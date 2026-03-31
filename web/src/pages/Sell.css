@@ -553,6 +553,23 @@
   align-items: start;
 }
 
+.sell-page__scan-expander {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.sell-page__scan-expander-summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sell-page__scan-expander-content {
+  margin-top: 12px;
+}
+
 .sell-page__left,
 .sell-page__right {
   width: 100%;

@@ -1650,68 +1650,70 @@ export default function Sell() {
 
       <div className="sell-page__grid">
         <section className="card sell-page__left">
-          <div className="sell-page__section-header">
-            <h3>Scan barcode</h3>
-            <p>Use your phone camera or a USB barcode scanner. We match the code to the product SKU/barcode you saved.</p>
-          </div>
+          <details className="sell-page__scan-expander">
+            <summary className="sell-page__scan-expander-summary">Scan barcode</summary>
+            <div className="sell-page__scan-expander-content">
+              <p>Use your phone camera or a USB barcode scanner. We match the code to the product SKU/barcode you saved.</p>
 
-          <form className="sell-page__scan-form" onSubmit={handleScanSubmit}>
-            <label className="field">
-              <span className="field__label">Barcode / SKU</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-label="Scan or type a barcode"
-                autoCorrect="off"
-                autoCapitalize="off"
-                placeholder="Tap here, then scan the product barcode"
-                value={scanInput}
-                onChange={e => setScanInput(e.target.value)}
-              />
-            </label>
-            <button type="submit" className="button button--primary" aria-label="Add">
-              Add from barcode
-            </button>
-          </form>
-
-          {scanStatus && (
-            <p
-              className={
-                scanStatus.type === 'success'
-                  ? 'sell-page__scan-status sell-page__scan-status--success'
-                  : 'sell-page__scan-status sell-page__scan-status--error'
-              }
-            >
-              {scanStatus.message}
-            </p>
-          )}
-
-          <div className="sell-page__section-header" style={{ marginTop: 16 }}>
-            <h3>Camera scanner (beta)</h3>
-            <p>Opens your device camera and automatically adds items as you scan.</p>
-          </div>
-
-          {isCameraOpen ? (
-            <div className="sell-page__camera-panel">
-              <div className="sell-page__camera-viewport">
-                <video ref={videoRef} className="sell-page__camera-preview" autoPlay muted playsInline />
-                <div className="sell-page__camera-overlay" aria-hidden="true" />
-              </div>
-              <div className="sell-page__camera-actions">
-                <button type="button" className="button button--ghost" onClick={handleCloseCameraClick}>
-                  Close camera
+              <form className="sell-page__scan-form" onSubmit={handleScanSubmit}>
+                <label className="field">
+                  <span className="field__label">Barcode / SKU</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Scan or type a barcode"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    placeholder="Tap here, then scan the product barcode"
+                    value={scanInput}
+                    onChange={e => setScanInput(e.target.value)}
+                  />
+                </label>
+                <button type="submit" className="button button--primary" aria-label="Add">
+                  Add from barcode
                 </button>
+              </form>
+
+              {scanStatus && (
+                <p
+                  className={
+                    scanStatus.type === 'success'
+                      ? 'sell-page__scan-status sell-page__scan-status--success'
+                      : 'sell-page__scan-status sell-page__scan-status--error'
+                  }
+                >
+                  {scanStatus.message}
+                </p>
+              )}
+
+              <div className="sell-page__section-header" style={{ marginTop: 16 }}>
+                <h3>Camera scanner (beta)</h3>
+                <p>Opens your device camera and automatically adds items as you scan.</p>
               </div>
-              <p className={'sell-page__camera-hint ' + (isCameraReady ? '' : 'sell-page__camera-hint--idle')}>
-                {cameraStatusMessage}
-              </p>
-              {cameraError && <p className="sell-page__camera-error">{cameraError}</p>}
+
+              {isCameraOpen ? (
+                <div className="sell-page__camera-panel">
+                  <div className="sell-page__camera-viewport">
+                    <video ref={videoRef} className="sell-page__camera-preview" autoPlay muted playsInline />
+                    <div className="sell-page__camera-overlay" aria-hidden="true" />
+                  </div>
+                  <div className="sell-page__camera-actions">
+                    <button type="button" className="button button--ghost" onClick={handleCloseCameraClick}>
+                      Close camera
+                    </button>
+                  </div>
+                  <p className={'sell-page__camera-hint ' + (isCameraReady ? '' : 'sell-page__camera-hint--idle')}>
+                    {cameraStatusMessage}
+                  </p>
+                  {cameraError && <p className="sell-page__camera-error">{cameraError}</p>}
+                </div>
+              ) : (
+                <button type="button" className="button button--ghost" onClick={() => setIsCameraOpen(true)}>
+                  Open camera scanner
+                </button>
+              )}
             </div>
-          ) : (
-            <button type="button" className="button button--ghost" onClick={() => setIsCameraOpen(true)}>
-              Open camera scanner
-            </button>
-          )}
+          </details>
 
           <hr className="sell-page__divider" />
 
