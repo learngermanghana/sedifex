@@ -1969,177 +1969,184 @@ export default function Sell() {
             </div>
           </div>
 
-          <div className="sell-page__display">
-            <div className="sell-page__display-header">
-              <div>
-                <p className="sell-page__display-title">Customer display</p>
-                <p className="sell-page__display-subtitle">Show live cart totals on a second device.</p>
-              </div>
-              {!displaySessionId ? (
-                <button type="button" className="button button--ghost" onClick={handleStartCustomerDisplay}>
-                  Start customer display
-                </button>
-              ) : (
-                <button type="button" className="button button--ghost" onClick={handleStopCustomerDisplay}>
-                  Stop display
-                </button>
-              )}
-            </div>
-
-            {displaySessionId && displayLink ? (
-              <div className="sell-page__display-body">
-                <div className="sell-page__display-info">
+          <details className="sell-page__scan-options" style={{ marginTop: 20 }}>
+            <summary>More checkout options (not often used)</summary>
+            <div className="sell-page__scan-options-body">
+              <div className="sell-page__display">
+                <div className="sell-page__display-header">
                   <div>
-                    <p className="sell-page__display-label">Pairing code</p>
-                    <p className="sell-page__display-code">{displayPairCode ?? '—'}</p>
+                    <p className="sell-page__display-title">Customer display</p>
+                    <p className="sell-page__display-subtitle">Show live cart totals on a second device.</p>
                   </div>
-                  <div>
-                    <p className="sell-page__display-label">Display link</p>
-                    <div className="sell-page__display-link-row">
-                      <a className="sell-page__display-link" href={displayLink} target="_blank" rel="noreferrer">
-                        {displayLink}
-                      </a>
-                      <button type="button" className="sell-page__display-link-copy" onClick={handleShareCustomerDisplay}>
-                        Copy link
-                      </button>
-                    </div>
-                  </div>
+                  {!displaySessionId ? (
+                    <button type="button" className="button button--ghost" onClick={handleStartCustomerDisplay}>
+                      Start customer display
+                    </button>
+                  ) : (
+                    <button type="button" className="button button--ghost" onClick={handleStopCustomerDisplay}>
+                      Stop display
+                    </button>
+                  )}
                 </div>
 
-                {displayQrSvg ? (
-                  <div className="sell-page__display-qr" dangerouslySetInnerHTML={{ __html: displayQrSvg }} aria-hidden={!displayQrSvg} />
-                ) : (
-                  <div className="sell-page__display-qr sell-page__display-qr--empty">
-                    QR unavailable
+                {displaySessionId && displayLink ? (
+                  <div className="sell-page__display-body">
+                    <div className="sell-page__display-info">
+                      <div>
+                        <p className="sell-page__display-label">Pairing code</p>
+                        <p className="sell-page__display-code">{displayPairCode ?? '—'}</p>
+                      </div>
+                      <div>
+                        <p className="sell-page__display-label">Display link</p>
+                        <div className="sell-page__display-link-row">
+                          <a className="sell-page__display-link" href={displayLink} target="_blank" rel="noreferrer">
+                            {displayLink}
+                          </a>
+                          <button type="button" className="sell-page__display-link-copy" onClick={handleShareCustomerDisplay}>
+                            Copy link
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {displayQrSvg ? (
+                      <div className="sell-page__display-qr" dangerouslySetInnerHTML={{ __html: displayQrSvg }} aria-hidden={!displayQrSvg} />
+                    ) : (
+                      <div className="sell-page__display-qr sell-page__display-qr--empty">
+                        QR unavailable
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <p className="sell-page__display-hint">
+                    Open <strong>{PUBLIC_ORIGIN.replace(/https?:\/\//, '')}/display</strong> on a phone or tablet and scan
+                    the QR code to pair.
+                  </p>
                 )}
-              </div>
-            ) : (
-              <p className="sell-page__display-hint">
-                Open <strong>{PUBLIC_ORIGIN.replace(/https?:\/\//, '')}/display</strong> on a phone or tablet and scan
-                the QR code to pair.
-              </p>
-            )}
 
-            {displayStatus && <p className="sell-page__display-status">{displayStatus}</p>}
-          </div>
-
-          <div className="sell-page__payment" style={{ marginTop: 20 }}>
-            <div className="field">
-              <label className="field__label">Payment method</label>
-              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="mobile_money">Mobile money</option>
-                <option value="transfer">Bank transfer</option>
-              </select>
-            </div>
-
-            <div className="field">
-              <label className="field__label">Amount paid (optional)</label>
-              <input type="number" min="0" step="0.01" placeholder="If customer pays cash" value={amountPaidInput} onChange={e => setAmountPaidInput(e.target.value)} />
-              {totalAmountPaid > 0 && (
-                <p className={'sell-page__change ' + (isShortPayment ? 'is-short' : '')}>
-                  {isShortPayment ? `Short by ${formatCurrency(totalAfterDiscount - totalAmountPaid)}` : `Change due: ${formatCurrency(changeDue)}`}
-                </p>
-              )}
-            </div>
-
-            <div className="sell-page__additional-payments">
-              <div className="sell-page__additional-header">
-                <span>Additional payment methods (optional)</span>
-                <button type="button" className="button button--ghost" onClick={handleAddTender}>
-                  Add method
-                </button>
+                {displayStatus && <p className="sell-page__display-status">{displayStatus}</p>}
               </div>
 
-              {additionalTenders.length === 0 ? (
-                <p className="sell-page__additional-hint">Use this to record split payments such as part cash and part mobile money.</p>
-              ) : (
-                <ul className="sell-page__additional-list">
-                  {additionalTenders.map(tender => (
-                    <li key={tender.id} className="sell-page__additional-row">
-                      <select value={tender.method} onChange={e => handleTenderChange(tender.id, { method: e.target.value as PaymentMethod })}>
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="mobile_money">Mobile money</option>
-                        <option value="transfer">Bank transfer</option>
-                      </select>
+              <div className="sell-page__payment" style={{ marginTop: 20 }}>
+                <div className="field">
+                  <label className="field__label">Payment method</label>
+                  <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="mobile_money">Mobile money</option>
+                    <option value="transfer">Bank transfer</option>
+                  </select>
+                </div>
 
-                      <input type="number" min="0" step="0.01" placeholder="Amount" value={tender.amount} onChange={e => handleTenderChange(tender.id, { amount: e.target.value })} />
+                <div className="field">
+                  <label className="field__label">Amount paid (optional)</label>
+                  <input type="number" min="0" step="0.01" placeholder="If customer pays cash" value={amountPaidInput} onChange={e => setAmountPaidInput(e.target.value)} />
+                  {totalAmountPaid > 0 && (
+                    <p className={'sell-page__change ' + (isShortPayment ? 'is-short' : '')}>
+                      {isShortPayment ? `Short by ${formatCurrency(totalAfterDiscount - totalAmountPaid)}` : `Change due: ${formatCurrency(changeDue)}`}
+                    </p>
+                  )}
+                </div>
 
-                      <button type="button" className="button button--ghost" onClick={() => handleTenderRemove(tender.id)}>
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                <div className="sell-page__additional-payments">
+                  <div className="sell-page__additional-header">
+                    <span>Additional payment methods (optional)</span>
+                    <button type="button" className="button button--ghost" onClick={handleAddTender}>
+                      Add method
+                    </button>
+                  </div>
+
+                  {additionalTenders.length === 0 ? (
+                    <p className="sell-page__additional-hint">Use this to record split payments such as part cash and part mobile money.</p>
+                  ) : (
+                    <ul className="sell-page__additional-list">
+                      {additionalTenders.map(tender => (
+                        <li key={tender.id} className="sell-page__additional-row">
+                          <select value={tender.method} onChange={e => handleTenderChange(tender.id, { method: e.target.value as PaymentMethod })}>
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="mobile_money">Mobile money</option>
+                            <option value="transfer">Bank transfer</option>
+                          </select>
+
+                          <input type="number" min="0" step="0.01" placeholder="Amount" value={tender.amount} onChange={e => handleTenderChange(tender.id, { amount: e.target.value })} />
+
+                          <button type="button" className="button button--ghost" onClick={() => handleTenderRemove(tender.id)}>
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="sell-page__receipt-settings">
+                  <label className="field">
+                    <span className="field__label">Receipt size preset</span>
+                    <select value={receiptSize} onChange={event => setReceiptSize(event.target.value as EscPosReceiptSize)}>
+                      <option value="58mm">58mm</option>
+                      <option value="80mm">80mm</option>
+                    </select>
+                    <span className="field__hint">Match the width of your thermal paper roll for printing.</span>
+                  </label>
+                </div>
+              </div>
             </div>
-
-            <div className="sell-page__receipt-settings">
-              <label className="field">
-                <span className="field__label">Receipt size preset</span>
-                <select value={receiptSize} onChange={event => setReceiptSize(event.target.value as EscPosReceiptSize)}>
-                  <option value="58mm">58mm</option>
-                  <option value="80mm">80mm</option>
-                </select>
-                <span className="field__hint">Match the width of your thermal paper roll for printing.</span>
-              </label>
-            </div>
-          </div>
+          </details>
 
           {errorMessage && <p className="sell-page__message sell-page__message--error">{errorMessage}</p>}
           {successMessage && <p className="sell-page__message sell-page__message--success">{successMessage}</p>}
 
           {receiptDownload && lastReceipt && (
-            <div className="sell-page__receipt-actions" role="status">
-              <div className="sell-page__receipt-actions-row">
-                {receiptDownload.url ? (
-                  isIOSLike() ? (
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() =>
-                        downloadOrSharePdf(receiptDownload.fileName, receiptDownload.url!, receiptDownload.shareText).catch(err =>
-                          console.warn('PDF share failed', err),
-                        )
-                      }
-                    >
-                      Save / Share PDF
-                    </button>
+            <details className="sell-page__scan-options" style={{ marginTop: 20 }} role="status">
+              <summary>Receipt, sharing, and printer tools</summary>
+              <div className="sell-page__scan-options-body">
+                <div className="sell-page__receipt-actions-row">
+                  {receiptDownload.url ? (
+                    isIOSLike() ? (
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() =>
+                          downloadOrSharePdf(receiptDownload.fileName, receiptDownload.url!, receiptDownload.shareText).catch(err =>
+                            console.warn('PDF share failed', err),
+                          )
+                        }
+                      >
+                        Save / Share PDF
+                      </button>
+                    ) : (
+                      <a href={receiptDownload.url} download={receiptDownload.fileName} className="button button--ghost">
+                        Download PDF (this device)
+                      </a>
+                    )
                   ) : (
-                    <a href={receiptDownload.url} download={receiptDownload.fileName} className="button button--ghost">
-                      Download PDF (this device)
-                    </a>
-                  )
-                ) : (
-                  <span className="sell-page__receipt-hint">Preparing receipt file…</span>
-                )}
+                    <span className="sell-page__receipt-hint">Preparing receipt file…</span>
+                  )}
 
-                <button
-                  type="button"
-                  className="button button--ghost"
-                  onClick={() =>
-                    printReceipt({
-                      saleId: lastReceipt.saleId,
-                      items: lastReceipt.items,
-                      totals: lastReceipt.totals,
-                      paymentMethod: lastReceipt.paymentMethod,
-                      tenders: (lastReceipt as any).tenders,
-                      discountInput: lastReceipt.discountInput,
-                      companyName: lastReceipt.companyName,
-                      customerName: lastReceipt.customerName,
-                      customerPhone: (lastReceipt as any).customerPhone ?? null,
-                      receiptSize,
-                    })
-                  }
-                >
-                  Print again
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    onClick={() =>
+                      printReceipt({
+                        saleId: lastReceipt.saleId,
+                        items: lastReceipt.items,
+                        totals: lastReceipt.totals,
+                        paymentMethod: lastReceipt.paymentMethod,
+                        tenders: (lastReceipt as any).tenders,
+                        discountInput: lastReceipt.discountInput,
+                        companyName: lastReceipt.companyName,
+                        customerName: lastReceipt.customerName,
+                        customerPhone: (lastReceipt as any).customerPhone ?? null,
+                        receiptSize,
+                      })
+                    }
+                  >
+                    Print again
+                  </button>
+                </div>
 
-              <div className="sell-page__escpos">
+                <div className="sell-page__escpos">
                 <div className="sell-page__escpos-header">
                   <p className="sell-page__escpos-title">Thermal printer (ESC/POS)</p>
                   <p className="sell-page__escpos-subtitle">
@@ -2226,40 +2233,41 @@ export default function Sell() {
                 {escposStatus && <p className="sell-page__escpos-status">{escposStatus}</p>}
               </div>
 
-              <div className="sell-page__share-row">
-                <span>Share receipt:</span>
-                <a href={`https://wa.me/?text=${encodeURIComponent(receiptDownload.shareText)}`} target="_blank" rel="noreferrer">
-                  WhatsApp
-                </a>
-                <a
-                  href={`https://t.me/share/url?url=${encodeURIComponent(receiptDownload.shareUrl)}&text=${encodeURIComponent(receiptDownload.shareText)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Telegram
-                </a>
-                <a href={`mailto:?subject=${encodeURIComponent('Sale receipt')}&body=${encodeURIComponent(`${receiptDownload.shareText}\n\nOpen: ${receiptDownload.shareUrl}`)}`}>
-                  Email
-                </a>
-              </div>
-
-              <div className="sell-page__qr">
-                <div className="sell-page__qr-header">
-                  <p className="sell-page__qr-title">Receipt QR</p>
-                  <p className="sell-page__qr-subtitle">Scan on a customer phone or second device to open the receipt link quickly.</p>
+                <div className="sell-page__share-row">
+                  <span>Share receipt:</span>
+                  <a href={`https://wa.me/?text=${encodeURIComponent(receiptDownload.shareText)}`} target="_blank" rel="noreferrer">
+                    WhatsApp
+                  </a>
+                  <a
+                    href={`https://t.me/share/url?url=${encodeURIComponent(receiptDownload.shareUrl)}&text=${encodeURIComponent(receiptDownload.shareText)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Telegram
+                  </a>
+                  <a href={`mailto:?subject=${encodeURIComponent('Sale receipt')}&body=${encodeURIComponent(`${receiptDownload.shareText}\n\nOpen: ${receiptDownload.shareUrl}`)}`}>
+                    Email
+                  </a>
                 </div>
 
-                {receiptQrSvg ? (
-                  <div className="sell-page__qr-code" dangerouslySetInnerHTML={{ __html: receiptQrSvg }} aria-hidden={!receiptQrSvg} />
-                ) : (
-                  <div className="sell-page__qr-code">
-                    <span className="sell-page__qr-empty">QR unavailable</span>
+                <div className="sell-page__qr">
+                  <div className="sell-page__qr-header">
+                    <p className="sell-page__qr-title">Receipt QR</p>
+                    <p className="sell-page__qr-subtitle">Scan on a customer phone or second device to open the receipt link quickly.</p>
                   </div>
-                )}
 
-                <p className="sell-page__qr-hint">Tip: Print this after checkout or have customers scan it directly at the counter.</p>
+                  {receiptQrSvg ? (
+                    <div className="sell-page__qr-code" dangerouslySetInnerHTML={{ __html: receiptQrSvg }} aria-hidden={!receiptQrSvg} />
+                  ) : (
+                    <div className="sell-page__qr-code">
+                      <span className="sell-page__qr-empty">QR unavailable</span>
+                    </div>
+                  )}
+
+                  <p className="sell-page__qr-hint">Tip: Print this after checkout or have customers scan it directly at the counter.</p>
+                </div>
               </div>
-            </div>
+            </details>
           )}
 
           <div className="sell-page__actions">
