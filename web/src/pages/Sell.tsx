@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { FirebaseError } from 'firebase/app'
 import {
   addDoc,
   collection,
@@ -27,6 +28,7 @@ import {
   saveCachedCustomers,
   saveCachedProducts,
 } from '../utils/offlineCache'
+import { queueCallableRequest } from '../utils/offlineQueue'
 import './Sell.css'
 
 import { BrowserMultiFormatReader, BrowserQRCodeSvgWriter } from '@zxing/browser'
@@ -122,6 +124,24 @@ const PUBLIC_ORIGIN = (() => {
     return normalized.replace(/\/$/, '') || window.location.origin
   }
 })()
+
+function isOfflineError(error: unknown) {
+  if (!navigator.onLine) return true
+  if (error instanceof FirebaseError) {
+    const code = (error.code || '').toLowerCase()
+    return (
+      code === 'unavailable' ||
+      code === 'internal' ||
+      code.endsWith('/unavailable') ||
+      code.endsWith('/internal')
+    )
+  }
+  if (error instanceof TypeError) {
+    const message = error.message.toLowerCase()
+    return message.includes('network') || message.includes('fetch')
+  }
+  return false
+}
 
 function toDate(value: unknown): Date | null {
   if (!value) return null
@@ -1504,70 +1524,71 @@ export default function Sell() {
     }
 
     setIsSaving(true)
+    const saleId = `sale_${activeStoreId}_${Date.now()}`
+    const cartSnapshot = [...cart]
+
+    const items = cart.map(line => ({
+      productId: line.productId,
+      name: line.name,
+      qty: line.qty,
+      price: line.price,
+      taxRate: line.taxRate,
+      type: line.itemType,
+      isService: line.itemType === 'service',
+    }))
+
+    const totals = { subTotal, taxTotal: effectiveTaxTotal, discount: discountAmount, total: totalAfterDiscount }
+
+    const amountPaidValue = totalAmountPaid > 0 ? totalAmountPaid : totalAfterDiscount
+    const changeDueValue = Math.max(0, amountPaidValue - totalAfterDiscount)
+
+    const parsedAdditionalTenders: ReceiptTender[] = additionalTenders
+      .map(t => ({ method: t.method, amount: Number(t.amount) }))
+      .filter(t => Number.isFinite(t.amount) && t.amount > 0)
+
+    const primaryTenderAmount = totalAmountPaid > 0 && primaryAmountPaid > 0 ? primaryAmountPaid : 0
+
+    const tenders: ReceiptTender[] =
+      totalAmountPaid > 0
+        ? [
+            ...(primaryTenderAmount > 0 ? [{ method: paymentMethod, amount: primaryTenderAmount }] : []),
+            ...parsedAdditionalTenders,
+          ]
+        : [{ method: paymentMethod, amount: totalAfterDiscount }]
+
+    const primaryPaymentMethod = tenders[0]?.method ?? paymentMethod
+
+    const payment = {
+      method: primaryPaymentMethod,
+      amountPaid: amountPaidValue,
+      changeDue: changeDueValue,
+      tenders,
+    }
+
+    const trimmedCustomerName = customerNameInput.trim()
+    const customerName = customerMode === 'named' ? trimmedCustomerName : trimmedCustomerName || 'Walk-in'
+    const customerPhone = customerPhoneInput.trim() || null
+    const customerPayload =
+      customerMode === 'walk_in'
+        ? null
+        : {
+            id: selectedCustomerId,
+            name: customerName,
+            phone: customerPhone,
+          }
+    const commitSalePayload = {
+      branchId: activeStoreId,
+      items,
+      totals,
+      cashierId: user?.uid ?? null,
+      saleId,
+      payment,
+      customer: customerPayload,
+    }
+
     try {
-      const saleId = `sale_${activeStoreId}_${Date.now()}`
-      const cartSnapshot = [...cart]
-
-      const items = cart.map(line => ({
-        productId: line.productId,
-        name: line.name,
-        qty: line.qty,
-        price: line.price,
-        taxRate: line.taxRate,
-        type: line.itemType,
-        isService: line.itemType === 'service',
-      }))
-
-      const totals = { subTotal, taxTotal: effectiveTaxTotal, discount: discountAmount, total: totalAfterDiscount }
-
-      const amountPaidValue = totalAmountPaid > 0 ? totalAmountPaid : totalAfterDiscount
-      const changeDueValue = Math.max(0, amountPaidValue - totalAfterDiscount)
-
-      const parsedAdditionalTenders: ReceiptTender[] = additionalTenders
-        .map(t => ({ method: t.method, amount: Number(t.amount) }))
-        .filter(t => Number.isFinite(t.amount) && t.amount > 0)
-
-      const primaryTenderAmount = totalAmountPaid > 0 && primaryAmountPaid > 0 ? primaryAmountPaid : 0
-
-      const tenders: ReceiptTender[] =
-        totalAmountPaid > 0
-          ? [
-              ...(primaryTenderAmount > 0 ? [{ method: paymentMethod, amount: primaryTenderAmount }] : []),
-              ...parsedAdditionalTenders,
-            ]
-          : [{ method: paymentMethod, amount: totalAfterDiscount }]
-
-      const primaryPaymentMethod = tenders[0]?.method ?? paymentMethod
-
-      const payment = {
-        method: primaryPaymentMethod,
-        amountPaid: amountPaidValue,
-        changeDue: changeDueValue,
-        tenders,
-      }
-
-      const trimmedCustomerName = customerNameInput.trim()
-      const customerName = customerMode === 'named' ? trimmedCustomerName : trimmedCustomerName || 'Walk-in'
-      const customerPhone = customerPhoneInput.trim() || null
-      const customerPayload =
-        customerMode === 'walk_in'
-          ? null
-          : {
-              id: selectedCustomerId,
-              name: customerName,
-              phone: customerPhone,
-            }
-
       const commitSaleFn = httpsCallable(functions, 'commitSale')
-      await commitSaleFn({
-        branchId: activeStoreId,
-        items,
-        totals,
-        cashierId: user?.uid ?? null,
-        saleId,
-        payment,
-        customer: customerPayload,
-      })
+      await commitSaleFn(commitSalePayload)
 
       const receiptItems: ReceiptLine[] = cartSnapshot.map(line => ({
         name: line.name,
@@ -1646,7 +1667,47 @@ export default function Sell() {
       setSuccessMessage('Sale recorded successfully.')
     } catch (error: any) {
       console.error('[sell] Failed to commit sale', error)
-      setErrorMessage(typeof error?.message === 'string' ? error.message : 'We could not save this sale. Please try again.')
+      if (isOfflineError(error)) {
+        const queued = await queueCallableRequest('commitSale', commitSalePayload, 'sale')
+        if (queued) {
+          const receiptItems: ReceiptLine[] = cartSnapshot.map(line => ({
+            name: line.name,
+            qty: line.qty,
+            price: line.price,
+            metadata: line.metadata?.length ? [...line.metadata] : undefined,
+          }))
+
+          const receiptPayload: ReceiptPayload = {
+            saleId,
+            items: receiptItems,
+            totals,
+            paymentMethod: primaryPaymentMethod,
+            tenders,
+            discountInput,
+            companyName: storeName,
+            customerName,
+            customerPhone,
+          } as any
+
+          setLastReceipt(receiptPayload)
+          setCart([])
+          setAmountPaidInput('')
+          setAdditionalTenders([])
+          setDiscountInput('')
+          setTaxInput('')
+          setCustomerNameInput('')
+          setCustomerPhoneInput('')
+          setSelectedCustomerId(null)
+          setSuccessMessage('Offline — sale saved and will sync when you reconnect.')
+          return
+        }
+      }
+      const normalizedCode = typeof error?.code === 'string' ? error.code.toLowerCase() : ''
+      if (normalizedCode.includes('internal') || normalizedCode.includes('unavailable')) {
+        setErrorMessage('We could not save this sale right now. Please try again once your connection is stable.')
+      } else {
+        setErrorMessage(typeof error?.message === 'string' ? error.message : 'We could not save this sale. Please try again.')
+      }
     } finally {
       setIsSaving(false)
     }
