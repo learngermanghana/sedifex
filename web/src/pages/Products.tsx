@@ -408,6 +408,7 @@ export default function Products() {
    */
   useEffect(() => {
     let cancelled = false
+    let receivedLiveSnapshot = false
 
     if (!activeStoreId) {
       setProducts([])
@@ -416,28 +417,7 @@ export default function Products() {
       }
     }
 
-    // 1. Try cached products first
-    loadCachedProducts<CachedProduct>({ storeId: activeStoreId })
-      .then(cached => {
-        if (cancelled || !cached.length) return
-        const mapped = cached.map((item, index) =>
-          mapFirestoreProduct(
-            // cached objects don't have ids, so we fake a stable-ish one
-            (item as any).id ?? `cached-${index}`,
-            item as any,
-          ),
-        )
-        setProducts(
-          mapped.sort((a, b) =>
-            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-          ),
-        )
-      })
-      .catch(error => {
-        console.warn('[products] Failed to load cached products', error)
-      })
-
-    // 2. Live Firestore subscription
+    // 1. Live Firestore subscription (primary source of truth)
     const q = query(
       collection(db, 'products'),
       where('storeId', '==', activeStoreId),
@@ -447,6 +427,7 @@ export default function Products() {
     )
 
     const unsubscribe = onSnapshot(q, snapshot => {
+      receivedLiveSnapshot = true
       const rows: Product[] = snapshot.docs.map(d => {
         const raw = d.data() as Record<string, unknown>
         backfillProductDefaults(d.id, raw)
@@ -469,6 +450,27 @@ export default function Products() {
       )
       setProducts(sorted)
     })
+
+    // 2. Fallback to cached products only if live data has not arrived yet.
+    loadCachedProducts<CachedProduct>({ storeId: activeStoreId })
+      .then(cached => {
+        if (cancelled || receivedLiveSnapshot || !cached.length) return
+        const mapped = cached.map((item, index) =>
+          mapFirestoreProduct(
+            // cached objects don't have ids, so we fake a stable-ish one
+            (item as any).id ?? `cached-${index}`,
+            item as any,
+          ),
+        )
+        setProducts(
+          mapped.sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+          ),
+        )
+      })
+      .catch(error => {
+        console.warn('[products] Failed to load cached products', error)
+      })
 
     return () => {
       cancelled = true
