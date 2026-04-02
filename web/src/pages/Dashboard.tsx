@@ -9,6 +9,7 @@ import { useActiveStore } from '../hooks/useActiveStore'
 import { db } from '../firebase'
 import {
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
@@ -352,6 +353,8 @@ export default function Dashboard() {
   const [upcomingBirthdays, setUpcomingBirthdays] = useState<UpcomingBirthday[]>([])
   const [isLoadingBirthdays, setIsLoadingBirthdays] = useState(false)
   const [birthdayError, setBirthdayError] = useState<string | null>(null)
+  const [bulkMessagingCredits, setBulkMessagingCredits] = useState<number>(0)
+  const [isLoadingBulkCredits, setIsLoadingBulkCredits] = useState(false)
 
   const [aiSummary, setAiSummary] = useState<{
     message: string | null
@@ -488,6 +491,35 @@ export default function Dashboard() {
         setIsLoadingDebt(false)
         setBirthdayError('Unable to load customer birthdays right now.')
         setIsLoadingBirthdays(false)
+      },
+    )
+
+    return unsubscribe
+  }, [storeId])
+
+  useEffect(() => {
+    if (!storeId) {
+      setBulkMessagingCredits(0)
+      setIsLoadingBulkCredits(false)
+      return () => {}
+    }
+
+    setIsLoadingBulkCredits(true)
+
+    const unsubscribe = onSnapshot(
+      doc(db, 'stores', storeId),
+      snapshot => {
+        const data = snapshot.data() ?? {}
+        const rawCredits = data.bulkMessagingCredits
+        const nextCredits =
+          typeof rawCredits === 'number' && Number.isFinite(rawCredits) ? rawCredits : 0
+        setBulkMessagingCredits(nextCredits)
+        setIsLoadingBulkCredits(false)
+      },
+      error => {
+        console.error('[dashboard] Failed to load bulk messaging credits', error)
+        setBulkMessagingCredits(0)
+        setIsLoadingBulkCredits(false)
       },
     )
 
@@ -842,6 +874,64 @@ export default function Dashboard() {
         Welcome back! Choose what you’d like to work on — the most important Sedifex pages
         are just one tap away.
       </p>
+
+      <section
+        style={{
+          background: '#FFFFFF',
+          borderRadius: 20,
+          border: '1px solid #E2E8F0',
+          padding: '18px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16,
+          marginBottom: 20,
+        }}
+        aria-label="Bulk SMS credits"
+      >
+        <div style={{ display: 'grid', gap: 6 }}>
+          <h3 style={{ margin: 0, fontSize: 17, color: '#0F172A' }}>Bulk SMS credits</h3>
+          <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>
+            Monitor available credits and top up before campaigns.
+          </p>
+          <p style={{ margin: 0, fontSize: 14, color: '#0F172A', fontWeight: 700 }}>
+            {isLoadingBulkCredits ? 'Loading credits…' : `${bulkMessagingCredits.toLocaleString()} credits`}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Link
+            to="/bulk-messaging"
+            style={{
+              border: '1px solid #C7D2FE',
+              borderRadius: 999,
+              padding: '8px 14px',
+              textDecoration: 'none',
+              color: '#4338CA',
+              fontWeight: 600,
+              fontSize: 13,
+              background: '#EEF2FF',
+            }}
+          >
+            Open bulk SMS
+          </Link>
+          <Link
+            to="/bulk-messaging#buy-credits"
+            style={{
+              borderRadius: 999,
+              padding: '8px 14px',
+              textDecoration: 'none',
+              color: '#FFFFFF',
+              fontWeight: 600,
+              fontSize: 13,
+              background: '#4338CA',
+            }}
+          >
+            Buy credits
+          </Link>
+        </div>
+      </section>
 
       {paceNudge && (
         <div
