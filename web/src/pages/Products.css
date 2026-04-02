@@ -488,6 +488,19 @@
   color: #b91c1c;
 }
 
+.products-page__upload-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.products-page__upload-error {
+  color: #b91c1c;
+  font-size: 14px;
+  margin: 0;
+}
+
 /* -------- Edit dialog ---------- */
 
 .products-page__dialog {

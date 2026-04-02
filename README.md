@@ -15,6 +15,25 @@ Sedifex product documents now support first-class image metadata:
 - `imageUrl?: string | null` — optional public image URL (`http://` or `https://` only in product forms/import).
 - `imageAlt?: string | null` — optional accessibility label; defaults to `name` when `imageUrl` exists and `imageAlt` is missing.
 
+### Optional self-hosted image upload route (no Firebase Storage)
+
+If you do not want to use Firebase Storage, run the local upload server in `web/`:
+
+```bash
+cd web
+npm i
+npm run upload:server
+```
+
+- Upload API endpoint: `POST /api/uploads` (JSON body with `filename`, `mimeType`, `dataBase64`)
+- Static image route: `/uploads/<generated-file-name>`
+- By default, files are saved to `web/public/uploads/`
+- Optional env vars:
+  - `UPLOAD_SERVER_PORT` (default `8787`)
+  - `UPLOAD_DIR` (absolute/relative filesystem path to persist uploads)
+  - `PUBLIC_BASE_URL` (e.g. `https://app.example.com` for absolute URLs in API responses)
+  - `VITE_UPLOAD_API_URL` in frontend (defaults to `/api/uploads`)
+
 ### CSV import/export (items)
 
 - Required item headers remain unchanged: `name`, `price`.

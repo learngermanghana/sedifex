@@ -26,6 +26,7 @@ import {
 import { normalizeBarcode } from '../utils/barcode'
 import { useStorePreferences } from '../hooks/useStorePreferences'
 import type { ItemType, Product } from '../types/product'
+import { uploadProductImage } from '../api/productImageUpload'
 
 type CachedProduct = Omit<Product, 'id'>
 type AbcBucket = 'A' | 'B' | 'C'
@@ -276,6 +277,9 @@ export default function Products() {
   const [showOnReceiptInput, setShowOnReceiptInput] = useState(false)
   const [imageUrlInput, setImageUrlInput] = useState('')
   const [imageAltInput, setImageAltInput] = useState('')
+  const [imageFileInput, setImageFileInput] = useState<File | null>(null)
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   const [isSaving, setIsSaving] = useState(false)
   const [formStatus, setFormStatus] = useState<'idle' | 'success' | 'error'>('idle')
@@ -645,6 +649,26 @@ export default function Products() {
       )
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  async function handleImageUpload() {
+    if (!imageFileInput) {
+      setImageUploadError('Choose an image file before uploading.')
+      return
+    }
+
+    setImageUploadError(null)
+    setIsUploadingImage(true)
+    try {
+      const uploadedUrl = await uploadProductImage(imageFileInput)
+      setImageUrlInput(uploadedUrl)
+      setImageFileInput(null)
+    } catch (error) {
+      console.error('[products] Failed to upload product image', error)
+      setImageUploadError('Image upload failed. Please try again.')
+    } finally {
+      setIsUploadingImage(false)
     }
   }
 
@@ -1102,6 +1126,40 @@ export default function Products() {
                   </label>
                 </>
               )}
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-file">
+                  Upload image <span className="field__optional">(optional)</span>
+                </label>
+                <input
+                  id="add-image-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={event => {
+                    const file = event.target.files?.[0] ?? null
+                    setImageFileInput(file)
+                    setImageUploadError(null)
+                  }}
+                />
+                <div className="products-page__upload-actions">
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    disabled={!imageFileInput || isUploadingImage}
+                    onClick={() => {
+                      void handleImageUpload()
+                    }}
+                  >
+                    {isUploadingImage ? 'Uploading…' : 'Upload and use URL'}
+                  </button>
+                  {imageUploadError ? (
+                    <p className="products-page__upload-error">{imageUploadError}</p>
+                  ) : null}
+                </div>
+                <p className="field__hint">
+                  Uploads to your own backend endpoint and auto-fills Image URL.
+                </p>
+              </div>
 
               <div className="field">
                 <label className="field__label" htmlFor="add-image-url">
