@@ -75,47 +75,60 @@ export function buildInvoicePdf(options: InvoicePayload) {
     const totals = normalizeTotals(options.totals)
     const issuedDate = options.issuedDate || new Date().toISOString().slice(0, 10)
 
-    const lines: string[] = [
-      options.companyName ? options.companyName : 'Invoice',
-    ]
+    const lines: string[] = []
+    const companyName = options.companyName ? options.companyName : 'Sedifex Workspace'
+    const generatedAt = new Date().toLocaleString()
+
+    lines.push(companyName)
+    lines.push('Powered by Sedifex • sedifex.com')
+    lines.push('────────────────────────────────────────')
 
     appendMultiline(lines, options.companyAddress)
     if (options.companyEmail) {
       lines.push(options.companyEmail)
     }
+    lines.push(' ')
 
     lines.push(
+      'INVOICE',
       `Invoice #: ${options.invoiceNumber}`,
       `Issued: ${issuedDate}`,
       options.dueDate ? `Due: ${options.dueDate}` : '',
+      `Generated: ${generatedAt}`,
       options.customerName || options.customerPhone || options.customerEmail
         ? formatCustomerLine(options)
         : '',
-      'Items:',
+      '────────────────────────────────────────',
+      'Line items:',
     )
 
     const filteredLines = lines.filter(Boolean)
 
     items.forEach(item => {
       const total = formatCurrency(item.price * item.qty)
-      filteredLines.push(`• ${item.qty} x ${item.name} @ ${formatCurrency(item.price)} = ${total}`)
+      filteredLines.push(`${item.name}`)
+      filteredLines.push(`  ${item.qty} × ${formatCurrency(item.price)}  =  ${total}`)
       if (item.metadata?.length) {
         item.metadata.forEach(entry => {
-          filteredLines.push(`   - ${entry}`)
+          filteredLines.push(`  • ${entry}`)
         })
       }
     })
 
+    filteredLines.push('────────────────────────────────────────')
     filteredLines.push('Summary:')
     filteredLines.push(`Subtotal: ${formatCurrency(totals.subTotal)}`)
     filteredLines.push(`VAT / Tax: ${formatCurrency(totals.taxTotal)}`)
     filteredLines.push(`Discount: ${formatCurrency(totals.discount)}`)
-    filteredLines.push(`Total: ${formatCurrency(totals.total)}`)
+    filteredLines.push(`TOTAL DUE: ${formatCurrency(totals.total)}`)
 
     if (options.notes) {
+      filteredLines.push(' ')
       filteredLines.push('Notes:')
       filteredLines.push(options.notes)
     }
+    filteredLines.push(' ')
+    filteredLines.push('Thank you for your business.')
 
     const pdfBytes = buildSimplePdf('Invoice', filteredLines)
     const blob = new Blob([pdfBytes], { type: 'application/pdf' })

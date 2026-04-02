@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { buildReceiptPdf, type PaymentMethod, type ReceiptLine } from '../utils/receipt'
+import { doc, getDoc } from 'firebase/firestore'
 import { buildInvoicePdf, type InvoiceLine } from '../utils/invoice'
+import { db } from '../firebase'
+import { useActiveStore } from '../hooks/useActiveStore'
 import './DocumentsGenerator.css'
-
-type DocumentType = 'invoice' | 'receipt'
 
 type LineItemState = {
   id: string
@@ -17,15 +16,7 @@ type LineItemState = {
 type GeneratedDocument = {
   url: string
   fileName: string
-  shareText?: string
 }
-
-const PAYMENT_METHODS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'card', label: 'Card' },
-  { value: 'mobile_money', label: 'Mobile money' },
-  { value: 'transfer', label: 'Bank transfer' },
-]
 
 function createLineItem(): LineItemState {
   return {
@@ -47,13 +38,7 @@ function formatCurrency(amount: number): string {
 }
 
 export default function DocumentsGenerator() {
-  const [searchParams] = useSearchParams()
-  const initialType = searchParams.get('type')
-  const [docType, setDocType] = useState<DocumentType>(initialType === 'receipt' ? 'receipt' : 'invoice')
-
-  useEffect(() => {
-    setDocType(initialType === 'receipt' ? 'receipt' : 'invoice')
-  }, [initialType])
+  const { storeId } = useActiveStore()
   const [companyName, setCompanyName] = useState('')
   const [companyEmail, setCompanyEmail] = useState('')
   const [companyAddress, setCompanyAddress] = useState('')
@@ -63,7 +48,6 @@ export default function DocumentsGenerator() {
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [issuedDate, setIssuedDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [dueDate, setDueDate] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [taxRate, setTaxRate] = useState('0')
   const [discount, setDiscount] = useState('0')
   const [notes, setNotes] = useState('')
@@ -105,6 +89,52 @@ export default function DocumentsGenerator() {
     }
   }, [generated])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadStoreProfile() {
+      if (!storeId) return
+      try {
+        const snapshot = await getDoc(doc(db, 'stores', storeId))
+        if (!snapshot.exists() || cancelled) return
+        const data = snapshot.data()
+        const company =
+          typeof data.displayName === 'string' && data.displayName.trim()
+            ? data.displayName.trim()
+            : typeof data.name === 'string' && data.name.trim()
+              ? data.name.trim()
+              : ''
+        const email =
+          typeof data.ownerEmail === 'string' && data.ownerEmail.trim()
+            ? data.ownerEmail.trim()
+            : typeof data.email === 'string' && data.email.trim()
+              ? data.email.trim()
+              : ''
+        const address = [
+          typeof data.addressLine1 === 'string' ? data.addressLine1.trim() : '',
+          typeof data.addressLine2 === 'string' ? data.addressLine2.trim() : '',
+          typeof data.city === 'string' ? data.city.trim() : '',
+          typeof data.region === 'string' ? data.region.trim() : '',
+          typeof data.postalCode === 'string' ? data.postalCode.trim() : '',
+          typeof data.country === 'string' ? data.country.trim() : '',
+        ]
+          .filter(Boolean)
+          .join(', ')
+
+        setCompanyName(prev => (prev.trim() ? prev : company))
+        setCompanyEmail(prev => (prev.trim() ? prev : email))
+        setCompanyAddress(prev => (prev.trim() ? prev : address))
+      } catch (profileError) {
+        console.warn('[documents] Failed to prefill store profile', profileError)
+      }
+    }
+
+    loadStoreProfile()
+    return () => {
+      cancelled = true
+    }
+  }, [storeId])
+
   function updateLineItem(id: string, patch: Partial<LineItemState>) {
     setLineItems(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)))
   }
@@ -123,7 +153,7 @@ export default function DocumentsGenerator() {
       return
     }
 
-    const normalizedItems = parsedItems.map<ReceiptLine | InvoiceLine>(item => ({
+    const normalizedItems = parsedItems.map<InvoiceLine>(item => ({
       name: item.name,
       qty: item.qty,
       price: item.price,
@@ -148,45 +178,12 @@ export default function DocumentsGenerator() {
       URL.revokeObjectURL(generated.url)
     }
 
-    if (docType === 'receipt') {
-      const saleId = invoiceNumber.trim() || `receipt-${Date.now()}`
-      const discountInput = discountValue > 0 ? formatCurrency(discountValue) : 'None'
-
-      const receipt = buildReceiptPdf({
-        saleId,
-        items: normalizedItems as ReceiptLine[],
-        totals: commonTotals,
-        paymentMethod,
-        discountInput,
-        companyName: companyLabel,
-        companyEmail: companyEmailLabel,
-        companyAddress: companyAddressLabel,
-        customerName: customerLabel,
-        customerPhone: phoneLabel,
-        customerEmail: emailLabel,
-      })
-
-      if (!receipt) {
-        setError('Unable to generate a receipt right now. Try again.')
-        setGenerated(null)
-        return
-      }
-
-      setGenerated({
-        url: receipt.url,
-        fileName: receipt.fileName,
-        shareText: receipt.shareText,
-      })
-      setError(null)
-      return
-    }
-
     const invoiceId = invoiceNumber.trim() || `inv-${Date.now()}`
     const invoice = buildInvoicePdf({
       invoiceNumber: invoiceId,
       issuedDate,
       dueDate,
-      items: normalizedItems as InvoiceLine[],
+      items: normalizedItems,
       totals: commonTotals,
       companyName: companyLabel,
       companyEmail: companyEmailLabel,
@@ -224,33 +221,14 @@ export default function DocumentsGenerator() {
     <div className="page">
       <header className="page__header">
         <div>
-          <h2 className="page__title">Invoice & receipt generator</h2>
+          <h2 className="page__title">Invoice</h2>
           <p className="page__subtitle">
-            Build share-ready PDFs without adding another top-level navigation tab.
+            Build and download a branded invoice PDF instantly.
           </p>
         </div>
       </header>
 
       <section className="card">
-        <div className="documents-generator__toggle" role="tablist" aria-label="Document type">
-          {(['invoice', 'receipt'] as DocumentType[]).map(type => (
-            <button
-              key={type}
-              type="button"
-              role="tab"
-              aria-selected={docType === type}
-              className={
-                docType === type
-                  ? 'button button--primary button--small'
-                  : 'button button--ghost button--small'
-              }
-              onClick={() => setDocType(type)}
-            >
-              {type === 'invoice' ? 'Invoice' : 'Receipt'}
-            </button>
-          ))}
-        </div>
-
         <div className="documents-generator__grid">
           <div className="documents-generator__section">
             <h3 className="card__title">Document details</h3>
@@ -316,47 +294,28 @@ export default function DocumentsGenerator() {
                   className="input"
                   value={invoiceNumber}
                   onChange={event => setInvoiceNumber(event.target.value)}
-                  placeholder={docType === 'invoice' ? 'INV-0001' : 'Receipt ID'}
+                  placeholder="INV-0001"
                 />
               </label>
 
-              {docType === 'invoice' ? (
-                <>
-                  <label className="form__field">
-                    <span className="form__hint">Issued date</span>
-                    <input
-                      className="input"
-                      type="date"
-                      value={issuedDate}
-                      onChange={event => setIssuedDate(event.target.value)}
-                    />
-                  </label>
-                  <label className="form__field">
-                    <span className="form__hint">Due date (optional)</span>
-                    <input
-                      className="input"
-                      type="date"
-                      value={dueDate}
-                      onChange={event => setDueDate(event.target.value)}
-                    />
-                  </label>
-                </>
-              ) : (
-                <label className="form__field">
-                  <span className="form__hint">Payment method</span>
-                  <select
-                    className="input"
-                    value={paymentMethod}
-                    onChange={event => setPaymentMethod(event.target.value as PaymentMethod)}
-                  >
-                    {PAYMENT_METHODS.map(method => (
-                      <option key={method.value} value={method.value}>
-                        {method.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
+              <label className="form__field">
+                <span className="form__hint">Issued date</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={issuedDate}
+                  onChange={event => setIssuedDate(event.target.value)}
+                />
+              </label>
+              <label className="form__field">
+                <span className="form__hint">Due date (optional)</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={dueDate}
+                  onChange={event => setDueDate(event.target.value)}
+                />
+              </label>
 
               <div className="documents-generator__row">
                 <label className="form__field">
@@ -379,17 +338,15 @@ export default function DocumentsGenerator() {
                 </label>
               </div>
 
-              {docType === 'invoice' ? (
-                <label className="form__field">
-                  <span className="form__hint">Invoice notes</span>
-                  <textarea
-                    className="input documents-generator__notes"
-                    value={notes}
-                    onChange={event => setNotes(event.target.value)}
-                    placeholder="Add payment terms, delivery notes, or thank you text."
-                  />
-                </label>
-              ) : null}
+              <label className="form__field">
+                <span className="form__hint">Invoice notes</span>
+                <textarea
+                  className="input documents-generator__notes"
+                  value={notes}
+                  onChange={event => setNotes(event.target.value)}
+                  placeholder="Add payment terms, delivery notes, or thank you text."
+                />
+              </label>
             </div>
           </div>
 
@@ -494,7 +451,7 @@ export default function DocumentsGenerator() {
 
         <div className="documents-generator__actions">
           <button type="button" className="button button--primary" onClick={handleGenerate}>
-            Generate {docType === 'invoice' ? 'invoice' : 'receipt'} PDF
+            Generate invoice PDF
           </button>
           {generated ? (
             <div className="documents-generator__download">
@@ -504,9 +461,6 @@ export default function DocumentsGenerator() {
               <button type="button" className="button button--ghost" onClick={handlePrint}>
                 Print PDF
               </button>
-              {generated.shareText ? (
-                <p className="form__hint">Share text ready for WhatsApp or email.</p>
-              ) : null}
             </div>
           ) : null}
         </div>

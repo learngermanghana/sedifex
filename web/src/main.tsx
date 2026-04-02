@@ -20,7 +20,6 @@ import BulkMessaging from './pages/BulkMessaging'
 import StaffManagement from './pages/StaffManagement'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
 import Support from './pages/Support'
-import Finance from './pages/Finance'
 import Expenses from './pages/Expenses'
 import DocumentsGenerator from './pages/DocumentsGenerator'
 import ResetPassword from './pages/ResetPassword'
@@ -70,8 +69,8 @@ const router = createBrowserRouter([
           { path: 'logi', element: <Logi /> },
 
           // Finance
-          { path: 'finance', element: <Finance /> },
-          { path: 'finance/documents', element: <DocumentsGenerator /> },
+          { path: 'finance', element: <DocumentsGenerator /> },
+          { path: 'finance/documents', element: <Navigate to="/finance" replace /> },
           { path: 'expenses', element: <Expenses /> },
 
           // Close day
