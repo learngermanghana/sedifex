@@ -5,8 +5,6 @@ import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb as db } from './firestore'
 import { normalizePhoneE164 } from './phone'
 import type { ProductReadModel } from './types/product'
-export { generateAiAdvice } from './aiAdvisor'
-export { exportDailyStoreReports } from './reports'
 export { checkSignupUnlock } from './paystack'
 
 /**
