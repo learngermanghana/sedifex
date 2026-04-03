@@ -2,6 +2,21 @@ const DEFAULT_UPLOAD_ENDPOINT = '/api/uploads'
 
 type UploadResponse = {
   url?: string
+  error?: string
+}
+
+export class ProductImageUploadError extends Error {
+  endpoint: string
+  status?: number
+  isNetworkError: boolean
+
+  constructor(message: string, options: { endpoint: string; status?: number; isNetworkError: boolean }) {
+    super(message)
+    this.name = 'ProductImageUploadError'
+    this.endpoint = options.endpoint
+    this.status = options.status
+    this.isNetworkError = options.isNetworkError
+  }
 }
 
 function resolveUploadEndpoint(): string {
@@ -20,25 +35,54 @@ export async function uploadProductImage(file: File): Promise<string> {
   })
   const dataBase64 = btoa(binary)
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      filename: file.name,
-      mimeType: file.type,
-      dataBase64,
-    }),
-  })
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type,
+        dataBase64,
+      }),
+    })
+  } catch (error) {
+    throw new ProductImageUploadError(
+      `Network error while uploading to ${endpoint}. Check connectivity and same-origin API deployment.`,
+      {
+        endpoint,
+        isNetworkError: true,
+      },
+    )
+  }
 
   if (!response.ok) {
-    throw new Error(`Upload failed with status ${response.status}`)
+    let detail = ''
+    try {
+      const payload = (await response.json()) as UploadResponse
+      if (payload?.error) detail = `: ${payload.error}`
+    } catch {
+      // ignore JSON parse errors and use status only
+    }
+
+    throw new ProductImageUploadError(
+      `Upload failed at ${endpoint} with HTTP ${response.status}${detail}`,
+      {
+        endpoint,
+        status: response.status,
+        isNetworkError: false,
+      },
+    )
   }
 
   const payload = (await response.json()) as UploadResponse
   if (!payload.url || typeof payload.url !== 'string') {
-    throw new Error('Upload succeeded but no URL was returned.')
+    throw new ProductImageUploadError(`Upload succeeded at ${endpoint} but no URL was returned.`, {
+      endpoint,
+      isNetworkError: false,
+    })
   }
 
   return payload.url
