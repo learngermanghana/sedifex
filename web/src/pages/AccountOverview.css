@@ -306,3 +306,30 @@
   gap: 4px;
   min-width: min(420px, 100%);
 }
+
+.account-overview__website-sync-keys {
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.account-overview__integration-key-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-overview__integration-key-item {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}

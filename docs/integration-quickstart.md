@@ -2,7 +2,7 @@
 
 Use this guide to auto-load products from Sedifex into another website ("Website A").
 
-This quickstart follows the current Sedifex downstream contract based on the callable `listStoreProducts` function and product shape documented in the root README.
+This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and product shape documented in the root README.
 
 ## What you get
 
@@ -20,14 +20,14 @@ After setup, Website A can fetch a store's product catalog from Sedifex and rend
 
 ## Prerequisites
 
-1. Sedifex Firebase project configured (Auth + Firestore + Functions).
-2. The website integration user exists and belongs to the target `storeId`.
-3. Your website can run Firebase client SDK (browser or Node runtime).
+1. Sedifex Firebase project configured (Firestore + Functions).
+2. A workspace owner has created an integration API key for the target `storeId`.
+3. Your website runtime can make HTTPS requests.
 
 ## Integration flow
 
-1. Sign in an authorized user (staff/owner) for the target store.
-2. Call `listStoreProducts` via Firebase callable Functions SDK.
+1. Create an integration API key in **Account overview → Workspace → Integration keys**.
+2. Call the HTTP endpoint `GET /integrationProducts?storeId=<storeId>` with `Authorization: Bearer <integration_key>`.
 3. Normalize and render the returned product list.
 4. Refresh on an interval (for example every 60 seconds) or on page focus.
 
@@ -36,36 +36,24 @@ After setup, Website A can fetch a store's product catalog from Sedifex and rend
 ## Example: JavaScript (Website A)
 
 ```js
-import { initializeApp } from 'firebase/app'
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
-import { getFunctions, httpsCallable } from 'firebase/functions'
-
-// 1) Initialize Firebase for the Sedifex project
-const firebaseConfig = {
-  apiKey: process.env.VITE_FB_API_KEY,
-  authDomain: process.env.VITE_FB_AUTH_DOMAIN,
-  projectId: process.env.VITE_FB_PROJECT_ID,
-  appId: process.env.VITE_FB_APP_ID,
-}
-
-const app = initializeApp(firebaseConfig)
-const auth = getAuth(app)
-const functions = getFunctions(app)
-
-// 2) Authenticate integration user
-await signInWithEmailAndPassword(
-  auth,
-  process.env.SEDIFEX_INTEGRATION_EMAIL,
-  process.env.SEDIFEX_INTEGRATION_PASSWORD
+const response = await fetch(
+  `${process.env.SEDIFEX_API_BASE_URL}/integrationProducts?storeId=${encodeURIComponent(
+    process.env.SEDIFEX_STORE_ID
+  )}`,
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.SEDIFEX_INTEGRATION_KEY}`,
+      Accept: 'application/json',
+    },
+  }
 )
 
-// 3) Call tenant-safe product reader
-const listStoreProducts = httpsCallable(functions, 'listStoreProducts')
-const response = await listStoreProducts({
-  // Keep payload minimal unless function requires additional filters.
-})
+if (!response.ok) {
+  throw new Error(`Sedifex sync failed with status ${response.status}`)
+}
 
-const products = Array.isArray(response?.data) ? response.data : []
+const payload = await response.json()
+const products = Array.isArray(payload?.products) ? payload.products : []
 
 // 4) Render or map for your site
 const websiteProducts = products.map((p) => ({
@@ -76,7 +64,8 @@ const websiteProducts = products.map((p) => ({
   imageUrl: p.imageUrl || null,
   imageAlt: p.imageAlt || p.name,
   updatedAt: p.updatedAt,
-}))
+})
+)
 
 console.log('Synced products:', websiteProducts)
 ```
@@ -91,7 +80,7 @@ console.log('Synced products:', websiteProducts)
 ## Security checklist
 
 - Do not embed admin credentials in Website A.
-- Use least-privilege user account tied to the correct store.
+- Use per-integration keys and rotate/revoke on owner transitions.
 - Keep store membership (`teamMembers`) and `storeId` assignments accurate.
 - Keep Firestore rules aligned with tenant boundaries.
 

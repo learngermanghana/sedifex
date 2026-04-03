@@ -88,6 +88,9 @@ Set these in your Vercel project:
 ### Integration quickstart (website sync)
 
 - See [`docs/integration-quickstart.md`](docs/integration-quickstart.md) for a step-by-step guide to connect another website and auto-load products from Sedifex.
+- See [`docs/integration-delivery-sequence.md`](docs/integration-delivery-sequence.md) for the recommended rollout order: API keys first, then WordPress plugin MVP, then product webhooks.
+- See [`docs/wordpress-plugin/sedifex-sync.php`](docs/wordpress-plugin/sedifex-sync.php) for a WordPress plugin MVP scaffold (settings + shortcode/block + sync health).
+- See [`docs/webhooks-signature-verification.md`](docs/webhooks-signature-verification.md) for webhook event and signature verification examples.
 
 ### One-time backfill utility
 
