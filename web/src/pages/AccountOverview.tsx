@@ -1162,13 +1162,13 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                 <p style={{ fontSize: 12, color: '#374151', marginTop: 8 }}>
                   Free route preview:{' '}
                   <a
-                    href={`https://stores.sedifex.com/promo/${encodeURIComponent(
+                    href={`https://www.sedifex.com/promo/${encodeURIComponent(
                       normalizePromoSlug(promoDraft.slug) ?? storeId,
                     )}`}
                     target="_blank"
                     rel="noreferrer noopener"
                   >
-                    stores.sedifex.com/promo/{normalizePromoSlug(promoDraft.slug) ?? storeId}
+                    www.sedifex.com/promo/{normalizePromoSlug(promoDraft.slug) ?? storeId}
                   </a>
                 </p>
               </div>
