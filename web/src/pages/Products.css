@@ -7,10 +7,10 @@
   gap: 24px;
 }
 
-@media (min-width: 1080px) {
-  .products-page__grid {
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  }
+.products-page__subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .products-page__card {

@@ -253,6 +253,7 @@ function normalizeSaleItems(items: unknown): SaleRecord['items'] {
 }
 
 export default function Products() {
+  const [activeSubTab, setActiveSubTab] = useState<'create' | 'added'>('added')
   const { storeId: activeStoreId } = useActiveStore()
   const { memberships } = useMemberships()
   const user = useAuthUser()
@@ -909,8 +910,37 @@ export default function Products() {
       </header>
 
       <div className="products-page__grid">
+        <div
+          className="products-page__subtabs"
+          role="tablist"
+          aria-label="Items page sections"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubTab === 'create'}
+            className={`button ${activeSubTab === 'create' ? 'button--primary' : 'button--ghost'}`}
+            onClick={() => setActiveSubTab('create')}
+          >
+            Create product
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubTab === 'added'}
+            className={`button ${activeSubTab === 'added' ? 'button--primary' : 'button--ghost'}`}
+            onClick={() => setActiveSubTab('added')}
+          >
+            Added products ({products.length})
+          </button>
+        </div>
+
         {/* Add item card */}
-        <section className="card products-page__add-card">
+        <section
+          className="card products-page__add-card"
+          role="tabpanel"
+          hidden={activeSubTab !== 'create'}
+        >
           <h3 className="card__title">Add item</h3>
           <p className="card__subtitle">
             Capture both physical products and services you offer so sales and records
@@ -1200,7 +1230,11 @@ export default function Products() {
         </section>
 
         {/* List card */}
-        <section className="card products-page__list-card">
+        <section
+          className="card products-page__list-card"
+          role="tabpanel"
+          hidden={activeSubTab !== 'added'}
+        >
           <div className="products-page__list-header">
             <div className="field field--inline">
               <label className="field__label" htmlFor="products-search">
