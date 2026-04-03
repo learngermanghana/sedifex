@@ -144,6 +144,27 @@
   color: #111827;
 }
 
+.account-overview__grid label {
+  color: #111827;
+  font-size: 14px;
+}
+
+.account-overview__grid input,
+.account-overview__grid textarea {
+  color: #111827;
+}
+
+.account-overview__grid input::placeholder,
+.account-overview__grid textarea::placeholder {
+  color: #64748b;
+}
+
+.account-overview__promo-link {
+  font-size: 12px;
+  color: #334155;
+  margin-top: 8px;
+}
+
 .account-overview__danger-actions {
   display: flex;
   flex-direction: column;

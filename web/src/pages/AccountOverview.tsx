@@ -288,7 +288,6 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     summary: '',
     startDate: '',
     endDate: '',
-    slug: '',
     websiteUrl: '',
   })
 
@@ -438,7 +437,6 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       summary: profile.promoSummary ?? '',
       startDate: profile.promoStartDate ?? '',
       endDate: profile.promoEndDate ?? '',
-      slug: profile.promoSlug ?? '',
       websiteUrl: profile.promoWebsiteUrl ?? '',
     })
   }, [profile])
@@ -598,6 +596,8 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     return normalized || null
   }
 
+  const promoSlug = normalizePromoSlug(storeId) ?? storeId
+
   async function handleSavePromo() {
     if (!storeId) return
     if (!isOwner) {
@@ -616,7 +616,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         promoSummary: normalizeInput(promoDraft.summary),
         promoStartDate: normalizeInput(promoDraft.startDate),
         promoEndDate: normalizeInput(promoDraft.endDate),
-        promoSlug: normalizePromoSlug(promoDraft.slug),
+        promoSlug,
         promoWebsiteUrl: normalizeInput(promoDraft.websiteUrl),
         updatedAt: Timestamp.now(),
       }
@@ -1153,22 +1153,22 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                   <span>Promo URL slug</span>
                   <input
                     type="text"
-                    value={promoDraft.slug}
-                    onChange={e => updatePromoDraft('slug', e.target.value)}
-                    placeholder="weekend-sale"
-                    data-testid="account-promo-slug"
+                    value={promoSlug}
+                    readOnly
+                    aria-readonly="true"
+                    data-testid="account-promo-slug-constant"
                   />
                 </label>
-                <p style={{ fontSize: 12, color: '#374151', marginTop: 8 }}>
+                <p className="account-overview__promo-link">
                   Free route preview:{' '}
                   <a
                     href={`https://www.sedifex.com/promo/${encodeURIComponent(
-                      normalizePromoSlug(promoDraft.slug) ?? storeId,
+                      promoSlug,
                     )}`}
                     target="_blank"
                     rel="noreferrer noopener"
                   >
-                    www.sedifex.com/promo/{normalizePromoSlug(promoDraft.slug) ?? storeId}
+                    www.sedifex.com/promo/{promoSlug}
                   </a>
                 </p>
               </div>
