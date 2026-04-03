@@ -81,6 +81,17 @@ type RosterMember = {
   updatedAt: Timestamp | null
 }
 
+type IntegrationApiKey = {
+  id: string
+  name: string
+  status: 'active' | 'revoked'
+  keyPreview: string
+  createdAt: Timestamp | null
+  updatedAt: Timestamp | null
+  revokedAt: Timestamp | null
+  lastUsedAt: Timestamp | null
+}
+
 function toNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() !== '' ? value : null
 }
@@ -295,6 +306,11 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
   const [isTestingEndpoint, setIsTestingEndpoint] = useState(false)
   const [isCopyingApiToken, setIsCopyingApiToken] = useState(false)
+  const [integrationApiKeys, setIntegrationApiKeys] = useState<IntegrationApiKey[]>([])
+  const [integrationKeysLoading, setIntegrationKeysLoading] = useState(false)
+  const [integrationKeyName, setIntegrationKeyName] = useState('')
+  const [isCreatingIntegrationKey, setIsCreatingIntegrationKey] = useState(false)
+  const [actioningKeyId, setActioningKeyId] = useState<string | null>(null)
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -445,6 +461,54 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       websiteUrl: profile.promoWebsiteUrl ?? '',
     })
   }, [profile])
+
+  async function refreshIntegrationApiKeys() {
+    if (!isOwner) {
+      setIntegrationApiKeys([])
+      return
+    }
+
+    try {
+      setIntegrationKeysLoading(true)
+      const callable = httpsCallable(functions, 'listIntegrationApiKeys')
+      const response = await callable({})
+      const payload = (response.data ?? {}) as {
+        keys?: Array<Record<string, unknown>>
+      }
+
+      const keys = Array.isArray(payload.keys)
+        ? payload.keys.map(item => ({
+            id: typeof item.id === 'string' ? item.id : '',
+            name: typeof item.name === 'string' ? item.name : 'Unnamed key',
+            status: item.status === 'revoked' ? 'revoked' : 'active',
+            keyPreview:
+              typeof item.keyPreview === 'string' && item.keyPreview.trim()
+                ? item.keyPreview
+                : '••••••••',
+            createdAt: isTimestamp(item.createdAt) ? item.createdAt : null,
+            updatedAt: isTimestamp(item.updatedAt) ? item.updatedAt : null,
+            revokedAt: isTimestamp(item.revokedAt) ? item.revokedAt : null,
+            lastUsedAt: isTimestamp(item.lastUsedAt) ? item.lastUsedAt : null,
+          }))
+        : []
+      setIntegrationApiKeys(keys.filter(key => key.id))
+    } catch (error) {
+      console.error('[account] Failed to load integration API keys', error)
+      publish({ message: 'Unable to load integration API keys.', tone: 'error' })
+      setIntegrationApiKeys([])
+    } finally {
+      setIntegrationKeysLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!storeId || !isOwner) {
+      setIntegrationApiKeys([])
+      return
+    }
+    void refreshIntegrationApiKeys()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId, isOwner])
 
   useEffect(() => {
     if (!profile) return
@@ -710,6 +774,88 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       })
     } finally {
       setIsCopyingApiToken(false)
+    }
+  }
+
+  async function copyTextToClipboard(value: string, successMessage: string) {
+    await navigator.clipboard.writeText(value)
+    publish({ message: successMessage, tone: 'success' })
+  }
+
+  async function handleCreateIntegrationApiKey() {
+    if (!integrationKeyName.trim()) {
+      publish({ message: 'Provide a key name first.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsCreatingIntegrationKey(true)
+      const callable = httpsCallable(functions, 'createIntegrationApiKey')
+      const response = await callable({ name: integrationKeyName.trim() })
+      const data = (response.data ?? {}) as { token?: unknown }
+      const token = typeof data.token === 'string' ? data.token : ''
+
+      if (token) {
+        await copyTextToClipboard(
+          token,
+          'Integration API key created. Token copied (shown once).',
+        )
+      } else {
+        publish({
+          message: 'Integration API key created, but token was unavailable.',
+          tone: 'warning',
+        })
+      }
+
+      setIntegrationKeyName('')
+      await refreshIntegrationApiKeys()
+    } catch (error) {
+      console.error('[account] Failed to create integration API key', error)
+      publish({ message: 'Unable to create integration API key.', tone: 'error' })
+    } finally {
+      setIsCreatingIntegrationKey(false)
+    }
+  }
+
+  async function handleRevokeIntegrationApiKey(keyId: string) {
+    try {
+      setActioningKeyId(keyId)
+      const callable = httpsCallable(functions, 'revokeIntegrationApiKey')
+      await callable({ keyId })
+      publish({ message: 'Integration API key revoked.', tone: 'success' })
+      await refreshIntegrationApiKeys()
+    } catch (error) {
+      console.error('[account] Failed to revoke integration API key', error)
+      publish({ message: 'Unable to revoke integration API key.', tone: 'error' })
+    } finally {
+      setActioningKeyId(null)
+    }
+  }
+
+  async function handleRotateIntegrationApiKey(keyId: string) {
+    try {
+      setActioningKeyId(keyId)
+      const callable = httpsCallable(functions, 'rotateIntegrationApiKey')
+      const response = await callable({ keyId })
+      const data = (response.data ?? {}) as { token?: unknown }
+      const token = typeof data.token === 'string' ? data.token : ''
+      if (token) {
+        await copyTextToClipboard(
+          token,
+          'Integration API key rotated. New token copied (shown once).',
+        )
+      } else {
+        publish({
+          message: 'Key rotated, but the new token was unavailable.',
+          tone: 'warning',
+        })
+      }
+      await refreshIntegrationApiKeys()
+    } catch (error) {
+      console.error('[account] Failed to rotate integration API key', error)
+      publish({ message: 'Unable to rotate integration API key.', tone: 'error' })
+    } finally {
+      setActioningKeyId(null)
     }
   }
 
@@ -1049,6 +1195,72 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                 Test Sedifex endpoint
               </button>
             </div>
+            {isOwner && (
+              <div className="account-overview__website-sync-test">
+                <label>
+                  <span>New integration key name</span>
+                  <input
+                    type="text"
+                    value={integrationKeyName}
+                    onChange={event => setIntegrationKeyName(event.target.value)}
+                    placeholder="WordPress storefront"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={handleCreateIntegrationApiKey}
+                  disabled={isCreatingIntegrationKey}
+                >
+                  {isCreatingIntegrationKey ? 'Creating…' : 'Create integration key'}
+                </button>
+              </div>
+            )}
+            {isOwner && (
+              <div className="account-overview__website-sync-keys">
+                <p className="account-overview__hint">Active integration keys</p>
+                {integrationKeysLoading ? (
+                  <p className="account-overview__hint">Loading integration keys…</p>
+                ) : integrationApiKeys.length === 0 ? (
+                  <p className="account-overview__hint">No integration keys yet.</p>
+                ) : (
+                  <ul className="account-overview__integration-key-list">
+                    {integrationApiKeys.map(key => (
+                      <li key={key.id} className="account-overview__integration-key-item">
+                        <div>
+                          <strong>{key.name}</strong>
+                          <p className="account-overview__hint">
+                            {key.keyPreview}
+                            {' · '}
+                            {key.status}
+                            {' · '}
+                            Created {formatTimestamp(key.createdAt)}
+                          </p>
+                        </div>
+                        <div className="account-overview__website-sync-actions">
+                          <button
+                            type="button"
+                            className="button button--secondary"
+                            onClick={() => handleRotateIntegrationApiKey(key.id)}
+                            disabled={actioningKeyId === key.id || key.status === 'revoked'}
+                          >
+                            Rotate
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--secondary"
+                            onClick={() => handleRevokeIntegrationApiKey(key.id)}
+                            disabled={actioningKeyId === key.id || key.status === 'revoked'}
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             <div className="account-overview__website-sync-test">
               <label>
                 <span>Test your endpoint</span>

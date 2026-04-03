@@ -94,6 +94,18 @@ type ListStoreProductsPayload = {
   limit?: unknown
 }
 
+type CreateIntegrationApiKeyPayload = {
+  name?: unknown
+}
+
+type RotateIntegrationApiKeyPayload = {
+  keyId?: unknown
+}
+
+type RevokeIntegrationApiKeyPayload = {
+  keyId?: unknown
+}
+
 const VALID_ROLES = new Set(['owner', 'staff'])
 const TRIAL_DAYS = 14
 const GRACE_DAYS = 7
@@ -1660,6 +1672,409 @@ export const listStoreProducts = functions.https.onCall(
     return { storeId: resolvedStoreId, products }
   },
 )
+
+/** ============================================================================
+ *  CALLABLES: integration API keys (owner)
+ * ==========================================================================*/
+
+function normalizeIntegrationApiKeyName(nameRaw: unknown) {
+  const name = typeof nameRaw === 'string' ? nameRaw.trim() : ''
+  if (!name) throw new functions.https.HttpsError('invalid-argument', 'Key name is required.')
+  if (name.length > 80) {
+    throw new functions.https.HttpsError('invalid-argument', 'Key name must be 80 characters or less.')
+  }
+  return name
+}
+
+function normalizeIntegrationApiKeyId(keyIdRaw: unknown) {
+  const keyId = typeof keyIdRaw === 'string' ? keyIdRaw.trim() : ''
+  if (!keyId) throw new functions.https.HttpsError('invalid-argument', 'keyId is required.')
+  return keyId
+}
+
+function generateIntegrationSecret() {
+  return crypto.randomBytes(24).toString('hex')
+}
+
+function hashIntegrationSecret(secret: string) {
+  return crypto.createHash('sha256').update(secret).digest('hex')
+}
+
+function shortMask(value: string) {
+  if (value.length <= 8) return '••••••••'
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`
+}
+
+export const listIntegrationApiKeys = functions.https.onCall(
+  async (_data: unknown, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+
+    const snapshot = await db
+      .collection('integrationApiKeys')
+      .where('storeId', '==', storeId)
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get()
+
+    const keys = snapshot.docs.map(docSnap => {
+      const data = docSnap.data() as Record<string, unknown>
+      return {
+        id: docSnap.id,
+        name: typeof data.name === 'string' ? data.name : 'Unnamed key',
+        status: data.status === 'revoked' ? 'revoked' : 'active',
+        keyPreview:
+          typeof data.keyPreview === 'string' && data.keyPreview.trim()
+            ? data.keyPreview
+            : '••••••••',
+        lastUsedAt: data.lastUsedAt instanceof admin.firestore.Timestamp ? data.lastUsedAt : null,
+        createdAt: data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt : null,
+        updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt : null,
+        revokedAt: data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt : null,
+      }
+    })
+
+    return { storeId, keys }
+  },
+)
+
+export const createIntegrationApiKey = functions.https.onCall(
+  async (data: CreateIntegrationApiKeyPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+
+    const name = normalizeIntegrationApiKeyName(data?.name)
+    const secret = generateIntegrationSecret()
+    const token = `sedx_${secret}`
+    const keyHash = hashIntegrationSecret(token)
+    const keyPreview = shortMask(token)
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+
+    const keyRef = db.collection('integrationApiKeys').doc()
+    await keyRef.set({
+      storeId,
+      name,
+      status: 'active',
+      keyHash,
+      keyPreview,
+      createdBy: uid,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revokedAt: null,
+      lastUsedAt: null,
+    })
+
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: 'api_key.created',
+      actorUid: uid,
+      targetId: keyRef.id,
+      metadata: { name },
+      createdAt: timestamp,
+    })
+
+    return {
+      key: {
+        id: keyRef.id,
+        name,
+        status: 'active',
+        keyPreview,
+      },
+      token,
+    }
+  },
+)
+
+export const revokeIntegrationApiKey = functions.https.onCall(
+  async (data: RevokeIntegrationApiKeyPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+    const keyId = normalizeIntegrationApiKeyId(data?.keyId)
+
+    const keyRef = db.collection('integrationApiKeys').doc(keyId)
+    const keySnap = await keyRef.get()
+    if (!keySnap.exists) throw new functions.https.HttpsError('not-found', 'Integration key not found.')
+
+    const keyData = (keySnap.data() ?? {}) as Record<string, unknown>
+    if (keyData.storeId !== storeId) {
+      throw new functions.https.HttpsError('permission-denied', 'Key does not belong to this store.')
+    }
+
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+    await keyRef.set(
+      {
+        status: 'revoked',
+        revokedAt: timestamp,
+        updatedAt: timestamp,
+        revokedBy: uid,
+      },
+      { merge: true },
+    )
+
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: 'api_key.revoked',
+      actorUid: uid,
+      targetId: keyId,
+      createdAt: timestamp,
+    })
+
+    return { ok: true, keyId }
+  },
+)
+
+export const rotateIntegrationApiKey = functions.https.onCall(
+  async (data: RotateIntegrationApiKeyPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+    const keyId = normalizeIntegrationApiKeyId(data?.keyId)
+
+    const keyRef = db.collection('integrationApiKeys').doc(keyId)
+    const keySnap = await keyRef.get()
+    if (!keySnap.exists) throw new functions.https.HttpsError('not-found', 'Integration key not found.')
+    const keyData = (keySnap.data() ?? {}) as Record<string, unknown>
+    if (keyData.storeId !== storeId) {
+      throw new functions.https.HttpsError('permission-denied', 'Key does not belong to this store.')
+    }
+
+    const replacementName =
+      typeof keyData.name === 'string' && keyData.name.trim()
+        ? keyData.name.trim()
+        : 'Rotated key'
+
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+    await keyRef.set(
+      {
+        status: 'revoked',
+        revokedAt: timestamp,
+        updatedAt: timestamp,
+        revokedBy: uid,
+      },
+      { merge: true },
+    )
+
+    const secret = generateIntegrationSecret()
+    const token = `sedx_${secret}`
+    const keyHash = hashIntegrationSecret(token)
+    const keyPreview = shortMask(token)
+    const replacementRef = db.collection('integrationApiKeys').doc()
+    await replacementRef.set({
+      storeId,
+      name: replacementName,
+      status: 'active',
+      keyHash,
+      keyPreview,
+      createdBy: uid,
+      rotatedFrom: keyId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revokedAt: null,
+      lastUsedAt: null,
+    })
+
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: 'api_key.rotated',
+      actorUid: uid,
+      targetId: keyId,
+      metadata: { replacementId: replacementRef.id },
+      createdAt: timestamp,
+    })
+
+    return {
+      ok: true,
+      revokedKeyId: keyId,
+      replacement: {
+        id: replacementRef.id,
+        name: replacementName,
+        status: 'active',
+        keyPreview,
+      },
+      token,
+    }
+  },
+)
+
+export const integrationProducts = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+  const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : ''
+
+  if (!token || !storeId) {
+    res.status(400).json({ error: 'missing-token-or-store' })
+    return
+  }
+
+  const tokenHash = hashIntegrationSecret(token)
+  const keySnapshot = await db
+    .collection('integrationApiKeys')
+    .where('storeId', '==', storeId)
+    .where('status', '==', 'active')
+    .where('keyHash', '==', tokenHash)
+    .limit(1)
+    .get()
+
+  if (keySnapshot.empty) {
+    res.status(401).json({ error: 'invalid-token' })
+    return
+  }
+
+  const keyDoc = keySnapshot.docs[0]
+  await keyDoc.ref.set(
+    {
+      lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+
+  const productsSnap = await db
+    .collection('products')
+    .where('storeId', '==', storeId)
+    .orderBy('updatedAt', 'desc')
+    .limit(200)
+    .get()
+
+  const products = productsSnap.docs.map(docSnap => {
+    const data = docSnap.data() as Record<string, unknown>
+    return {
+      id: docSnap.id,
+      storeId,
+      name: typeof data.name === 'string' ? data.name : 'Untitled item',
+      price: typeof data.price === 'number' ? data.price : null,
+      stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+      imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
+      imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+      updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
+    }
+  })
+
+  res.status(200).json({ storeId, products })
+})
+
+/** ============================================================================
+ *  WEBHOOKS: product.created / product.updated / product.deleted
+ * ==========================================================================*/
+
+function computeWebhookSignature(secret: string, payload: string) {
+  const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex')
+  return `sha256=${digest}`
+}
+
+export const emitProductWebhooks = functions.firestore
+  .document('products/{productId}')
+  .onWrite(async (change, context) => {
+    const beforeExists = change.before.exists
+    const afterExists = change.after.exists
+    if (!beforeExists && !afterExists) return
+
+    const productId = context.params.productId
+    const beforeData = (beforeExists ? change.before.data() : null) as Record<string, unknown> | null
+    const afterData = (afterExists ? change.after.data() : null) as Record<string, unknown> | null
+
+    const storeIdRaw =
+      (typeof afterData?.storeId === 'string' && afterData.storeId) ||
+      (typeof beforeData?.storeId === 'string' && beforeData.storeId) ||
+      ''
+    const storeId = storeIdRaw.trim()
+    if (!storeId) return
+
+    const eventType = !beforeExists
+      ? 'product.created'
+      : !afterExists
+        ? 'product.deleted'
+        : 'product.updated'
+
+    const payloadObject = {
+      id: `evt_${context.eventId}`,
+      type: eventType,
+      occurredAt: new Date().toISOString(),
+      storeId,
+      data: {
+        productId,
+        before: beforeData,
+        after: afterData,
+      },
+    }
+    const payload = JSON.stringify(payloadObject)
+
+    const endpointSnapshot = await db
+      .collection('webhookEndpoints')
+      .where('storeId', '==', storeId)
+      .where('status', '==', 'active')
+      .get()
+
+    if (endpointSnapshot.empty) return
+
+    const results = await Promise.all(
+      endpointSnapshot.docs.map(async endpointDoc => {
+        const endpoint = endpointDoc.data() as Record<string, unknown>
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : ''
+        if (!url || !secret) {
+          return { endpointId: endpointDoc.id, ok: false, statusCode: null, error: 'missing config' }
+        }
+
+        const signature = computeWebhookSignature(secret, payload)
+
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-sedifex-signature': signature,
+              'x-sedifex-event': eventType,
+              'x-sedifex-event-id': `evt_${context.eventId}`,
+            },
+            body: payload,
+          })
+
+          return {
+            endpointId: endpointDoc.id,
+            ok: response.ok,
+            statusCode: response.status,
+            error: null,
+          }
+        } catch (error) {
+          return {
+            endpointId: endpointDoc.id,
+            ok: false,
+            statusCode: null,
+            error: error instanceof Error ? error.message : 'unknown error',
+          }
+        }
+      }),
+    )
+
+    await Promise.all(
+      results.map(result =>
+        db.collection('webhookDeliveries').add({
+          storeId,
+          endpointId: result.endpointId,
+          eventType,
+          productId,
+          eventId: `evt_${context.eventId}`,
+          ok: result.ok,
+          statusCode: result.statusCode,
+          error: result.error,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+      ),
+    )
+  })
 /** ============================================================================
  *  HUBTEL BULK MESSAGING
  * ==========================================================================*/
