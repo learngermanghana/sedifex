@@ -1269,6 +1269,31 @@ function ensureHubtelConfig() {
     }
     return config;
 }
+function normalizeHubtelSenderId(value) {
+    if (typeof value !== 'string')
+        return null;
+    const trimmed = value.trim();
+    if (!trimmed)
+        return null;
+    // Hubtel sender IDs are typically alphanumeric and between 3-11 chars.
+    if (!/^[a-zA-Z0-9]{3,11}$/.test(trimmed))
+        return null;
+    return trimmed;
+}
+function resolveHubtelSenderId(storeData, fallbackSenderId) {
+    const senderCandidates = [
+        storeData.hubtelApprovedSenderId,
+        storeData.hubtelSenderId,
+        storeData.smsSenderId,
+        storeData.senderId,
+    ];
+    for (const candidate of senderCandidates) {
+        const normalized = normalizeHubtelSenderId(candidate);
+        if (normalized)
+            return normalized;
+    }
+    return fallbackSenderId;
+}
 function formatSmsAddress(phone) {
     const trimmed = phone.trim();
     if (!trimmed)
@@ -1319,7 +1344,8 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
     const creditsRequired = creditCosts.reduce((total, cost) => total + cost, 0);
     const storeRef = firestore_1.defaultDb.collection('stores').doc(storeId);
     const config = ensureHubtelConfig();
-    const from = config.senderId;
+    const fallbackSenderId = config.senderId;
+    let senderIdForStore = fallbackSenderId;
     // debit credits first
     await firestore_1.defaultDb.runTransaction(async (transaction) => {
         const storeSnap = await transaction.get(storeRef);
@@ -1327,6 +1353,7 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('not-found', 'Store not found for this bulk messaging request.');
         }
         const storeData = storeSnap.data() ?? {};
+        senderIdForStore = resolveHubtelSenderId(storeData, fallbackSenderId);
         const rawCredits = storeData.bulkMessagingCredits;
         const currentCredits = typeof rawCredits === 'number' && Number.isFinite(rawCredits) ? rawCredits : 0;
         if (currentCredits < creditsRequired) {
@@ -1337,6 +1364,7 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
             updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
         });
     });
+    const from = senderIdForStore;
     const attempted = recipients.length;
     const results = await Promise.allSettled(recipients.map(async (recipient) => {
         const to = formatSmsAddress(recipient.phone ?? '');
