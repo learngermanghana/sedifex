@@ -1,67 +1,47 @@
-// ESM-compatible Firebase Admin singleton for Vercel Node functions
-// Usage in other API files: `import { db } from "./_firebase-admin.js"`
+import * as admin from 'firebase-admin'
 
-import * as admin from "firebase-admin";
+let app: admin.app.App | undefined
 
-let app: admin.app.App | undefined;
-
-/**
- * Load service account credentials from env.
- * - Prefer ADMIN_SERVICE_ACCOUNT_JSON (full JSON string).
- * - Fallback: FIREBASE_SERVICE_ACCOUNT_JSON (legacy name).
- * - Or FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the same JSON).
- */
 function loadServiceAccount(): admin.ServiceAccount {
   console.log('[api/_firebase-admin] service account env check', {
     hasAdminJson: !!process.env.ADMIN_SERVICE_ACCOUNT_JSON,
-    hasJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
-    hasBase64: !!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
-  });
+    hasFirebaseJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    hasFirebaseBase64: !!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+  })
 
-  const rawJson = process.env.ADMIN_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (rawJson && rawJson.trim().startsWith("{")) {
-    return JSON.parse(rawJson);
+  const rawJson =
+    process.env.ADMIN_SERVICE_ACCOUNT_JSON ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+
+  if (rawJson && rawJson.trim().startsWith('{')) {
+    return JSON.parse(rawJson)
   }
 
-  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
   if (b64) {
-    const json = Buffer.from(b64, "base64").toString("utf8");
-    return JSON.parse(json);
+    const json = Buffer.from(b64, 'base64').toString('utf8')
+    return JSON.parse(json)
   }
 
   throw new Error(
-    "Missing service account: set ADMIN_SERVICE_ACCOUNT_JSON (recommended), FIREBASE_SERVICE_ACCOUNT_JSON (legacy), or FIREBASE_SERVICE_ACCOUNT_BASE64 in Vercel env."
-  );
+    'Missing service account: set ADMIN_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_JSON, or FIREBASE_SERVICE_ACCOUNT_BASE64 in deployment env.',
+  )
 }
 
-/**
- * Initialize Admin SDK once per cold start.
- */
 export function getAdmin(): admin.app.App {
-  if (app) return app;
+  if (app) return app
 
-  const creds = loadServiceAccount();
-  const projectId = process.env.FIREBASE_PROJECT_ID || (creds as any).project_id;
+  const creds = loadServiceAccount()
+  const projectId = process.env.FIREBASE_PROJECT_ID || (creds as any).project_id
 
   app = admin.apps.length
     ? admin.app()
     : admin.initializeApp({
         credential: admin.credential.cert(creds),
-        projectId, // makes Firestore endpoint explicit when running outside GCP
-      });
+        projectId,
+      })
 
-  return app;
+  return app
 }
 
-/**
- * Convenient Firestore accessor.
- * Example:  const snap = await db().collection("sales").doc("x").get();
- */
-export const db = () => getAdmin().firestore();
-
-/**
- * (Optional) Export auth/storage if you need them later:
- *
- * export const auth = () => getAdmin().auth();
- * export const storage = () => getAdmin().storage();
- */
+export const db = () => getAdmin().firestore()
