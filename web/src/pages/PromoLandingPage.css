@@ -38,7 +38,7 @@
   font-size: 12px;
 }
 
-.promo-store {
+.promo-meta {
   margin: 0;
   color: #334155;
   font-weight: 600;
@@ -51,7 +51,7 @@
   font-size: 1.03rem;
 }
 
-.promo-dates {
+.promo-summary {
   margin: 0;
   font-weight: 700;
   color: #1d4ed8;
