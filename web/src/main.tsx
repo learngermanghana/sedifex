@@ -26,6 +26,7 @@ import ResetPassword from './pages/ResetPassword'
 import VerifyEmail from './pages/VerifyEmail'
 import InventorySystemGhana from './pages/InventorySystemGhana'
 import DataTransfer from './pages/DataTransfer'
+import PromoLandingPage from './pages/PromoLandingPage'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -40,6 +41,7 @@ import { ToastProvider } from './components/ToastProvider'
 const router = createBrowserRouter([
   // Public receipt route bypasses App-level redirects
   { path: '/receipt/:saleId', element: <ReceiptView /> },
+  { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
 
