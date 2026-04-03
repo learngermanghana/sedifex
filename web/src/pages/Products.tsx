@@ -26,7 +26,7 @@ import {
 import { normalizeBarcode } from '../utils/barcode'
 import { useStorePreferences } from '../hooks/useStorePreferences'
 import type { ItemType, Product } from '../types/product'
-import { uploadProductImage } from '../api/productImageUpload'
+import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 
 type CachedProduct = Omit<Product, 'id'>
 type AbcBucket = 'A' | 'B' | 'C'
@@ -669,7 +669,11 @@ export default function Products() {
       setImageFileInput(null)
     } catch (error) {
       console.error('[products] Failed to upload product image', error)
-      setImageUploadError('Image upload failed. Please try again.')
+      if (error instanceof ProductImageUploadError) {
+        setImageUploadError(error.message)
+      } else {
+        setImageUploadError('Image upload failed. Please try again.')
+      }
     } finally {
       setIsUploadingImage(false)
     }

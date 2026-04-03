@@ -15,24 +15,44 @@ Sedifex product documents now support first-class image metadata:
 - `imageUrl?: string | null` — optional public image URL (`http://` or `https://` only in product forms/import).
 - `imageAlt?: string | null` — optional accessibility label; defaults to `name` when `imageUrl` exists and `imageAlt` is missing.
 
-### Optional self-hosted image upload route (no Firebase Storage)
+### Production image uploads (same-origin `/api/uploads` on Vercel)
 
-If you do not want to use Firebase Storage, run the local upload server in `web/`:
+Sedifex now uses a real serverless API route at `web/api/uploads.ts` (deployed by Vercel) so the browser uploads to the **same origin** as the app (for example `https://www.sedifex.com/api/uploads`).
 
-```bash
-cd web
-npm i
-npm run upload:server
-```
+- Upload API endpoint: `POST /api/uploads`
+- Request JSON body:
+  - `filename`
+  - `mimeType`
+  - `dataBase64`
+- Validation rules:
+  - `mimeType` must start with `image/`
+  - `dataBase64` must be present and decode to non-empty bytes
+  - max decoded size is **5 MB**
+- Response JSON:
+  - `{ "url": "<public-image-url>" }`
 
-- Upload API endpoint: `POST /api/uploads` (JSON body with `filename`, `mimeType`, `dataBase64`)
-- Static image route: `/uploads/<generated-file-name>`
-- By default, files are saved to `web/public/uploads/`
-- Optional env vars:
-  - `UPLOAD_SERVER_PORT` (default `8787`)
-  - `UPLOAD_DIR` (absolute/relative filesystem path to persist uploads)
-  - `PUBLIC_BASE_URL` (e.g. `https://app.example.com` for absolute URLs in API responses)
-  - `VITE_UPLOAD_API_URL` in frontend (defaults to `/api/uploads`)
+#### Storage backend
+
+Uploads are stored in your configured **Firebase Storage bucket** under the `product-images/` prefix using the existing Firebase Admin credentials already used by Vercel API routes. The API returns a public Google Cloud Storage URL, which can be stored in Firestore and rendered by the Products page.
+
+#### Required environment variables
+
+Set these in your Vercel project:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_BASE64` (already required by existing API routes)
+- `FIREBASE_STORAGE_BUCKET` (for example: `sedifex-prod.appspot.com`)
+- `VITE_UPLOAD_API_URL` (optional; leave unset in production to use the same-origin default `/api/uploads`)
+
+#### Deploy notes
+
+1. Deploy from the repo (or `web/`) to Vercel with `web/` as the build root for the frontend.
+2. Ensure `web/vercel.json` (and root `vercel.json`, if used) keeps SPA rewrites from catching `/api/*`.
+3. In production, verify:
+   - `POST https://www.sedifex.com/api/uploads` returns `201` + `{ "url": "..." }`
+   - Uploaded URL is publicly accessible and renders in the product list.
+4. Ensure bucket/object access allows public reads for product images (for example, grant `Storage Object Viewer` on the bucket to `allUsers`, or apply an equivalent public-read policy for the `product-images/` path).
+
+> The previous local-only `npm run upload:server` helper has been removed to avoid confusion with production deployment.
 
 ### CSV import/export (items)
 
