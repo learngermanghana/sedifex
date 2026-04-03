@@ -1264,10 +1264,14 @@ function ensureHubtelConfig() {
         console.error('[hubtel] Missing client id or client secret');
         throw new functions.https.HttpsError('failed-precondition', 'Hubtel is not configured. Please contact support.');
     }
-    if (!config.senderId) {
-        throw new functions.https.HttpsError('failed-precondition', 'Hubtel sender ID is not configured.');
+    const normalizedFallbackSenderId = normalizeHubtelSenderId(config.senderId);
+    if (!normalizedFallbackSenderId) {
+        throw new functions.https.HttpsError('failed-precondition', 'Hubtel sender ID is invalid or not configured.');
     }
-    return config;
+    return {
+        ...config,
+        senderId: normalizedFallbackSenderId,
+    };
 }
 function normalizeHubtelSenderId(value) {
     if (typeof value !== 'string')
@@ -1292,7 +1296,7 @@ function resolveHubtelSenderId(storeData, fallbackSenderId) {
         if (normalized)
             return normalized;
     }
-    return fallbackSenderId;
+    return normalizeHubtelSenderId(fallbackSenderId) ?? fallbackSenderId;
 }
 function formatSmsAddress(phone) {
     const trimmed = phone.trim();
