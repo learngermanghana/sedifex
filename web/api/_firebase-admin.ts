@@ -2,7 +2,8 @@ import type { ServiceAccount, app as AdminApp } from 'firebase-admin'
 import { cert, getApp, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
-let app: AdminApp.App | undefined
+let app: admin.app.App | undefined
+const adminCompat = (admin as unknown as { default?: typeof admin }).default ?? admin
 
 type RawServiceAccount = {
   project_id?: unknown
@@ -107,10 +108,14 @@ export function getAdmin(): AdminApp.App {
 
   const creds = loadServiceAccount()
 
-  app = getApps().length
-    ? getApp()
-    : initializeApp({
-        credential: cert(creds),
+  const existingApps = Array.isArray((adminCompat as { apps?: admin.app.App[] }).apps)
+    ? (adminCompat as { apps: admin.app.App[] }).apps
+    : []
+
+  app = existingApps.length
+    ? adminCompat.app()
+    : adminCompat.initializeApp({
+        credential: adminCompat.credential.cert(creds),
         projectId: creds.projectId,
       })
 
