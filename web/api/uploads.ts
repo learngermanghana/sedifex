@@ -3,7 +3,6 @@ import { getStorage } from 'firebase-admin/storage'
 import { getAdmin } from './_firebase-admin.js'
 
 const MAX_BYTES = 5 * 1024 * 1024
-const SIGNED_URL_EXPIRATION = '03-01-2500'
 
 type UploadRequestBody = {
   filename?: unknown
@@ -95,23 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     })
 
-    try {
-      await file.makePublic()
-      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(objectName)}`
-      return res.status(201).json({ url: publicUrl })
-    } catch (makePublicError) {
-      console.warn(
-        '[api/uploads] makePublic failed, returning signed URL instead',
-        makePublicError,
-      )
-
-      const [signedUrl] = await file.getSignedUrl({
-        action: 'read',
-        expires: SIGNED_URL_EXPIRATION,
-      })
-
-      return res.status(201).json({ url: signedUrl })
-    }
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(objectName)}`
+    return res.status(201).json({ url: publicUrl })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
 
