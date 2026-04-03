@@ -1,14 +1,9 @@
-import type { App } from 'firebase-admin/app'
+import type { ServiceAccount, app as AdminApp } from 'firebase-admin'
 import { cert, getApp, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
-let app: App | undefined
-
-type ParsedServiceAccount = {
-  projectId: string
-  clientEmail: string
-  privateKey: string
-}
+let app: admin.app.App | undefined
+const adminCompat = (admin as unknown as { default?: typeof admin }).default ?? admin
 
 type RawServiceAccount = {
   project_id?: unknown
@@ -19,7 +14,7 @@ type RawServiceAccount = {
   privateKey?: unknown
 }
 
-function parseServiceAccount(raw: string): ParsedServiceAccount {
+function parseServiceAccount(raw: string): ServiceAccount {
   let parsed: RawServiceAccount
 
   try {
@@ -78,7 +73,7 @@ function parseServiceAccount(raw: string): ParsedServiceAccount {
   }
 }
 
-function loadServiceAccount(): ParsedServiceAccount {
+function loadServiceAccount(): ServiceAccount {
   console.log('[api/_firebase-admin] service account env check', {
     hasAdminJson: !!process.env.ADMIN_SERVICE_ACCOUNT_JSON,
     hasAdminBase64: !!process.env.ADMIN_SERVICE_ACCOUNT_BASE64,
@@ -108,15 +103,19 @@ function loadServiceAccount(): ParsedServiceAccount {
   )
 }
 
-export function getAdmin(): App {
+export function getAdmin(): AdminApp.App {
   if (app) return app
 
   const creds = loadServiceAccount()
 
-  app = getApps().length
-    ? getApp()
-    : initializeApp({
-        credential: cert(creds),
+  const existingApps = Array.isArray((adminCompat as { apps?: admin.app.App[] }).apps)
+    ? (adminCompat as { apps: admin.app.App[] }).apps
+    : []
+
+  app = existingApps.length
+    ? adminCompat.app()
+    : adminCompat.initializeApp({
+        credential: adminCompat.credential.cert(creds),
         projectId: creds.projectId,
       })
 
