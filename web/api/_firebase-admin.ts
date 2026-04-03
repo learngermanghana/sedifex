@@ -7,11 +7,12 @@ let app: admin.app.App | undefined;
 
 /**
  * Load service account credentials from env.
- * - Prefer FIREBASE_SERVICE_ACCOUNT_JSON (full JSON string).
+ * - Prefer ADMIN_SERVICE_ACCOUNT_JSON (full JSON string).
+ * - Fallback: FIREBASE_SERVICE_ACCOUNT_JSON (legacy name).
  * - Or FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the same JSON).
  */
 function loadServiceAccount(): admin.ServiceAccount {
-  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const rawJson = process.env.ADMIN_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (rawJson && rawJson.trim().startsWith("{")) {
     return JSON.parse(rawJson);
   }
@@ -23,7 +24,7 @@ function loadServiceAccount(): admin.ServiceAccount {
   }
 
   throw new Error(
-    "Missing service account: set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_BASE64 in Vercel env."
+    "Missing service account: set ADMIN_SERVICE_ACCOUNT_JSON (recommended), FIREBASE_SERVICE_ACCOUNT_JSON (legacy), or FIREBASE_SERVICE_ACCOUNT_BASE64 in Vercel env."
   );
 }
 
