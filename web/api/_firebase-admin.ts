@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin'
 
 let app: admin.app.App | undefined
+const adminCompat = (admin as unknown as { default?: typeof admin }).default ?? admin
 
 type RawServiceAccount = {
   project_id?: unknown
@@ -105,10 +106,14 @@ export function getAdmin(): admin.app.App {
 
   const creds = loadServiceAccount()
 
-  app = admin.apps.length
-    ? admin.app()
-    : admin.initializeApp({
-        credential: admin.credential.cert(creds),
+  const existingApps = Array.isArray((adminCompat as { apps?: admin.app.App[] }).apps)
+    ? (adminCompat as { apps: admin.app.App[] }).apps
+    : []
+
+  app = existingApps.length
+    ? adminCompat.app()
+    : adminCompat.initializeApp({
+        credential: adminCompat.credential.cert(creds),
         projectId: creds.projectId,
       })
 
