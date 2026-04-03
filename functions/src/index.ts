@@ -2622,6 +2622,22 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
           )
         })
 
+        if (reference) {
+          await db.collection('bulkCreditsPurchases').doc(reference).set(
+            {
+              status: 'success',
+              paystackStatus: typeof data.status === 'string' ? data.status : 'success',
+              paidAt:
+                typeof data.paid_at === 'string'
+                  ? admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
+                  : admin.firestore.FieldValue.serverTimestamp(),
+              amountPaid: typeof data.amount === 'number' ? data.amount / 100 : null,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
+        }
+
 
         res.status(200).send('ok')
         return

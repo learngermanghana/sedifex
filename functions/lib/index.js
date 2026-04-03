@@ -33,17 +33,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = exports.exportDailyStoreReports = exports.generateAiAdvice = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
 const params_1 = require("firebase-functions/params");
 const firestore_1 = require("./firestore");
 const phone_1 = require("./phone");
-var aiAdvisor_1 = require("./aiAdvisor");
-Object.defineProperty(exports, "generateAiAdvice", { enumerable: true, get: function () { return aiAdvisor_1.generateAiAdvice; } });
-var reports_1 = require("./reports");
-Object.defineProperty(exports, "exportDailyStoreReports", { enumerable: true, get: function () { return reports_1.exportDailyStoreReports; } });
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
 const VALID_ROLES = new Set(['owner', 'staff']);
@@ -357,6 +353,14 @@ function normalizeManageStaffPayload(data) {
         ? actionRaw
         : 'invite';
     return { storeId, email, role, password, action };
+}
+function normalizeListProductsPayload(data) {
+    const storeId = typeof data?.storeId === 'string' ? data.storeId.trim() : '';
+    const requestedLimit = typeof data?.limit === 'number' && Number.isFinite(data.limit)
+        ? Math.floor(data.limit)
+        : 200;
+    const limit = Math.min(Math.max(requestedLimit, 1), 500);
+    return { storeId, limit };
 }
 function timestampDaysFromNow(days) {
     const now = new Date();
@@ -1191,6 +1195,49 @@ exports.logPaymentReminder = functions.https.onCall(async (data, context) => {
     return { ok: true, reminderId: ref.id };
 });
 /** ============================================================================
+ *  CALLABLE: listStoreProducts (staff, read-only)
+ * ==========================================================================*/
+exports.listStoreProducts = functions.https.onCall(async (data, context) => {
+    assertStaffAccess(context);
+    const uid = context.auth.uid;
+    const { storeId: requestedStoreId, limit } = normalizeListProductsPayload(data);
+    const resolvedStoreId = await resolveStaffStoreId(uid);
+    if (requestedStoreId && requestedStoreId !== resolvedStoreId) {
+        throw new functions.https.HttpsError('permission-denied', 'You can only read products from your assigned store.');
+    }
+    const snapshot = await firestore_1.defaultDb
+        .collection('products')
+        .where('storeId', '==', resolvedStoreId)
+        .orderBy('updatedAt', 'desc')
+        .limit(limit)
+        .get();
+    const products = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Untitled item';
+        const itemType = data.itemType === 'service'
+            ? 'service'
+            : data.itemType === 'made_to_order'
+                ? 'made_to_order'
+                : 'product';
+        return {
+            id: docSnap.id,
+            storeId: resolvedStoreId,
+            name,
+            price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
+            stockCount: typeof data.stockCount === 'number' && Number.isFinite(data.stockCount)
+                ? data.stockCount
+                : null,
+            itemType,
+            imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
+            imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim()
+                ? data.imageAlt.trim()
+                : null,
+            updatedAt: data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt : null,
+        };
+    });
+    return { storeId: resolvedStoreId, products };
+});
+/** ============================================================================
  *  HUBTEL BULK MESSAGING
  * ==========================================================================*/
 const HUBTEL_CLIENT_ID = (0, params_1.defineString)('HUBTEL_CLIENT_ID');
@@ -1911,6 +1958,17 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
                         updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                     }, { merge: true });
                 });
+                if (reference) {
+                    await firestore_1.defaultDb.collection('bulkCreditsPurchases').doc(reference).set({
+                        status: 'success',
+                        paystackStatus: typeof data.status === 'string' ? data.status : 'success',
+                        paidAt: typeof data.paid_at === 'string'
+                            ? firestore_1.admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
+                            : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                        amountPaid: typeof data.amount === 'number' ? data.amount / 100 : null,
+                        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+                }
                 res.status(200).send('ok');
                 return;
             }
