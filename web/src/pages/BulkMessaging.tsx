@@ -73,6 +73,12 @@ type CreditsPackage = {
   price: number
   label: string
 }
+type BulkMessagingTab = 'metrics' | 'send' | 'buy'
+type MessageTemplate = {
+  id: string
+  title: string
+  content: string
+}
 
 const MESSAGE_LIMIT = 1000
 const SMS_SEGMENT_SIZE = 160
@@ -84,6 +90,26 @@ const BULK_CREDITS_PACKAGES: CreditsPackage[] = [
 ]
 const SMS_PRICE_ESTIMATE_GHS =
   BULK_CREDITS_PACKAGES[0].price / (BULK_CREDITS_PACKAGES[0].credits / CREDITS_PER_SMS)
+const MESSAGE_TEMPLATES: MessageTemplate[] = [
+  {
+    id: 'promo',
+    title: 'Promo offer',
+    content:
+      'Hi {{name}}, enjoy {{discount}} off selected items at {{store}} this week. Offer ends {{date}}.',
+  },
+  {
+    id: 'arrival',
+    title: 'New arrivals',
+    content:
+      'Hello {{name}}, new stock just arrived at {{store}}. Visit us today or reply for details.',
+  },
+  {
+    id: 'reminder',
+    title: 'Payment reminder',
+    content:
+      'Hi {{name}}, this is a friendly reminder from {{store}} about your pending balance of {{amount}}. Thank you.',
+  },
+]
 const formatNumber = (value: number) => value.toLocaleString('en-GH')
 const formatPrice = (value: number) =>
   value.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -129,6 +155,7 @@ export default function BulkMessaging() {
   const [creditLoading, setCreditLoading] = useState(true)
   const [buyingPackageId, setBuyingPackageId] = useState<string | null>(null)
   const [buyStatus, setBuyStatus] = useState<StatusMessage | null>(null)
+  const [activeTab, setActiveTab] = useState<BulkMessagingTab>('send')
 
   const sendBulkMessage = useMemo(
     () => httpsCallable<BulkMessagePayload, BulkMessageResult>(functions, 'sendBulkMessage'),
@@ -314,6 +341,14 @@ export default function BulkMessaging() {
     })
   }
 
+  function handleUseTemplate(template: MessageTemplate) {
+    setMessage(template.content)
+    setStatus({
+      tone: 'info',
+      message: `Template "${template.title}" inserted. Replace placeholders like {{name}} before sending.`,
+    })
+  }
+
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setStatus(null)
@@ -468,56 +503,115 @@ export default function BulkMessaging() {
         </div>
       </header>
 
-      <section className="bulk-messaging-page__summary">
-        <div className="card bulk-messaging-page__summary-card">
-          <p className="bulk-messaging-page__summary-label">Audience selected</p>
-          <p className="bulk-messaging-page__summary-value">{selectedCustomers.length}</p>
-          <p className="bulk-messaging-page__summary-meta">
-            {selectableCustomers.length} with a phone number
-          </p>
-        </div>
-        <div className="card bulk-messaging-page__summary-card">
-          <p className="bulk-messaging-page__summary-label">Channel</p>
-          <p className="bulk-messaging-page__summary-value">SMS</p>
-          <p className="bulk-messaging-page__summary-meta">
-            Messages will send via Hubtel from your verified sender
-          </p>
-        </div>
-        <div className="card bulk-messaging-page__summary-card">
-          <p className="bulk-messaging-page__summary-label">Message length</p>
-          <p className="bulk-messaging-page__summary-value">{messageLength}</p>
-          <p className="bulk-messaging-page__summary-meta">{`${messageSegments} SMS segment(s)`}</p>
-        </div>
-        <div className="card bulk-messaging-page__summary-card bulk-messaging-page__summary-card--credits">
-          <p className="bulk-messaging-page__summary-label">Bulk message credits</p>
-          <p className="bulk-messaging-page__summary-value">
-            {creditLoading ? 'Loading…' : creditBalance}
-          </p>
-          <div className="bulk-messaging-page__summary-meta bulk-messaging-page__credits-meta">
-            <span>
-              {creditLoading
-                ? 'Checking available credits'
-                : creditsNeeded > 0
-                ? `${formatNumber(creditsNeeded)} credits required (${formatNumber(
-                    selectableCustomers.length,
-                  )} recipient(s) × ${messageSegments} segment(s) × ${CREDITS_PER_SMS} credits)`
-                : 'Select recipients to see required credits'}
-            </span>
-            <a className="button button--ghost button--small" href="#buy-credits">
-              Buy credits
-            </a>
-          </div>
-        </div>
-      </section>
+      <div className="bulk-messaging-page__tabs" role="tablist" aria-label="Bulk messaging sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'metrics'}
+          className={`button button--ghost bulk-messaging-page__tab${
+            activeTab === 'metrics' ? ' is-active' : ''
+          }`}
+          onClick={() => setActiveTab('metrics')}
+        >
+          Metrics
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'send'}
+          className={`button button--ghost bulk-messaging-page__tab${
+            activeTab === 'send' ? ' is-active' : ''
+          }`}
+          onClick={() => setActiveTab('send')}
+        >
+          Send SMS
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'buy'}
+          className={`button button--ghost bulk-messaging-page__tab${
+            activeTab === 'buy' ? ' is-active' : ''
+          }`}
+          onClick={() => setActiveTab('buy')}
+        >
+          Buy credits
+        </button>
+      </div>
 
-      <div className="bulk-messaging-page__grid">
-        <section className="card">
+      {activeTab === 'metrics' ? (
+        <section className="bulk-messaging-page__summary" role="tabpanel">
+          <div className="card bulk-messaging-page__summary-card">
+            <p className="bulk-messaging-page__summary-label">Audience selected</p>
+            <p className="bulk-messaging-page__summary-value">{selectedCustomers.length}</p>
+            <p className="bulk-messaging-page__summary-meta">
+              {selectableCustomers.length} with a phone number
+            </p>
+          </div>
+          <div className="card bulk-messaging-page__summary-card">
+            <p className="bulk-messaging-page__summary-label">Channel</p>
+            <p className="bulk-messaging-page__summary-value">SMS</p>
+            <p className="bulk-messaging-page__summary-meta">
+              Messages will send via Hubtel from your verified sender
+            </p>
+          </div>
+          <div className="card bulk-messaging-page__summary-card">
+            <p className="bulk-messaging-page__summary-label">Message length</p>
+            <p className="bulk-messaging-page__summary-value">{messageLength}</p>
+            <p className="bulk-messaging-page__summary-meta">{`${messageSegments} SMS segment(s)`}</p>
+          </div>
+          <div className="card bulk-messaging-page__summary-card bulk-messaging-page__summary-card--credits">
+            <p className="bulk-messaging-page__summary-label">Bulk message credits</p>
+            <p className="bulk-messaging-page__summary-value">
+              {creditLoading ? 'Loading…' : creditBalance}
+            </p>
+            <div className="bulk-messaging-page__summary-meta bulk-messaging-page__credits-meta">
+              <span>
+                {creditLoading
+                  ? 'Checking available credits'
+                  : creditsNeeded > 0
+                  ? `${formatNumber(creditsNeeded)} credits required (${formatNumber(
+                      selectableCustomers.length,
+                    )} recipient(s) × ${messageSegments} segment(s) × ${CREDITS_PER_SMS} credits)`
+                  : 'Select recipients to see required credits'}
+              </span>
+              <button
+                type="button"
+                className="button button--ghost button--small"
+                onClick={() => setActiveTab('buy')}
+              >
+                Buy credits
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === 'send' ? (
+        <div className="bulk-messaging-page__grid" role="tabpanel">
+          <section className="card">
           <div className="bulk-messaging-page__section-header">
             <div>
               <h3 className="card__title">Compose message</h3>
               <p className="card__subtitle">
                 Craft your message and send to the selected customers.
               </p>
+            </div>
+          </div>
+
+          <div className="bulk-messaging-page__templates">
+            <p className="bulk-messaging-page__templates-title">Templates</p>
+            <div className="bulk-messaging-page__templates-list">
+              {MESSAGE_TEMPLATES.map(template => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="button button--outline button--small"
+                  onClick={() => handleUseTemplate(template)}
+                >
+                  {template.title}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -556,9 +650,9 @@ export default function BulkMessaging() {
               </div>
             </div>
           </form>
-        </section>
+          </section>
 
-        <section className="card">
+          <section className="card">
           <div className="bulk-messaging-page__section-header">
             <div>
               <h3 className="card__title">Recipients</h3>
@@ -636,10 +730,12 @@ export default function BulkMessaging() {
               </div>
             )}
           </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      ) : null}
 
-      <section className="card bulk-messaging-page__buy-credits" id="buy-credits">
+      {activeTab === 'buy' ? (
+        <section className="card bulk-messaging-page__buy-credits" id="buy-credits" role="tabpanel">
         <div>
           <h3 className="card__title">Buy bulk messaging credits</h3>
           <p className="card__subtitle">
@@ -688,7 +784,8 @@ export default function BulkMessaging() {
             </p>
           )}
         </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   )
 }
