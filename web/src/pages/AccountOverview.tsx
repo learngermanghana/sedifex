@@ -47,9 +47,13 @@ type StoreProfile = {
   updatedAt: Timestamp | null
   // 🔹 Billing/trial fields
   trialEndsAt: Timestamp | null
-  // 🔹 Public directory fields
-  isPublicDirectory: boolean
-  publicDescription: string | null
+  // 🔹 Upcoming promo fields
+  promoTitle: string | null
+  promoSummary: string | null
+  promoStartDate: string | null
+  promoEndDate: string | null
+  promoSlug: string | null
+  promoWebsiteUrl: string | null
 }
 
 type SubscriptionProfile = {
@@ -150,8 +154,12 @@ function mapStoreSnapshot(
     createdAt: isTimestamp(data.createdAt) ? data.createdAt : null,
     updatedAt: isTimestamp(data.updatedAt) ? data.updatedAt : null,
     trialEndsAt,
-    isPublicDirectory: Boolean((data as any).isPublicDirectory),
-    publicDescription: toNullableString((data as any).publicDescription),
+    promoTitle: toNullableString((data as any).promoTitle),
+    promoSummary: toNullableString((data as any).promoSummary),
+    promoStartDate: toNullableString((data as any).promoStartDate),
+    promoEndDate: toNullableString((data as any).promoEndDate),
+    promoSlug: toNullableString((data as any).promoSlug),
+    promoWebsiteUrl: toNullableString((data as any).promoWebsiteUrl),
   }
 }
 
@@ -231,6 +239,8 @@ type AccountOverviewProps = {
   headingLevel?: HeadingLevel
 }
 
+type AccountTab = 'workspace' | 'promotions' | 'operations'
+
 export default function AccountOverview({ headingLevel = 'h1' }: AccountOverviewProps) {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
   const {
@@ -270,11 +280,17 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   })
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [activeTab, setActiveTab] = useState<AccountTab>('workspace')
 
-  // Public directory edit state
-  const [isSavingPublicProfile, setIsSavingPublicProfile] = useState(false)
-  const [publicDescriptionDraft, setPublicDescriptionDraft] = useState('')
-  const [isPublicDirectoryDraft, setIsPublicDirectoryDraft] = useState(false)
+  const [isSavingPromo, setIsSavingPromo] = useState(false)
+  const [promoDraft, setPromoDraft] = useState({
+    title: '',
+    summary: '',
+    startDate: '',
+    endDate: '',
+    slug: '',
+    websiteUrl: '',
+  })
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -415,11 +431,16 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     }
   }, [storeId, publish])
 
-  // Sync public profile drafts with loaded profile
   useEffect(() => {
     if (!profile) return
-    setPublicDescriptionDraft(profile.publicDescription ?? '')
-    setIsPublicDirectoryDraft(profile.isPublicDirectory ?? false)
+    setPromoDraft({
+      title: profile.promoTitle ?? '',
+      summary: profile.promoSummary ?? '',
+      startDate: profile.promoStartDate ?? '',
+      endDate: profile.promoEndDate ?? '',
+      slug: profile.promoSlug ?? '',
+      websiteUrl: profile.promoWebsiteUrl ?? '',
+    })
   }, [profile])
 
   useEffect(() => {
@@ -563,51 +584,74 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   // 🔹 Period start (from subscription)
   const periodStartDisplay = formatTimestamp(subscriptionProfile?.currentPeriodStart ?? null)
 
-  async function handleSavePublicProfile() {
+  function updatePromoDraft(key: keyof typeof promoDraft, value: string): void {
+    setPromoDraft(current => ({ ...current, [key]: value }))
+  }
+
+  function normalizePromoSlug(value: string) {
+    const normalized = value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-|-$/g, '')
+    return normalized || null
+  }
+
+  async function handleSavePromo() {
     if (!storeId) return
     if (!isOwner) {
       publish({
-        message: 'Only the workspace owner can update public details.',
+        message: 'Only the workspace owner can update promotions.',
         tone: 'error',
       })
       return
     }
 
     try {
-      setIsSavingPublicProfile(true)
+      setIsSavingPromo(true)
       const ref = doc(db, 'stores', storeId)
+      const payload = {
+        promoTitle: normalizeInput(promoDraft.title),
+        promoSummary: normalizeInput(promoDraft.summary),
+        promoStartDate: normalizeInput(promoDraft.startDate),
+        promoEndDate: normalizeInput(promoDraft.endDate),
+        promoSlug: normalizePromoSlug(promoDraft.slug),
+        promoWebsiteUrl: normalizeInput(promoDraft.websiteUrl),
+        updatedAt: Timestamp.now(),
+      }
 
-      await setDoc(
-        ref,
-        {
-          isPublicDirectory: isPublicDirectoryDraft,
-          publicDescription: publicDescriptionDraft.trim() || null,
-          displayName: profile?.displayName ?? profile?.name ?? null,
-          addressLine1: profile?.addressLine1 ?? null,
-          city: profile?.city ?? null,
-          country: profile?.country ?? null,
-          phone: profile?.phone ?? null,
-          email: profile?.email ?? null,
-          // ✅ keep ownerEmail aligned (optional but helpful)
-          ownerEmail: profile?.ownerEmail ?? profile?.email ?? null,
-          updatedAt: Timestamp.now(),
-        },
-        { merge: true },
+      await setDoc(ref, payload, { merge: true })
+
+      setProfile(current =>
+        current
+          ? {
+              ...current,
+              promoTitle: payload.promoTitle,
+              promoSummary: payload.promoSummary,
+              promoStartDate: payload.promoStartDate,
+              promoEndDate: payload.promoEndDate,
+              promoSlug: payload.promoSlug,
+              promoWebsiteUrl: payload.promoWebsiteUrl,
+              updatedAt: payload.updatedAt,
+            }
+          : current,
       )
 
-      publish({ message: 'Public profile updated.', tone: 'success' })
+      publish({ message: 'Upcoming promo saved.', tone: 'success' })
     } catch (error) {
-      console.error('[account] Failed to save public profile', error)
+      console.error('[account] Failed to save upcoming promo', error)
       publish({
-        message: 'Unable to save public profile. Please try again.',
+        message: 'Unable to save upcoming promo. Please try again.',
         tone: 'error',
       })
     } finally {
-      setIsSavingPublicProfile(false)
+      setIsSavingPromo(false)
     }
   }
 
   async function handleDeleteWorkspaceData() {
+
     if (!storeId) return
 
     if (!isOwner) {
@@ -808,7 +852,35 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         </p>
       )}
 
-      {profile && (
+
+      <nav className="account-overview__tabs" aria-label="Account sections">
+        <button
+          type="button"
+          className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
+          aria-pressed={activeTab === 'workspace'}
+          onClick={() => setActiveTab('workspace')}
+        >
+          Workspace
+        </button>
+        <button
+          type="button"
+          className={`account-overview__tab ${activeTab === 'promotions' ? 'is-active' : ''}`}
+          aria-pressed={activeTab === 'promotions'}
+          onClick={() => setActiveTab('promotions')}
+        >
+          Promotions
+        </button>
+        <button
+          type="button"
+          className={`account-overview__tab ${activeTab === 'operations' ? 'is-active' : ''}`}
+          aria-pressed={activeTab === 'operations'}
+          onClick={() => setActiveTab('operations')}
+        >
+          Billing & team
+        </button>
+      </nav>
+
+      {profile && activeTab === 'workspace' && (
         <section aria-labelledby="account-overview-profile" id="store-profile">
           <div className="account-overview__section-header">
             <h2 id="account-overview-profile">Store profile</h2>
@@ -1010,55 +1082,106 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         </section>
       )}
 
-      {/* Public directory profile section */}
-      {profile && (
-        <section aria-labelledby="account-overview-public">
+      {profile && activeTab === 'promotions' && (
+        <section aria-labelledby="account-overview-promotions">
           <div className="account-overview__section-header">
-            <h2 id="account-overview-public">Public directory profile</h2>
+            <h2 id="account-overview-promotions">Upcoming promos</h2>
             <p className="account-overview__subtitle">
-              Control what customers see on <strong>stores.sedifex.com</strong>.
+              Save upcoming promotions in Firebase and use a free promo link for customers.
             </p>
           </div>
 
           {isOwner ? (
             <div className="account-overview__grid">
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Promo title</span>
                   <input
-                    type="checkbox"
-                    checked={isPublicDirectoryDraft}
-                    onChange={e => setIsPublicDirectoryDraft(e.target.checked)}
+                    type="text"
+                    value={promoDraft.title}
+                    onChange={e => updatePromoDraft('title', e.target.value)}
+                    placeholder="Weekend 15% off sale"
+                    data-testid="account-promo-title"
                   />
-                  <span>Show this store in the public Sedifex directory</span>
                 </label>
                 <p style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
-                  When enabled, your store will appear on stores.sedifex.com with your name, city,
-                  country, address and contact details.
+                  This data is stored on your store document so your own website can also read and
+                  update it from Firebase.
                 </p>
-
-                {isPublicDirectoryDraft && (
-                  <p style={{ fontSize: 12, color: '#374151', marginTop: 8 }}>
-                    Preview your listing:{' '}
-                    <a
-                      href={`https://stores.sedifex.com/${encodeURIComponent(storeId)}`}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      Visit stores.sedifex.com with your store ID
-                    </a>
-                  </p>
-                )}
               </div>
 
               <div>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span>What your store does (short description)</span>
+                  <span>Promo summary</span>
                   <textarea
                     rows={3}
-                    value={publicDescriptionDraft}
-                    onChange={e => setPublicDescriptionDraft(e.target.value)}
-                    placeholder="E.g. We sell fresh fish, feed and equipment for aquaculture farms across Lagos."
+                    value={promoDraft.summary}
+                    onChange={e => updatePromoDraft('summary', e.target.value)}
+                    placeholder="Tell customers what the promo includes and any limits."
                     style={{ width: '100%', resize: 'vertical' }}
+                    data-testid="account-promo-summary"
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Promo start date</span>
+                  <input
+                    type="date"
+                    value={promoDraft.startDate}
+                    onChange={e => updatePromoDraft('startDate', e.target.value)}
+                    data-testid="account-promo-start"
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Promo end date</span>
+                  <input
+                    type="date"
+                    value={promoDraft.endDate}
+                    onChange={e => updatePromoDraft('endDate', e.target.value)}
+                    data-testid="account-promo-end"
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Promo URL slug</span>
+                  <input
+                    type="text"
+                    value={promoDraft.slug}
+                    onChange={e => updatePromoDraft('slug', e.target.value)}
+                    placeholder="weekend-sale"
+                    data-testid="account-promo-slug"
+                  />
+                </label>
+                <p style={{ fontSize: 12, color: '#374151', marginTop: 8 }}>
+                  Free route preview:{' '}
+                  <a
+                    href={`https://stores.sedifex.com/promo/${encodeURIComponent(
+                      normalizePromoSlug(promoDraft.slug) ?? storeId,
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    stores.sedifex.com/promo/{normalizePromoSlug(promoDraft.slug) ?? storeId}
+                  </a>
+                </p>
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Your website URL (optional)</span>
+                  <input
+                    type="url"
+                    value={promoDraft.websiteUrl}
+                    onChange={e => updatePromoDraft('websiteUrl', e.target.value)}
+                    placeholder="https://yourstore.com/promotions"
+                    data-testid="account-promo-website"
                   />
                 </label>
               </div>
@@ -1067,19 +1190,21 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                 <button
                   type="button"
                   className="button button--primary"
-                  onClick={handleSavePublicProfile}
-                  disabled={isSavingPublicProfile}
+                  onClick={handleSavePromo}
+                  disabled={isSavingPromo}
                 >
-                  {isSavingPublicProfile ? 'Saving…' : 'Save public profile'}
+                  {isSavingPromo ? 'Saving…' : 'Save upcoming promo'}
                 </button>
               </div>
             </div>
           ) : (
-            <p role="note">Only the workspace owner can change the public directory settings.</p>
+            <p role="note">Only the workspace owner can change promo settings.</p>
           )}
         </section>
       )}
 
+      {activeTab === 'operations' && (
+        <>
       {/* ✅ Billing summary: prefer profile.ownerEmail, fallback to auth email */}
       <AccountBillingSection
         storeId={storeId}
@@ -1308,6 +1433,8 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
           </tbody>
         </table>
       </section>
+        </>
+      )}
     </div>
   )
 }

@@ -151,6 +151,29 @@
   margin-top: 8px;
 }
 
+.account-overview__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.account-overview__tab {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #fff;
+  color: #1f2937;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-overview__tab.is-active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
 /* =========================================================
    Monthly / Yearly selector (SEGMENTED CONTROL)
    Use these classes on your monthly/yearly toggle wrapper/buttons.

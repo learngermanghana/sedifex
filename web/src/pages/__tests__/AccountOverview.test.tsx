@@ -113,6 +113,12 @@ afterAll(() => {
 })
 
 describe('AccountOverview', () => {
+  async function openOperationsTab() {
+    await userEvent.click(
+      await screen.findByRole('button', { name: /billing & team/i }),
+    )
+  }
+
   beforeEach(() => {
     mockPublish.mockReset()
     mockUseActiveStore.mockReset()
@@ -217,6 +223,7 @@ describe('AccountOverview', () => {
 
     await waitFor(() => expect(getDocMock).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(getDocsMock).toHaveBeenCalledTimes(1))
+    await openOperationsTab()
 
     const rosterRow = await screen.findByTestId('account-roster-member-1')
     expect(rosterRow).toHaveAttribute('data-uid', 'uid-member-1')
@@ -341,6 +348,7 @@ describe('AccountOverview', () => {
     await act(async () => {
       await Promise.resolve()
     })
+    await openOperationsTab()
 
     expect(await screen.findByText(/Team members will appear here once they are available/i)).toBeInTheDocument()
     expect(screen.queryByTestId('account-edit-team')).not.toBeInTheDocument()
@@ -373,6 +381,7 @@ describe('AccountOverview', () => {
 
     await waitFor(() => expect(getDocMock).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(getDocsMock).toHaveBeenCalledTimes(1))
+    await openOperationsTab()
 
     expect(screen.queryByTestId('account-invite-form')).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
@@ -419,6 +428,7 @@ describe('AccountOverview', () => {
     })
 
     render(<AccountOverview />)
+    await openOperationsTab()
 
     expect(await screen.findByTestId('account-pending-approvals')).toBeInTheDocument()
     const approveButton = screen.getByRole('button', { name: /approve/i })
@@ -434,7 +444,7 @@ describe('AccountOverview', () => {
     })
   })
 
-  it('falls back to ownerId lookup when the store document id differs from the storeId', async () => {
+  it('shows a profile error when the store document is missing', async () => {
     mockUseActiveStore.mockReturnValue({ storeId: 'owner-1', isLoading: false, error: null })
     mockUseMemberships.mockReturnValue({
       memberships: [
@@ -459,48 +469,22 @@ describe('AccountOverview', () => {
       exists: () => false,
     })
 
-    getDocsMock.mockImplementation(async request => {
-      const ref = (request as { ref?: { path?: string } } | undefined)?.ref
-      if (ref?.path === 'stores') {
-        return {
-          docs: [
-            {
-              id: 'store-document-id',
-              data: () => ({
-                displayName: 'Fallback Coffee',
-                status: 'Active',
-                currency: 'USD',
-                billingPlan: 'Annual',
-                paymentProvider: 'Stripe',
-                createdAt: { toDate: () => new Date('2023-03-01T00:00:00Z') },
-                updatedAt: { toDate: () => new Date('2023-03-02T00:00:00Z') },
-              }),
-            },
-          ],
-        }
-      }
-
-      if (ref?.path === 'teamMembers') {
-        return {
-          docs: [
-            {
-              id: 'member-owner',
-              data: () => ({
-                uid: 'owner-1',
-                storeId: 'owner-1',
-                email: 'owner@example.com',
-                role: 'owner',
-                invitedBy: null,
-                phone: '+1-555-0000',
-                firstSignupEmail: null,
-                updatedAt: { toDate: () => new Date('2023-03-02T00:00:00Z') },
-              }),
-            },
-          ],
-        }
-      }
-
-      return { docs: [] }
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'member-owner',
+          data: () => ({
+            uid: 'owner-1',
+            storeId: 'owner-1',
+            email: 'owner@example.com',
+            role: 'owner',
+            invitedBy: null,
+            phone: '+1-555-0000',
+            firstSignupEmail: null,
+            updatedAt: { toDate: () => new Date('2023-03-02T00:00:00Z') },
+          }),
+        },
+      ],
     })
 
     render(<AccountOverview />)
@@ -509,15 +493,10 @@ describe('AccountOverview', () => {
     })
 
     await waitFor(() => expect(getDocMock).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(getDocsMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(getDocsMock).toHaveBeenCalledTimes(1))
+    await openOperationsTab()
 
-    expect(queryMock).toHaveBeenCalledWith(
-      { type: 'collection', path: 'stores' },
-      { field: 'ownerId', op: '==', value: 'owner-1' },
-    )
-
-    const workspaceNames = await screen.findAllByText('Fallback Coffee')
-    expect(workspaceNames.length).toBeGreaterThan(0)
+    expect(screen.getByText('We could not find this workspace profile.')).toBeInTheDocument()
     const rosterRow = await screen.findByTestId('account-roster-member-owner')
     expect(rosterRow).toHaveAttribute('data-uid', 'owner-1')
   })
@@ -560,6 +539,7 @@ describe('AccountOverview', () => {
     await act(async () => {
       await Promise.resolve()
     })
+    await openOperationsTab()
 
     const rosterRow = await screen.findByTestId('account-roster-member-2')
     expect(rosterRow).toHaveAttribute('data-uid', 'member-2')
@@ -594,6 +574,7 @@ describe('AccountOverview', () => {
     await act(async () => {
       await Promise.resolve()
     })
+    await openOperationsTab()
 
     const deleteButton = await screen.findByTestId('account-delete-data')
     await userEvent.click(deleteButton)
@@ -645,6 +626,7 @@ describe('AccountOverview', () => {
     await act(async () => {
       await Promise.resolve()
     })
+    await openOperationsTab()
 
     const deleteButton = await screen.findByTestId('account-delete-account')
     await userEvent.click(deleteButton)
@@ -691,6 +673,7 @@ describe('AccountOverview', () => {
     await act(async () => {
       await Promise.resolve()
     })
+    await openOperationsTab()
 
     const deleteButton = await screen.findByTestId('account-delete-data')
     expect(deleteButton).toBeDisabled()
