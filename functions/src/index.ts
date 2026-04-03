@@ -1707,6 +1707,31 @@ function ensureHubtelConfig() {
   return config
 }
 
+function normalizeHubtelSenderId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  // Hubtel sender IDs are typically alphanumeric and between 3-11 chars.
+  if (!/^[a-zA-Z0-9]{3,11}$/.test(trimmed)) return null
+  return trimmed
+}
+
+function resolveHubtelSenderId(storeData: Record<string, unknown>, fallbackSenderId: string): string {
+  const senderCandidates = [
+    storeData.hubtelApprovedSenderId,
+    storeData.hubtelSenderId,
+    storeData.smsSenderId,
+    storeData.senderId,
+  ]
+
+  for (const candidate of senderCandidates) {
+    const normalized = normalizeHubtelSenderId(candidate)
+    if (normalized) return normalized
+  }
+
+  return fallbackSenderId
+}
+
 function formatSmsAddress(phone: string) {
   const trimmed = phone.trim()
   if (!trimmed) return trimmed
@@ -1783,7 +1808,9 @@ export const sendBulkMessage = functions.https.onCall(
     const storeRef = db.collection('stores').doc(storeId)
 
     const config = ensureHubtelConfig()
-    const from = config.senderId!
+    const fallbackSenderId = config.senderId!
+
+    let senderIdForStore = fallbackSenderId
 
     // debit credits first
     await db.runTransaction(async transaction => {
@@ -1796,6 +1823,10 @@ export const sendBulkMessage = functions.https.onCall(
       }
 
       const storeData = storeSnap.data() ?? {}
+      senderIdForStore = resolveHubtelSenderId(
+        storeData as Record<string, unknown>,
+        fallbackSenderId,
+      )
       const rawCredits = storeData.bulkMessagingCredits
       const currentCredits =
         typeof rawCredits === 'number' && Number.isFinite(rawCredits) ? rawCredits : 0
@@ -1812,6 +1843,7 @@ export const sendBulkMessage = functions.https.onCall(
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       })
     })
+    const from = senderIdForStore
 
     const attempted = recipients.length
     const results = await Promise.allSettled(
