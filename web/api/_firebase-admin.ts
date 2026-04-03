@@ -12,6 +12,12 @@ let app: admin.app.App | undefined;
  * - Or FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the same JSON).
  */
 function loadServiceAccount(): admin.ServiceAccount {
+  console.log('[api/_firebase-admin] service account env check', {
+    hasAdminJson: !!process.env.ADMIN_SERVICE_ACCOUNT_JSON,
+    hasJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    hasBase64: !!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+  });
+
   const rawJson = process.env.ADMIN_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (rawJson && rawJson.trim().startsWith("{")) {
     return JSON.parse(rawJson);

@@ -66,6 +66,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const objectName = `product-images/${Date.now()}-${basename}${ext}`
 
     const adminApp = getAdmin()
+    console.log('[api/uploads] bucket env check', {
+      hasImageUploadBucket: !!process.env.IMAGE_UPLOAD_BUCKET,
+      hasFirebaseStorageBucket: !!process.env.FIREBASE_STORAGE_BUCKET,
+      imageUploadBucketName: process.env.IMAGE_UPLOAD_BUCKET || null,
+      firebaseStorageBucketName: process.env.FIREBASE_STORAGE_BUCKET || null,
+    })
     const configuredBucket = process.env.IMAGE_UPLOAD_BUCKET || process.env.FIREBASE_STORAGE_BUCKET
     if (!configuredBucket || typeof configuredBucket !== 'string') {
       return res.status(500).json({
@@ -95,7 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({ url: signedUrl })
     }
   } catch (error) {
-    console.error('[api/uploads] upload failed', error)
+    console.error('[api/uploads] upload failed', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+    })
     return res.status(500).json({ error: 'Failed to store image.' })
   }
 }
