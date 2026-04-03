@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getAdmin } from './_firebase-admin.js'
 
 const MAX_BYTES = 5 * 1024 * 1024
+const SIGNED_URL_EXPIRATION = '03-01-2500'
 
 type UploadRequestBody = {
   filename?: unknown
@@ -81,10 +82,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cacheControl: 'public,max-age=31536000,immutable',
       },
     })
-    await file.makePublic()
-
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(objectName)}`
-    return res.status(201).json({ url: publicUrl })
+    try {
+      await file.makePublic()
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(objectName)}`
+      return res.status(201).json({ url: publicUrl })
+    } catch (makePublicError) {
+      console.warn('[api/uploads] makePublic failed, returning signed URL instead', makePublicError)
+      const [signedUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: SIGNED_URL_EXPIRATION,
+      })
+      return res.status(201).json({ url: signedUrl })
+    }
   } catch (error) {
     console.error('[api/uploads] upload failed', error)
     return res.status(500).json({ error: 'Failed to store image.' })
