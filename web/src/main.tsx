@@ -9,10 +9,8 @@ import Dashboard from './pages/Dashboard'
 import DashboardHub from './pages/DashboardHub'
 import Products from './pages/Products'
 import Sell from './pages/Sell'
-import Receive from './pages/Receive'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
-import ActivityFeed from './pages/ActivityFeed'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
@@ -58,16 +56,13 @@ const router = createBrowserRouter([
             element: <DashboardHub />,
             children: [
               { index: true, element: <Dashboard /> },
-              { path: 'activity', element: <ActivityFeed /> },
             ],
           },
           { path: 'products', element: <Products /> },
           { path: 'sell', element: <Sell /> },
-          { path: 'receive', element: <Receive /> },
           { path: 'customers', element: <Customers /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
-          { path: 'activity', element: <Navigate to="/dashboard/activity" replace /> },
           { path: 'logi', element: <Logi /> },
 
           // Finance

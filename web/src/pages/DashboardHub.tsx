@@ -5,7 +5,6 @@ import './DashboardHub.css'
 
 const tabs = [
   { to: '/dashboard', label: 'Main dashboard', end: true },
-  { to: '/dashboard/activity', label: 'Activity' },
 ]
 
 export default function DashboardHub() {

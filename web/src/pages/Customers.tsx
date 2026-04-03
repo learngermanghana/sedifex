@@ -751,11 +751,6 @@ export default function Customers() {
     navigate(`/sell?customerId=${encodeURIComponent(selectedCustomerId)}`)
   }
 
-  function handleViewActivities() {
-    if (!selectedCustomerId) return
-    navigate('/dashboard/activity')
-  }
-
   function openMessageComposer(channel: MessageChannel) {
     if (!selectedCustomerId) return
     setMessageChannel(channel)
@@ -1606,14 +1601,6 @@ export default function Customers() {
                       disabled={!selectedCustomerId}
                     >
                       Sell to customer
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost button--small"
-                      onClick={handleViewActivities}
-                      disabled={!selectedCustomerId}
-                    >
-                      View activity feed
                     </button>
                   </div>
                 </div>

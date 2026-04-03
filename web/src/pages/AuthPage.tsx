@@ -1349,12 +1349,6 @@ const PAGE_FEATURES = [
       'Ring up sales with guided workflows that keep the floor moving and customers happy.',
   },
   {
-    path: '/receive',
-    name: 'Receive',
-    description:
-      'Check in purchase orders, reconcile deliveries, and put new stock to work immediately.',
-  },
-  {
     path: '/customers',
     name: 'Customers',
     description:
