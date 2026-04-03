@@ -27,6 +27,7 @@ import { useStorePreferences } from '../hooks/useStorePreferences'
 import type { ItemType, Product } from '../types/product'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import { useToast } from '../components/ToastProvider'
+import { playSound } from '../utils/sound'
 
 type CachedProduct = Omit<Product, 'id'>
 type AbcBucket = 'A' | 'B' | 'C'
@@ -638,6 +639,7 @@ export default function Products() {
           ? 'Service added to catalogue'
           : `SKU ${trimmedSku || '—'} · Price ${finalPrice !== null ? `GHS ${finalPrice.toFixed(2)}` : '—'}`,
       )
+      void playSound('success')
     } catch (error) {
       console.error('[products] Failed to add item', error)
       setFormStatus('error')
@@ -646,6 +648,7 @@ export default function Products() {
           ? error.message
           : 'We could not save this item. Please try again.',
       )
+      void playSound('error')
     } finally {
       setIsSaving(false)
     }
@@ -664,6 +667,7 @@ export default function Products() {
       setImageUrlInput(uploadedUrl)
       setImageFileInput(null)
       publish({ tone: 'success', message: 'Image uploaded successfully.' })
+      void playSound('action')
     } catch (error) {
       console.error('[products] Failed to upload product image', error)
       if (error instanceof ProductImageUploadError) {
@@ -671,6 +675,7 @@ export default function Products() {
       } else {
         setImageUploadError('Image upload failed. Please try again.')
       }
+      void playSound('error')
     } finally {
       setIsUploadingImage(false)
     }

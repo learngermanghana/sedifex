@@ -29,6 +29,7 @@ import {
   saveCachedProducts,
 } from '../utils/offlineCache'
 import { queueCallableRequest } from '../utils/offlineQueue'
+import { playSound } from '../utils/sound'
 import './Sell.css'
 
 import { BrowserMultiFormatReader, BrowserQRCodeSvgWriter } from '@zxing/browser'
@@ -1094,6 +1095,7 @@ export default function Sell() {
 
     if (!hasValidPrice && !canSetPriceAtCheckout) {
       setScanStatus({ type: 'error', message: `This item has no price. Set a price on the Items page first.` })
+      void playSound('error')
       return { ok: false, needsPrice: false }
     }
 
@@ -1118,6 +1120,8 @@ export default function Sell() {
         },
       ]
     })
+
+    void playSound('action')
 
     return { ok: true, needsPrice: !hasValidPrice && canSetPriceAtCheckout }
   }
@@ -1486,6 +1490,7 @@ export default function Sell() {
       setCustomerPhoneInput('')
       setSelectedCustomerId(null)
       setSuccessMessage('Sale recorded successfully.')
+      void playSound('success')
     } catch (error: any) {
       console.error('[sell] Failed to commit sale', error)
       if (isOfflineError(error)) {
@@ -1520,6 +1525,7 @@ export default function Sell() {
           setCustomerPhoneInput('')
           setSelectedCustomerId(null)
           setSuccessMessage('Offline — sale saved and will sync when you reconnect.')
+          void playSound('success')
           return
         }
       }
@@ -1529,6 +1535,7 @@ export default function Sell() {
       } else {
         setErrorMessage(typeof error?.message === 'string' ? error.message : 'We could not save this sale. Please try again.')
       }
+      void playSound('error')
     } finally {
       setIsSaving(false)
     }
