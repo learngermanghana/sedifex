@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getStorage } from 'firebase-admin/storage'
 import { getAdmin } from './_firebase-admin.js'
 
 const MAX_BYTES = 5 * 1024 * 1024
@@ -83,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    const bucket = adminApp.storage().bucket(configuredBucket)
+    const bucket = getStorage(adminApp).bucket(configuredBucket)
     const file = bucket.file(objectName)
 
     await file.save(fileBuffer, {
