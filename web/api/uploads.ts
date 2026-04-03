@@ -66,10 +66,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const objectName = `product-images/${Date.now()}-${basename}${ext}`
 
     const adminApp = getAdmin()
-    const configuredBucket = process.env.FIREBASE_STORAGE_BUCKET
+    const configuredBucket = process.env.IMAGE_UPLOAD_BUCKET || process.env.FIREBASE_STORAGE_BUCKET
     if (!configuredBucket || typeof configuredBucket !== 'string') {
       return res.status(500).json({
-        error: 'FIREBASE_STORAGE_BUCKET is not configured for image uploads.',
+        error: 'IMAGE_UPLOAD_BUCKET is not configured for image uploads.',
       })
     }
 

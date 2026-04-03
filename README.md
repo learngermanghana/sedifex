@@ -39,9 +39,11 @@ Uploads are stored in your configured **Firebase Storage bucket** under the `pro
 
 Set these in your Vercel project:
 
-- `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_BASE64` (already required by existing API routes)
-- `FIREBASE_STORAGE_BUCKET` (for example: `sedifex-prod.appspot.com`)
+- `ADMIN_SERVICE_ACCOUNT_JSON` (recommended) or `FIREBASE_SERVICE_ACCOUNT_BASE64` (already required by existing API routes)
+- `IMAGE_UPLOAD_BUCKET` (for example: `sedifex-prod.appspot.com`)
 - `VITE_UPLOAD_API_URL` (optional; leave unset in production to use the same-origin default `/api/uploads`)
+
+> Note: Firebase Functions `.env*` files reserve the `FIREBASE_*` prefix. Use non-reserved names like `IMAGE_UPLOAD_BUCKET` and `ADMIN_SERVICE_ACCOUNT_JSON` for deploy-safe config.
 
 #### Deploy notes
 
