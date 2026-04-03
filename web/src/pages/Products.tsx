@@ -262,6 +262,7 @@ export default function Products() {
   const [sales, setSales] = useState<SaleRecord[]>([])
   const [searchText, setSearchText] = useState('')
   const [showLowStockOnly, setShowLowStockOnly] = useState(false)
+  const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set())
   // add-item form state
   const [name, setName] = useState('')
   const [itemType, setItemType] = useState<ItemType>('product')
@@ -713,6 +714,7 @@ export default function Products() {
   function startEditing(product: Product) {
     if (!canManageProducts) return
 
+    setExpandedProductIds(prev => new Set(prev).add(product.id))
     setEditingId(product.id)
     setEditName(product.name)
     setEditItemType(product.itemType)
@@ -750,6 +752,18 @@ export default function Products() {
 
   function cancelEditing() {
     setEditingId(null)
+  }
+
+  function toggleExpandedProduct(productId: string) {
+    setExpandedProductIds(prev => {
+      const next = new Set(prev)
+      if (next.has(productId)) {
+        next.delete(productId)
+      } else {
+        next.add(productId)
+      }
+      return next
+    })
   }
 
   async function handleSaveEdit(product: Product) {
@@ -1311,6 +1325,7 @@ export default function Products() {
             <div className="products-page__list" aria-live="polite">
               {visibleProducts.map(product => {
                 const isEditing = editingId === product.id
+                const isExpanded = isEditing || expandedProductIds.has(product.id)
                 const displayItemType = isEditing ? editItemType : product.itemType
                 const isStockTracked = displayItemType === 'product'
 
@@ -1353,20 +1368,30 @@ export default function Products() {
                         <span className="products-page__meta-label">Last receipt:</span>
                         <span>{formatLastReceipt(product.lastReceiptAt)}</span>
                       </div>
+                      <button
+                        type="button"
+                        className="button button--ghost products-page__expand-button"
+                        onClick={() => toggleExpandedProduct(product.id)}
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded ? 'Hide details' : 'View details'}
+                      </button>
                     </header>
 
-                    <div className="products-page__list-grid">
-                      <div className="products-page__list-field">
-                        <label className="field__label">Name</label>
-                        {isEditing ? (
-                          <input
-                            value={editName}
-                            onChange={event => setEditName(event.target.value)}
-                          />
-                        ) : (
-                          <p className="products-page__list-value">{product.name}</p>
-                        )}
-                      </div>
+                    {isExpanded ? (
+                      <>
+                        <div className="products-page__list-grid">
+                          <div className="products-page__list-field">
+                            <label className="field__label">Name</label>
+                            {isEditing ? (
+                              <input
+                                value={editName}
+                                onChange={event => setEditName(event.target.value)}
+                              />
+                            ) : (
+                              <p className="products-page__list-value">{product.name}</p>
+                            )}
+                          </div>
 
                       <div className="products-page__list-field">
                         <label className="field__label">Item type</label>
@@ -1590,54 +1615,56 @@ export default function Products() {
                           </div>
                         </>
                       )}
-                    </div>
+                        </div>
 
-                    <div className="products-page__list-actions">
-                      {!canManageProducts ? (
-                        <span className="products-page__list-value">View only</span>
-                      ) : isEditing ? (
-                        <>
-                          <button
-                            type="button"
-                            className="button button--primary"
-                            onClick={() => handleSaveEdit(product)}
-                          >
-                            Save changes
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost"
-                            onClick={cancelEditing}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--danger"
-                            onClick={() => handleDelete(product)}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="button button--ghost"
-                            onClick={() => startEditing(product)}
-                          >
-                            Edit details
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--danger"
-                            onClick={() => handleDelete(product)}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </div>
+                        <div className="products-page__list-actions">
+                          {!canManageProducts ? (
+                            <span className="products-page__list-value">View only</span>
+                          ) : isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                className="button button--primary"
+                                onClick={() => handleSaveEdit(product)}
+                              >
+                                Save changes
+                              </button>
+                              <button
+                                type="button"
+                                className="button button--ghost"
+                                onClick={cancelEditing}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="button button--danger"
+                                onClick={() => handleDelete(product)}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="button button--ghost"
+                                onClick={() => startEditing(product)}
+                              >
+                                Edit details
+                              </button>
+                              <button
+                                type="button"
+                                className="button button--danger"
+                                onClick={() => handleDelete(product)}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </>
+                    ) : null}
                   </article>
                 )
               })}

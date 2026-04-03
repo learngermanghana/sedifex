@@ -292,6 +292,10 @@
   color: #4b5563;
 }
 
+.products-page__expand-button {
+  margin-left: auto;
+}
+
 .products-page__meta-label {
   color: #6b7280;
 }
