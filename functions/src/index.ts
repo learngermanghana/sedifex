@@ -1697,14 +1697,18 @@ function ensureHubtelConfig() {
     )
   }
 
-  if (!config.senderId) {
+  const normalizedFallbackSenderId = normalizeHubtelSenderId(config.senderId)
+  if (!normalizedFallbackSenderId) {
     throw new functions.https.HttpsError(
       'failed-precondition',
-      'Hubtel sender ID is not configured.',
+      'Hubtel sender ID is invalid or not configured.',
     )
   }
 
-  return config
+  return {
+    ...config,
+    senderId: normalizedFallbackSenderId,
+  }
 }
 
 function normalizeHubtelSenderId(value: unknown): string | null {
@@ -1729,7 +1733,7 @@ function resolveHubtelSenderId(storeData: Record<string, unknown>, fallbackSende
     if (normalized) return normalized
   }
 
-  return fallbackSenderId
+  return normalizeHubtelSenderId(fallbackSenderId) ?? fallbackSenderId
 }
 
 function formatSmsAddress(phone: string) {
