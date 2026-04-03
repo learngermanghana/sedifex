@@ -85,6 +85,10 @@ Set these in your Vercel project:
   - `imageAlt`
   - `updatedAt`
 
+### Integration quickstart (website sync)
+
+- See [`docs/integration-quickstart.md`](docs/integration-quickstart.md) for a step-by-step guide to connect another website and auto-load products from Sedifex.
+
 ### One-time backfill utility
 
 - Run `node functions/scripts/migrateProductImageFields.js` from the repo root (with Firebase admin credentials available) to backfill old records:
