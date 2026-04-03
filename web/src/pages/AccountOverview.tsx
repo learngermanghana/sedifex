@@ -1,6 +1,7 @@
 // web/src/pages/AccountOverview.tsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { httpsCallable } from 'firebase/functions'
 import {
   Timestamp,
   collection,
@@ -17,7 +18,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { deleteUser } from 'firebase/auth'
-import { db } from '../firebase'
+import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships, type Membership } from '../hooks/useMemberships'
 import { useToast } from '../components/ToastProvider'
@@ -290,6 +291,10 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     endDate: '',
     websiteUrl: '',
   })
+  const [endpointToTest, setEndpointToTest] = useState('')
+  const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
+  const [isTestingEndpoint, setIsTestingEndpoint] = useState(false)
+  const [isCopyingApiToken, setIsCopyingApiToken] = useState(false)
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -686,6 +691,77 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     }
   }
 
+  async function handleCopyApiToken() {
+    if (!user) {
+      publish({ message: 'You need to be signed in to copy an API token.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsCopyingApiToken(true)
+      const token = await user.getIdToken()
+      await navigator.clipboard.writeText(token)
+      publish({ message: 'API token copied.', tone: 'success' })
+    } catch (error) {
+      console.error('[account] Failed to copy API token', error)
+      publish({
+        message: 'Unable to copy API token. Please try again.',
+        tone: 'error',
+      })
+    } finally {
+      setIsCopyingApiToken(false)
+    }
+  }
+
+  async function handleTestEndpoint() {
+    if (!endpointToTest.trim()) {
+      setEndpointTestStatus('Enter an endpoint URL to test.')
+      return
+    }
+
+    if (!user) {
+      setEndpointTestStatus('Sign in again and retry endpoint test.')
+      return
+    }
+
+    try {
+      setIsTestingEndpoint(true)
+      setEndpointTestStatus(null)
+      const token = await user.getIdToken()
+      const response = await fetch(endpointToTest.trim(), {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        setEndpointTestStatus(`Endpoint is reachable (${response.status}).`)
+      } else {
+        setEndpointTestStatus(`Endpoint returned ${response.status}.`)
+      }
+    } catch (error) {
+      console.error('[account] Endpoint test failed', error)
+      setEndpointTestStatus('Endpoint test failed. Check URL/CORS and try again.')
+    } finally {
+      setIsTestingEndpoint(false)
+    }
+  }
+
+  async function handleTestSedifexProducts() {
+    try {
+      const listStoreProducts = httpsCallable(functions, 'listStoreProducts')
+      await listStoreProducts({})
+      publish({ message: 'Sedifex products endpoint test passed.', tone: 'success' })
+    } catch (error) {
+      console.error('[account] listStoreProducts test failed', error)
+      publish({
+        message: 'Sedifex products endpoint test failed.',
+        tone: 'error',
+      })
+    }
+  }
+
   async function handleDeleteAccount() {
     if (!user) {
       publish({
@@ -942,6 +1018,58 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
               <dd>{formatTimestamp(profile.updatedAt)}</dd>
             </div>
           </dl>
+
+          <div className="account-overview__website-sync" role="status" aria-live="polite">
+            <p className="account-overview__website-sync-title">Turn on website sync.</p>
+            <p className="account-overview__hint">
+              Connect your store catalog to your website in minutes.
+              {' '}
+              <a href="/docs/integration-quickstart.md" target="_blank" rel="noreferrer">
+                Integration quickstart
+              </a>
+              {' · '}
+              <a href="/docs/wordpress-install-guide.md" target="_blank" rel="noreferrer">
+                Install on WordPress
+              </a>
+            </p>
+            <div className="account-overview__website-sync-actions">
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={handleCopyApiToken}
+                disabled={isCopyingApiToken}
+              >
+                {isCopyingApiToken ? 'Copying token…' : 'Copy API token'}
+              </button>
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={handleTestSedifexProducts}
+              >
+                Test Sedifex endpoint
+              </button>
+            </div>
+            <div className="account-overview__website-sync-test">
+              <label>
+                <span>Test your endpoint</span>
+                <input
+                  type="url"
+                  value={endpointToTest}
+                  onChange={event => setEndpointToTest(event.target.value)}
+                  placeholder="https://example.com/api/sedifex-sync"
+                />
+              </label>
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={handleTestEndpoint}
+                disabled={isTestingEndpoint}
+              >
+                {isTestingEndpoint ? 'Testing…' : 'Test endpoint'}
+              </button>
+            </div>
+            {endpointTestStatus && <p className="account-overview__hint">{endpointTestStatus}</p>}
+          </div>
 
           {isOwner && isEditingProfile && (
             <form

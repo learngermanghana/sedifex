@@ -269,3 +269,40 @@
     color: #0f172a;
   }
 }
+
+.account-overview__website-sync {
+  margin-top: 16px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-overview__website-sync-title {
+  margin: 0;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.account-overview__website-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-overview__website-sync-test {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.account-overview__website-sync-test label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: min(420px, 100%);
+}

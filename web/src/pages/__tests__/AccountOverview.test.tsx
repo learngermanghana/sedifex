@@ -323,6 +323,40 @@ describe('AccountOverview', () => {
     })
   })
 
+  it('shows website sync call-to-action controls on workspace tab', async () => {
+    mockUseMemberships.mockReturnValue({
+      memberships: [
+        {
+          id: 'm-1',
+          uid: 'owner-1',
+          role: 'owner',
+          storeId: 'store-123',
+          email: 'owner@example.com',
+          phone: null,
+          invitedBy: null,
+          firstSignupEmail: null,
+          createdAt: null,
+          updatedAt: null,
+        },
+      ],
+      loading: false,
+      error: null,
+    })
+
+    render(<AccountOverview />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByText('Turn on website sync.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /copy api token/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /test endpoint/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /install on wordpress/i })).toHaveAttribute(
+      'href',
+      '/docs/wordpress-install-guide.md',
+    )
+  })
+
   it('hides team editing until roster data is available', async () => {
     getDocsMock.mockResolvedValueOnce({ docs: [] })
     mockUseMemberships.mockReturnValue({
