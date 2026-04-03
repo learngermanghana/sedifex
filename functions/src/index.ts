@@ -1686,16 +1686,14 @@ function getHubtelConfig() {
   return { clientId, clientSecret, senderId }
 }
 
+function normalizeHubtelApiCredential(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
 function ensureHubtelConfig() {
   const config = getHubtelConfig()
-
-  if (!config.clientId || !config.clientSecret) {
-    console.error('[hubtel] Missing client id or client secret')
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Hubtel is not configured. Please contact support.',
-    )
-  }
 
   const normalizedFallbackSenderId = normalizeHubtelSenderId(config.senderId)
   if (!normalizedFallbackSenderId) {
@@ -1734,6 +1732,41 @@ function resolveHubtelSenderId(storeData: Record<string, unknown>, fallbackSende
   }
 
   return normalizeHubtelSenderId(fallbackSenderId) ?? fallbackSenderId
+}
+
+function resolveHubtelCredentials(
+  storeData: Record<string, unknown>,
+  fallbackConfig: { clientId?: string; clientSecret?: string },
+) {
+  const clientIdCandidates = [storeData.hubtelClientId, storeData.smsClientId, storeData.clientId]
+  const clientSecretCandidates = [
+    storeData.hubtelClientSecret,
+    storeData.smsClientSecret,
+    storeData.clientSecret,
+  ]
+
+  const storeClientId = clientIdCandidates.map(normalizeHubtelApiCredential).find(Boolean)
+  const storeClientSecret = clientSecretCandidates.map(normalizeHubtelApiCredential).find(Boolean)
+  const fallbackClientId = normalizeHubtelApiCredential(fallbackConfig.clientId)
+  const fallbackClientSecret = normalizeHubtelApiCredential(fallbackConfig.clientSecret)
+
+  const clientId = storeClientId ?? fallbackClientId
+  const clientSecret = storeClientSecret ?? fallbackClientSecret
+
+  if (!clientId || !clientSecret) {
+    console.error('[hubtel] Missing client id or client secret for store', {
+      hasStoreClientId: !!storeClientId,
+      hasStoreClientSecret: !!storeClientSecret,
+      hasFallbackClientId: !!fallbackClientId,
+      hasFallbackClientSecret: !!fallbackClientSecret,
+    })
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Hubtel is not configured for this store. Please add Hubtel credentials in store settings.',
+    )
+  }
+
+  return { clientId, clientSecret }
 }
 
 function formatSmsAddress(phone: string) {
@@ -1815,6 +1848,8 @@ export const sendBulkMessage = functions.https.onCall(
     const fallbackSenderId = config.senderId!
 
     let senderIdForStore = fallbackSenderId
+    let hubtelClientIdForStore = normalizeHubtelApiCredential(config.clientId) ?? ''
+    let hubtelClientSecretForStore = normalizeHubtelApiCredential(config.clientSecret) ?? ''
 
     // debit credits first
     await db.runTransaction(async transaction => {
@@ -1831,6 +1866,12 @@ export const sendBulkMessage = functions.https.onCall(
         storeData as Record<string, unknown>,
         fallbackSenderId,
       )
+      const storeHubtelConfig = resolveHubtelCredentials(storeData as Record<string, unknown>, {
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+      })
+      hubtelClientIdForStore = storeHubtelConfig.clientId
+      hubtelClientSecretForStore = storeHubtelConfig.clientSecret
       const rawCredits = storeData.bulkMessagingCredits
       const currentCredits =
         typeof rawCredits === 'number' && Number.isFinite(rawCredits) ? rawCredits : 0
@@ -1856,8 +1897,8 @@ export const sendBulkMessage = functions.https.onCall(
         if (!to) throw new Error('Missing recipient phone')
 
         await sendHubtelMessage({
-          clientId: config.clientId,
-          clientSecret: config.clientSecret,
+          clientId: hubtelClientIdForStore,
+          clientSecret: hubtelClientSecretForStore,
           to,
           from,
           body: message,
