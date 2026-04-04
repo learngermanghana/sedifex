@@ -1963,24 +1963,47 @@ export const rotateIntegrationApiKey = functions.https.onCall(
   },
 )
 
-export const integrationProducts = functions.https.onRequest(async (req, res) => {
+function setIntegrationResponseHeaders(res: functions.Response<any>) {
   const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim()
   if (configuredApiBaseUrl) {
     res.setHeader('x-sedifex-api-base-url', configuredApiBaseUrl)
   }
+}
 
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'method-not-allowed' })
-    return
-  }
-
+function getIntegrationAuthContext(req: functions.https.Request) {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
   const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : ''
+  return { token, storeId }
+}
 
+function normalizeTimestampIso(value: unknown): string | null {
+  if (value instanceof admin.firestore.Timestamp) {
+    return value.toDate().toISOString()
+  }
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString()
+  }
+  if (typeof value === 'string') {
+    const millis = Date.parse(value)
+    return Number.isNaN(millis) ? null : new Date(millis).toISOString()
+  }
+  return null
+}
+
+async function validateIntegrationTokenOrReply(
+  req: functions.https.Request,
+  res: functions.Response<any>,
+): Promise<{ storeId: string } | null> {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return null
+  }
+
+  const { token, storeId } = getIntegrationAuthContext(req)
   if (!token || !storeId) {
     res.status(400).json({ error: 'missing-token-or-store' })
-    return
+    return null
   }
 
   const tokenHash = hashIntegrationSecret(token)
@@ -1994,7 +2017,7 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
 
   if (keySnapshot.empty) {
     res.status(401).json({ error: 'invalid-token' })
-    return
+    return null
   }
 
   const keyDoc = keySnapshot.docs[0]
@@ -2005,6 +2028,17 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
     },
     { merge: true },
   )
+
+  return { storeId }
+}
+
+export const integrationProducts = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  const { storeId } = authContext
 
   const mapProductDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
     const data = docSnap.data() as Record<string, unknown>
@@ -2064,6 +2098,119 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
     })
 
   res.status(200).json({ storeId, products })
+})
+
+export const integrationPromo = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  const { storeId } = authContext
+
+  const storeSnap = await db.collection('stores').doc(storeId).get()
+  if (!storeSnap.exists) {
+    res.status(404).json({ error: 'store-not-found' })
+    return
+  }
+
+  const data = (storeSnap.data() ?? {}) as Record<string, unknown>
+  res.status(200).json({
+    storeId,
+    promo: {
+      enabled: data.promoEnabled === true,
+      slug: typeof data.promoSlug === 'string' && data.promoSlug.trim() ? data.promoSlug.trim() : null,
+      title: typeof data.promoTitle === 'string' && data.promoTitle.trim() ? data.promoTitle.trim() : null,
+      summary:
+        typeof data.promoSummary === 'string' && data.promoSummary.trim() ? data.promoSummary.trim() : null,
+      startDate:
+        typeof data.promoStartDate === 'string' && data.promoStartDate.trim()
+          ? data.promoStartDate.trim()
+          : null,
+      endDate:
+        typeof data.promoEndDate === 'string' && data.promoEndDate.trim() ? data.promoEndDate.trim() : null,
+      websiteUrl:
+        typeof data.promoWebsiteUrl === 'string' && data.promoWebsiteUrl.trim()
+          ? data.promoWebsiteUrl.trim()
+          : null,
+      storeName: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Sedifex Store',
+      updatedAt: normalizeTimestampIso(data.updatedAt),
+    },
+  })
+})
+
+export const integrationCustomers = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  const { storeId } = authContext
+
+  let customersSnap: admin.firestore.QuerySnapshot
+  try {
+    customersSnap = await db
+      .collection('customers')
+      .where('storeId', '==', storeId)
+      .orderBy('updatedAt', 'desc')
+      .limit(500)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    console.warn('[integrationCustomers] Missing Firestore index for ordered customer query; falling back to unordered fetch', {
+      storeId,
+      code,
+    })
+    customersSnap = await db.collection('customers').where('storeId', '==', storeId).limit(500).get()
+  }
+
+  const customers = customersSnap.docs
+    .map(docSnap => {
+      const data = docSnap.data() as Record<string, unknown>
+      const debt = typeof data.debt === 'object' && data.debt !== null ? (data.debt as Record<string, unknown>) : null
+      return {
+        id: docSnap.id,
+        storeId,
+        name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null,
+        displayName:
+          typeof data.displayName === 'string' && data.displayName.trim() ? data.displayName.trim() : null,
+        phone: typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null,
+        email: typeof data.email === 'string' && data.email.trim() ? data.email.trim() : null,
+        notes: typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : null,
+        tags: Array.isArray(data.tags)
+          ? data.tags.filter(tag => typeof tag === 'string' && tag.trim()).map(tag => (tag as string).trim())
+          : [],
+        birthdate:
+          typeof data.birthdate === 'string' && data.birthdate.trim()
+            ? data.birthdate.trim()
+            : normalizeTimestampIso(data.birthdate),
+        createdAt: normalizeTimestampIso(data.createdAt),
+        updatedAt: normalizeTimestampIso(data.updatedAt),
+        debt: debt
+          ? {
+              outstandingCents:
+                typeof debt.outstandingCents === 'number' && Number.isFinite(debt.outstandingCents)
+                  ? debt.outstandingCents
+                  : null,
+              dueDate: normalizeTimestampIso(debt.dueDate),
+              lastReminderAt: normalizeTimestampIso(debt.lastReminderAt),
+            }
+          : null,
+      }
+    })
+    .sort((a, b) => {
+      if (!a.updatedAt && !b.updatedAt) return 0
+      if (!a.updatedAt) return 1
+      if (!b.updatedAt) return -1
+      return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+    })
+
+  res.status(200).json({ storeId, customers })
 })
 
 /** ============================================================================

@@ -12,6 +12,7 @@ export default function IntegrationQuickstartPage() {
         <ul>
           <li>Product fields: <code>id</code>, <code>storeId</code>, <code>name</code>, <code>category</code>, <code>description</code>, <code>price</code>, <code>stockCount</code>, and media metadata.</li>
           <li>Integration flow with API key auth via <code>GET /integrationProducts?storeId=&lt;storeId&gt;</code>.</li>
+          <li>Companion endpoints for promotions and customers: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code> and <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>.</li>
           <li>Dedupe, fallback data, category grouping, and cache strategy recommendations.</li>
         </ul>
       </section>
