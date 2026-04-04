@@ -3,6 +3,7 @@ export type ItemType = 'product' | 'service' | 'made_to_order'
 export type Product = {
   id: string
   name: string
+  description?: string | null
   category?: string | null
   sku: string | null
   barcode: string | null
