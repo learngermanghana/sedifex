@@ -1035,12 +1035,12 @@ export default function AuthPage() {
           </div>
           <div className="app__visual-overlay" />
           <div className="app__visual-caption">
-            <span className="app__visual-pill">Quick tutorial</span>
-            <h2>See how our AI inventory system works before logging in</h2>
+            <span className="app__visual-pill">New updates</span>
+            <h2>See what is new in Sedifex before you sign up</h2>
             <p>
-              Watch the short walkthrough to learn how Sedifex uses AI to connect sales,
-              inventory, and finance in one workspace built for small businesses. Start
-              the video right here before creating an account.
+              We are rolling out new updates across sales, inventory, and finance tools.
+              Create your account to get the latest improvements for faster daily store
+              operations.
             </p>
           </div>
         </aside>
