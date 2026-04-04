@@ -1959,8 +1959,8 @@ export const rotateIntegrationApiKey = functions.https.onCall(
 
 export const integrationProducts = functions.https.onRequest(async (req, res) => {
   const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim()
-  if (configuredApiBaseUrl && !/^https?:\/\//i.test(configuredApiBaseUrl)) {
-    functions.logger.warn('SEDIFEX_API_BASE_URL is configured without http/https scheme.')
+  if (configuredApiBaseUrl) {
+    res.setHeader('x-sedifex-api-base-url', configuredApiBaseUrl)
   }
 
   if (req.method !== 'GET') {
