@@ -1741,7 +1741,7 @@ export const listIntegrationApiKeys = functions.https.onCall(
     } catch (error) {
       if (error instanceof functions.https.HttpsError) throw error
 
-      logger.error('[integrations] listIntegrationApiKeys failed', error)
+      console.error('[integrations] listIntegrationApiKeys failed', error)
       throw new functions.https.HttpsError(
         'failed-precondition',
         'Unable to list integration API keys. Verify store ownership, Firestore indexes, and permissions.',
