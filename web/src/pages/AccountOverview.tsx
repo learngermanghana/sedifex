@@ -26,6 +26,7 @@ import { useAuthUser } from '../hooks/useAuthUser'
 import { AccountBillingSection } from '../components/AccountBillingSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
+import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import './AccountOverview.css'
 
 type StoreProfile = {
@@ -55,6 +56,7 @@ type StoreProfile = {
   promoEndDate: string | null
   promoSlug: string | null
   promoWebsiteUrl: string | null
+  promoImageUrl: string | null
 }
 
 type SubscriptionProfile = {
@@ -172,6 +174,7 @@ function mapStoreSnapshot(
     promoEndDate: toNullableString((data as any).promoEndDate),
     promoSlug: toNullableString((data as any).promoSlug),
     promoWebsiteUrl: toNullableString((data as any).promoWebsiteUrl),
+    promoImageUrl: toNullableString((data as any).promoImageUrl),
   }
 }
 
@@ -301,7 +304,11 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     startDate: '',
     endDate: '',
     websiteUrl: '',
+    imageUrl: '',
   })
+  const [promoImageFileInput, setPromoImageFileInput] = useState<File | null>(null)
+  const [isUploadingPromoImage, setIsUploadingPromoImage] = useState(false)
+  const [promoImageUploadError, setPromoImageUploadError] = useState<string | null>(null)
   const [endpointToTest, setEndpointToTest] = useState('')
   const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
   const [isTestingEndpoint, setIsTestingEndpoint] = useState(false)
@@ -459,6 +466,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       startDate: profile.promoStartDate ?? '',
       endDate: profile.promoEndDate ?? '',
       websiteUrl: profile.promoWebsiteUrl ?? '',
+      imageUrl: profile.promoImageUrl ?? '',
     })
   }, [profile])
 
@@ -687,6 +695,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         promoEndDate: normalizeInput(promoDraft.endDate),
         promoSlug,
         promoWebsiteUrl: normalizeInput(promoDraft.websiteUrl),
+        promoImageUrl: normalizeInput(promoDraft.imageUrl),
         updatedAt: Timestamp.now(),
       }
 
@@ -702,6 +711,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
               promoEndDate: payload.promoEndDate,
               promoSlug: payload.promoSlug,
               promoWebsiteUrl: payload.promoWebsiteUrl,
+              promoImageUrl: payload.promoImageUrl,
               updatedAt: payload.updatedAt,
             }
           : current,
@@ -716,6 +726,31 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       })
     } finally {
       setIsSavingPromo(false)
+    }
+  }
+
+  async function handlePromoImageUpload() {
+    if (!promoImageFileInput) {
+      setPromoImageUploadError('Choose an image file before uploading.')
+      return
+    }
+
+    setPromoImageUploadError(null)
+    setIsUploadingPromoImage(true)
+    try {
+      const uploadedUrl = await uploadProductImage(promoImageFileInput)
+      setPromoDraft(current => ({ ...current, imageUrl: uploadedUrl }))
+      setPromoImageFileInput(null)
+      publish({ tone: 'success', message: 'Promo image uploaded successfully.' })
+    } catch (error) {
+      console.error('[account] Failed to upload promo image', error)
+      if (error instanceof ProductImageUploadError) {
+        setPromoImageUploadError(error.message)
+      } else {
+        setPromoImageUploadError('Promo image upload failed. Please try again.')
+      }
+    } finally {
+      setIsUploadingPromoImage(false)
     }
   }
 
@@ -1511,6 +1546,52 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                     www.sedifex.com/promo/{promoSlug}
                   </a>
                 </p>
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Upload promo image (optional)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={event => {
+                      const file = event.target.files?.[0] ?? null
+                      setPromoImageFileInput(file)
+                      setPromoImageUploadError(null)
+                    }}
+                    data-testid="account-promo-image-file"
+                  />
+                </label>
+                <div style={{ marginTop: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    disabled={!promoImageFileInput || isUploadingPromoImage}
+                    onClick={() => {
+                      void handlePromoImageUpload()
+                    }}
+                  >
+                    {isUploadingPromoImage ? 'Uploading…' : 'Upload and use URL'}
+                  </button>
+                  {promoImageUploadError ? (
+                    <p className="account-overview__hint" style={{ margin: 0 }} role="alert">
+                      {promoImageUploadError}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>Promo image URL (optional)</span>
+                  <input
+                    type="url"
+                    value={promoDraft.imageUrl}
+                    onChange={e => updatePromoDraft('imageUrl', e.target.value)}
+                    placeholder="https://example.com/promo-image.jpg"
+                    data-testid="account-promo-image-url"
+                  />
+                </label>
               </div>
 
               <div>
