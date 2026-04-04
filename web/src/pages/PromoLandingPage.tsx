@@ -12,6 +12,8 @@ type PromoProfile = {
   startDate: string | null
   endDate: string | null
   websiteUrl: string | null
+  imageUrl: string | null
+  imageAlt: string | null
 }
 
 function normalizeSlug(value: string): string {
@@ -94,6 +96,8 @@ export default function PromoLandingPage() {
           startDate: typeof data.promoStartDate === 'string' ? data.promoStartDate : null,
           endDate: typeof data.promoEndDate === 'string' ? data.promoEndDate : null,
           websiteUrl: typeof data.promoWebsiteUrl === 'string' ? data.promoWebsiteUrl : null,
+          imageUrl: typeof data.promoImageUrl === 'string' ? data.promoImageUrl : null,
+          imageAlt: typeof data.promoImageAlt === 'string' ? data.promoImageAlt : null,
         })
       } catch (nextError) {
         console.error('[promo] Failed to load promo page', nextError)
@@ -146,6 +150,14 @@ export default function PromoLandingPage() {
     <main className="promo-page">
       <article className="promo-card">
         <p className="promo-label">Sedifex promo</p>
+        {profile.imageUrl ? (
+          <img
+            className="promo-image"
+            src={profile.imageUrl}
+            alt={profile.imageAlt || `${profile.storeName} promo image`}
+            loading="lazy"
+          />
+        ) : null}
         <h1>{profile.title || `Special offers at ${profile.storeName}`}</h1>
         <p className="promo-store">Store: {profile.storeName}</p>
         <p className="promo-summary">
