@@ -1720,10 +1720,12 @@ function isFirestoreMissingIndexError(error: unknown) {
 
 export const listIntegrationApiKeys = functions.https.onCall(
   async (_data: unknown, context: functions.https.CallableContext) => {
+    let uid: string | null = null
+    let storeId: string | null = null
     try {
       assertOwnerAccess(context)
-      const uid = context.auth!.uid
-      const storeId = await resolveStaffStoreId(uid)
+      uid = context.auth!.uid
+      storeId = await resolveStaffStoreId(uid)
       await verifyOwnerForStore(uid, storeId)
 
       let snapshot: admin.firestore.QuerySnapshot
@@ -1772,10 +1774,21 @@ export const listIntegrationApiKeys = functions.https.onCall(
     } catch (error) {
       if (error instanceof functions.https.HttpsError) throw error
 
-      console.error('[integrations] listIntegrationApiKeys failed', error)
+      const code = (error as { code?: unknown })?.code
+      const message = (error as { message?: unknown })?.message
+      const stack = (error as { stack?: unknown })?.stack
+      const diagnostics = {
+        uid,
+        storeId,
+        code: typeof code === 'string' || typeof code === 'number' ? code : null,
+        message: typeof message === 'string' ? message : 'Unknown error',
+      }
+
+      console.error('[integrations] listIntegrationApiKeys failed', diagnostics, stack)
       throw new functions.https.HttpsError(
         'failed-precondition',
         'Unable to list integration API keys. Verify store ownership, Firestore indexes, and permissions.',
+        diagnostics,
       )
     }
   },

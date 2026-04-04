@@ -497,9 +497,24 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     } catch (error) {
       console.error('[account] Failed to load integration API keys', error)
       const callableError = error as FirebaseError | null
+      const detailsRaw =
+        callableError && 'details' in callableError
+          ? (callableError as FirebaseError & { details?: unknown }).details
+          : null
+      const detailText =
+        detailsRaw && typeof detailsRaw === 'object'
+          ? JSON.stringify(detailsRaw)
+          : typeof detailsRaw === 'string'
+            ? detailsRaw
+            : ''
+      console.error('[account] listIntegrationApiKeys diagnostics', {
+        code: callableError?.code ?? null,
+        message: callableError?.message ?? null,
+        details: detailsRaw ?? null,
+      })
       const detail =
         callableError && typeof callableError.code === 'string' && callableError.code
-          ? ` (${callableError.code}${callableError.message ? `: ${callableError.message}` : ''})`
+          ? ` (${callableError.code}${callableError.message ? `: ${callableError.message}` : ''}${detailText ? ` | details: ${detailText}` : ''})`
           : ''
       publish({ message: `Unable to load integration API keys.${detail}`, tone: 'error' })
       setIntegrationApiKeys([])
