@@ -12,7 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/products', label: 'Items', roles: ['owner'] },
   { to: '/sell', label: 'Sell', roles: ['owner', 'staff'] },
   { to: '/customers', label: 'Customers', roles: ['owner', 'staff'] },
-  { to: '/data-transfer', label: 'Data transfer', roles: ['owner'] },
+  { to: '/data-transfer', label: 'Data', roles: ['owner'] },
   { to: '/bulk-messaging', label: 'SMS', roles: ['owner'] },
   { to: '/finance', label: 'Invoice', roles: ['owner'] },
   { to: '/close-day', label: 'Close day', roles: ['owner', 'staff'] },
