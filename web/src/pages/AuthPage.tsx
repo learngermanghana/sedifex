@@ -1375,9 +1375,11 @@ const PRICING_PLANS = [
     amount: 'GHS 0',
     cadence: '/ 14 days',
     features: [
-      'Live dashboard updates',
-      'Products with expiry & made-to-order options',
+      'Branded SMS with your company name',
+      'Products with expiry and made-to-order options',
       'Sell with customer display or QR pricing',
+      'Products can automatically show on your website',
+      'Products can be published to buy.sedifex.com',
     ],
     cta: {
       type: 'button' as const,
@@ -1391,8 +1393,9 @@ const PRICING_PLANS = [
     amount: 'GHS 100',
     cadence: '/ month',
     features: [
-      'Inventory + CRM platform',
-      'Bulk SMS at lower rates',
+      'Everything in Free Trial',
+      'Branded SMS campaigns at lower rates',
+      'Products can show on your website and buy.sedifex.com',
       'Free invoice & receipt generator',
     ],
     cta: {
@@ -1407,8 +1410,9 @@ const PRICING_PLANS = [
     cadence: '/ year',
     features: [
       'Everything in Monthly',
-      'Finance, close-day & reporting suite',
-      'Priority onboarding & support',
+      'Finance, close-day, and advanced reporting suite',
+      'Priority onboarding, support, and setup guidance',
+      'Best annual value for growing teams',
     ],
     cta: {
       type: 'button' as const,
