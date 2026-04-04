@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import Sparkline from '../components/Sparkline'
-import { requestAiAdvisor } from '../api/aiAdvisor'
 import { useStoreMetrics } from '../hooks/useStoreMetrics'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { db } from '../firebase'
@@ -354,26 +353,9 @@ export default function Dashboard() {
   const [bulkMessagingCredits, setBulkMessagingCredits] = useState<number>(0)
   const [isLoadingBulkCredits, setIsLoadingBulkCredits] = useState(false)
 
-  const [aiSummary, setAiSummary] = useState<{
-    message: string | null
-    lastGeneratedAt: Date | null
-    error: string | null
-    loading: boolean
-    lastContextKey: string | null
-  }>({
-    message: null,
-    lastGeneratedAt: null,
-    error: null,
-    loading: false,
-    lastContextKey: null,
-  })
   const [metricFilter, setMetricFilter] = useState<'all' | 'sales' | 'inventory'>('all')
 
   const now = new Date()
-  const todayKey = useMemo(
-    () => new Date().toISOString().slice(0, 10),
-    [now.toDateString()],
-  )
   const yesterday = useMemo(() => {
     const d = new Date(now)
     d.setDate(d.getDate() - 1)
@@ -720,44 +702,6 @@ export default function Dashboard() {
       .reduce((sum, exp) => sum + exp.amount, 0)
   }, [expenses, now])
 
-  const aiContext = useMemo(
-    () => ({
-      date: todayKey,
-      storeId,
-      sales: {
-        todayTotal: todaySalesTotal,
-        todayCount: todaySalesCount,
-        yesterdayTotal: yesterdaySalesTotal,
-        monthTotal: monthSalesTotal,
-      },
-      expenses: {
-        monthTotal: monthExpensesTotal,
-      },
-    }),
-    [monthExpensesTotal, monthSalesTotal, storeId, todayKey, todaySalesCount, todaySalesTotal, yesterdaySalesTotal],
-  )
-
-  const aiContextKey = useMemo(
-    () => `${storeId ?? 'no-store'}-${todayKey}`,
-    [storeId, todayKey],
-  )
-
-  useEffect(() => {
-    setAiSummary(prev => ({
-      ...prev,
-      message: null,
-      lastGeneratedAt: null,
-      error: null,
-      loading: false,
-      lastContextKey: null,
-    }))
-  }, [aiContextKey])
-
-  const aiLastGeneratedLabel =
-    aiSummary.lastGeneratedAt && aiSummary.lastContextKey === aiContextKey
-      ? aiSummary.lastGeneratedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-      : 'Not generated yet'
-
   const todaySalesMixTotal = todayProductSalesTotal + todayServiceSalesTotal
   const todayProductMixPercent =
     todaySalesMixTotal > 0
@@ -785,34 +729,7 @@ export default function Dashboard() {
       ? formatPercent(revenueMetric.changePercent)
       : '—'
 
-  async function handleGenerateAiSummary() {
-    if (aiSummary.loading) return
 
-    setAiSummary(prev => ({ ...prev, loading: true, error: null }))
-
-    try {
-      const response = await requestAiAdvisor({
-        question: 'Provide today’s top 3 actions.',
-        storeId: storeId ?? undefined,
-        jsonContext: aiContext,
-      })
-
-      setAiSummary({
-        message: response.advice,
-        lastGeneratedAt: new Date(),
-        error: null,
-        loading: false,
-        lastContextKey: aiContextKey,
-      })
-    } catch (error: unknown) {
-      console.error('[Dashboard] AI summary failed', error)
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Unable to generate advice right now.'
-      setAiSummary(prev => ({ ...prev, error: message, loading: false }))
-    }
-  }
 
   return (
     <div>
@@ -1192,79 +1109,6 @@ export default function Dashboard() {
               </p>
               <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>
                 Total VAT portion included in this month&apos;s sales.
-              </p>
-            </article>
-
-            {/* AI daily advisor */}
-            <article
-              style={{
-                background: '#F8FAFC',
-                borderRadius: 14,
-                padding: '14px 16px',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.6,
-                  color: '#64748B',
-                  fontWeight: 600,
-                }}
-              >
-                AI advisor summary
-              </p>
-
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={handleGenerateAiSummary}
-                  disabled={!storeId || aiSummary.loading}
-                  style={{
-                    background: '#4338CA',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: 10,
-                    padding: '8px 12px',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: aiSummary.loading || !storeId ? 'not-allowed' : 'pointer',
-                    opacity: aiSummary.loading || !storeId ? 0.7 : 1,
-                  }}
-                >
-                  {aiSummary.loading ? 'Generating…' : 'Generate AI summary'}
-                </button>
-
-                {aiSummary.error ? (
-                  <span
-                    style={{
-                      background: '#FEF2F2',
-                      color: '#B91C1C',
-                      border: '1px solid #FECACA',
-                      borderRadius: 999,
-                      padding: '4px 8px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {aiSummary.error}
-                  </span>
-                ) : null}
-              </div>
-
-              <p style={{ margin: 0, fontSize: 13, color: '#1E293B' }}>
-                {aiSummary.message
-                  ? aiSummary.message
-                  : 'Use AI to get today’s top 3 actions based on sales, expenses, and low stock.'}
-              </p>
-
-              <p style={{ margin: 0, fontSize: 12, color: '#475569' }}>
-                Last generated: {aiLastGeneratedLabel}
               </p>
             </article>
 
