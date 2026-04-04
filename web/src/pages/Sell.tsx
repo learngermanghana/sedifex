@@ -85,6 +85,7 @@ type Customer = {
 }
 
 type CustomerMode = 'walk_in' | 'named'
+type SellFlowTab = 'items' | 'checkout'
 
 type DisplayItem = {
   name: string
@@ -276,6 +277,7 @@ export default function Sell() {
   const [storeName, setStoreName] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [searchText, setSearchText] = useState('')
+  const [sellFlowTab, setSellFlowTab] = useState<SellFlowTab>('items')
   const [cart, setCart] = useState<CartLine[]>([])
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({})
   const [priceInputs, setPriceInputs] = useState<Record<string, string>>({})
@@ -1552,7 +1554,28 @@ export default function Sell() {
       </header>
 
       <div className="sell-page__grid">
-        <section className="card sell-page__left">
+        <div className="sell-page__flow-tabs" role="tablist" aria-label="Sell flow">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sellFlowTab === 'items'}
+            className={sellFlowTab === 'items' ? 'is-active' : ''}
+            onClick={() => setSellFlowTab('items')}
+          >
+            1. Pick items
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sellFlowTab === 'checkout'}
+            className={sellFlowTab === 'checkout' ? 'is-active' : ''}
+            onClick={() => setSellFlowTab('checkout')}
+          >
+            2. Checkout{cart.length > 0 ? ` (${cart.length})` : ''}
+          </button>
+        </div>
+
+        <section className={'card sell-page__left' + (sellFlowTab !== 'items' ? ' sell-page__panel--mobile-hidden' : '')}>
           <details className="sell-page__scan-expander">
             <summary className="sell-page__scan-expander-summary">Scan barcode</summary>
             <div className="sell-page__scan-expander-content">
@@ -1671,7 +1694,7 @@ export default function Sell() {
           </div>
         </section>
 
-        <section className="card sell-page__right">
+        <section className={'card sell-page__right' + (sellFlowTab !== 'checkout' ? ' sell-page__panel--mobile-hidden' : '')}>
           <div className="sell-page__section-header">
             <h3>Cart</h3>
             <p>Review items, apply discount, pick customer, then save the sale.</p>
