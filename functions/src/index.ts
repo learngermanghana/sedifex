@@ -1707,36 +1707,46 @@ function shortMask(value: string) {
 
 export const listIntegrationApiKeys = functions.https.onCall(
   async (_data: unknown, context: functions.https.CallableContext) => {
-    assertOwnerAccess(context)
-    const uid = context.auth!.uid
-    const storeId = await resolveStaffStoreId(uid)
-    await verifyOwnerForStore(uid, storeId)
+    try {
+      assertOwnerAccess(context)
+      const uid = context.auth!.uid
+      const storeId = await resolveStaffStoreId(uid)
+      await verifyOwnerForStore(uid, storeId)
 
-    const snapshot = await db
-      .collection('integrationApiKeys')
-      .where('storeId', '==', storeId)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get()
+      const snapshot = await db
+        .collection('integrationApiKeys')
+        .where('storeId', '==', storeId)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get()
 
-    const keys = snapshot.docs.map(docSnap => {
-      const data = docSnap.data() as Record<string, unknown>
-      return {
-        id: docSnap.id,
-        name: typeof data.name === 'string' ? data.name : 'Unnamed key',
-        status: data.status === 'revoked' ? 'revoked' : 'active',
-        keyPreview:
-          typeof data.keyPreview === 'string' && data.keyPreview.trim()
-            ? data.keyPreview
-            : '••••••••',
-        lastUsedAt: data.lastUsedAt instanceof admin.firestore.Timestamp ? data.lastUsedAt : null,
-        createdAt: data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt : null,
-        updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt : null,
-        revokedAt: data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt : null,
-      }
-    })
+      const keys = snapshot.docs.map(docSnap => {
+        const data = docSnap.data() as Record<string, unknown>
+        return {
+          id: docSnap.id,
+          name: typeof data.name === 'string' ? data.name : 'Unnamed key',
+          status: data.status === 'revoked' ? 'revoked' : 'active',
+          keyPreview:
+            typeof data.keyPreview === 'string' && data.keyPreview.trim()
+              ? data.keyPreview
+              : '••••••••',
+          lastUsedAt: data.lastUsedAt instanceof admin.firestore.Timestamp ? data.lastUsedAt : null,
+          createdAt: data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt : null,
+          updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt : null,
+          revokedAt: data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt : null,
+        }
+      })
 
-    return { storeId, keys }
+      return { storeId, keys }
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error
+
+      logger.error('[integrations] listIntegrationApiKeys failed', error)
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Unable to list integration API keys. Verify store ownership, Firestore indexes, and permissions.',
+      )
+    }
   },
 )
 

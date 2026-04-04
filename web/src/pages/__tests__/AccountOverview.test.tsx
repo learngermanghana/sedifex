@@ -81,6 +81,11 @@ vi.mock('firebase/auth', () => ({
   deleteUser: (...args: Parameters<typeof deleteUserMock>) => deleteUserMock(...args),
 }))
 
+const httpsCallableMock = vi.fn()
+vi.mock('firebase/functions', () => ({
+  httpsCallable: (...args: Parameters<typeof httpsCallableMock>) => httpsCallableMock(...args),
+}))
+
 vi.mock('../../lib/paystackClient', () => ({
   startPaystackCheckout: vi.fn(),
   checkSignupUnlockStatus: vi.fn(),
@@ -135,6 +140,7 @@ describe('AccountOverview', () => {
     serverTimestampMock?.mockReset()
     deleteWorkspaceDataMock.mockReset()
     deleteUserMock.mockReset()
+    httpsCallableMock.mockReset()
 
     mockUseActiveStore.mockReturnValue({ storeId: 'store-123', isLoading: false, error: null })
     mockUseAuthUser.mockReturnValue({
@@ -194,6 +200,7 @@ describe('AccountOverview', () => {
         },
       ],
     })
+    httpsCallableMock.mockReturnValue(async () => ({ data: { keys: [] } }))
   })
 
   it('shows an edit control for owners when roster data is available', async () => {
@@ -711,5 +718,27 @@ describe('AccountOverview', () => {
 
     const deleteButton = await screen.findByTestId('account-delete-data')
     expect(deleteButton).toBeDisabled()
+  })
+
+  it('shows integration callable error details when loading API keys fails', async () => {
+    httpsCallableMock.mockReturnValue(async () => {
+      throw {
+        code: 'functions/failed-precondition',
+        message: 'Missing index for integrationApiKeys',
+      }
+    })
+
+    render(<AccountOverview />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await waitFor(() =>
+      expect(mockPublish).toHaveBeenCalledWith({
+        message:
+          'Unable to load integration API keys. (functions/failed-precondition: Missing index for integrationApiKeys)',
+        tone: 'error',
+      }),
+    )
   })
 })

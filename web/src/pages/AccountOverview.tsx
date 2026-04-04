@@ -1,6 +1,7 @@
 // web/src/pages/AccountOverview.tsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import type { FirebaseError } from 'firebase/app'
 import { httpsCallable } from 'firebase/functions'
 import {
   Timestamp,
@@ -495,7 +496,12 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       setIntegrationApiKeys(keys.filter(key => key.id))
     } catch (error) {
       console.error('[account] Failed to load integration API keys', error)
-      publish({ message: 'Unable to load integration API keys.', tone: 'error' })
+      const callableError = error as FirebaseError | null
+      const detail =
+        callableError && typeof callableError.code === 'string' && callableError.code
+          ? ` (${callableError.code}${callableError.message ? `: ${callableError.message}` : ''})`
+          : ''
+      publish({ message: `Unable to load integration API keys.${detail}`, tone: 'error' })
       setIntegrationApiKeys([])
     } finally {
       setIntegrationKeysLoading(false)
