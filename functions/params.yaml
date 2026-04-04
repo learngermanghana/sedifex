@@ -15,6 +15,9 @@ params:
   - name: APP_BASE_URL
     type: string
     default: ""
+  - name: SEDIFEX_API_BASE_URL
+    type: string
+    default: ""
   - name: SHEETS_SERVICE_ACCOUNT
     type: string
     default: ""

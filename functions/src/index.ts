@@ -1958,6 +1958,11 @@ export const rotateIntegrationApiKey = functions.https.onCall(
 )
 
 export const integrationProducts = functions.https.onRequest(async (req, res) => {
+  const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim()
+  if (configuredApiBaseUrl) {
+    res.setHeader('x-sedifex-api-base-url', configuredApiBaseUrl)
+  }
+
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method-not-allowed' })
     return
@@ -2449,6 +2454,7 @@ export const sendBulkMessage = functions.https.onCall(
 const PAYSTACK_BASE_URL = 'https://api.paystack.co'
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
 const PAYSTACK_PUBLIC_KEY = defineString('PAYSTACK_PUBLIC_KEY')
+const SEDIFEX_API_BASE_URL = defineString('SEDIFEX_API_BASE_URL')
 
 // Legacy: was a single plan code for all checkouts. Kept for backwards compatibility.
 const PAYSTACK_STANDARD_PLAN_CODE = defineString('PAYSTACK_STANDARD_PLAN_CODE')
