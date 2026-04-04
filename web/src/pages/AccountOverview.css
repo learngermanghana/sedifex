@@ -314,6 +314,31 @@
   padding: 10px;
 }
 
+.account-overview__integration-token-notice {
+  border: 1px solid #facc15;
+  background: #fefce8;
+  color: #713f12;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.account-overview__integration-token-notice p {
+  margin: 0 0 8px;
+}
+
+.account-overview__integration-token-value {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: 0.9rem;
+  background: #fffbeb;
+  border: 1px dashed #f59e0b;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
 .account-overview__integration-key-list {
   list-style: none;
   margin: 8px 0 0;

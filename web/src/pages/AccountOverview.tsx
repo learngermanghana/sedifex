@@ -310,6 +310,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   const [integrationKeysLoading, setIntegrationKeysLoading] = useState(false)
   const [integrationKeyName, setIntegrationKeyName] = useState('')
   const [isCreatingIntegrationKey, setIsCreatingIntegrationKey] = useState(false)
+  const [latestIntegrationToken, setLatestIntegrationToken] = useState<string | null>(null)
   const [actioningKeyId, setActioningKeyId] = useState<string | null>(null)
 
   const activeMembership = useMemo(() => {
@@ -796,9 +797,10 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       const token = typeof data.token === 'string' ? data.token : ''
 
       if (token) {
+        setLatestIntegrationToken(token)
         await copyTextToClipboard(
           token,
-          'Integration API key created. Token copied (shown once).',
+          'Integration API key created. It was copied to your clipboard and is shown below once.',
         )
       } else {
         publish({
@@ -811,7 +813,16 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       await refreshIntegrationApiKeys()
     } catch (error) {
       console.error('[account] Failed to create integration API key', error)
-      publish({ message: 'Unable to create integration API key.', tone: 'error' })
+      const errorMessage =
+        typeof (error as { message?: unknown })?.message === 'string'
+          ? (error as { message: string }).message
+          : ''
+      publish({
+        message: errorMessage
+          ? `Unable to create integration API key: ${errorMessage}`
+          : 'Unable to create integration API key.',
+        tone: 'error',
+      })
     } finally {
       setIsCreatingIntegrationKey(false)
     }
@@ -840,9 +851,10 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       const data = (response.data ?? {}) as { token?: unknown }
       const token = typeof data.token === 'string' ? data.token : ''
       if (token) {
+        setLatestIntegrationToken(token)
         await copyTextToClipboard(
           token,
-          'Integration API key rotated. New token copied (shown once).',
+          'Integration API key rotated. The new key was copied to your clipboard and is shown below once.',
         )
       } else {
         publish({
@@ -1371,6 +1383,17 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                 >
                   {isCreatingIntegrationKey ? 'Creating…' : 'Create integration key'}
                 </button>
+              </div>
+            )}
+            {isOwner && latestIntegrationToken && (
+              <div className="account-overview__integration-token-notice" role="status" aria-live="polite">
+                <p>
+                  <strong>This is your integration key.</strong>
+                  {' '}
+                  It starts with <code>sedx_</code>, was copied automatically, and is shown only this time.
+                  Save it now.
+                </p>
+                <code className="account-overview__integration-token-value">{latestIntegrationToken}</code>
               </div>
             )}
             {isOwner && (
