@@ -14,6 +14,8 @@ Sedifex product documents now support first-class image metadata:
 
 - `imageUrl?: string | null` — optional public image URL (`http://` or `https://` only in product forms/import).
 - `imageAlt?: string | null` — optional accessibility label; defaults to `name` when `imageUrl` exists and `imageAlt` is missing.
+- `category?: string | null` — optional item grouping label used across product listings and integrations.
+- `description?: string | null` — optional product summary for richer storefront rendering.
 
 ### Production image uploads (same-origin `/api/uploads` on Vercel)
 
@@ -78,6 +80,8 @@ Set these in your Vercel project:
   - `id`
   - `storeId`
   - `name`
+  - `category`
+  - `description`
   - `price`
   - `stockCount`
   - `itemType`

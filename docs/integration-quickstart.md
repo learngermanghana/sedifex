@@ -14,6 +14,8 @@ After setup, Website A can fetch and render:
 - `id`
 - `storeId`
 - `name`
+- `category`
+- `description`
 - `price`
 - `stockCount`
 - `itemType`
@@ -49,9 +51,10 @@ type Product = {
   id: string
   storeId: string
   name: string
+  category?: string | null
+  description?: string | null
   price: number
   stockCount?: number
-  category?: string
   imageUrl?: string | null
 }
 
@@ -60,17 +63,19 @@ const FALLBACK_PRODUCTS: Product[] = [
     id: 'fallback-1',
     storeId: 'fallback',
     name: 'Sample Jollof Rice',
+    category: 'Meals',
+    description: 'Classic Ghana-style rice with tomato stew and spices.',
     price: 45,
     stockCount: 10,
-    category: 'Meals',
   },
   {
     id: 'fallback-2',
     storeId: 'fallback',
     name: 'Sample Orange Juice',
+    category: 'Drinks',
+    description: 'Freshly squeezed orange juice served chilled.',
     price: 12,
     stockCount: 25,
-    category: 'Drinks',
   },
 ]
 
@@ -136,7 +141,8 @@ export default async function MenuPage() {
           <ul>
             {items.map(item => (
               <li key={`${item.id}-${item.storeId}`}>
-                {item.name} — {item.price}
+                <strong>{item.name}</strong> — {item.price}
+                {item.description ? <p>{item.description}</p> : null}
               </li>
             ))}
           </ul>

@@ -4,6 +4,7 @@ export type Product = {
   id: string
   name: string
   category?: string | null
+  description?: string | null
   sku: string | null
   barcode: string | null
   price: number | null

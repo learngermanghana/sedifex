@@ -31,7 +31,7 @@ Create a frontend script that:
 - Calls `integrationProducts?storeId=<storeId>` with `Authorization: Bearer <integration_key>`.
 - Deduplicates by composite key: `id|storeId|name|price`.
 - Falls back to static products when fetch fails.
-- Groups products by category and renders menu sections.
+- Groups products by category and renders menu sections, including optional product descriptions.
 - Handles cache timing (30-120s for fast-changing stock, 3600s+ for mostly static catalogs).
 
 Reference implementation: `docs/integration-quickstart.md`.

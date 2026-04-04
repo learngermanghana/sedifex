@@ -27,7 +27,7 @@ export default function WordpressInstallGuidePage() {
           <li>Fetch <code>integrationProducts?storeId=&lt;storeId&gt;</code> with bearer auth.</li>
           <li>Deduplicate with key <code>id|storeId|name|price</code>.</li>
           <li>Fallback to static data on fetch failure.</li>
-          <li>Group by category and render menu sections.</li>
+          <li>Group by category and render menu sections with optional item descriptions.</li>
         </ul>
 
         <h3>3) Register shortcode</h3>
@@ -45,7 +45,7 @@ export default function WordpressInstallGuidePage() {
         <h2>Validation checklist</h2>
         <ol>
           <li>Open a page that contains <code>[sedifex_products]</code>.</li>
-          <li>Confirm category-based rendering and out-of-stock handling.</li>
+          <li>Confirm category-based rendering, description visibility, and out-of-stock handling.</li>
           <li>Simulate endpoint failure and verify fallback products render.</li>
         </ol>
       </section>

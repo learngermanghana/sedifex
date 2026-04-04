@@ -43,6 +43,8 @@ const ITEM_REQUIRED_HEADERS: HeaderSpec[] = [
   { key: 'price', description: 'Selling price (number). Example: 25.5' },
 ]
 const ITEM_OPTIONAL_HEADERS: HeaderSpec[] = [
+  { key: 'category', description: 'Category name used for grouping on the product page.' },
+  { key: 'description', description: 'Short product description shown on product cards or menus.' },
   { key: 'sku', description: 'SKU or internal code.' },
   { key: 'barcode', description: 'Barcode for scanning (letters + digits are supported).' },
   { key: 'stock_count', description: 'Current stock quantity.' },
@@ -284,6 +286,8 @@ export default function DataTransfer() {
       buildCsv(
         [
           'name',
+          'category',
+          'description',
           'sku',
           'barcode',
           'price',
@@ -302,6 +306,8 @@ export default function DataTransfer() {
         [
           [
             'Classic Rice 5kg',
+            'Grains',
+            'Premium long-grain rice for daily family meals.',
             'RICE-5K',
             '1234567890123',
             '125.00',
@@ -433,6 +439,8 @@ export default function DataTransfer() {
         const data = docSnap.data() as Record<string, unknown>
         const name = normalizeText(data.name)
         const sku = normalizeText(data.sku)
+        const category = normalizeText(data.category)
+        const description = normalizeText(data.description)
         const barcode = normalizeText(data.barcode ?? data.sku)
         const price = normalizeNumber(data.price)
         const stockCount = normalizeNumber(data.stockCount)
@@ -457,6 +465,8 @@ export default function DataTransfer() {
 
         return [
           name,
+          category,
+          description,
           sku,
           barcode,
           price === null ? '' : price.toString(),
@@ -481,6 +491,8 @@ export default function DataTransfer() {
 
       const headers = [
         'name',
+        'category',
+        'description',
         'sku',
         'barcode',
         'price',
@@ -652,6 +664,8 @@ export default function DataTransfer() {
       })
 
       const shouldSetSku = headerIndex.sku !== undefined
+      const shouldSetCategory = headerIndex.category !== undefined
+      const shouldSetDescription = headerIndex.description !== undefined
       const shouldSetBarcode = headerIndex.barcode !== undefined
       const shouldSetStockCount = headerIndex.stock_count !== undefined
       const shouldSetReorderPoint = headerIndex.reorder_point !== undefined
@@ -688,6 +702,8 @@ export default function DataTransfer() {
               ? 'made_to_order'
               : 'product'
         const sku = normalizeText(getRowValue(row, headerIndex, 'sku'))
+        const category = normalizeText(getRowValue(row, headerIndex, 'category'))
+        const description = normalizeText(getRowValue(row, headerIndex, 'description'))
         const barcodeValue = normalizeText(getRowValue(row, headerIndex, 'barcode'))
         const barcode = barcodeValue || sku
         const stockCount = normalizeNumber(getRowValue(row, headerIndex, 'stock_count'))
@@ -739,6 +755,8 @@ export default function DataTransfer() {
         }
 
         setField(shouldSetSku, 'sku', itemType === 'service' ? null : sku || null)
+        setField(shouldSetCategory, 'category', category || null)
+        setField(shouldSetDescription, 'description', description || null)
         setField(shouldSetBarcode, 'barcode', itemType === 'service' ? null : barcode || null)
         setField(shouldSetStockCount, 'stockCount', itemType === 'product' ? stockCount : null)
         setField(shouldSetReorderPoint, 'reorderPoint', itemType === 'product' ? reorderPoint : null)

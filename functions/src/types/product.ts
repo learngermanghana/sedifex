@@ -4,6 +4,8 @@ export type ProductReadModel = {
   id: string
   storeId: string
   name: string
+  category: string | null
+  description: string | null
   price: number | null
   stockCount: number | null
   itemType: ProductItemType

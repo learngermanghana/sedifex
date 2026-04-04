@@ -1652,6 +1652,12 @@ export const listStoreProducts = functions.https.onCall(
         id: docSnap.id,
         storeId: resolvedStoreId,
         name,
+        category:
+          typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+        description:
+          typeof data.description === 'string' && data.description.trim()
+            ? data.description.trim()
+            : null,
         price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
         stockCount:
           typeof data.stockCount === 'number' && Number.isFinite(data.stockCount)
@@ -2006,8 +2012,20 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
       id: docSnap.id,
       storeId,
       name: typeof data.name === 'string' ? data.name : 'Untitled item',
+      category:
+        typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+      description:
+        typeof data.description === 'string' && data.description.trim()
+          ? data.description.trim()
+          : null,
       price: typeof data.price === 'number' ? data.price : null,
       stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+      itemType:
+        data.itemType === 'service'
+          ? 'service'
+          : data.itemType === 'made_to_order'
+            ? 'made_to_order'
+            : 'product',
       imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
       imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
       updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
