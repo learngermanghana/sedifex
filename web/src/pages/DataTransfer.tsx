@@ -36,6 +36,8 @@ type ActionStatus = {
   message: string
 }
 
+type DataTab = 'transfer' | 'downloads'
+
 const ITEM_REQUIRED_HEADERS: HeaderSpec[] = [
   { key: 'name', description: 'Item name as it appears on receipts.' },
   { key: 'price', description: 'Selling price (number). Example: 25.5' },
@@ -248,6 +250,7 @@ function getRowValue(row: string[], headerIndex: CsvHeaderIndex, key: string) {
 }
 
 export default function DataTransfer() {
+  const [activeTab, setActiveTab] = useState<DataTab>('transfer')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [headerValidation, setHeaderValidation] = useState<CsvHeaderValidation | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -1171,295 +1174,319 @@ export default function DataTransfer() {
 
   return (
     <PageSection
-      title="Data transfer"
-      subtitle="Import data from another website or export your Sedifex records with CSV files."
+      title="Data"
+      subtitle="Transfer or download your Sedifex data with CSV and OneDrive Excel."
     >
-      <div className="data-transfer__grid">
-        <section className="card data-transfer__card">
-          <h3>Import CSV</h3>
-          <p className="data-transfer__muted">
-            Upload a CSV file with the headers below to migrate your items and customers.
-          </p>
-          <div className="data-transfer__section">
-            <h4 className="data-transfer__section-title">CSV file import</h4>
-            <ol className="data-transfer__steps">
-              <li>
-                <span className="data-transfer__step-label">Step 1:</span>
-                Download the items or customers template.
-              </li>
-              <li>
-                <span className="data-transfer__step-label">Step 2:</span>
-                Fill in the CSV and upload it below.
-              </li>
-              <li>
-                <span className="data-transfer__step-label">Step 3:</span>
-                Import items or customers.
-              </li>
-            </ol>
-            <div className="data-transfer__actions">
-              <button
-                type="button"
-                className="button button--ghost"
-                onClick={() => downloadCsv('sedifex-items-import-template.csv', itemTemplate)}
-              >
-                Download items template
-              </button>
-              <button
-                type="button"
-                className="button button--ghost"
-                onClick={() =>
-                  downloadCsv('sedifex-customers-import-template.csv', customerTemplate)
-                }
-              >
-                Download customers template
-              </button>
-            </div>
-            <div className="data-transfer__header-summary">
-              <div className="data-transfer__header-summary-title">
-                <span>Required headers</span>
-                <a className="data-transfer__header-toggle" href="#data-transfer-guide">
-                  Show full headers
-                </a>
-              </div>
-              <div className="data-transfer__header-summary-list">
-                <span className="data-transfer__header-summary-label">Items:</span>
-                {itemRequired.map(header => (
-                  <span key={header.key} className="data-transfer__header-chip">
-                    {header.key}
-                  </span>
-                ))}
-                <span className="data-transfer__header-summary-label">Customers:</span>
-                {customerRequired.map(header => (
-                  <span key={header.key} className="data-transfer__header-chip">
-                    {header.key}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="data-transfer__upload">
-              <input
-                className="data-transfer__file-input"
-                id="data-transfer-upload"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleFileChange}
-                ref={fileInputRef}
-              />
-              <label className="button button--outline" htmlFor="data-transfer-upload">
-                Choose CSV file
-              </label>
-              <span className="data-transfer__file-name">
-                {selectedFile ? selectedFile.name : 'No file selected'}
-              </span>
-            </div>
-            {headerValidation && (
-              <div className="data-transfer__validation">
-                {headerValidation.error && (
-                  <p className="data-transfer__validation-error">{headerValidation.error}</p>
-                )}
-                {!headerValidation.error && headerValidation.itemsMissing.length > 0 && (
-                  <p className="data-transfer__validation-error">
-                    Missing required item headers: {headerValidation.itemsMissing.join(', ')}.
-                  </p>
-                )}
-                {!headerValidation.error && headerValidation.customersMissing.length > 0 && (
-                  <p className="data-transfer__validation-error">
-                    Missing required customer headers:{' '}
-                    {headerValidation.customersMissing.join(', ')}.
-                  </p>
-                )}
-                {!headerValidation.error && validationSummary && (
-                  <p className="data-transfer__validation-success">{validationSummary}</p>
-                )}
-              </div>
-            )}
-            <div className="data-transfer__actions data-transfer__actions--stacked">
-              <div className="data-transfer__action">
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={handleImportItemsFromCsv}
-                  disabled={!selectedFile || isItemsCsvImporting}
-                >
-                  {isItemsCsvImporting ? 'Importing items…' : 'Import items from CSV'}
-                </button>
-                {itemsCsvImportStatus && (
-                  <p
-                    className={`data-transfer__status data-transfer__status--${itemsCsvImportStatus.tone}`}
-                  >
-                    {itemsCsvImportStatus.message}
-                  </p>
-                )}
-              </div>
-              <div className="data-transfer__action">
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={handleImportCustomersFromCsv}
-                  disabled={!selectedFile || isCustomersCsvImporting}
-                >
-                  {isCustomersCsvImporting ? 'Importing customers…' : 'Import customers from CSV'}
-                </button>
-                {customersCsvImportStatus && (
-                  <p
-                    className={`data-transfer__status data-transfer__status--${customersCsvImportStatus.tone}`}
-                  >
-                    {customersCsvImportStatus.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="data-transfer__section">
-            <h4 className="data-transfer__section-title">OneDrive Excel import</h4>
-            <ol className="data-transfer__steps">
-              <li>
-                <span className="data-transfer__step-label">Step 1:</span>
-                Pull the latest sedifex-items.xlsx or sedifex-customers.xlsx from OneDrive.
-              </li>
-              <li>
-                <span className="data-transfer__step-label">Step 2:</span>
-                Upload the downloaded CSV using the uploader above.
-              </li>
-              <li>
-                <span className="data-transfer__step-label">Step 3:</span>
-                Import the CSV with the buttons above.
-              </li>
-            </ol>
-            <div className="data-transfer__actions data-transfer__actions--stacked">
-              <div className="data-transfer__action">
-                <button
-                  type="button"
-                  className="button button--outline"
-                  onClick={handleImportItemsFromExcel}
-                  disabled={isItemsExcelImporting}
-                >
-                  {isItemsExcelImporting
-                    ? 'Importing items from Excel…'
-                    : 'Import items from Excel (OneDrive)'}
-                </button>
-                {itemsExcelImportStatus && (
-                  <p
-                    className={`data-transfer__status data-transfer__status--${itemsExcelImportStatus.tone}`}
-                  >
-                    {itemsExcelImportStatus.message}
-                  </p>
-                )}
-              </div>
-              <div className="data-transfer__action">
-                <button
-                  type="button"
-                  className="button button--outline"
-                  onClick={handleImportCustomersFromExcel}
-                  disabled={isCustomersExcelImporting}
-                >
-                  {isCustomersExcelImporting
-                    ? 'Importing customers from Excel…'
-                    : 'Import customers from Excel (OneDrive)'}
-                </button>
-                {customersExcelImportStatus && (
-                  <p
-                    className={`data-transfer__status data-transfer__status--${customersExcelImportStatus.tone}`}
-                  >
-                    {customersExcelImportStatus.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="card data-transfer__card">
-          <h3>Export CSV</h3>
-          <p className="data-transfer__muted">
-            Export files keep the same headers, so you can re-import later without edits.
-          </p>
-          <div className="data-transfer__actions data-transfer__actions--stacked">
-            {/* Existing CSV downloads */}
-            <div className="data-transfer__action">
-              <button
-                type="button"
-                className="button button--primary"
-                onClick={handleDownloadItemsCsv}
-                disabled={isItemsCsvExporting}
-              >
-                {isItemsCsvExporting ? 'Downloading items CSV…' : 'Download items CSV'}
-              </button>
-              {itemsCsvExportStatus && (
-                <p
-                  className={`data-transfer__status data-transfer__status--${itemsCsvExportStatus.tone}`}
-                >
-                  {itemsCsvExportStatus.message}
-                </p>
-              )}
-            </div>
-            <div className="data-transfer__action">
-              <button
-                type="button"
-                className="button button--primary"
-                onClick={handleDownloadCustomersCsv}
-                disabled={isCustomersCsvExporting}
-              >
-                {isCustomersCsvExporting
-                  ? 'Downloading customers CSV…'
-                  : 'Download customers CSV'}
-              </button>
-              {customersCsvExportStatus && (
-                <p
-                  className={`data-transfer__status data-transfer__status--${customersCsvExportStatus.tone}`}
-                >
-                  {customersCsvExportStatus.message}
-                </p>
-              )}
-            </div>
-
-            {/* NEW: Excel export buttons */}
-            <div className="data-transfer__action">
-              <button
-                type="button"
-                className="button button--ghost"
-                onClick={handleExportItemsToExcel}
-                disabled={isItemsExcelExporting}
-              >
-                {isItemsExcelExporting
-                  ? 'Exporting items to Excel…'
-                  : 'Export items to Excel (OneDrive)'}
-              </button>
-              {itemsExcelExportStatus && (
-                <p
-                  className={`data-transfer__status data-transfer__status--${itemsExcelExportStatus.tone}`}
-                >
-                  {itemsExcelExportStatus.message}
-                </p>
-              )}
-            </div>
-            <div className="data-transfer__action">
-              <button
-                type="button"
-                className="button button--ghost"
-                onClick={handleExportCustomersToExcel}
-                disabled={isCustomersExcelExporting}
-              >
-                {isCustomersExcelExporting
-                  ? 'Exporting customers to Excel…'
-                  : 'Export customers to Excel (OneDrive)'}
-              </button>
-              {customersExcelExportStatus && (
-                <p
-                  className={`data-transfer__status data-transfer__status--${customersExcelExportStatus.tone}`}
-                >
-                  {customersExcelExportStatus.message}
-                </p>
-              )}
-            </div>
-          </div>
-          <p className="data-transfer__hint">
-            Tip: Keep headers lowercase with underscores exactly as shown.
-          </p>
-        </section>
+      <div className="data-transfer__tabs" role="tablist" aria-label="Data actions">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'transfer'}
+          className={`data-transfer__tab ${activeTab === 'transfer' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('transfer')}
+        >
+          Transfer data
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'downloads'}
+          className={`data-transfer__tab ${activeTab === 'downloads' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('downloads')}
+        >
+          Download products, customers & CSV
+        </button>
       </div>
 
-      <div className="data-transfer__guide" id="data-transfer-guide">
+      <div className="data-transfer__grid">
+        {activeTab === 'transfer' ? (
+          <section className="card data-transfer__card">
+            <h3>Transfer data</h3>
+            <p className="data-transfer__muted">
+              Upload a CSV file with the headers below to migrate your items and customers.
+            </p>
+            <div className="data-transfer__section">
+              <h4 className="data-transfer__section-title">CSV file import</h4>
+              <ol className="data-transfer__steps">
+                <li>
+                  <span className="data-transfer__step-label">Step 1:</span>
+                  Download the items or customers template.
+                </li>
+                <li>
+                  <span className="data-transfer__step-label">Step 2:</span>
+                  Fill in the CSV and upload it below.
+                </li>
+                <li>
+                  <span className="data-transfer__step-label">Step 3:</span>
+                  Import items or customers.
+                </li>
+              </ol>
+              <div className="data-transfer__actions">
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() => downloadCsv('sedifex-items-import-template.csv', itemTemplate)}
+                >
+                  Download items template
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() =>
+                    downloadCsv('sedifex-customers-import-template.csv', customerTemplate)
+                  }
+                >
+                  Download customers template
+                </button>
+              </div>
+              <div className="data-transfer__header-summary">
+                <div className="data-transfer__header-summary-title">
+                  <span>Required headers</span>
+                  <a className="data-transfer__header-toggle" href="#data-transfer-guide">
+                    Show full headers
+                  </a>
+                </div>
+                <div className="data-transfer__header-summary-list">
+                  <span className="data-transfer__header-summary-label">Items:</span>
+                  {itemRequired.map(header => (
+                    <span key={header.key} className="data-transfer__header-chip">
+                      {header.key}
+                    </span>
+                  ))}
+                  <span className="data-transfer__header-summary-label">Customers:</span>
+                  {customerRequired.map(header => (
+                    <span key={header.key} className="data-transfer__header-chip">
+                      {header.key}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="data-transfer__upload">
+                <input
+                  className="data-transfer__file-input"
+                  id="data-transfer-upload"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleFileChange}
+                  ref={fileInputRef}
+                />
+                <label className="button button--outline" htmlFor="data-transfer-upload">
+                  Choose CSV file
+                </label>
+                <span className="data-transfer__file-name">
+                  {selectedFile ? selectedFile.name : 'No file selected'}
+                </span>
+              </div>
+              {headerValidation && (
+                <div className="data-transfer__validation">
+                  {headerValidation.error && (
+                    <p className="data-transfer__validation-error">{headerValidation.error}</p>
+                  )}
+                  {!headerValidation.error && headerValidation.itemsMissing.length > 0 && (
+                    <p className="data-transfer__validation-error">
+                      Missing required item headers: {headerValidation.itemsMissing.join(', ')}.
+                    </p>
+                  )}
+                  {!headerValidation.error && headerValidation.customersMissing.length > 0 && (
+                    <p className="data-transfer__validation-error">
+                      Missing required customer headers:{' '}
+                      {headerValidation.customersMissing.join(', ')}.
+                    </p>
+                  )}
+                  {!headerValidation.error && validationSummary && (
+                    <p className="data-transfer__validation-success">{validationSummary}</p>
+                  )}
+                </div>
+              )}
+              <div className="data-transfer__actions data-transfer__actions--stacked">
+                <div className="data-transfer__action">
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={handleImportItemsFromCsv}
+                    disabled={!selectedFile || isItemsCsvImporting}
+                  >
+                    {isItemsCsvImporting ? 'Importing items…' : 'Import items from CSV'}
+                  </button>
+                  {itemsCsvImportStatus && (
+                    <p
+                      className={`data-transfer__status data-transfer__status--${itemsCsvImportStatus.tone}`}
+                    >
+                      {itemsCsvImportStatus.message}
+                    </p>
+                  )}
+                </div>
+                <div className="data-transfer__action">
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={handleImportCustomersFromCsv}
+                    disabled={!selectedFile || isCustomersCsvImporting}
+                  >
+                    {isCustomersCsvImporting ? 'Importing customers…' : 'Import customers from CSV'}
+                  </button>
+                  {customersCsvImportStatus && (
+                    <p
+                      className={`data-transfer__status data-transfer__status--${customersCsvImportStatus.tone}`}
+                    >
+                      {customersCsvImportStatus.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="data-transfer__section">
+              <h4 className="data-transfer__section-title">OneDrive Excel import</h4>
+              <ol className="data-transfer__steps">
+                <li>
+                  <span className="data-transfer__step-label">Step 1:</span>
+                  Pull the latest sedifex-items.xlsx or sedifex-customers.xlsx from OneDrive.
+                </li>
+                <li>
+                  <span className="data-transfer__step-label">Step 2:</span>
+                  Upload the downloaded CSV using the uploader above.
+                </li>
+                <li>
+                  <span className="data-transfer__step-label">Step 3:</span>
+                  Import the CSV with the buttons above.
+                </li>
+              </ol>
+              <div className="data-transfer__actions data-transfer__actions--stacked">
+                <div className="data-transfer__action">
+                  <button
+                    type="button"
+                    className="button button--outline"
+                    onClick={handleImportItemsFromExcel}
+                    disabled={isItemsExcelImporting}
+                  >
+                    {isItemsExcelImporting
+                      ? 'Importing items from Excel…'
+                      : 'Import items from Excel (OneDrive)'}
+                  </button>
+                  {itemsExcelImportStatus && (
+                    <p
+                      className={`data-transfer__status data-transfer__status--${itemsExcelImportStatus.tone}`}
+                    >
+                      {itemsExcelImportStatus.message}
+                    </p>
+                  )}
+                </div>
+                <div className="data-transfer__action">
+                  <button
+                    type="button"
+                    className="button button--outline"
+                    onClick={handleImportCustomersFromExcel}
+                    disabled={isCustomersExcelImporting}
+                  >
+                    {isCustomersExcelImporting
+                      ? 'Importing customers from Excel…'
+                      : 'Import customers from Excel (OneDrive)'}
+                  </button>
+                  {customersExcelImportStatus && (
+                    <p
+                      className={`data-transfer__status data-transfer__status--${customersExcelImportStatus.tone}`}
+                    >
+                      {customersExcelImportStatus.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="card data-transfer__card">
+            <h3>Download products, customers & CSV data</h3>
+            <p className="data-transfer__muted">
+              Export files keep the same headers, so you can re-import later without edits.
+            </p>
+            <div className="data-transfer__actions data-transfer__actions--stacked">
+              <div className="data-transfer__action">
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={handleDownloadItemsCsv}
+                  disabled={isItemsCsvExporting}
+                >
+                  {isItemsCsvExporting ? 'Downloading items CSV…' : 'Download items CSV'}
+                </button>
+                {itemsCsvExportStatus && (
+                  <p
+                    className={`data-transfer__status data-transfer__status--${itemsCsvExportStatus.tone}`}
+                  >
+                    {itemsCsvExportStatus.message}
+                  </p>
+                )}
+              </div>
+              <div className="data-transfer__action">
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={handleDownloadCustomersCsv}
+                  disabled={isCustomersCsvExporting}
+                >
+                  {isCustomersCsvExporting
+                    ? 'Downloading customers CSV…'
+                    : 'Download customers CSV'}
+                </button>
+                {customersCsvExportStatus && (
+                  <p
+                    className={`data-transfer__status data-transfer__status--${customersCsvExportStatus.tone}`}
+                  >
+                    {customersCsvExportStatus.message}
+                  </p>
+                )}
+              </div>
+              <div className="data-transfer__action">
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={handleExportItemsToExcel}
+                  disabled={isItemsExcelExporting}
+                >
+                  {isItemsExcelExporting
+                    ? 'Exporting items to Excel…'
+                    : 'Export items to Excel (OneDrive)'}
+                </button>
+                {itemsExcelExportStatus && (
+                  <p
+                    className={`data-transfer__status data-transfer__status--${itemsExcelExportStatus.tone}`}
+                  >
+                    {itemsExcelExportStatus.message}
+                  </p>
+                )}
+              </div>
+              <div className="data-transfer__action">
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={handleExportCustomersToExcel}
+                  disabled={isCustomersExcelExporting}
+                >
+                  {isCustomersExcelExporting
+                    ? 'Exporting customers to Excel…'
+                    : 'Export customers to Excel (OneDrive)'}
+                </button>
+                {customersExcelExportStatus && (
+                  <p
+                    className={`data-transfer__status data-transfer__status--${customersExcelExportStatus.tone}`}
+                  >
+                    {customersExcelExportStatus.message}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="data-transfer__hint">
+              Tip: Keep headers lowercase with underscores exactly as shown.
+            </p>
+          </section>
+        )}
+      </div>
+
+      <div
+        className="data-transfer__guide"
+        id="data-transfer-guide"
+        hidden={activeTab !== 'transfer'}
+      >
         <section className="card data-transfer__card">
           <h3>Items CSV headers</h3>
           <div className="data-transfer__header-group">
