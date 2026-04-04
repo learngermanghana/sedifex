@@ -33,6 +33,8 @@ import CustomerDisplay from './pages/CustomerDisplay'
 import PrivacyPage from './pages/legal/PrivacyPage'
 import CookiesPage from './pages/legal/CookiesPage'
 import RefundPage from './pages/legal/RefundPage'
+import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
+import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
 
 import { ToastProvider } from './components/ToastProvider'
 
@@ -86,6 +88,8 @@ const router = createBrowserRouter([
       { path: 'verify-email', element: <VerifyEmail /> },
       { path: 'billing/verify', element: <BillingVerifyPage /> },
       { path: 'inventory-system-ghana', element: <InventorySystemGhana /> },
+      { path: 'docs/integration-quickstart', element: <IntegrationQuickstartPage /> },
+      { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
 
       // Legal pages
       { path: 'legal/privacy', element: <PrivacyPage /> },

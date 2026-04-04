@@ -1327,11 +1327,11 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
             <p className="account-overview__hint">
               Sedifex supports both WordPress and Next.js storefronts.
               {' '}
-              <a href="/docs/integration-quickstart.md" target="_blank" rel="noreferrer">
+              <a href="/docs/integration-quickstart" target="_blank" rel="noreferrer">
                 Next.js + Vercel tutorial
               </a>
               {' · '}
-              <a href="/docs/wordpress-install-guide.md" target="_blank" rel="noreferrer">
+              <a href="/docs/wordpress-install-guide" target="_blank" rel="noreferrer">
                 WordPress tutorial
               </a>
             </p>

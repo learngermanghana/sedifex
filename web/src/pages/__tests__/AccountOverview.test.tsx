@@ -353,7 +353,7 @@ describe('AccountOverview', () => {
     expect(screen.getByRole('button', { name: /test endpoint/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /install on wordpress/i })).toHaveAttribute(
       'href',
-      '/docs/wordpress-install-guide.md',
+      '/docs/wordpress-install-guide',
     )
   })
 

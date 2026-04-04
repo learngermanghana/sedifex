@@ -35,6 +35,7 @@ export default function App() {
     '/verify-email',
     '/billing/verify',
     '/inventory-system-ghana',
+    '/docs',
     '/legal/privacy',
     '/legal/cookies',
     '/legal/refund',
