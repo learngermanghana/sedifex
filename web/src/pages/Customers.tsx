@@ -69,6 +69,7 @@ type CachedSaleRecord = {
 } & Record<string, unknown>
 
 type MessageChannel = 'whatsapp' | 'telegram' | 'email'
+type CustomerTab = 'view' | 'add'
 
 const RECENT_VISIT_DAYS = 90
 const HIGH_VALUE_THRESHOLD = 1000
@@ -353,6 +354,7 @@ export default function Customers() {
   const [messageChannel, setMessageChannel] = useState<MessageChannel | null>(null)
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<CustomerTab>('view')
   useEffect(() => {
     return () => {
       if (messageTimeoutRef.current) {
@@ -1096,6 +1098,7 @@ export default function Customers() {
   }
 
   function beginEdit(customer: Customer) {
+    setActiveTab('add')
     setEditingCustomerId(customer.id)
     setName(getCustomerPrimaryName(customer))
     setPhone(customer.phone ?? '')
@@ -1111,6 +1114,7 @@ export default function Customers() {
   }
 
   function beginView(customer: Customer) {
+    setActiveTab('view')
     setSelectedCustomerId(customer.id)
   }
 
@@ -1142,7 +1146,28 @@ export default function Customers() {
       </header>
 
       <div className="customers-page__grid">
-        <section className="card" aria-label="Add a customer">
+        <div className="customers-page__tabs" role="tablist" aria-label="Customer sections">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'view'}
+            className={`button button--small ${activeTab === 'view' ? 'button--primary' : 'button--ghost'}`}
+            onClick={() => setActiveTab('view')}
+          >
+            View customers
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'add'}
+            className={`button button--small ${activeTab === 'add' ? 'button--primary' : 'button--ghost'}`}
+            onClick={() => setActiveTab('add')}
+          >
+            Add customer
+          </button>
+        </div>
+
+        <section className={`card ${activeTab !== 'add' ? 'customers-page__card--hidden-mobile' : ''}`} aria-label="Add a customer">
           <div className="customers-page__section-header">
             <h3 className="card__title">{editingCustomerId ? 'Update customer' : 'New customer'}</h3>
             <p className="card__subtitle">
@@ -1284,7 +1309,7 @@ export default function Customers() {
           </form>
         </section>
 
-        <section className="card" aria-label="Saved customers">
+        <section className={`card ${activeTab !== 'view' ? 'customers-page__card--hidden-mobile' : ''}`} aria-label="Saved customers">
           <div className="customers-page__section-header">
             <h3 className="card__title">Customer list</h3>
             <p className="card__subtitle">
@@ -1483,7 +1508,7 @@ export default function Customers() {
           )}
         </section>
 
-        <section className="card customers-page__details" aria-label="Customer details">
+        <section className={`card customers-page__details ${activeTab !== 'view' ? 'customers-page__card--hidden-mobile' : ''}`} aria-label="Customer details">
           {selectedCustomer ? (
             <div className="customers-page__details-content">
               <div className="customers-page__section-header">
