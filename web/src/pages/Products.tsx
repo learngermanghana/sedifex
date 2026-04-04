@@ -212,6 +212,11 @@ function normalizeImageUrl(value: string): string | null {
   }
 }
 
+function normalizeLookupValue(value: string | null | undefined): string {
+  if (!value) return ''
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
 function formatLastReceipt(lastReceiptAt: unknown): string {
   if (!lastReceiptAt) return 'No receipts recorded'
   try {
@@ -584,6 +589,30 @@ export default function Products() {
     }
 
     const trimmedSku = sku.trim()
+    const normalizedName = normalizeLookupValue(trimmedName)
+    const normalizedSku = normalizeBarcode(trimmedSku)
+
+    const duplicateNameProduct = products.find(
+      product => normalizeLookupValue(product.name) === normalizedName,
+    )
+    if (duplicateNameProduct) {
+      setFormStatus('error')
+      setFormError(`"${trimmedName}" already exists. Update the existing item instead.`)
+      return
+    }
+
+    if (!isService && normalizedSku) {
+      const duplicateSkuProduct = products.find(product => {
+        const existingSku = normalizeBarcode(product.barcode ?? product.sku ?? '')
+        return existingSku === normalizedSku
+      })
+
+      if (duplicateSkuProduct) {
+        setFormStatus('error')
+        setFormError(`SKU "${trimmedSku}" is already assigned to another item.`)
+        return
+      }
+    }
 
     setIsSaving(true)
     try {

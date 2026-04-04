@@ -340,6 +340,86 @@ describe('Items page', () => {
     })
   })
 
+  it('blocks duplicate product names when adding a new item', async () => {
+    const user = userEvent.setup()
+    let snapshotHandler: ((snap: { docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null
+    onSnapshotMock.mockImplementation((queryRef, onNext) => {
+      snapshotHandler = onNext
+      return () => {}
+    })
+
+    render(
+      <MemoryRouter>
+        <Products />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(onSnapshotMock).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      snapshotHandler?.({
+        docs: [
+          {
+            id: 'product-1',
+            data: () => ({
+              name: 'Iced Coffee',
+              sku: 'COF-01',
+              price: 12,
+            }),
+          },
+        ],
+      })
+    })
+
+    await user.type(screen.getByLabelText('Name'), '   iced   coffee ')
+    await user.type(screen.getByLabelText('SKU'), 'COF-02')
+    await user.type(screen.getByLabelText('Price'), '12')
+    await user.click(screen.getByRole('button', { name: /add product/i }))
+
+    expect(addDocMock).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(/already exists\. update the existing item instead/i),
+    ).toBeInTheDocument()
+  })
+
+  it('blocks duplicate SKUs when adding a new item', async () => {
+    const user = userEvent.setup()
+    let snapshotHandler: ((snap: { docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null
+    onSnapshotMock.mockImplementation((queryRef, onNext) => {
+      snapshotHandler = onNext
+      return () => {}
+    })
+
+    render(
+      <MemoryRouter>
+        <Products />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(onSnapshotMock).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      snapshotHandler?.({
+        docs: [
+          {
+            id: 'product-1',
+            data: () => ({
+              name: 'Iced Coffee',
+              sku: 'COF-01',
+              price: 12,
+            }),
+          },
+        ],
+      })
+    })
+
+    await user.type(screen.getByLabelText('Name'), 'Caramel Latte')
+    await user.type(screen.getByLabelText('SKU'), '  cof-01 ')
+    await user.type(screen.getByLabelText('Price'), '20')
+    await user.click(screen.getByRole('button', { name: /add product/i }))
+
+    expect(addDocMock).not.toHaveBeenCalled()
+    expect(await screen.findByText(/is already assigned to another item/i)).toBeInTheDocument()
+  })
+
   it('saves price updates when editing a product', async () => {
     const user = userEvent.setup()
     let snapshotHandler: ((snap: { docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null
