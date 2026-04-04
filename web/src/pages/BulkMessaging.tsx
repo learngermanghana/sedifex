@@ -12,6 +12,7 @@ import {
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useWorkspaceIdentity } from '../hooks/useWorkspaceIdentity'
 import { CUSTOMER_CACHE_LIMIT, loadCachedCustomers, saveCachedCustomers } from '../utils/offlineCache'
 import './BulkMessaging.css'
 
@@ -109,6 +110,12 @@ const MESSAGE_TEMPLATES: MessageTemplate[] = [
     content:
       'Hi {{name}}, this is a friendly reminder from {{store}} about your pending balance of {{amount}}. Thank you.',
   },
+  {
+    id: 'thank-you',
+    title: 'Thank you',
+    content:
+      'Hi {{name}}, thank you for shopping with {{store}}. We appreciate your support and look forward to serving you again soon.',
+  },
 ]
 const formatNumber = (value: number) => value.toLocaleString('en-GH')
 const formatPrice = (value: number) =>
@@ -143,6 +150,7 @@ function normalizeSearchTerm(value: string) {
 
 export default function BulkMessaging() {
   const { storeId } = useActiveStore()
+  const { name: workspaceName } = useWorkspaceIdentity()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const channel: BulkMessageChannel = 'sms'
@@ -342,7 +350,10 @@ export default function BulkMessaging() {
   }
 
   function handleUseTemplate(template: MessageTemplate) {
-    setMessage(template.content)
+    const storeName = workspaceName?.trim() || 'our store'
+    const personalizedContent = template.content.replaceAll('{{store}}', storeName)
+
+    setMessage(personalizedContent)
     setStatus({
       tone: 'info',
       message: `Template "${template.title}" inserted. Replace placeholders like {{name}} before sending.`,
