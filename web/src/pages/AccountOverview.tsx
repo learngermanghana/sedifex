@@ -872,25 +872,29 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   }
 
   async function handleTestEndpoint() {
-    if (!endpointToTest.trim()) {
+    const endpoint = endpointToTest.trim()
+
+    if (!endpoint) {
       setEndpointTestStatus('Enter an endpoint URL to test.')
       return
     }
 
-    if (!user) {
-      setEndpointTestStatus('Sign in again and retry endpoint test.')
+    try {
+      new URL(endpoint)
+    } catch {
+      setEndpointTestStatus('Enter a valid URL (including https://) and try again.')
       return
     }
 
     try {
       setIsTestingEndpoint(true)
       setEndpointTestStatus(null)
-      const token = await user.getIdToken()
-      const response = await fetch(endpointToTest.trim(), {
+
+      const response = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
       })
 
       if (response.ok) {
@@ -900,7 +904,9 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       }
     } catch (error) {
       console.error('[account] Endpoint test failed', error)
-      setEndpointTestStatus('Endpoint test failed. Check URL/CORS and try again.')
+      setEndpointTestStatus(
+        'Endpoint test failed. Ensure the endpoint allows CORS (Access-Control-Allow-Origin) and accepts browser GET requests.',
+      )
     } finally {
       setIsTestingEndpoint(false)
     }
