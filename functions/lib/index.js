@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -1238,6 +1238,419 @@ exports.listStoreProducts = functions.https.onCall(async (data, context) => {
     return { storeId: resolvedStoreId, products };
 });
 /** ============================================================================
+ *  CALLABLES: integration API keys (owner)
+ * ==========================================================================*/
+function normalizeIntegrationApiKeyName(nameRaw) {
+    const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
+    if (!name)
+        throw new functions.https.HttpsError('invalid-argument', 'Key name is required.');
+    if (name.length > 80) {
+        throw new functions.https.HttpsError('invalid-argument', 'Key name must be 80 characters or less.');
+    }
+    return name;
+}
+function normalizeIntegrationApiKeyId(keyIdRaw) {
+    const keyId = typeof keyIdRaw === 'string' ? keyIdRaw.trim() : '';
+    if (!keyId)
+        throw new functions.https.HttpsError('invalid-argument', 'keyId is required.');
+    return keyId;
+}
+function generateIntegrationSecret() {
+    return crypto.randomBytes(24).toString('hex');
+}
+function hashIntegrationSecret(secret) {
+    return crypto.createHash('sha256').update(secret).digest('hex');
+}
+function shortMask(value) {
+    if (value.length <= 8)
+        return '••••••••';
+    return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+}
+function isFirestoreMissingIndexError(error) {
+    if (!error || typeof error !== 'object')
+        return false;
+    const code = 'code' in error ? error.code : undefined;
+    const message = 'message' in error ? error.message : undefined;
+    if (typeof code === 'number' && code === 9)
+        return true;
+    if (typeof code === 'string' && code.toLowerCase().includes('failed-precondition'))
+        return true;
+    if (typeof message === 'string' && message.toLowerCase().includes('index'))
+        return true;
+    return false;
+}
+exports.listIntegrationApiKeys = functions.https.onCall(async (_data, context) => {
+    let uid = null;
+    let storeId = null;
+    try {
+        assertOwnerAccess(context);
+        uid = context.auth.uid;
+        storeId = await resolveStaffStoreId(uid);
+        await verifyOwnerForStore(uid, storeId);
+        let snapshot;
+        try {
+            snapshot = await firestore_1.defaultDb
+                .collection('integrationApiKeys')
+                .where('storeId', '==', storeId)
+                .orderBy('createdAt', 'desc')
+                .limit(50)
+                .get();
+        }
+        catch (queryError) {
+            if (!isFirestoreMissingIndexError(queryError))
+                throw queryError;
+            console.warn('[integrations] listIntegrationApiKeys fallback to non-indexed query due to missing index', queryError);
+            snapshot = await firestore_1.defaultDb.collection('integrationApiKeys').where('storeId', '==', storeId).limit(200).get();
+        }
+        const keys = snapshot.docs
+            .map(docSnap => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                name: typeof data.name === 'string' ? data.name : 'Unnamed key',
+                status: data.status === 'revoked' ? 'revoked' : 'active',
+                keyPreview: typeof data.keyPreview === 'string' && data.keyPreview.trim()
+                    ? data.keyPreview
+                    : '••••••••',
+                lastUsedAt: data.lastUsedAt instanceof firestore_1.admin.firestore.Timestamp ? data.lastUsedAt : null,
+                createdAt: data.createdAt instanceof firestore_1.admin.firestore.Timestamp ? data.createdAt : null,
+                updatedAt: data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt : null,
+                revokedAt: data.revokedAt instanceof firestore_1.admin.firestore.Timestamp ? data.revokedAt : null,
+            };
+        })
+            .sort((a, b) => {
+            const aMillis = a.createdAt?.toMillis() ?? 0;
+            const bMillis = b.createdAt?.toMillis() ?? 0;
+            return bMillis - aMillis;
+        })
+            .slice(0, 50);
+        return { storeId, keys };
+    }
+    catch (error) {
+        if (error instanceof functions.https.HttpsError)
+            throw error;
+        const code = error?.code;
+        const message = error?.message;
+        const stack = error?.stack;
+        const diagnostics = {
+            uid,
+            storeId,
+            code: typeof code === 'string' || typeof code === 'number' ? code : null,
+            message: typeof message === 'string' ? message : 'Unknown error',
+        };
+        console.error('[integrations] listIntegrationApiKeys failed', diagnostics, stack);
+        throw new functions.https.HttpsError('failed-precondition', 'Unable to list integration API keys. Verify store ownership, Firestore indexes, and permissions.', diagnostics);
+    }
+});
+exports.createIntegrationApiKey = functions.https.onCall(async (data, context) => {
+    assertOwnerAccess(context);
+    const uid = context.auth.uid;
+    const storeId = await resolveStaffStoreId(uid);
+    await verifyOwnerForStore(uid, storeId);
+    const name = normalizeIntegrationApiKeyName(data?.name);
+    const secret = generateIntegrationSecret();
+    const token = `sedx_${secret}`;
+    const keyHash = hashIntegrationSecret(token);
+    const keyPreview = shortMask(token);
+    const timestamp = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    const keyRef = firestore_1.defaultDb.collection('integrationApiKeys').doc();
+    await keyRef.set({
+        storeId,
+        name,
+        status: 'active',
+        keyHash,
+        keyPreview,
+        createdBy: uid,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        revokedAt: null,
+        lastUsedAt: null,
+    });
+    await firestore_1.defaultDb.collection('integrationAuditLogs').add({
+        storeId,
+        action: 'api_key.created',
+        actorUid: uid,
+        targetId: keyRef.id,
+        metadata: { name },
+        createdAt: timestamp,
+    });
+    return {
+        key: {
+            id: keyRef.id,
+            name,
+            status: 'active',
+            keyPreview,
+        },
+        token,
+    };
+});
+exports.revokeIntegrationApiKey = functions.https.onCall(async (data, context) => {
+    assertOwnerAccess(context);
+    const uid = context.auth.uid;
+    const storeId = await resolveStaffStoreId(uid);
+    await verifyOwnerForStore(uid, storeId);
+    const keyId = normalizeIntegrationApiKeyId(data?.keyId);
+    const keyRef = firestore_1.defaultDb.collection('integrationApiKeys').doc(keyId);
+    const keySnap = await keyRef.get();
+    if (!keySnap.exists)
+        throw new functions.https.HttpsError('not-found', 'Integration key not found.');
+    const keyData = (keySnap.data() ?? {});
+    if (keyData.storeId !== storeId) {
+        throw new functions.https.HttpsError('permission-denied', 'Key does not belong to this store.');
+    }
+    const timestamp = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    await keyRef.set({
+        status: 'revoked',
+        revokedAt: timestamp,
+        updatedAt: timestamp,
+        revokedBy: uid,
+    }, { merge: true });
+    await firestore_1.defaultDb.collection('integrationAuditLogs').add({
+        storeId,
+        action: 'api_key.revoked',
+        actorUid: uid,
+        targetId: keyId,
+        createdAt: timestamp,
+    });
+    return { ok: true, keyId };
+});
+exports.rotateIntegrationApiKey = functions.https.onCall(async (data, context) => {
+    assertOwnerAccess(context);
+    const uid = context.auth.uid;
+    const storeId = await resolveStaffStoreId(uid);
+    await verifyOwnerForStore(uid, storeId);
+    const keyId = normalizeIntegrationApiKeyId(data?.keyId);
+    const keyRef = firestore_1.defaultDb.collection('integrationApiKeys').doc(keyId);
+    const keySnap = await keyRef.get();
+    if (!keySnap.exists)
+        throw new functions.https.HttpsError('not-found', 'Integration key not found.');
+    const keyData = (keySnap.data() ?? {});
+    if (keyData.storeId !== storeId) {
+        throw new functions.https.HttpsError('permission-denied', 'Key does not belong to this store.');
+    }
+    const replacementName = typeof keyData.name === 'string' && keyData.name.trim()
+        ? keyData.name.trim()
+        : 'Rotated key';
+    const timestamp = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    await keyRef.set({
+        status: 'revoked',
+        revokedAt: timestamp,
+        updatedAt: timestamp,
+        revokedBy: uid,
+    }, { merge: true });
+    const secret = generateIntegrationSecret();
+    const token = `sedx_${secret}`;
+    const keyHash = hashIntegrationSecret(token);
+    const keyPreview = shortMask(token);
+    const replacementRef = firestore_1.defaultDb.collection('integrationApiKeys').doc();
+    await replacementRef.set({
+        storeId,
+        name: replacementName,
+        status: 'active',
+        keyHash,
+        keyPreview,
+        createdBy: uid,
+        rotatedFrom: keyId,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        revokedAt: null,
+        lastUsedAt: null,
+    });
+    await firestore_1.defaultDb.collection('integrationAuditLogs').add({
+        storeId,
+        action: 'api_key.rotated',
+        actorUid: uid,
+        targetId: keyId,
+        metadata: { replacementId: replacementRef.id },
+        createdAt: timestamp,
+    });
+    return {
+        ok: true,
+        revokedKeyId: keyId,
+        replacement: {
+            id: replacementRef.id,
+            name: replacementName,
+            status: 'active',
+            keyPreview,
+        },
+        token,
+    };
+});
+exports.integrationProducts = functions.https.onRequest(async (req, res) => {
+    const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim();
+    if (configuredApiBaseUrl) {
+        res.setHeader('x-sedifex-api-base-url', configuredApiBaseUrl);
+    }
+    if (req.method !== 'GET') {
+        res.status(405).json({ error: 'method-not-allowed' });
+        return;
+    }
+    const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : '';
+    if (!token || !storeId) {
+        res.status(400).json({ error: 'missing-token-or-store' });
+        return;
+    }
+    const tokenHash = hashIntegrationSecret(token);
+    const keySnapshot = await firestore_1.defaultDb
+        .collection('integrationApiKeys')
+        .where('storeId', '==', storeId)
+        .where('status', '==', 'active')
+        .where('keyHash', '==', tokenHash)
+        .limit(1)
+        .get();
+    if (keySnapshot.empty) {
+        res.status(401).json({ error: 'invalid-token' });
+        return;
+    }
+    const keyDoc = keySnapshot.docs[0];
+    await keyDoc.ref.set({
+        lastUsedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    const mapProductDoc = (docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            storeId,
+            name: typeof data.name === 'string' ? data.name : 'Untitled item',
+            price: typeof data.price === 'number' ? data.price : null,
+            stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
+            imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+            updatedAt: data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
+        };
+    };
+    let productsSnap;
+    try {
+        productsSnap = await firestore_1.defaultDb
+            .collection('products')
+            .where('storeId', '==', storeId)
+            .orderBy('updatedAt', 'desc')
+            .limit(200)
+            .get();
+    }
+    catch (error) {
+        const code = error?.code;
+        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+        if (!isMissingIndex) {
+            throw error;
+        }
+        console.warn('[integrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+            storeId,
+            code,
+        });
+        productsSnap = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+    }
+    const products = productsSnap.docs
+        .map(mapProductDoc)
+        .sort((a, b) => {
+        if (!a.updatedAt && !b.updatedAt)
+            return 0;
+        if (!a.updatedAt)
+            return 1;
+        if (!b.updatedAt)
+            return -1;
+        return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+    });
+    res.status(200).json({ storeId, products });
+});
+/** ============================================================================
+ *  WEBHOOKS: product.created / product.updated / product.deleted
+ * ==========================================================================*/
+function computeWebhookSignature(secret, payload) {
+    const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    return `sha256=${digest}`;
+}
+exports.emitProductWebhooks = functions.firestore
+    .document('products/{productId}')
+    .onWrite(async (change, context) => {
+    const beforeExists = change.before.exists;
+    const afterExists = change.after.exists;
+    if (!beforeExists && !afterExists)
+        return;
+    const productId = context.params.productId;
+    const beforeData = (beforeExists ? change.before.data() : null);
+    const afterData = (afterExists ? change.after.data() : null);
+    const storeIdRaw = (typeof afterData?.storeId === 'string' && afterData.storeId) ||
+        (typeof beforeData?.storeId === 'string' && beforeData.storeId) ||
+        '';
+    const storeId = storeIdRaw.trim();
+    if (!storeId)
+        return;
+    const eventType = !beforeExists
+        ? 'product.created'
+        : !afterExists
+            ? 'product.deleted'
+            : 'product.updated';
+    const payloadObject = {
+        id: `evt_${context.eventId}`,
+        type: eventType,
+        occurredAt: new Date().toISOString(),
+        storeId,
+        data: {
+            productId,
+            before: beforeData,
+            after: afterData,
+        },
+    };
+    const payload = JSON.stringify(payloadObject);
+    const endpointSnapshot = await firestore_1.defaultDb
+        .collection('webhookEndpoints')
+        .where('storeId', '==', storeId)
+        .where('status', '==', 'active')
+        .get();
+    if (endpointSnapshot.empty)
+        return;
+    const results = await Promise.all(endpointSnapshot.docs.map(async (endpointDoc) => {
+        const endpoint = endpointDoc.data();
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : '';
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : '';
+        if (!url || !secret) {
+            return { endpointId: endpointDoc.id, ok: false, statusCode: null, error: 'missing config' };
+        }
+        const signature = computeWebhookSignature(secret, payload);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-sedifex-signature': signature,
+                    'x-sedifex-event': eventType,
+                    'x-sedifex-event-id': `evt_${context.eventId}`,
+                },
+                body: payload,
+            });
+            return {
+                endpointId: endpointDoc.id,
+                ok: response.ok,
+                statusCode: response.status,
+                error: null,
+            };
+        }
+        catch (error) {
+            return {
+                endpointId: endpointDoc.id,
+                ok: false,
+                statusCode: null,
+                error: error instanceof Error ? error.message : 'unknown error',
+            };
+        }
+    }));
+    await Promise.all(results.map(result => firestore_1.defaultDb.collection('webhookDeliveries').add({
+        storeId,
+        endpointId: result.endpointId,
+        eventType,
+        productId,
+        eventId: `evt_${context.eventId}`,
+        ok: result.ok,
+        statusCode: result.statusCode,
+        error: result.error,
+        createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+    })));
+});
+/** ============================================================================
  *  HUBTEL BULK MESSAGING
  * ==========================================================================*/
 const HUBTEL_CLIENT_ID = (0, params_1.defineString)('HUBTEL_CLIENT_ID');
@@ -1258,12 +1671,14 @@ function getHubtelConfig() {
     }
     return { clientId, clientSecret, senderId };
 }
+function normalizeHubtelApiCredential(value) {
+    if (typeof value !== 'string')
+        return null;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+}
 function ensureHubtelConfig() {
     const config = getHubtelConfig();
-    if (!config.clientId || !config.clientSecret) {
-        console.error('[hubtel] Missing client id or client secret');
-        throw new functions.https.HttpsError('failed-precondition', 'Hubtel is not configured. Please contact support.');
-    }
     const normalizedFallbackSenderId = normalizeHubtelSenderId(config.senderId);
     if (!normalizedFallbackSenderId) {
         throw new functions.https.HttpsError('failed-precondition', 'Hubtel sender ID is invalid or not configured.');
@@ -1297,6 +1712,30 @@ function resolveHubtelSenderId(storeData, fallbackSenderId) {
             return normalized;
     }
     return normalizeHubtelSenderId(fallbackSenderId) ?? fallbackSenderId;
+}
+function resolveHubtelCredentials(storeData, fallbackConfig) {
+    const clientIdCandidates = [storeData.hubtelClientId, storeData.smsClientId, storeData.clientId];
+    const clientSecretCandidates = [
+        storeData.hubtelClientSecret,
+        storeData.smsClientSecret,
+        storeData.clientSecret,
+    ];
+    const storeClientId = clientIdCandidates.map(normalizeHubtelApiCredential).find(Boolean);
+    const storeClientSecret = clientSecretCandidates.map(normalizeHubtelApiCredential).find(Boolean);
+    const fallbackClientId = normalizeHubtelApiCredential(fallbackConfig.clientId);
+    const fallbackClientSecret = normalizeHubtelApiCredential(fallbackConfig.clientSecret);
+    const clientId = storeClientId ?? fallbackClientId;
+    const clientSecret = storeClientSecret ?? fallbackClientSecret;
+    if (!clientId || !clientSecret) {
+        console.error('[hubtel] Missing client id or client secret for store', {
+            hasStoreClientId: !!storeClientId,
+            hasStoreClientSecret: !!storeClientSecret,
+            hasFallbackClientId: !!fallbackClientId,
+            hasFallbackClientSecret: !!fallbackClientSecret,
+        });
+        throw new functions.https.HttpsError('failed-precondition', 'Hubtel is not configured for this store. Please add Hubtel credentials in store settings.');
+    }
+    return { clientId, clientSecret };
 }
 function formatSmsAddress(phone) {
     const trimmed = phone.trim();
@@ -1350,6 +1789,8 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
     const config = ensureHubtelConfig();
     const fallbackSenderId = config.senderId;
     let senderIdForStore = fallbackSenderId;
+    let hubtelClientIdForStore = normalizeHubtelApiCredential(config.clientId) ?? '';
+    let hubtelClientSecretForStore = normalizeHubtelApiCredential(config.clientSecret) ?? '';
     // debit credits first
     await firestore_1.defaultDb.runTransaction(async (transaction) => {
         const storeSnap = await transaction.get(storeRef);
@@ -1358,6 +1799,12 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
         }
         const storeData = storeSnap.data() ?? {};
         senderIdForStore = resolveHubtelSenderId(storeData, fallbackSenderId);
+        const storeHubtelConfig = resolveHubtelCredentials(storeData, {
+            clientId: config.clientId,
+            clientSecret: config.clientSecret,
+        });
+        hubtelClientIdForStore = storeHubtelConfig.clientId;
+        hubtelClientSecretForStore = storeHubtelConfig.clientSecret;
         const rawCredits = storeData.bulkMessagingCredits;
         const currentCredits = typeof rawCredits === 'number' && Number.isFinite(rawCredits) ? rawCredits : 0;
         if (currentCredits < creditsRequired) {
@@ -1375,8 +1822,8 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
         if (!to)
             throw new Error('Missing recipient phone');
         await sendHubtelMessage({
-            clientId: config.clientId,
-            clientSecret: config.clientSecret,
+            clientId: hubtelClientIdForStore,
+            clientSecret: hubtelClientSecretForStore,
             to,
             from,
             body: message,
@@ -1443,6 +1890,7 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 const PAYSTACK_SECRET_KEY = (0, params_1.defineString)('PAYSTACK_SECRET_KEY');
 const PAYSTACK_PUBLIC_KEY = (0, params_1.defineString)('PAYSTACK_PUBLIC_KEY');
+const SEDIFEX_API_BASE_URL = (0, params_1.defineString)('SEDIFEX_API_BASE_URL');
 // Legacy: was a single plan code for all checkouts. Kept for backwards compatibility.
 const PAYSTACK_STANDARD_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STANDARD_PLAN_CODE');
 // New: map frontend plan keys -> Paystack plan codes (optional).

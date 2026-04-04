@@ -2000,14 +2000,7 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
     { merge: true },
   )
 
-  const productsSnap = await db
-    .collection('products')
-    .where('storeId', '==', storeId)
-    .orderBy('updatedAt', 'desc')
-    .limit(200)
-    .get()
-
-  const products = productsSnap.docs.map(docSnap => {
+  const mapProductDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
     const data = docSnap.data() as Record<string, unknown>
     return {
       id: docSnap.id,
@@ -2019,7 +2012,38 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
       imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
       updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
     }
-  })
+  }
+
+  let productsSnap: admin.firestore.QuerySnapshot
+  try {
+    productsSnap = await db
+      .collection('products')
+      .where('storeId', '==', storeId)
+      .orderBy('updatedAt', 'desc')
+      .limit(200)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    console.warn('[integrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+      storeId,
+      code,
+    })
+    productsSnap = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+  }
+
+  const products = productsSnap.docs
+    .map(mapProductDoc)
+    .sort((a, b) => {
+      if (!a.updatedAt && !b.updatedAt) return 0
+      if (!a.updatedAt) return 1
+      if (!b.updatedAt) return -1
+      return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+    })
 
   res.status(200).json({ storeId, products })
 })
