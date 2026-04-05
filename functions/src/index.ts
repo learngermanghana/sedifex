@@ -76,6 +76,7 @@ type CreateCheckoutPayload = {
   amount?: unknown
   plan?: unknown
   planId?: unknown
+  durationMonths?: unknown
   metadata?: unknown
   returnUrl?: unknown
   redirectUrl?: unknown
@@ -113,6 +114,11 @@ const MILLIS_PER_DAY = 1000 * 60 * 60 * 24
 const BULK_MESSAGE_LIMIT = 1000
 const BULK_MESSAGE_BATCH_LIMIT = 200
 const SMS_SEGMENT_SIZE = 160
+const PLAN_LIMITS: Record<string, { productLimit: number; dailySalesLimit: number }> = {
+  starter: { productLimit: 100, dailySalesLimit: 100 },
+  growth: { productLimit: 500, dailySalesLimit: 500 },
+  scale: { productLimit: 2000, dailySalesLimit: 2000 },
+}
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
@@ -863,6 +869,14 @@ export const resolveStoreAccess = functions.https.onCall(
 
     const trialDaysRemaining = calculateDaysRemaining(trialEndsAt, nowTs)
     const graceDaysRemaining = calculateDaysRemaining(graceEndsAt, nowTs)
+    const contractEndTs =
+      previousBilling.currentPeriodEnd && typeof previousBilling.currentPeriodEnd.toMillis === 'function'
+        ? (previousBilling.currentPeriodEnd as admin.firestore.Timestamp)
+        : null
+    const contractExpired =
+      normalizedContractStatus === 'active' &&
+      !!contractEndTs &&
+      contractEndTs.toMillis() <= nowTs.toMillis()
 
     const trialExpired =
       (normalizedContractStatus === 'trial' || billingStatus === 'trial') &&
@@ -870,9 +884,10 @@ export const resolveStoreAccess = functions.https.onCall(
       trialDaysRemaining !== null &&
       trialDaysRemaining <= 0
 
-    const normalizedBillingStatus: BillingStatus = trialExpired ? 'past_due' : billingStatus
+    const normalizedBillingStatus: BillingStatus =
+      trialExpired || contractExpired ? 'past_due' : billingStatus
 
-    const normalizedPaymentStatus: BillingStatus = trialExpired
+    const normalizedPaymentStatus: BillingStatus = trialExpired || contractExpired
       ? 'past_due'
       : paymentStatusRaw === 'active'
         ? 'active'
@@ -924,7 +939,7 @@ export const resolveStoreAccess = functions.https.onCall(
       ownerEmail: baseStore.ownerEmail || email || null,
       status: baseStore.status || 'active',
       workspaceSlug: baseStore.workspaceSlug || workspaceSlug,
-      contractStatus: contractStatusRaw || baseStore.contractStatus || 'trial',
+      contractStatus: contractExpired ? 'past_due' : contractStatusRaw || baseStore.contractStatus || 'trial',
       productCount:
         typeof baseStore.productCount === 'number' ? baseStore.productCount : 0,
       totalStockCount:
@@ -2649,13 +2664,13 @@ const SEDIFEX_API_BASE_URL = defineString('SEDIFEX_API_BASE_URL')
 const PAYSTACK_STANDARD_PLAN_CODE = defineString('PAYSTACK_STANDARD_PLAN_CODE')
 
 // New: map frontend plan keys -> Paystack plan codes (optional).
-const PAYSTACK_STARTER_MONTHLY_PLAN_CODE = defineString('PAYSTACK_STARTER_MONTHLY_PLAN_CODE')
-const PAYSTACK_STARTER_BIANNUAL_PLAN_CODE = defineString('PAYSTACK_STARTER_BIANNUAL_PLAN_CODE')
-const PAYSTACK_STARTER_YEARLY_PLAN_CODE = defineString('PAYSTACK_STARTER_YEARLY_PLAN_CODE')
+const PAYSTACK_STARTER_PLAN_CODE = defineString('PAYSTACK_STARTER_PLAN_CODE')
+const PAYSTACK_GROWTH_PLAN_CODE = defineString('PAYSTACK_GROWTH_PLAN_CODE')
+const PAYSTACK_SCALE_PLAN_CODE = defineString('PAYSTACK_SCALE_PLAN_CODE')
 
 const PAYSTACK_CURRENCY = defineString('PAYSTACK_CURRENCY')
 
-type PaystackPlanKey = 'starter-monthly' | 'starter-biannual' | 'starter-yearly' | string
+type PaystackPlanKey = 'starter' | 'growth' | 'scale' | string
 
 // Fixed packages (GHS)
 const BULK_CREDITS_PACKAGES: Record<string, { credits: number; amount: number }> = {
@@ -2670,19 +2685,18 @@ function getPaystackConfig() {
   const publicKey = PAYSTACK_PUBLIC_KEY.value()
   const currency = PAYSTACK_CURRENCY.value() || 'GHS'
 
-  const starterMonthly =
-    PAYSTACK_STARTER_MONTHLY_PLAN_CODE.value() || PAYSTACK_STANDARD_PLAN_CODE.value()
-  const starterBiannual = PAYSTACK_STARTER_BIANNUAL_PLAN_CODE.value()
-  const starterYearly = PAYSTACK_STARTER_YEARLY_PLAN_CODE.value()
+  const starterPlan = PAYSTACK_STARTER_PLAN_CODE.value() || PAYSTACK_STANDARD_PLAN_CODE.value()
+  const growthPlan = PAYSTACK_GROWTH_PLAN_CODE.value()
+  const scalePlan = PAYSTACK_SCALE_PLAN_CODE.value()
 
   if (!paystackConfigLogged) {
     console.log('[paystack] startup config', {
       hasSecret: !!secret,
       hasPublicKey: !!publicKey,
       currency,
-      hasStarterMonthlyPlan: !!starterMonthly,
-      hasStarterBiannualPlan: !!starterBiannual,
-      hasStarterYearlyPlan: !!starterYearly,
+      hasStarterPlan: !!starterPlan,
+      hasGrowthPlan: !!growthPlan,
+      hasScalePlan: !!scalePlan,
     })
     paystackConfigLogged = true
   }
@@ -2692,9 +2706,9 @@ function getPaystackConfig() {
     publicKey,
     currency,
     plans: {
-      'starter-monthly': starterMonthly,
-      'starter-biannual': starterBiannual,
-      'starter-yearly': starterYearly,
+      starter: starterPlan,
+      growth: growthPlan,
+      scale: scalePlan,
     } as Record<string, string | undefined>,
   }
 }
@@ -2732,27 +2746,56 @@ function resolveBulkCreditsPackage(raw: unknown): string | null {
   return BULK_CREDITS_PACKAGES[trimmed] ? trimmed : null
 }
 
-function resolvePlanMonths(planKey: string | null): number {
-  if (!planKey) return 1
-  const lower = planKey.toLowerCase()
-  if (lower.includes('year')) return 12
-  if (lower.includes('annual')) return 12
-  if (lower.includes('biannual')) return 6
-  if (lower.includes('semiannual')) return 6
-  if (lower.includes('semi-annual')) return 6
-  if (lower.includes('month')) return 1
+function resolvePlanMonths(_planKey: string | null): number {
   return 1
 }
 
 function resolvePlanDefaultAmount(planKey: string | null): number {
-  if (!planKey) return 100
+  if (!planKey) return 20
   const lower = planKey.toLowerCase()
-  if (lower.includes('year')) return 1100
-  if (lower.includes('annual')) return 1100
-  if (lower.includes('biannual')) return 600
-  if (lower.includes('semiannual')) return 600
-  if (lower.includes('semi-annual')) return 600
-  return 100
+  if (lower.includes('scale')) return 100
+  if (lower.includes('growth')) return 50
+  return 20
+}
+
+function parseDurationMonths(raw: unknown): number {
+  const numeric = Number(raw)
+  if (!Number.isFinite(numeric)) return 1
+  const value = Math.floor(numeric)
+  if (value <= 0) return 1
+  if (value > 12) return 12
+  return value
+}
+
+async function hasReachedContractLimits(args: {
+  storeRef: admin.firestore.DocumentReference
+  storeData: Record<string, any>
+  planKey: string | null
+}): Promise<boolean> {
+  const plan = args.planKey ? PLAN_LIMITS[args.planKey.toLowerCase()] : null
+  if (!plan) return false
+
+  const productCount =
+    typeof args.storeData.productCount === 'number' ? args.storeData.productCount : 0
+  if (productCount >= plan.productLimit) return true
+
+  const now = new Date()
+  const startOfUtcDay = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
+  )
+  const startTs = admin.firestore.Timestamp.fromDate(startOfUtcDay)
+
+  try {
+    const salesSnap = await args.storeRef
+      .collection('sales')
+      .where('createdAt', '>=', startTs)
+      .limit(plan.dailySalesLimit)
+      .get()
+    return salesSnap.size >= plan.dailySalesLimit
+  } catch (error) {
+    console.warn('[billing] unable to evaluate daily sales limit during upgrade gate', error)
+    return false
+  }
 }
 
 function addMonths(base: Date, months: number) {
@@ -2823,13 +2866,39 @@ export const createPaystackCheckout = functions.https.onCall(
       resolvePlanKey(payload.plan) ||
       resolvePlanKey(payload.planId) ||
       resolvePlanKey((payload as any).planKey) ||
-      'starter-monthly'
+      'starter'
+    const durationMonths = parseDurationMonths(payload.durationMonths)
+
+    const currentPlanKey =
+      typeof billing.planKey === 'string' && billing.planKey.trim() ? billing.planKey.trim() : null
+    const currentPeriodEnd =
+      billing.currentPeriodEnd && typeof billing.currentPeriodEnd.toDate === 'function'
+        ? (billing.currentPeriodEnd as admin.firestore.Timestamp).toDate()
+        : null
+    const hasActiveContract =
+      (storeData.contractStatus === 'active' || billing.status === 'active') &&
+      !!currentPeriodEnd &&
+      currentPeriodEnd.getTime() > Date.now()
+
+    if (hasActiveContract && currentPlanKey && currentPlanKey !== planKey) {
+      const reachedLimit = await hasReachedContractLimits({
+        storeRef,
+        storeData,
+        planKey: currentPlanKey,
+      })
+      if (!reachedLimit) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          `Your current ${currentPlanKey} contract is active until ${currentPeriodEnd!.toISOString().slice(0, 10)}. You can upgrade now only after reaching your current plan limit, or wait until contract end.`,
+        )
+      }
+    }
 
     const amountInput = Number((payload as any).amount)
+    const amountGhsPerMonth = resolvePlanDefaultAmount(planKey)
+    const fallbackAmount = amountGhsPerMonth * durationMonths
     const amountGhs =
-      Number.isFinite(amountInput) && amountInput > 0
-        ? amountInput
-        : resolvePlanDefaultAmount(planKey)
+      Number.isFinite(amountInput) && amountInput > 0 ? amountInput : fallbackAmount
 
     const amountMinorUnits = toMinorUnits(amountGhs)
     const reference = `${storeId}_${Date.now()}`
@@ -2856,16 +2925,16 @@ export const createPaystackCheckout = functions.https.onCall(
         storeId,
         userId: uid,
         planKey,
+        durationMonths,
+        billingModel: 'contract_prepaid',
         ...metadataIn,
       },
+      channels: ['mobile_money', 'card', 'bank_transfer', 'ussd'],
     }
 
     if (callbackUrl) {
       body.callback_url = callbackUrl
     }
-
-    const planCode = resolvePaystackPlanCode(planKey, paystackConfig)
-    if (planCode) body.plan = planCode
 
     let responseJson: any
     try {
@@ -3395,64 +3464,60 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
       const timestamp = admin.firestore.FieldValue.serverTimestamp()
 
       const customer = data.customer || {}
-      const subscription = data.subscription || {}
       const plan = data.plan || {}
+      const paidAtDate = new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now())
+      const paidPlanKey =
+        resolvePlanKey(metadata.planKey) ||
+        resolvePlanKey(metadata.plan) ||
+        resolvePlanKey(metadata.planId) ||
+        'starter'
+      const paidDurationMonths =
+        parseDurationMonths(metadata.durationMonths) || resolvePlanMonths(paidPlanKey)
+      const existingStoreSnap = await storeRef.get()
+      const existingStoreData = (existingStoreSnap.data() ?? {}) as Record<string, any>
+      const existingBilling = (existingStoreData.billing ?? {}) as Record<string, any>
+      const existingPlanKey =
+        typeof existingBilling.planKey === 'string' && existingBilling.planKey.trim()
+          ? existingBilling.planKey.trim()
+          : null
+      const existingEndDate =
+        existingBilling.currentPeriodEnd &&
+        typeof existingBilling.currentPeriodEnd.toDate === 'function'
+          ? (existingBilling.currentPeriodEnd as admin.firestore.Timestamp).toDate()
+          : null
+      const shouldExtendFromCurrentEnd =
+        existingPlanKey === paidPlanKey &&
+        !!existingEndDate &&
+        existingEndDate.getTime() > paidAtDate.getTime()
+      const contractStartDate = shouldExtendFromCurrentEnd ? existingEndDate! : paidAtDate
+      const contractEndDate = addMonths(contractStartDate, paidDurationMonths)
 
       await storeRef.set(
         {
           billing: {
             provider: 'paystack',
-            planKey:
-              resolvePlanKey(metadata.planKey) ||
-              resolvePlanKey(metadata.plan) ||
-              resolvePlanKey(metadata.planId) ||
-              'starter-monthly',
+            planKey: paidPlanKey,
             status: 'active',
             currency: paystackConfig.currency,
             paystackCustomerCode: customer.customer_code || null,
-            paystackSubscriptionCode: subscription.subscription_code || null,
-            paystackEmailToken: subscription.email_token || null,
+            paystackSubscriptionCode: null,
+            paystackEmailToken: null,
             paystackPlanCode:
               (plan && typeof plan.plan_code === 'string' && plan.plan_code) ||
-              resolvePaystackPlanCode(
-                resolvePlanKey(metadata.planKey) ||
-                  resolvePlanKey(metadata.plan) ||
-                  resolvePlanKey(metadata.planId),
-                paystackConfig,
-              ) ||
+              resolvePaystackPlanCode(paidPlanKey, paystackConfig) ||
               null,
-            currentPeriodStart: admin.firestore.Timestamp.fromDate(
-              new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-            ),
-            currentPeriodEnd: admin.firestore.Timestamp.fromDate(
-              addMonths(
-                new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-                resolvePlanMonths(
-                  resolvePlanKey(metadata.planKey) ||
-                    resolvePlanKey(metadata.plan) ||
-                    resolvePlanKey(metadata.planId),
-                ),
-              ),
-            ),
-            lastPaymentAt: admin.firestore.Timestamp.fromDate(
-              new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-            ),
+            currentPeriodStart: admin.firestore.Timestamp.fromDate(contractStartDate),
+            currentPeriodEnd: admin.firestore.Timestamp.fromDate(contractEndDate),
+            lastPaymentAt: admin.firestore.Timestamp.fromDate(paidAtDate),
             lastEventAt: timestamp,
             lastChargeReference: data.reference || null,
             amountPaid: typeof data.amount === 'number' ? data.amount / 100 : null,
+            contractMode: 'prepaid',
+            durationMonths: paidDurationMonths,
           },
           paymentStatus: 'active',
           contractStatus: 'active',
-          contractEnd: admin.firestore.Timestamp.fromDate(
-            addMonths(
-              new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-              resolvePlanMonths(
-                resolvePlanKey(metadata.planKey) ||
-                  resolvePlanKey(metadata.plan) ||
-                  resolvePlanKey(metadata.planId),
-              ),
-            ),
-          ),
+          contractEnd: admin.firestore.Timestamp.fromDate(contractEndDate),
         },
         { merge: true },
       )
@@ -3461,32 +3526,16 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
         {
           provider: 'paystack',
           status: 'active',
-          plan:
-            resolvePlanKey(metadata.planKey) ||
-            resolvePlanKey(metadata.plan) ||
-            resolvePlanKey(metadata.planId) ||
-            'starter-monthly',
+          plan: paidPlanKey,
           reference: data.reference || null,
           amount: typeof data.amount === 'number' ? data.amount / 100 : null,
           currency: paystackConfig.currency,
-          paystackSubscriptionCode: subscription.subscription_code || null,
-          paystackEmailToken: subscription.email_token || null,
-          currentPeriodStart: admin.firestore.Timestamp.fromDate(
-            new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-          ),
-          currentPeriodEnd: admin.firestore.Timestamp.fromDate(
-            addMonths(
-              new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-              resolvePlanMonths(
-                resolvePlanKey(metadata.planKey) ||
-                  resolvePlanKey(metadata.plan) ||
-                  resolvePlanKey(metadata.planId),
-              ),
-            ),
-          ),
-          lastPaymentAt: admin.firestore.Timestamp.fromDate(
-            new Date(typeof data.paid_at === 'string' ? data.paid_at : Date.now()),
-          ),
+          paystackSubscriptionCode: null,
+          paystackEmailToken: null,
+          currentPeriodStart: admin.firestore.Timestamp.fromDate(contractStartDate),
+          currentPeriodEnd: admin.firestore.Timestamp.fromDate(contractEndDate),
+          durationMonths: paidDurationMonths,
+          lastPaymentAt: admin.firestore.Timestamp.fromDate(paidAtDate),
           updatedAt: timestamp,
           lastEvent: eventName,
         },

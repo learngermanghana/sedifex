@@ -61,12 +61,12 @@ export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
     <div className={`subscription-banner subscription-banner--${status}`} role="status">
       <div className="subscription-banner__inner">
         <div className="subscription-banner__text">
-          <strong>Subscription:</strong> {message}{' '}
+          <strong>Contract:</strong> {message}{' '}
           {isPwaApp ? (
             'Manage your plan at sedifex.com to unlock full features.'
           ) : (
             <>
-              Subscribe for <strong>$10/month</strong> to keep unlimited sales and inventory.
+              Upgrade to Starter, Growth, or Scale to increase your product and daily sales limits.
             </>
           )}
         </div>
@@ -76,7 +76,7 @@ export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
             className="subscription-banner__button"
             onClick={() => navigate('/account')}
           >
-            Manage subscription
+            Manage contract
           </button>
         )}
       </div>

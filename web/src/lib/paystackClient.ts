@@ -6,6 +6,7 @@ type PaystackCheckoutPayload = {
   storeId: string
   amount: number
   plan: string
+  durationMonths?: number
   redirectUrl?: string
   returnUrl?: string
   metadata?: Record<string, unknown>
