@@ -46,6 +46,8 @@ type StoreProfile = {
   region: string | null
   postalCode: string | null
   country: string | null
+  logoUrl: string | null
+  logoAlt: string | null
   createdAt: Timestamp | null
   updatedAt: Timestamp | null
   // 🔹 Billing/trial fields
@@ -167,6 +169,8 @@ function mapStoreSnapshot(
     region: toNullableString(data.region),
     postalCode: toNullableString(data.postalCode),
     country: toNullableString(data.country),
+    logoUrl: toNullableString((data as any).logoUrl),
+    logoAlt: toNullableString((data as any).logoAlt),
     createdAt: isTimestamp(data.createdAt) ? data.createdAt : null,
     updatedAt: isTimestamp(data.updatedAt) ? data.updatedAt : null,
     trialEndsAt,
@@ -295,7 +299,12 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     region: '',
     postalCode: '',
     country: '',
+    logoUrl: '',
+    logoAlt: '',
   })
+  const [logoImageFile, setLogoImageFile] = useState<File | null>(null)
+  const [isUploadingLogoImage, setIsUploadingLogoImage] = useState(false)
+  const [logoImageUploadError, setLogoImageUploadError] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [activeTab, setActiveTab] = useState<AccountTab>('workspace')
@@ -557,6 +566,8 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       region: profile.region ?? '',
       postalCode: profile.postalCode ?? '',
       country: profile.country ?? '',
+      logoUrl: profile.logoUrl ?? '',
+      logoAlt: profile.logoAlt ?? '',
     })
   }, [profile])
 
@@ -599,6 +610,8 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         region: normalizeInput(profileDraft.region),
         postalCode: normalizeInput(profileDraft.postalCode),
         country: normalizeInput(profileDraft.country),
+        logoUrl: normalizeInput(profileDraft.logoUrl),
+        logoAlt: normalizeInput(profileDraft.logoAlt),
         updatedAt,
       }
 
@@ -619,6 +632,8 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
               region: payload.region,
               postalCode: payload.postalCode,
               country: payload.country,
+              logoUrl: payload.logoUrl,
+              logoAlt: payload.logoAlt,
               updatedAt,
             }
           : current,
@@ -779,6 +794,31 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       }
     } finally {
       setIsUploadingPromoImage(false)
+    }
+  }
+
+  async function handleUploadLogoImage() {
+    if (!logoImageFile) {
+      setLogoImageUploadError('Choose an image file before uploading.')
+      return
+    }
+
+    setLogoImageUploadError(null)
+    try {
+      setIsUploadingLogoImage(true)
+      const uploadedUrl = await uploadProductImage(logoImageFile)
+      setProfileDraft(current => ({ ...current, logoUrl: uploadedUrl }))
+      setLogoImageFile(null)
+      publish({ tone: 'success', message: 'Logo uploaded successfully.' })
+    } catch (error) {
+      console.error('[account] Failed to upload logo image', error)
+      if (error instanceof ProductImageUploadError) {
+        setLogoImageUploadError(error.message)
+      } else {
+        setLogoImageUploadError('Image upload failed. Please try again.')
+      }
+    } finally {
+      setIsUploadingLogoImage(false)
     }
   }
 
@@ -1362,6 +1402,63 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                     onChange={event => updateProfileDraft('country', event.target.value)}
                     placeholder="Kenya or Ghana"
                     data-testid="account-profile-country"
+                  />
+                </label>
+
+                <label>
+                  <span>Store logo (optional)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={event => {
+                      const file = event.target.files?.[0] ?? null
+                      setLogoImageFile(file)
+                    }}
+                  />
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="button button--secondary"
+                      onClick={handleUploadLogoImage}
+                      disabled={isUploadingLogoImage}
+                    >
+                      {isUploadingLogoImage ? 'Uploading logo…' : 'Upload logo'}
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--secondary"
+                      onClick={() => {
+                        setLogoImageFile(null)
+                        updateProfileDraft('logoUrl', '')
+                      }}
+                    >
+                      Clear logo
+                    </button>
+                  </div>
+                  {logoImageUploadError ? (
+                    <p role="alert" style={{ color: '#dc2626', marginTop: 6 }}>
+                      {logoImageUploadError}
+                    </p>
+                  ) : null}
+                </label>
+
+                <label>
+                  <span>Logo URL</span>
+                  <input
+                    type="url"
+                    value={profileDraft.logoUrl}
+                    onChange={event => updateProfileDraft('logoUrl', event.target.value)}
+                    placeholder="https://example.com/logo.png"
+                  />
+                </label>
+
+                <label>
+                  <span>Logo alt text</span>
+                  <input
+                    type="text"
+                    value={profileDraft.logoAlt}
+                    onChange={event => updateProfileDraft('logoAlt', event.target.value)}
+                    placeholder="Store logo"
                   />
                 </label>
               </div>

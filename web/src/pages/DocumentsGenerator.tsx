@@ -42,6 +42,7 @@ export default function DocumentsGenerator() {
   const [companyName, setCompanyName] = useState('')
   const [companyEmail, setCompanyEmail] = useState('')
   const [companyAddress, setCompanyAddress] = useState('')
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
@@ -124,6 +125,8 @@ export default function DocumentsGenerator() {
         setCompanyName(prev => (prev.trim() ? prev : company))
         setCompanyEmail(prev => (prev.trim() ? prev : email))
         setCompanyAddress(prev => (prev.trim() ? prev : address))
+        const logoUrl = typeof data.logoUrl === 'string' ? data.logoUrl.trim() : ''
+        setCompanyLogoUrl(prev => (prev.trim() ? prev : logoUrl))
       } catch (profileError) {
         console.warn('[documents] Failed to prefill store profile', profileError)
       }
@@ -170,6 +173,7 @@ export default function DocumentsGenerator() {
     const companyLabel = companyName.trim() || null
     const companyEmailLabel = companyEmail.trim() || null
     const companyAddressLabel = companyAddress.trim() || null
+    const companyLogoUrlLabel = companyLogoUrl.trim() || null
     const customerLabel = customerName.trim() || null
     const phoneLabel = customerPhone.trim() || null
     const emailLabel = customerEmail.trim() || null
@@ -188,6 +192,7 @@ export default function DocumentsGenerator() {
       companyName: companyLabel,
       companyEmail: companyEmailLabel,
       companyAddress: companyAddressLabel,
+      companyLogoUrl: companyLogoUrlLabel,
       customerName: customerLabel,
       customerPhone: phoneLabel,
       customerEmail: emailLabel,
@@ -260,6 +265,25 @@ export default function DocumentsGenerator() {
                   placeholder="Street, city, and region"
                 />
               </label>
+              <label className="form__field">
+                <span className="form__hint">Company logo URL</span>
+                <input
+                  className="input"
+                  value={companyLogoUrl}
+                  onChange={event => setCompanyLogoUrl(event.target.value)}
+                  placeholder="https://example.com/logo.png"
+                />
+              </label>
+              {companyLogoUrl.trim() ? (
+                <div className="form__field">
+                  <span className="form__hint">Logo preview</span>
+                  <img
+                    src={companyLogoUrl}
+                    alt="Company logo"
+                    style={{ maxWidth: 120, maxHeight: 120, objectFit: 'contain' }}
+                  />
+                </div>
+              ) : null}
               <label className="form__field">
                 <span className="form__hint">Customer name</span>
                 <input

@@ -18,6 +18,7 @@ type InvoicePayload = {
   companyName?: string | null
   companyEmail?: string | null
   companyAddress?: string | null
+  companyLogoUrl?: string | null
   customerName?: string | null
   customerPhone?: string | null
   customerEmail?: string | null
@@ -84,6 +85,9 @@ export function buildInvoicePdf(options: InvoicePayload) {
     lines.push('────────────────────────────────────────')
 
     appendMultiline(lines, options.companyAddress)
+    if (options.companyLogoUrl) {
+      lines.push(`Logo: ${options.companyLogoUrl}`)
+    }
     if (options.companyEmail) {
       lines.push(options.companyEmail)
     }

@@ -277,6 +277,7 @@ export default function Sell() {
   const [searchParams] = useSearchParams()
 
   const [storeName, setStoreName] = useState<string | null>(null)
+  const [storeLogoUrl, setStoreLogoUrl] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [searchText, setSearchText] = useState('')
   const [sellFlowTab, setSellFlowTab] = useState<SellFlowTab>('items')
@@ -341,6 +342,11 @@ export default function Sell() {
     return null
   }
 
+  function extractStoreLogoUrl(data: any): string | null {
+    const candidate = data?.logoUrl
+    return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null
+  }
+
   function withCollectionPath<T extends object>(ref: T | null, path: string) {
     if (!ref) return ref
     if (!(ref as any).collection) {
@@ -353,6 +359,7 @@ export default function Sell() {
   useEffect(() => {
     if (!activeStoreId) {
       setStoreName(null)
+      setStoreLogoUrl(null)
       return
     }
 
@@ -367,7 +374,9 @@ export default function Sell() {
         snapshot => {
           const data = typeof (snapshot as any).data === 'function' ? snapshot.data() : null
           const name = extractStoreName(data)
+          const logoUrl = extractStoreLogoUrl(data)
           setStoreName(prev => (name ? name : prev ?? null))
+          setStoreLogoUrl(prev => (logoUrl ? logoUrl : prev ?? null))
         },
         () => setStoreName(prev => prev ?? null),
       ),
@@ -1246,6 +1255,7 @@ export default function Sell() {
     tenders?: ReceiptTender[]
     discountInput: string
     companyName?: string | null
+    companyLogoUrl?: string | null
     customerName?: string | null
     customerPhone?: string | null
     receiptSize: EscPosReceiptSize
@@ -1302,6 +1312,7 @@ export default function Sell() {
 <body>
   <h1>Sale receipt</h1>
   ${options.companyName ? `<p class="meta"><strong>${options.companyName}</strong></p>` : ''}
+  ${options.companyLogoUrl ? `<p class="meta"><img src="${options.companyLogoUrl}" alt="Store logo" style="max-width:80px;max-height:80px;object-fit:contain;" /></p>` : ''}
   <p class="meta">Sale ID: ${options.saleId}</p>
   <p class="meta">${receiptDate}</p>
   <p class="meta">Payment: ${paymentLabel}</p>
@@ -1456,6 +1467,7 @@ export default function Sell() {
         tenders,
         discountInput,
         companyName: storeName,
+        companyLogoUrl: storeLogoUrl,
         customerName,
         customerPhone,
       } as any
@@ -1474,6 +1486,7 @@ export default function Sell() {
         tenders,
         discountInput,
         companyName: storeName,
+        companyLogoUrl: storeLogoUrl,
         customerName,
         customerPhone,
         receiptSize,
@@ -1540,6 +1553,7 @@ export default function Sell() {
             tenders,
             discountInput,
             companyName: storeName,
+            companyLogoUrl: storeLogoUrl,
             customerName,
             customerPhone,
           } as any

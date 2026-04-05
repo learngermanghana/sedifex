@@ -23,6 +23,7 @@ type ReceiptPayload = {
   companyName?: string | null
   companyEmail?: string | null
   companyAddress?: string | null
+  companyLogoUrl?: string | null
   customerName?: string | null
   customerPhone?: string | null
   customerEmail?: string | null
@@ -97,6 +98,9 @@ export function buildReceiptPdf(options: ReceiptPayload) {
       options.companyName ? options.companyName : 'Sale receipt',
     ]
     appendMultiline(lines, options.companyAddress)
+    if (options.companyLogoUrl) {
+      lines.push(`Logo: ${options.companyLogoUrl}`)
+    }
     if (options.companyEmail) {
       lines.push(options.companyEmail)
     }

@@ -72,6 +72,15 @@ export default function ReceiptView() {
       <h2>Receipt</h2>
       <p><strong>Sale ID:</strong> {receipt.saleId}</p>
       {receipt.companyName ? <p><strong>Company:</strong> {receipt.companyName}</p> : null}
+      {receipt.companyLogoUrl ? (
+        <p>
+          <img
+            src={receipt.companyLogoUrl}
+            alt="Company logo"
+            style={{ maxWidth: 120, maxHeight: 120, objectFit: 'contain' }}
+          />
+        </p>
+      ) : null}
       {receipt.customerName ? <p><strong>Customer:</strong> {receipt.customerName}</p> : null}
       {receipt.customerPhone ? <p><strong>Phone:</strong> {receipt.customerPhone}</p> : null}
       <p><strong>Payment:</strong> {String(receipt.paymentMethod).replace('_', ' ')}</p>
