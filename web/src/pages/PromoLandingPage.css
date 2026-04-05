@@ -1,15 +1,33 @@
 .promo-page {
   min-height: 100dvh;
   display: grid;
-  place-items: center;
+  align-content: start;
+  justify-items: center;
+  gap: 16px;
   padding: 24px;
   background:
     radial-gradient(circle at top, rgba(79, 70, 229, 0.18), transparent 45%),
     linear-gradient(180deg, #eef2ff 0%, #e2e8f0 100%);
 }
 
+.promo-nav {
+  width: min(920px, 100%);
+  display: flex;
+  gap: 10px;
+}
+
+.promo-nav a {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #312e81;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
 .promo-card {
-  width: min(640px, 100%);
+  width: min(920px, 100%);
   background: #ffffff;
   border: 1px solid #dbeafe;
   border-radius: 20px;
@@ -18,8 +36,12 @@
     0 24px 40px rgba(30, 41, 59, 0.14),
     0 2px 10px rgba(30, 41, 59, 0.08);
   display: grid;
-  gap: 12px;
+  gap: 22px;
   color: #0f172a;
+}
+.promo-section {
+  display: grid;
+  gap: 12px;
 }
 
 .promo-card h1 {
@@ -59,12 +81,6 @@
   font-size: 1.03rem;
 }
 
-.promo-summary {
-  margin: 0;
-  font-weight: 700;
-  color: #1d4ed8;
-}
-
 .promo-cta {
   justify-self: start;
   margin-top: 6px;
@@ -89,4 +105,45 @@
 .promo-cta:focus-visible {
   outline: 3px solid rgba(59, 130, 246, 0.35);
   outline-offset: 2px;
+}
+
+.promo-gallery-header h2 {
+  margin: 0;
+}
+
+.promo-gallery-header p {
+  margin: 0;
+  color: #334155;
+}
+
+.promo-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.promo-gallery-item {
+  margin: 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.promo-gallery-item img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.promo-gallery-item figcaption {
+  padding: 8px 10px 10px;
+  color: #334155;
+  font-size: 0.88rem;
+}
+
+.promo-gallery-empty {
+  margin: 0;
+  color: #64748b;
 }

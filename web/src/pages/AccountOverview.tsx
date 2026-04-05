@@ -4,12 +4,14 @@ import { Link } from 'react-router-dom'
 import type { FirebaseError } from 'firebase/app'
 import { httpsCallable } from 'firebase/functions'
 import {
+  addDoc,
   Timestamp,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  orderBy,
   query,
   where,
   setDoc,
@@ -96,6 +98,15 @@ type IntegrationApiKey = {
   updatedAt: Timestamp | null
   revokedAt: Timestamp | null
   lastUsedAt: Timestamp | null
+}
+
+type PromoGalleryDraftItem = {
+  id: string
+  url: string
+  alt: string
+  caption: string
+  sortOrder: number
+  isPublished: boolean
 }
 
 function toNullableString(value: unknown) {
@@ -322,6 +333,9 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   const [promoImageFile, setPromoImageFile] = useState<File | null>(null)
   const [isUploadingPromoImage, setIsUploadingPromoImage] = useState(false)
   const [promoImageUploadError, setPromoImageUploadError] = useState<string | null>(null)
+  const [promoGalleryDraft, setPromoGalleryDraft] = useState<PromoGalleryDraftItem[]>([])
+  const [promoGalleryLoading, setPromoGalleryLoading] = useState(false)
+  const [isSavingPromoGallery, setIsSavingPromoGallery] = useState(false)
   const [endpointToTest, setEndpointToTest] = useState('')
   const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
   const [isTestingEndpoint, setIsTestingEndpoint] = useState(false)
@@ -484,6 +498,52 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       imageAlt: profile.promoImageAlt ?? '',
     })
   }, [profile])
+
+  useEffect(() => {
+    if (!storeId || !isOwner) {
+      setPromoGalleryDraft([])
+      setPromoGalleryLoading(false)
+      return
+    }
+
+    let cancelled = false
+    async function loadPromoGallery() {
+      setPromoGalleryLoading(true)
+      try {
+        const galleryQuery = query(
+          collection(db, 'stores', storeId, 'promoGallery'),
+          orderBy('sortOrder', 'asc'),
+          limit(36),
+        )
+        const snapshot = await getDocs(galleryQuery)
+        if (cancelled) return
+        const items = snapshot.docs.map(itemDoc => {
+          const data = itemDoc.data() as Record<string, unknown>
+          return {
+            id: itemDoc.id,
+            url: typeof data.url === 'string' ? data.url : '',
+            alt: typeof data.alt === 'string' ? data.alt : '',
+            caption: typeof data.caption === 'string' ? data.caption : '',
+            sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
+            isPublished: data.isPublished === true,
+          } satisfies PromoGalleryDraftItem
+        })
+        setPromoGalleryDraft(items)
+      } catch (error) {
+        if (cancelled) return
+        console.error('[account] Failed to load promo gallery', error)
+        setPromoGalleryDraft([])
+        publish({ message: 'Unable to load promo gallery.', tone: 'error' })
+      } finally {
+        if (!cancelled) setPromoGalleryLoading(false)
+      }
+    }
+
+    void loadPromoGallery()
+    return () => {
+      cancelled = true
+    }
+  }, [isOwner, publish, storeId])
 
   async function refreshIntegrationApiKeys() {
     if (!isOwner) {
@@ -794,6 +854,106 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       }
     } finally {
       setIsUploadingPromoImage(false)
+    }
+  }
+
+  function updatePromoGalleryDraft(
+    id: string,
+    key: keyof Omit<PromoGalleryDraftItem, 'id'>,
+    value: string | number | boolean,
+  ) {
+    setPromoGalleryDraft(current =>
+      current.map(item => (item.id === id ? { ...item, [key]: value } : item)),
+    )
+  }
+
+  function handleAddPromoGalleryItem() {
+    setPromoGalleryDraft(current => [
+      ...current,
+      {
+        id: `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        url: '',
+        alt: '',
+        caption: '',
+        sortOrder: current.length,
+        isPublished: true,
+      },
+    ])
+  }
+
+  async function handleDeletePromoGalleryItem(itemId: string) {
+    if (!storeId) return
+    const isDraftOnly = itemId.startsWith('draft-')
+    try {
+      if (!isDraftOnly) {
+        await deleteDoc(doc(db, 'stores', storeId, 'promoGallery', itemId))
+      }
+      setPromoGalleryDraft(current => current.filter(item => item.id !== itemId))
+      publish({ message: 'Gallery item removed.', tone: 'success' })
+    } catch (error) {
+      console.error('[account] Failed to delete promo gallery item', error)
+      publish({ message: 'Unable to remove gallery item.', tone: 'error' })
+    }
+  }
+
+  async function handleSavePromoGallery() {
+    if (!storeId || !isOwner) return
+    const trimmedItems = promoGalleryDraft
+      .map(item => ({
+        ...item,
+        url: item.url.trim(),
+        alt: item.alt.trim(),
+        caption: item.caption.trim(),
+      }))
+      .filter(item => item.url)
+
+    try {
+      setIsSavingPromoGallery(true)
+      await Promise.all(
+        trimmedItems.map(item => {
+          const basePayload = {
+            url: item.url,
+            alt: item.alt || null,
+            caption: item.caption || null,
+            sortOrder: Number.isFinite(item.sortOrder) ? item.sortOrder : 0,
+            isPublished: item.isPublished,
+            updatedAt: serverTimestamp(),
+          }
+          if (item.id.startsWith('draft-')) {
+            return addDoc(collection(db, 'stores', storeId, 'promoGallery'), {
+              ...basePayload,
+              createdAt: serverTimestamp(),
+            })
+          }
+          return setDoc(doc(db, 'stores', storeId, 'promoGallery', item.id), basePayload, { merge: true })
+        }),
+      )
+      publish({ message: 'Promo gallery saved.', tone: 'success' })
+
+      const galleryQuery = query(
+        collection(db, 'stores', storeId, 'promoGallery'),
+        orderBy('sortOrder', 'asc'),
+        limit(36),
+      )
+      const snapshot = await getDocs(galleryQuery)
+      setPromoGalleryDraft(
+        snapshot.docs.map(itemDoc => {
+          const data = itemDoc.data() as Record<string, unknown>
+          return {
+            id: itemDoc.id,
+            url: typeof data.url === 'string' ? data.url : '',
+            alt: typeof data.alt === 'string' ? data.alt : '',
+            caption: typeof data.caption === 'string' ? data.caption : '',
+            sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
+            isPublished: data.isPublished === true,
+          } satisfies PromoGalleryDraftItem
+        }),
+      )
+    } catch (error) {
+      console.error('[account] Failed to save promo gallery', error)
+      publish({ message: 'Unable to save promo gallery.', tone: 'error' })
+    } finally {
+      setIsSavingPromoGallery(false)
     }
   }
 
@@ -1640,9 +1800,10 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
           </div>
 
           {isOwner ? (
-            <div className="account-overview__grid">
-              <div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <>
+              <div className="account-overview__grid">
+                <div>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span>Promo title</span>
                   <input
                     type="text"
@@ -1794,17 +1955,124 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
                 </label>
               </div>
 
-              <div>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={handleSavePromo}
-                  disabled={isSavingPromo}
-                >
-                  {isSavingPromo ? 'Saving…' : 'Save upcoming promo'}
-                </button>
+                <div>
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={handleSavePromo}
+                    disabled={isSavingPromo}
+                  >
+                    {isSavingPromo ? 'Saving…' : 'Save upcoming promo'}
+                  </button>
+                </div>
               </div>
-            </div>
+              <div style={{ marginTop: 20 }}>
+                <div className="account-overview__section-header" style={{ marginBottom: 10 }}>
+                  <h3>Promo gallery</h3>
+                  <p className="account-overview__subtitle">
+                    Add images for your public promo page and integration feeds.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={handleAddPromoGalleryItem}
+                  >
+                    Add gallery item
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={handleSavePromoGallery}
+                    disabled={isSavingPromoGallery}
+                  >
+                    {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery'}
+                  </button>
+                </div>
+                {promoGalleryLoading ? <p>Loading gallery…</p> : null}
+                {promoGalleryDraft.length === 0 && !promoGalleryLoading ? (
+                  <p className="account-overview__hint">No gallery items yet.</p>
+                ) : null}
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {promoGalleryDraft.map(item => (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 12,
+                        padding: 12,
+                        display: 'grid',
+                        gap: 10,
+                      }}
+                    >
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span>Image URL</span>
+                        <input
+                          type="url"
+                          value={item.url}
+                          onChange={event =>
+                            updatePromoGalleryDraft(item.id, 'url', event.target.value)
+                          }
+                          placeholder="https://..."
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span>Alt text</span>
+                        <input
+                          type="text"
+                          value={item.alt}
+                          onChange={event =>
+                            updatePromoGalleryDraft(item.id, 'alt', event.target.value)
+                          }
+                          placeholder="Describe this image"
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span>Caption</span>
+                        <input
+                          type="text"
+                          value={item.caption}
+                          onChange={event =>
+                            updatePromoGalleryDraft(item.id, 'caption', event.target.value)
+                          }
+                          placeholder="Optional caption"
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span>Sort order</span>
+                        <input
+                          type="number"
+                          value={item.sortOrder}
+                          onChange={event =>
+                            updatePromoGalleryDraft(item.id, 'sortOrder', Number(event.target.value))
+                          }
+                        />
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={item.isPublished}
+                          onChange={event =>
+                            updatePromoGalleryDraft(item.id, 'isPublished', event.target.checked)
+                          }
+                        />
+                        Published
+                      </label>
+                      <div>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => handleDeletePromoGalleryItem(item.id)}
+                        >
+                          Remove item
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           ) : (
             <p role="note">Only the workspace owner can change promo settings.</p>
           )}

@@ -12,7 +12,7 @@ export default function IntegrationQuickstartPage() {
         <ul>
           <li>Product fields: <code>id</code>, <code>storeId</code>, <code>name</code>, <code>category</code>, <code>description</code>, <code>price</code>, <code>stockCount</code>, and media metadata.</li>
           <li>Integration flow with API key auth via <code>GET /integrationProducts?storeId=&lt;storeId&gt;</code>.</li>
-          <li>Companion endpoints for promotions and customers: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code> and <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>.</li>
+          <li>Companion endpoints for promotions, promo galleries, and customers: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code>, <code>GET /integrationGallery?storeId=&lt;storeId&gt;</code>, and <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>.</li>
           <li>Dedupe, fallback data, category grouping, and cache strategy recommendations.</li>
         </ul>
       </section>
@@ -31,7 +31,7 @@ export default function IntegrationQuickstartPage() {
       <section>
         <h2>Next.js cache guidance</h2>
         <ul>
-          <li><strong>30–120s</strong> revalidate window for frequent stock/price changes.</li>
+          <li><strong>30–120s</strong> revalidate window for frequent stock/price/promo/gallery changes.</li>
           <li><strong>3600s+</strong> for mostly static catalogs.</li>
           <li>Use SWR/polling on top of SSR/ISR when you need near-live updates.</li>
         </ul>

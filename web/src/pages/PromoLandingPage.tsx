@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { collection, getDocs, limit, query, where } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import { Link, useParams } from 'react-router-dom'
 
 import { db } from '../firebase'
 import './PromoLandingPage.css'
 
 type PromoProfile = {
+  storeId: string
   storeName: string
   title: string | null
   summary: string | null
@@ -14,6 +15,14 @@ type PromoProfile = {
   websiteUrl: string | null
   imageUrl: string | null
   imageAlt: string | null
+}
+
+type PromoGalleryItem = {
+  id: string
+  url: string
+  alt: string | null
+  caption: string | null
+  sortOrder: number
 }
 
 function normalizeSlug(value: string): string {
@@ -38,20 +47,12 @@ function sanitizeSummary(value: string | null, storeName: string): string {
   return compact
 }
 
-function formatPromoDate(value: string | null): string | null {
-  if (!value) return null
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(
-    parsed,
-  )
-}
-
 export default function PromoLandingPage() {
   const { slug = '' } = useParams()
   const [profile, setProfile] = useState<PromoProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [gallery, setGallery] = useState<PromoGalleryItem[]>([])
 
   useEffect(() => {
     let isMounted = true
@@ -85,8 +86,33 @@ export default function PromoLandingPage() {
           return
         }
 
-        const data = snapshot.docs[0].data() as Record<string, unknown>
+        const storeDoc = snapshot.docs[0]
+        const data = storeDoc.data() as Record<string, unknown>
+        const galleryRef = collection(db, 'stores', storeDoc.id, 'promoGallery')
+        const gallerySnapshot = await getDocs(query(galleryRef, orderBy('sortOrder', 'asc'), limit(36)))
+
+        const publishedGallery = gallerySnapshot.docs
+          .map(itemDoc => {
+            const itemData = itemDoc.data() as Record<string, unknown>
+            if (itemData.isPublished !== true || typeof itemData.url !== 'string' || !itemData.url.trim()) {
+              return null
+            }
+            return {
+              id: itemDoc.id,
+              url: itemData.url.trim(),
+              alt:
+                typeof itemData.alt === 'string' && itemData.alt.trim() ? itemData.alt.trim() : null,
+              caption:
+                typeof itemData.caption === 'string' && itemData.caption.trim()
+                  ? itemData.caption.trim()
+                  : null,
+              sortOrder: typeof itemData.sortOrder === 'number' ? itemData.sortOrder : 0,
+            } satisfies PromoGalleryItem
+          })
+          .filter((item): item is PromoGalleryItem => item !== null)
+
         setProfile({
+          storeId: storeDoc.id,
           storeName:
             (typeof data.displayName === 'string' && data.displayName.trim()) ||
             (typeof data.name === 'string' && data.name.trim()) ||
@@ -99,10 +125,12 @@ export default function PromoLandingPage() {
           imageUrl: typeof data.promoImageUrl === 'string' ? data.promoImageUrl : null,
           imageAlt: typeof data.promoImageAlt === 'string' ? data.promoImageAlt : null,
         })
+        setGallery(publishedGallery)
       } catch (nextError) {
         console.error('[promo] Failed to load promo page', nextError)
         if (isMounted) {
           setProfile(null)
+          setGallery([])
           setError('Unable to load this promo right now.')
         }
       } finally {
@@ -143,12 +171,14 @@ export default function PromoLandingPage() {
 
   const promoTitle = profile.title?.trim() || `Special offers at ${profile.storeName}`
   const promoSummary = sanitizeSummary(profile.summary, profile.storeName)
-  const start = formatPromoDate(profile.startDate) || 'Now'
-  const end = formatPromoDate(profile.endDate) || 'Limited time'
-
   return (
     <main className="promo-page">
+      <nav className="promo-nav" aria-label="Promo sections">
+        <a href="#promo-hero">Hero</a>
+        <a href="#promo-gallery">Gallery</a>
+      </nav>
       <article className="promo-card">
+        <section id="promo-hero" className="promo-section">
         <p className="promo-label">Sedifex promo</p>
         {profile.imageUrl ? (
           <img
@@ -176,9 +206,32 @@ export default function PromoLandingPage() {
             target="_blank"
             rel="noreferrer noopener"
           >
-            Claim this offer
+            Shop now
           </a>
         ) : null}
+        </section>
+        <section id="promo-gallery" className="promo-section">
+          <div className="promo-gallery-header">
+            <h2>Gallery</h2>
+            <p>Latest highlights from {profile.storeName}.</p>
+          </div>
+          {gallery.length ? (
+            <div className="promo-gallery-grid" role="list" aria-label="Promo gallery">
+              {gallery.map(item => (
+                <figure key={item.id} className="promo-gallery-item" role="listitem">
+                  <img
+                    src={item.url}
+                    alt={item.alt || `${profile.storeName} gallery image`}
+                    loading="lazy"
+                  />
+                  {item.caption ? <figcaption>{item.caption}</figcaption> : null}
+                </figure>
+              ))}
+            </div>
+          ) : (
+            <p className="promo-gallery-empty">Gallery updates will appear here soon.</p>
+          )}
+        </section>
       </article>
     </main>
   )

@@ -5,7 +5,7 @@ Use this guide to auto-load products from Sedifex into either:
 - a **WordPress** site, or
 - a **Next.js site hosted on Vercel**.
 
-This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo` and `integrationCustomers`), plus the product shape documented in the root README.
+This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, and `integrationCustomers`), plus the product shape documented in the root README.
 
 ## What you get
 
@@ -64,6 +64,22 @@ Also used with:
 
 The same promo field set is defined in the account/store profile typing too, so these are the right canonical keys to use
 
+Promo gallery data fields (stores/{storeId}/promoGallery/{itemId})
+
+    url
+
+    alt
+
+    caption
+
+    sortOrder
+
+    isPublished
+
+    createdAt
+
+    updatedAt
+
 ## Prerequisites
 
 1. Sedifex Firebase project configured (Firestore + Functions).
@@ -75,6 +91,7 @@ The same promo field set is defined in the account/store profile typing too, so 
 1. Create an integration API key in **Account overview → Integrations → Website integrations**.
 2. Call `GET /integrationProducts?storeId=<storeId>` with `Authorization: Bearer <integration_key>`.
    - Promo data: `GET /integrationPromo?storeId=<storeId>`
+   - Promo gallery data: `GET /integrationGallery?storeId=<storeId>`
    - Customer data: `GET /integrationCustomers?storeId=<storeId>`
 3. Deduplicate products (important when combining multiple sources).
 4. Return fallback data when external fetch fails.
@@ -198,9 +215,11 @@ export default async function MenuPage() {
 
 ### 2) Cache strategy (important)
 
-- **Frequently changing price/stock:** `revalidate: 30-120` seconds.
+- **Frequently changing price/stock/promo/gallery:** `revalidate: 30-120` seconds.
 - **Mostly static catalog:** `revalidate: 3600` (1 hour) or longer.
 - **Truly live stock:** keep ISR for initial render, then use client polling/SWR for live updates.
+
+For promo + gallery integrations, use the same 30–120 second polling interval initially. If you later need sub-minute pushes, move to webhook-triggered cache invalidation.
 
 ### 3) Optional live refresh with SWR
 

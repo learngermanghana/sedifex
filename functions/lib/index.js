@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationCustomers = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationCustomers = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -1644,6 +1644,42 @@ exports.integrationPromo = functions.https.onRequest(async (req, res) => {
             updatedAt: normalizeTimestampIso(data.updatedAt),
         },
     });
+});
+exports.integrationGallery = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    const authContext = await validateIntegrationTokenOrReply(req, res);
+    if (!authContext) {
+        return;
+    }
+    const { storeId } = authContext;
+    const gallerySnapshot = await firestore_1.defaultDb
+        .collection('stores')
+        .doc(storeId)
+        .collection('promoGallery')
+        .orderBy('sortOrder', 'asc')
+        .limit(200)
+        .get();
+    const gallery = gallerySnapshot.docs
+        .map(itemDoc => {
+        const data = itemDoc.data();
+        if (data.isPublished !== true)
+            return null;
+        const url = typeof data.url === 'string' ? data.url.trim() : '';
+        if (!url)
+            return null;
+        return {
+            id: itemDoc.id,
+            url,
+            alt: typeof data.alt === 'string' && data.alt.trim() ? data.alt.trim() : null,
+            caption: typeof data.caption === 'string' && data.caption.trim() ? data.caption.trim() : null,
+            sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
+            isPublished: true,
+            createdAt: normalizeTimestampIso(data.createdAt),
+            updatedAt: normalizeTimestampIso(data.updatedAt),
+        };
+    })
+        .filter(item => item !== null);
+    res.status(200).json({ storeId, gallery });
 });
 exports.integrationCustomers = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
