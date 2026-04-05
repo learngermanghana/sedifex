@@ -275,6 +275,7 @@ type AccountOverviewProps = {
 }
 
 type AccountTab = 'workspace' | 'integrations' | 'promotions' | 'operations'
+type PublicPageTab = 'overview' | 'promo' | 'gallery' | 'website-sync'
 
 export default function AccountOverview({
   headingLevel = 'h1',
@@ -341,6 +342,7 @@ export default function AccountOverview({
   const [promoGalleryDraft, setPromoGalleryDraft] = useState<PromoGalleryDraftItem[]>([])
   const [promoGalleryLoading, setPromoGalleryLoading] = useState(false)
   const [isSavingPromoGallery, setIsSavingPromoGallery] = useState(false)
+  const [publicPageTab, setPublicPageTab] = useState<PublicPageTab>('overview')
   const [endpointToTest, setEndpointToTest] = useState('')
   const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
   const [isTestingEndpoint, setIsTestingEndpoint] = useState(false)
@@ -367,6 +369,11 @@ export default function AccountOverview({
   useEffect(() => {
     if (!isPromotionsView) return
     setActiveTab('promotions')
+  }, [isPromotionsView])
+
+  useEffect(() => {
+    if (!isPromotionsView) return
+    setPublicPageTab('overview')
   }, [isPromotionsView])
 
   useEffect(() => {
@@ -1790,12 +1797,73 @@ export default function AccountOverview({
           <div className="account-overview__section-header">
             <h2 id="account-overview-promotions">Upcoming promos</h2>
             <p className="account-overview__subtitle">
-              Save upcoming promotions in Firebase and use a free promo link for customers.
+              This page gives your business SEO visibility with a free Sedifex URL. Updates to your
+              promo, gallery, and catalog content will appear automatically on the public page.
             </p>
           </div>
 
+          <nav className="account-overview__tabs" aria-label="Public page settings sections">
+            <button
+              type="button"
+              className={`account-overview__tab ${publicPageTab === 'overview' ? 'is-active' : ''}`}
+              aria-pressed={publicPageTab === 'overview'}
+              onClick={() => setPublicPageTab('overview')}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={`account-overview__tab ${publicPageTab === 'promo' ? 'is-active' : ''}`}
+              aria-pressed={publicPageTab === 'promo'}
+              onClick={() => setPublicPageTab('promo')}
+            >
+              Promo
+            </button>
+            <button
+              type="button"
+              className={`account-overview__tab ${publicPageTab === 'gallery' ? 'is-active' : ''}`}
+              aria-pressed={publicPageTab === 'gallery'}
+              onClick={() => setPublicPageTab('gallery')}
+            >
+              Gallery
+            </button>
+            <button
+              type="button"
+              className={`account-overview__tab ${publicPageTab === 'website-sync' ? 'is-active' : ''}`}
+              aria-pressed={publicPageTab === 'website-sync'}
+              onClick={() => setPublicPageTab('website-sync')}
+            >
+              Website sync
+            </button>
+          </nav>
+
+          {publicPageTab === 'overview' && (
+            <div className="account-overview__card">
+              <p className="account-overview__hint">
+                Use this page to manage your public Sedifex profile. Your store name, promo details,
+                gallery images, and available products/services are organized for customers at your
+                free link.
+              </p>
+              <p className="account-overview__hint">
+                You can also reuse this same data on your own website. Contact the Sedifex team if
+                you want updates made here to auto-sync to your website integration.
+              </p>
+              <p className="account-overview__promo-link">
+                Public URL:{' '}
+                <a
+                  href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  www.sedifex.com/{promoSlug}
+                </a>
+              </p>
+            </div>
+          )}
+
           {isOwner ? (
             <>
+              {publicPageTab === 'promo' && (
               <div className="account-overview__grid">
                 <div>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1959,6 +2027,8 @@ export default function AccountOverview({
                   </button>
                 </div>
               </div>
+              )}
+              {publicPageTab === 'gallery' && (
               <div style={{ marginTop: 20 }}>
                 <div className="account-overview__section-header" style={{ marginBottom: 10 }}>
                   <h3>Promo gallery</h3>
@@ -2065,6 +2135,22 @@ export default function AccountOverview({
                   ))}
                 </div>
               </div>
+              )}
+              {publicPageTab === 'website-sync' && (
+                <div className="account-overview__card">
+                  <p className="account-overview__hint" style={{ marginBottom: 8 }}>
+                    Need your website to update automatically when you edit this page?
+                  </p>
+                  <p className="account-overview__hint">
+                    Contact the Sedifex team to connect your website so promo, gallery, and catalog
+                    changes sync automatically.
+                  </p>
+                  <p className="account-overview__hint" style={{ marginTop: 8 }}>
+                    Existing integrations can fetch this data using your integration API keys in the
+                    <Link to="/settings#website-sync"> Integrations tab</Link>.
+                  </p>
+                </div>
+              )}
             </>
           ) : (
             <p role="note">Only the workspace owner can change promo settings.</p>

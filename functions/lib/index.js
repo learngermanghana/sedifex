@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationCustomers = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationCustomers = exports.integrationPublicCatalog = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -1743,6 +1743,59 @@ exports.integrationGallery = functions.https.onRequest(async (req, res) => {
     })
         .filter(item => item !== null);
     res.status(200).json({ storeId, gallery });
+});
+exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    const storeContext = await resolvePromoStoreForRead(req, res);
+    if (!storeContext) {
+        return;
+    }
+    const { storeId } = storeContext;
+    let productsSnapshot;
+    try {
+        productsSnapshot = await firestore_1.defaultDb
+            .collection('products')
+            .where('storeId', '==', storeId)
+            .orderBy('updatedAt', 'desc')
+            .limit(200)
+            .get();
+    }
+    catch (error) {
+        const code = error?.code;
+        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+        if (!isMissingIndex) {
+            throw error;
+        }
+        productsSnapshot = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+    }
+    const products = productsSnapshot.docs
+        .map(docSnap => {
+        const data = docSnap.data();
+        const name = typeof data.name === 'string' ? data.name.trim() : '';
+        if (!name)
+            return null;
+        return {
+            id: docSnap.id,
+            name,
+            description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+            category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+            price: typeof data.price === 'number' ? data.price : null,
+            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
+            imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+            itemType: data.itemType === 'service'
+                ? 'service'
+                : data.itemType === 'made_to_order'
+                    ? 'made_to_order'
+                    : 'product',
+            updatedAt: normalizeTimestampIso(data.updatedAt),
+        };
+    })
+        .filter(item => item !== null);
+    res.status(200).json({ storeId, products });
 });
 exports.integrationCustomers = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);

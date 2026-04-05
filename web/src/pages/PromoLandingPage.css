@@ -13,17 +13,25 @@
 .promo-nav {
   width: min(920px, 100%);
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
-.promo-nav a {
+.promo-nav__button {
+  border: 1px solid #c7d2fe;
   font-size: 0.9rem;
   font-weight: 600;
   color: #312e81;
   background: rgba(255, 255, 255, 0.75);
   padding: 8px 12px;
   border-radius: 999px;
-  text-decoration: none;
+  cursor: pointer;
+}
+
+.promo-nav__button.is-active {
+  background: #312e81;
+  color: #fff;
+  border-color: #312e81;
 }
 
 .promo-card {
@@ -128,6 +136,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   overflow: hidden;
+  padding-bottom: 10px;
 }
 
 .promo-gallery-item img {
@@ -141,6 +150,12 @@
   padding: 8px 10px 10px;
   color: #334155;
   font-size: 0.88rem;
+}
+
+.promo-gallery-item > div {
+  padding: 10px 12px 0;
+  display: grid;
+  gap: 6px;
 }
 
 .promo-gallery-empty {

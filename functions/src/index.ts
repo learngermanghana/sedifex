@@ -2264,6 +2264,65 @@ export const integrationGallery = functions.https.onRequest(async (req, res) => 
   res.status(200).json({ storeId, gallery })
 })
 
+export const integrationPublicCatalog = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  const storeContext = await resolvePromoStoreForRead(req, res)
+  if (!storeContext) {
+    return
+  }
+  const { storeId } = storeContext
+
+  let productsSnapshot: admin.firestore.QuerySnapshot
+  try {
+    productsSnapshot = await db
+      .collection('products')
+      .where('storeId', '==', storeId)
+      .orderBy('updatedAt', 'desc')
+      .limit(200)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    productsSnapshot = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+  }
+
+  const products = productsSnapshot.docs
+    .map(docSnap => {
+      const data = docSnap.data() as Record<string, unknown>
+      const name = typeof data.name === 'string' ? data.name.trim() : ''
+      if (!name) return null
+
+      return {
+        id: docSnap.id,
+        name,
+        description:
+          typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+        category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+        price: typeof data.price === 'number' ? data.price : null,
+        imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
+        imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+        itemType:
+          data.itemType === 'service'
+            ? 'service'
+            : data.itemType === 'made_to_order'
+              ? 'made_to_order'
+              : 'product',
+        updatedAt: normalizeTimestampIso(data.updatedAt),
+      }
+    })
+    .filter(item => item !== null)
+
+  res.status(200).json({ storeId, products })
+})
+
 export const integrationCustomers = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
   const authContext = await validateIntegrationTokenOrReply(req, res)
