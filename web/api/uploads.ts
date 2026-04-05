@@ -8,6 +8,8 @@ type UploadRequestBody = {
   filename?: unknown
   mimeType?: unknown
   dataBase64?: unknown
+  storagePath?: unknown
+  url?: unknown
 }
 
 function normalizeFilename(value: unknown): string {
@@ -29,9 +31,65 @@ function resolveExtension(filename: string, mimeType: string): string {
   return '.jpg'
 }
 
+function normalizeStoragePath(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().replace(/^\/+/, '')
+  if (!trimmed) return null
+  if (!/^[a-zA-Z0-9/_\-.]+$/.test(trimmed)) return null
+  if (trimmed.includes('..')) return null
+  return trimmed
+}
+
+function extractObjectPathFromUrl(urlValue: unknown, bucketName: string): string | null {
+  if (typeof urlValue !== 'string' || !urlValue.trim()) return null
+
+  let parsed: URL
+  try {
+    parsed = new URL(urlValue.trim())
+  } catch {
+    return null
+  }
+
+  if (parsed.hostname !== 'storage.googleapis.com') return null
+
+  const [bucketSegment, ...pathSegments] = parsed.pathname.replace(/^\/+/, '').split('/')
+  if (!bucketSegment || bucketSegment !== bucketName) return null
+  if (!pathSegments.length) return null
+
+  const decoded = decodeURIComponent(pathSegments.join('/'))
+  return normalizeStoragePath(decoded)
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' })
+  if (req.method !== 'POST' && req.method !== 'DELETE') {
+    return res.status(405).json({ error: 'Method not allowed. Use POST or DELETE.' })
+  }
+
+  const adminApp = getAdmin()
+  const configuredBucket =
+    process.env.IMAGE_UPLOAD_BUCKET || process.env.FIREBASE_STORAGE_BUCKET
+
+  if (!configuredBucket || typeof configuredBucket !== 'string') {
+    return res.status(500).json({
+      error: 'IMAGE_UPLOAD_BUCKET is not configured for image uploads.',
+    })
+  }
+
+  const bucket = getStorage(adminApp).bucket(configuredBucket)
+
+  if (req.method === 'DELETE') {
+    const objectPath = extractObjectPathFromUrl((req.body || {}).url, bucket.name)
+    if (!objectPath) {
+      return res.status(400).json({ error: 'A valid storage.googleapis.com image URL is required.' })
+    }
+
+    try {
+      await bucket.file(objectPath).delete({ ignoreNotFound: true })
+      return res.status(200).json({ deleted: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return res.status(500).json({ error: `Failed to delete image: ${message}` })
+    }
   }
 
   const { filename, mimeType, dataBase64 } = (req.body || {}) as UploadRequestBody
@@ -63,7 +121,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const safeFilename = normalizeFilename(filename)
     const basename = safeFilename.replace(/\.(jpe?g|png|webp|gif|avif|svg)$/i, '')
     const ext = resolveExtension(safeFilename, mimeType)
-    const objectName = `product-images/${Date.now()}-${basename}${ext}`
+    const explicitStoragePath = normalizeStoragePath((req.body || {}).storagePath)
+    const objectName = explicitStoragePath || `product-images/${Date.now()}-${basename}${ext}`
 
     console.log('[api/uploads] bucket env check', {
       hasImageUploadBucket: !!process.env.IMAGE_UPLOAD_BUCKET,
@@ -73,17 +132,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       firebaseProjectId: process.env.FIREBASE_PROJECT_ID || null,
     })
 
-    const adminApp = getAdmin()
-    const configuredBucket =
-      process.env.IMAGE_UPLOAD_BUCKET || process.env.FIREBASE_STORAGE_BUCKET
-
-    if (!configuredBucket || typeof configuredBucket !== 'string') {
-      return res.status(500).json({
-        error: 'IMAGE_UPLOAD_BUCKET is not configured for image uploads.',
-      })
-    }
-
-    const bucket = getStorage(adminApp).bucket(configuredBucket)
     const file = bucket.file(objectName)
 
     await file.save(fileBuffer, {

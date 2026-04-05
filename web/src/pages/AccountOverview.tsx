@@ -31,7 +31,11 @@ import { AccountBillingSection } from '../components/AccountBillingSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
 import { buildPromoSlug } from '../utils/promoSlug'
-import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
+import {
+  ProductImageUploadError,
+  deleteUploadedImageByUrl,
+  uploadProductImage,
+} from '../api/productImageUpload'
 import './AccountOverview.css'
 
 type StoreProfile = {
@@ -113,9 +117,21 @@ type PromoGalleryDraftItem = {
 }
 
 const MAX_PROMO_GALLERY_ITEMS = 3
+const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
 
 function toNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() !== '' ? value : null
+}
+
+function buildStableStoreImagePath(storeId: string, imageType: 'promo' | 'logo'): string {
+  return `stores/${storeId}/${imageType}.jpg`
+}
+
+function buildUploadErrorMessage(error: unknown): string {
+  if (error instanceof ProductImageUploadError) {
+    return `${error.message} ${EXACT_UPLOAD_LIMIT_HINT}`.trim()
+  }
+  return `Image upload failed. ${EXACT_UPLOAD_LIMIT_HINT} Please try again.`
 }
 
 function isTimestamp(value: unknown): value is Timestamp {
@@ -852,6 +868,10 @@ export default function AccountOverview({
   }
 
   async function handleUploadPromoImage() {
+    if (!storeId) {
+      setPromoImageUploadError('Select a store before uploading promo images.')
+      return
+    }
     if (!promoImageFile) {
       setPromoImageUploadError('Choose an image file before uploading.')
       return
@@ -860,17 +880,15 @@ export default function AccountOverview({
     setPromoImageUploadError(null)
     setIsUploadingPromoImage(true)
     try {
-      const uploadedUrl = await uploadProductImage(promoImageFile)
+      const uploadedUrl = await uploadProductImage(promoImageFile, {
+        storagePath: buildStableStoreImagePath(storeId, 'promo'),
+      })
       setPromoDraft(current => ({ ...current, imageUrl: uploadedUrl }))
       setPromoImageFile(null)
       publish({ tone: 'success', message: 'Promo image uploaded successfully.' })
     } catch (error) {
       console.error('[account] Failed to upload promo image', error)
-      if (error instanceof ProductImageUploadError) {
-        setPromoImageUploadError(error.message)
-      } else {
-        setPromoImageUploadError('Image upload failed. Please try again.')
-      }
+      setPromoImageUploadError(buildUploadErrorMessage(error))
     } finally {
       setIsUploadingPromoImage(false)
     }
@@ -916,7 +934,11 @@ export default function AccountOverview({
   async function handleDeletePromoGalleryItem(itemId: string) {
     if (!storeId) return
     const isDraftOnly = itemId.startsWith('draft-')
+    const item = promoGalleryDraft.find(entry => entry.id === itemId)
     try {
+      if (item?.url) {
+        await deleteUploadedImageByUrl(item.url)
+      }
       if (!isDraftOnly) {
         await deleteDoc(doc(db, 'stores', storeId, 'promoGallery', itemId))
       }
@@ -1013,17 +1035,17 @@ export default function AccountOverview({
       publish({ tone: 'success', message: 'Gallery image uploaded successfully.' })
     } catch (error) {
       console.error('[account] Failed to upload promo gallery image', error)
-      if (error instanceof ProductImageUploadError) {
-        setPromoGalleryImageUploadError(error.message)
-      } else {
-        setPromoGalleryImageUploadError('Image upload failed. Please try again.')
-      }
+      setPromoGalleryImageUploadError(buildUploadErrorMessage(error))
     } finally {
       setIsUploadingPromoGalleryImage(false)
     }
   }
 
   async function handleUploadLogoImage() {
+    if (!storeId) {
+      setLogoImageUploadError('Select a store before uploading a logo.')
+      return
+    }
     if (!logoImageFile) {
       setLogoImageUploadError('Choose an image file before uploading.')
       return
@@ -1032,17 +1054,15 @@ export default function AccountOverview({
     setLogoImageUploadError(null)
     try {
       setIsUploadingLogoImage(true)
-      const uploadedUrl = await uploadProductImage(logoImageFile)
+      const uploadedUrl = await uploadProductImage(logoImageFile, {
+        storagePath: buildStableStoreImagePath(storeId, 'logo'),
+      })
       setProfileDraft(current => ({ ...current, logoUrl: uploadedUrl }))
       setLogoImageFile(null)
       publish({ tone: 'success', message: 'Logo uploaded successfully.' })
     } catch (error) {
       console.error('[account] Failed to upload logo image', error)
-      if (error instanceof ProductImageUploadError) {
-        setLogoImageUploadError(error.message)
-      } else {
-        setLogoImageUploadError('Image upload failed. Please try again.')
-      }
+      setLogoImageUploadError(buildUploadErrorMessage(error))
     } finally {
       setIsUploadingLogoImage(false)
     }

@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore'
@@ -42,6 +43,7 @@ type SaleRecord = {
     isService?: boolean
   }>
 }
+const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
 
 /**
  * Helpers
@@ -96,6 +98,17 @@ function toDate(value: unknown): Date | null {
     return null
   }
   return null
+}
+
+function createDraftProductKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `draft-${crypto.randomUUID()}`
+  }
+  return `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function buildProductImagePath(storeId: string, productKey: string): string {
+  return `stores/${storeId}/products/${productKey}.jpg`
 }
 
 function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product {
@@ -285,6 +298,7 @@ export default function Products() {
   const [showOnReceiptInput, setShowOnReceiptInput] = useState(false)
   const [imageUrlInput, setImageUrlInput] = useState('')
   const [imageAltInput, setImageAltInput] = useState('')
+  const [draftProductKey, setDraftProductKey] = useState(() => createDraftProductKey())
   const [imageFileInput, setImageFileInput] = useState<File | null>(null)
   const [imageUploadError, setImageUploadError] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
@@ -622,7 +636,9 @@ export default function Products() {
 
     setIsSaving(true)
     try {
-      await addDoc(collection(db, 'products'), {
+      const productRef = doc(collection(db, 'products'), draftProductKey)
+
+      await setDoc(productRef, {
         storeId: activeStoreId,
         name: trimmedName,
         itemType,
@@ -669,6 +685,7 @@ export default function Products() {
       setShowOnReceiptInput(false)
       setImageUrlInput('')
       setImageAltInput('')
+      setDraftProductKey(createDraftProductKey())
 
       await logInventoryActivity(
         `Added ${trimmedName}`,
@@ -692,6 +709,10 @@ export default function Products() {
   }
 
   async function handleImageUpload() {
+    if (!activeStoreId) {
+      setImageUploadError('Select an active store before uploading product images.')
+      return
+    }
     if (!imageFileInput) {
       setImageUploadError('Choose an image file before uploading.')
       return
@@ -700,7 +721,9 @@ export default function Products() {
     setImageUploadError(null)
     setIsUploadingImage(true)
     try {
-      const uploadedUrl = await uploadProductImage(imageFileInput)
+      const uploadedUrl = await uploadProductImage(imageFileInput, {
+        storagePath: buildProductImagePath(activeStoreId, draftProductKey),
+      })
       setImageUrlInput(uploadedUrl)
       setImageFileInput(null)
       publish({ tone: 'success', message: 'Image uploaded successfully.' })
@@ -708,9 +731,9 @@ export default function Products() {
     } catch (error) {
       console.error('[products] Failed to upload product image', error)
       if (error instanceof ProductImageUploadError) {
-        setImageUploadError(error.message)
+        setImageUploadError(`${error.message} ${EXACT_UPLOAD_LIMIT_HINT}`.trim())
       } else {
-        setImageUploadError('Image upload failed. Please try again.')
+        setImageUploadError(`Image upload failed. ${EXACT_UPLOAD_LIMIT_HINT} Please try again.`)
       }
       void playSound('error')
     } finally {

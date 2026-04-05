@@ -1,11 +1,21 @@
 const DEFAULT_UPLOAD_ENDPOINT = '/api/uploads'
-const MAX_SAFE_REQUEST_BYTES = 3 * 1024 * 1024
+const MAX_SAFE_REQUEST_BYTES = 5 * 1024 * 1024
+const MAX_SAFE_REQUEST_SIZE_LABEL = '5 MB (5,242,880 bytes)'
 
 const JPEG_MIME_TYPE = 'image/jpeg'
 
 type UploadResponse = {
   url?: string
   error?: string
+}
+
+type DeleteUploadResponse = {
+  deleted?: boolean
+  error?: string
+}
+
+export type UploadImageOptions = {
+  storagePath?: string
 }
 
 export class ProductImageUploadError extends Error {
@@ -104,7 +114,7 @@ async function createUploadCandidate(file: File): Promise<File> {
   }
 
   throw new ProductImageUploadError(
-    'Image is too large to upload. Please choose a smaller file (about 3 MB or less).',
+    `Image is too large to upload. Maximum allowed upload size is ${MAX_SAFE_REQUEST_SIZE_LABEL}. Please resize or compress the image and try again.`,
     {
       endpoint: resolveUploadEndpoint(),
       isNetworkError: false,
@@ -112,7 +122,7 @@ async function createUploadCandidate(file: File): Promise<File> {
   )
 }
 
-export async function uploadProductImage(file: File): Promise<string> {
+export async function uploadProductImage(file: File, options: UploadImageOptions = {}): Promise<string> {
   const endpoint = resolveUploadEndpoint()
   const uploadFile = await createUploadCandidate(file)
   const dataBase64 = await readFileAsBase64(uploadFile)
@@ -128,6 +138,7 @@ export async function uploadProductImage(file: File): Promise<string> {
         filename: uploadFile.name,
         mimeType: uploadFile.type,
         dataBase64,
+        storagePath: options.storagePath,
       }),
     })
   } catch (error) {
@@ -168,4 +179,33 @@ export async function uploadProductImage(file: File): Promise<string> {
   }
 
   return payload.url
+}
+
+export async function deleteUploadedImageByUrl(url: string): Promise<void> {
+  const endpoint = resolveUploadEndpoint()
+  const response = await fetch(endpoint, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url }),
+  })
+
+  if (!response.ok) {
+    let detail = ''
+    try {
+      const payload = (await response.json()) as DeleteUploadResponse
+      if (payload?.error) detail = `: ${payload.error}`
+    } catch {
+      // ignore JSON parse errors and use status only
+    }
+    throw new ProductImageUploadError(
+      `Image deletion failed at ${endpoint} with HTTP ${response.status}${detail}`,
+      {
+        endpoint,
+        status: response.status,
+        isNetworkError: false,
+      },
+    )
+  }
 }
