@@ -19,6 +19,8 @@ type ReceiptPayload = {
   totals: ReceiptTotals
   paymentMethod: PaymentMethod
   tenders?: ReceiptTender[]
+  amountPaid?: number
+  changeDue?: number
   discountInput: string
   companyName?: string | null
   companyEmail?: string | null
@@ -130,6 +132,8 @@ export function buildReceiptPdf(options: ReceiptPayload) {
     filteredLines.push(`VAT / Tax: ${formatCurrency(totals.taxTotal)}`)
     filteredLines.push(`Discount: ${options.discountInput ? options.discountInput : formatCurrency(totals.discount)}`)
     filteredLines.push(`Total: ${formatCurrency(totals.total)}`)
+    filteredLines.push(`Amount paid: ${formatCurrency(options.amountPaid ?? totals.total)}`)
+    filteredLines.push(`Change due: ${formatCurrency(options.changeDue ?? 0)}`)
 
     const pdfBytes = buildSimplePdf('Sale receipt', filteredLines)
     const blob = new Blob([pdfBytes], { type: 'application/pdf' })

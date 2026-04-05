@@ -292,6 +292,7 @@ export default function Sell() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [awaitingNextSale, setAwaitingNextSale] = useState(false)
 
   const activityActor = user?.displayName || user?.email || 'Team member'
 
@@ -333,6 +334,21 @@ export default function Sell() {
   const lastDisplayPayloadRef = useRef<string | null>(null)
   const lastCartHasItemsRef = useRef<boolean>(cart.length > 0)
   const displaySaleCompleteRef = useRef(false)
+
+  function resetSaleDraft() {
+    setCart([])
+    setAmountPaidInput('')
+    setAdditionalTenders([])
+    setDiscountInput('')
+    setTaxInput('')
+    setScanStatus(null)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+    setCustomerNameInput('')
+    setCustomerPhoneInput('')
+    setSelectedCustomerId(null)
+    setAwaitingNextSale(false)
+  }
 
   function extractStoreName(data: any): string | null {
     const candidates = [data?.company, data?.name, data?.companyName, data?.storeName, data?.businessName]
@@ -1258,6 +1274,8 @@ export default function Sell() {
     companyLogoUrl?: string | null
     customerName?: string | null
     customerPhone?: string | null
+    amountPaid: number
+    changeDue: number
     receiptSize: EscPosReceiptSize
   }) {
     const receiptDate = new Date().toLocaleString()
@@ -1328,6 +1346,8 @@ export default function Sell() {
       <tr><td colspan="3">VAT / Tax</td><td style="text-align:right">${formatCurrency(options.totals.taxTotal)}</td></tr>
       <tr><td colspan="3">Discount</td><td style="text-align:right">${options.discountInput ? options.discountInput : 'None'}</td></tr>
       <tr><td colspan="3">Total</td><td style="text-align:right">${formatCurrency(options.totals.total)}</td></tr>
+      <tr><td colspan="3">Amount paid</td><td style="text-align:right">${formatCurrency(options.amountPaid)}</td></tr>
+      <tr><td colspan="3">Change due</td><td style="text-align:right">${formatCurrency(options.changeDue)}</td></tr>
       <tr><td colspan="3">Payment</td><td style="text-align:right">${paymentLabel}</td></tr>
     </tfoot>
   </table>
@@ -1375,6 +1395,9 @@ export default function Sell() {
     setErrorMessage(null)
     setSuccessMessage(null)
     setScanStatus(null)
+    if (awaitingNextSale) {
+      return setErrorMessage('Start the next sale or refresh the page before recording another sale.')
+    }
 
     if (!activeStoreId) return setErrorMessage('Select a workspace before recording a sale.')
     if (!cart.length) return setErrorMessage('Add at least one item to the cart.')
@@ -1465,6 +1488,8 @@ export default function Sell() {
         totals,
         paymentMethod: primaryPaymentMethod,
         tenders,
+        amountPaid: amountPaidValue,
+        changeDue: changeDueValue,
         discountInput,
         companyName: storeName,
         companyLogoUrl: storeLogoUrl,
@@ -1489,6 +1514,8 @@ export default function Sell() {
         companyLogoUrl: storeLogoUrl,
         customerName,
         customerPhone,
+        amountPaid: amountPaidValue,
+        changeDue: changeDueValue,
         receiptSize,
       })
 
@@ -1520,15 +1547,7 @@ export default function Sell() {
         receipt: receiptPayload,
       })
 
-      setCart([])
-      setAmountPaidInput('')
-      setAdditionalTenders([])
-      setDiscountInput('')
-      setTaxInput('')
-      setCustomerNameInput('')
-      setCustomerPhoneInput('')
-      setSelectedCustomerId(null)
-      setSellFlowTab('items')
+      setAwaitingNextSale(true)
       setSuccessMessage('Sale recorded successfully.')
       void playSound('success')
       publish({ tone: 'success', message: 'Sale recorded successfully.' })
@@ -1551,6 +1570,8 @@ export default function Sell() {
             totals,
             paymentMethod: primaryPaymentMethod,
             tenders,
+            amountPaid: amountPaidValue,
+            changeDue: changeDueValue,
             discountInput,
             companyName: storeName,
             companyLogoUrl: storeLogoUrl,
@@ -1559,15 +1580,7 @@ export default function Sell() {
           } as any
 
           setLastReceipt(receiptPayload)
-          setCart([])
-          setAmountPaidInput('')
-          setAdditionalTenders([])
-          setDiscountInput('')
-          setTaxInput('')
-          setCustomerNameInput('')
-          setCustomerPhoneInput('')
-          setSelectedCustomerId(null)
-          setSellFlowTab('items')
+          setAwaitingNextSale(true)
           setSuccessMessage('Offline — sale saved and will sync when you reconnect.')
           void playSound('success')
           publish({ tone: 'success', message: 'Offline sale saved. It will sync when you reconnect.' })
@@ -2068,6 +2081,9 @@ export default function Sell() {
           {successMessage && <p className="sell-page__message sell-page__message--success">{successMessage}</p>}
           {successMessage && (
             <div className="sell-page__actions" style={{ marginTop: 12 }}>
+              <button type="button" className="button button--primary" onClick={resetSaleDraft}>
+                Start next sale
+              </button>
               <button type="button" className="button button--ghost" onClick={() => window.location.reload()}>
                 Refresh page
               </button>
@@ -2115,6 +2131,8 @@ export default function Sell() {
                         companyName: lastReceipt.companyName,
                         customerName: lastReceipt.customerName,
                         customerPhone: (lastReceipt as any).customerPhone ?? null,
+                        amountPaid: (lastReceipt as any).amountPaid ?? lastReceipt.totals.total,
+                        changeDue: (lastReceipt as any).changeDue ?? 0,
                         receiptSize,
                       })
                     }
@@ -2164,24 +2182,13 @@ export default function Sell() {
             <button
               type="button"
               className="button button--ghost"
-              onClick={() => {
-                setCart([])
-                setAmountPaidInput('')
-                setDiscountInput('')
-                setTaxInput('')
-                setScanStatus(null)
-                setErrorMessage(null)
-                setSuccessMessage(null)
-                setCustomerNameInput('')
-                setCustomerPhoneInput('')
-                setSelectedCustomerId(null)
-              }}
+              onClick={resetSaleDraft}
               disabled={isSaving}
             >
               Clear cart
             </button>
 
-            <button type="button" className="button button--primary" onClick={handleCommitSale} disabled={isSaving || !cart.length}>
+            <button type="button" className="button button--primary" onClick={handleCommitSale} disabled={isSaving || !cart.length || awaitingNextSale}>
               {isSaving ? 'Saving…' : 'Record sale'}
             </button>
           </div>

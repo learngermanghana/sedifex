@@ -84,6 +84,8 @@ export default function ReceiptView() {
       {receipt.customerName ? <p><strong>Customer:</strong> {receipt.customerName}</p> : null}
       {receipt.customerPhone ? <p><strong>Phone:</strong> {receipt.customerPhone}</p> : null}
       <p><strong>Payment:</strong> {String(receipt.paymentMethod).replace('_', ' ')}</p>
+      <p><strong>Amount paid:</strong> {formatCurrency(receipt.amountPaid ?? receipt.totals.total)}</p>
+      <p><strong>Change due:</strong> {formatCurrency(receipt.changeDue ?? 0)}</p>
 
       <div style={{ marginTop: 16 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
