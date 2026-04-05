@@ -18,4 +18,5 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/bulk-messaging', label: 'SMS', roles: ['owner'] },
   { to: '/finance', label: 'Invoice', parentTo: '/sell', roles: ['owner'] },
   { to: '/account', label: 'Account', roles: ['owner'] },
+  { to: '/public-page', label: 'Public page', roles: ['owner'] },
 ]
