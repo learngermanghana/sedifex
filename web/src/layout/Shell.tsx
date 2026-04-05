@@ -14,8 +14,8 @@ import './Shell.css'
 import './Workspace.css'
 import { usePwaContext } from '../context/PwaContext'
 
-function navLinkClass(isActive: boolean) {
-  return `shell__nav-link${isActive ? ' is-active' : ''}`
+function navLinkClass(isActive: boolean, isSubItem: boolean) {
+  return `shell__nav-link${isSubItem ? ' shell__nav-link--sub' : ''}${isActive ? ' is-active' : ''}`
 }
 
 type BannerVariant = 'offline' | 'degraded' | 'pending' | 'processing' | 'error'
@@ -123,6 +123,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
     return NAV_ITEMS.filter(item => item.roles.includes(role))
   }, [hasTrialEnded, role])
+
+  const navTree = useMemo(
+    () =>
+      navItems
+        .filter(item => !item.parentTo)
+        .map(item => ({
+          item,
+          children: navItems.filter(child => child.parentTo === item.to),
+        })),
+    [navItems],
+  )
 
   const billingNotice = useMemo<BillingNotice | null>(() => {
     if (!billing) return null
@@ -336,16 +347,45 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 aria-label="Primary"
                 id="primary-nav"
               >
-                {navItems.map(item => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) => navLinkClass(isActive)}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
+                {navTree.map(({ item, children }) => {
+                  const isChildActive = children.some(
+                    child =>
+                      location.pathname === child.to ||
+                      location.pathname.startsWith(`${child.to}/`),
+                  )
+
+                  return (
+                    <div
+                      key={item.to}
+                      className={`shell__nav-item-group${children.length > 0 ? ' has-children' : ''}`}
+                    >
+                      <NavLink
+                        to={item.to}
+                        end={item.end}
+                        className={({ isActive }) =>
+                          `${navLinkClass(isActive, false)}${isChildActive ? ' is-parent-active' : ''}`
+                        }
+                      >
+                        {item.label}
+                      </NavLink>
+
+                      {children.length > 0 && (
+                        <div className="shell__subnav" role="group" aria-label={`${item.label} links`}>
+                          {children.map(child => (
+                            <NavLink
+                              key={child.to}
+                              to={child.to}
+                              end={child.end}
+                              className={({ isActive }) => navLinkClass(isActive, true)}
+                            >
+                              {child.label}
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </nav>
             </div>
 
