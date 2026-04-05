@@ -29,6 +29,7 @@ import { useAuthUser } from '../hooks/useAuthUser'
 import { AccountBillingSection } from '../components/AccountBillingSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
+import { buildPromoSlug } from '../utils/promoSlug'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import './AccountOverview.css'
 
@@ -774,17 +775,7 @@ export default function AccountOverview({
     setPromoDraft(current => ({ ...current, [key]: value }))
   }
 
-  function normalizePromoSlug(value: string) {
-    const normalized = value
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-{2,}/g, '-')
-      .replace(/^-|-$/g, '')
-    return normalized || null
-  }
-
-  const promoSlug = normalizePromoSlug(storeId) ?? storeId
+  const promoSlug = buildPromoSlug(profile?.promoSlug, profile?.displayName, profile?.name, storeId)
 
   async function handleSavePromo() {
     if (!storeId) return
@@ -1875,13 +1866,11 @@ export default function AccountOverview({
                 <p className="account-overview__promo-link">
                   Free route preview:{' '}
                   <a
-                    href={`https://www.sedifex.com/promo/${encodeURIComponent(
-                      promoSlug,
-                    )}`}
+                    href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}`}
                     target="_blank"
                     rel="noreferrer noopener"
                   >
-                    www.sedifex.com/promo/{promoSlug}
+                    www.sedifex.com/{promoSlug}
                   </a>
                 </p>
               </div>

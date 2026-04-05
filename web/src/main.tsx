@@ -43,6 +43,7 @@ const router = createBrowserRouter([
   // Public receipt route bypasses App-level redirects
   { path: '/receipt/:saleId', element: <ReceiptView /> },
   { path: '/promo/:slug', element: <PromoLandingPage /> },
+  { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
 
