@@ -50,6 +50,8 @@ type SaleHistoryEntry = {
   total: number
   createdAt: Date | null
   paymentMethod?: string | null
+  amountPaid?: number | null
+  changeDue?: number | null
   items: { name?: string | null; qty?: number | null }[]
 }
 
@@ -61,10 +63,10 @@ type CustomerStats = {
 
 type CachedSaleRecord = {
   id: string
-  customer?: { id?: string | null } | null
+  customer?: { id?: string | null; name?: string | null; phone?: string | null } | null
   createdAt?: unknown
   total?: unknown
-  payment?: { method?: unknown } | null
+  payment?: { method?: unknown; amountPaid?: unknown; changeDue?: unknown } | null
   items?: unknown
 } & Record<string, unknown>
 
@@ -441,14 +443,30 @@ export default function Customers() {
   function applySalesData(records: CachedSaleRecord[]) {
     const statsMap: Record<string, CustomerStats> = {}
     const historyMap: Record<string, SaleHistoryEntry[]> = {}
+    const customerIdByName = new Map<string, string>()
+    const customerIdByPhone = new Map<string, string>()
+
+    customers.forEach(customer => {
+      const displayName = getCustomerDisplayName(customer).trim().toLowerCase()
+      if (displayName) {
+        customerIdByName.set(displayName, customer.id)
+      }
+      if (customer.phone) {
+        customerIdByPhone.set(normalizePhoneNumber(customer.phone), customer.id)
+      }
+    })
 
     records.forEach(record => {
       if (!record) return
       const customer =
         record.customer && typeof record.customer === 'object'
-          ? (record.customer as { id?: string | null })
+          ? (record.customer as { id?: string | null; name?: string | null; phone?: string | null })
           : null
-      const customerId = customer?.id ?? null
+      const fallbackCustomerId =
+        (customer?.phone ? customerIdByPhone.get(normalizePhoneNumber(customer.phone)) : null) ??
+        (customer?.name ? customerIdByName.get(customer.name.trim().toLowerCase()) : null) ??
+        null
+      const customerId = customer?.id ?? fallbackCustomerId
       if (!customerId) return
 
       const createdAt = normalizeSaleDate(record.createdAt)
@@ -457,6 +475,18 @@ export default function Customers() {
         record.payment && typeof record.payment === 'object'
           ? (record.payment as { method?: string | null }).method ?? null
           : null
+      const amountPaidRaw =
+        record.payment && typeof record.payment === 'object'
+          ? (record.payment as { amountPaid?: unknown }).amountPaid
+          : null
+      const amountPaid =
+        typeof amountPaidRaw === 'number' && Number.isFinite(amountPaidRaw) ? amountPaidRaw : null
+      const changeDueRaw =
+        record.payment && typeof record.payment === 'object'
+          ? (record.payment as { changeDue?: unknown }).changeDue
+          : null
+      const changeDue =
+        typeof changeDueRaw === 'number' && Number.isFinite(changeDueRaw) ? changeDueRaw : null
       const itemsSource = Array.isArray(record.items) ? record.items : []
       const items = itemsSource.map(item =>
         item && typeof item === 'object'
@@ -479,6 +509,8 @@ export default function Customers() {
         total,
         createdAt,
         paymentMethod,
+        amountPaid,
+        changeDue,
         items: items.map(item => ({
           name: item?.name ?? null,
           qty: item?.qty ?? null,
@@ -540,7 +572,7 @@ export default function Customers() {
       cancelled = true
       unsubscribe()
     }
-  }, [activeStoreId])
+  }, [activeStoreId, customers])
 
   useEffect(() => {
     if (!selectedCustomerId) return
@@ -1650,6 +1682,12 @@ export default function Customers() {
                         <div className="customers-page__history-meta">
                           {entry.paymentMethod ? `Paid via ${entry.paymentMethod}` : 'Payment method not recorded'}
                         </div>
+                        {(typeof entry.amountPaid === 'number' || typeof entry.changeDue === 'number') && (
+                          <div className="customers-page__history-meta">
+                            {typeof entry.amountPaid === 'number' ? `Amount paid: ${currencyFormatter.format(entry.amountPaid)}` : 'Amount paid: —'}
+                            {typeof entry.changeDue === 'number' ? ` • Change: ${currencyFormatter.format(entry.changeDue)}` : ''}
+                          </div>
+                        )}
                         {entry.items?.length ? (
                           <div className="customers-page__history-items">
                             {entry.items.slice(0, 3).map((item, index) => (
