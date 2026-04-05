@@ -213,6 +213,19 @@ body.shell--menu-open {
   box-shadow: 0 6px 18px rgba(67, 56, 202, 0.18);
 }
 
+.shell__nav-link--sub {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #e2e8f0;
+  margin-left: 4px;
+  font-size: 13px;
+}
+
+.shell__nav-link--sub::before {
+  content: '↳';
+  opacity: 0.7;
+}
+
 .shell__controls {
   margin-left: auto;
   display: flex;
@@ -458,6 +471,11 @@ body.shell--menu-open {
     justify-content: flex-start;
     text-align: left;
     padding: 12px 14px;
+  }
+
+  .shell__nav-link--sub {
+    margin-left: 16px;
+    width: calc(100% - 16px);
   }
 
   .shell__controls {
