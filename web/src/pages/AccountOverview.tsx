@@ -57,6 +57,7 @@ type StoreProfile = {
   // 🔹 Billing/trial fields
   trialEndsAt: Timestamp | null
   // 🔹 Upcoming promo fields
+  promoEnabled: boolean
   promoTitle: string | null
   promoSummary: string | null
   promoStartDate: string | null
@@ -190,6 +191,7 @@ function mapStoreSnapshot(
     updatedAt: isTimestamp(data.updatedAt) ? data.updatedAt : null,
     trialEndsAt,
     promoTitle: toNullableString((data as any).promoTitle),
+    promoEnabled: (data as any).promoEnabled === true,
     promoSummary: toNullableString((data as any).promoSummary),
     promoStartDate: toNullableString((data as any).promoStartDate),
     promoEndDate: toNullableString((data as any).promoEndDate),
@@ -805,6 +807,7 @@ export default function AccountOverview({
       setIsSavingPromo(true)
       const ref = doc(db, 'stores', storeId)
       const payload = {
+        promoEnabled: true,
         promoTitle: normalizeInput(promoDraft.title),
         promoSummary: normalizeInput(promoDraft.summary),
         promoStartDate: normalizeInput(promoDraft.startDate),
@@ -822,6 +825,7 @@ export default function AccountOverview({
         current
           ? {
               ...current,
+              promoEnabled: true,
               promoTitle: payload.promoTitle,
               promoSummary: payload.promoSummary,
               promoStartDate: payload.promoStartDate,
@@ -2114,8 +2118,16 @@ export default function AccountOverview({
                     onClick={handleSavePromoGallery}
                     disabled={isSavingPromoGallery}
                   >
-                    {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery'}
+                    {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery images'}
                   </button>
+                  <a
+                    className="button button--ghost"
+                    href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}#promo-gallery`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    View all images
+                  </a>
                 </div>
                 {promoGalleryLoading ? <p>Loading gallery…</p> : null}
                 {promoGalleryDraft.length === 0 && !promoGalleryLoading ? (
@@ -2238,6 +2250,11 @@ export default function AccountOverview({
                           }}
                         />
                       </label>
+                      {promoGalleryUploadTargetId === item.id && promoGalleryImageFile ? (
+                        <p className="account-overview__hint" style={{ margin: 0 }}>
+                          Selected: {promoGalleryImageFile.name}
+                        </p>
+                      ) : null}
                       <div>
                         <button
                           type="button"
