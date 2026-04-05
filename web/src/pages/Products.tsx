@@ -324,6 +324,9 @@ export default function Products() {
   const [editShowOnReceipt, setEditShowOnReceipt] = useState(false)
   const [editImageUrlInput, setEditImageUrlInput] = useState('')
   const [editImageAltInput, setEditImageAltInput] = useState('')
+  const [editImageFileInput, setEditImageFileInput] = useState<File | null>(null)
+  const [editImageUploadError, setEditImageUploadError] = useState<string | null>(null)
+  const [isUploadingEditImage, setIsUploadingEditImage] = useState(false)
   const [salesError, setSalesError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -816,12 +819,16 @@ export default function Products() {
     setEditShowOnReceipt(product.showOnReceipt === true)
     setEditImageUrlInput(product.imageUrl ?? '')
     setEditImageAltInput(product.imageAlt ?? '')
+    setEditImageFileInput(null)
+    setEditImageUploadError(null)
     setFormStatus('idle')
     setFormError(null)
   }
 
   function cancelEditing() {
     setEditingId(null)
+    setEditImageFileInput(null)
+    setEditImageUploadError(null)
   }
 
   function toggleExpandedProduct(productId: string) {
@@ -944,6 +951,39 @@ export default function Products() {
           ? error.message
           : 'We could not update this item. Please try again.',
       )
+    }
+  }
+
+  async function handleEditImageUpload(product: Product) {
+    if (!activeStoreId) {
+      setEditImageUploadError('Select an active store before uploading product images.')
+      return
+    }
+    if (!editImageFileInput) {
+      setEditImageUploadError('Choose an image file before uploading.')
+      return
+    }
+
+    setEditImageUploadError(null)
+    setIsUploadingEditImage(true)
+    try {
+      const uploadedUrl = await uploadProductImage(editImageFileInput, {
+        storagePath: buildProductImagePath(activeStoreId, product.id),
+      })
+      setEditImageUrlInput(uploadedUrl)
+      setEditImageFileInput(null)
+      publish({ tone: 'success', message: 'Image uploaded successfully.' })
+      void playSound('action')
+    } catch (error) {
+      console.error('[products] Failed to upload product image while editing', error)
+      if (error instanceof ProductImageUploadError) {
+        setEditImageUploadError(`${error.message} ${EXACT_UPLOAD_LIMIT_HINT}`.trim())
+      } else {
+        setEditImageUploadError(`Image upload failed. ${EXACT_UPLOAD_LIMIT_HINT} Please try again.`)
+      }
+      void playSound('error')
+    } finally {
+      setIsUploadingEditImage(false)
     }
   }
 
@@ -1535,12 +1575,35 @@ export default function Products() {
                       <div className="products-page__list-field">
                         <label className="field__label">Image URL</label>
                         {isEditing ? (
-                          <input
-                            type="url"
-                            value={editImageUrlInput}
-                            onChange={event => setEditImageUrlInput(event.target.value)}
-                            placeholder="https://example.com/image.jpg"
-                          />
+                          <>
+                            <div className="products-page__upload-actions">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={event => {
+                                  setEditImageFileInput(event.target.files?.[0] ?? null)
+                                  setEditImageUploadError(null)
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="button button--secondary"
+                                onClick={() => void handleEditImageUpload(product)}
+                                disabled={isUploadingEditImage}
+                              >
+                                {isUploadingEditImage ? 'Uploading…' : 'Upload image'}
+                              </button>
+                            </div>
+                            {editImageUploadError ? (
+                              <p className="products-page__upload-error">{editImageUploadError}</p>
+                            ) : null}
+                            <input
+                              type="url"
+                              value={editImageUrlInput}
+                              onChange={event => setEditImageUrlInput(event.target.value)}
+                              placeholder="https://example.com/image.jpg"
+                            />
+                          </>
                         ) : (
                           <p className="products-page__list-value">{product.imageUrl || '—'}</p>
                         )}
