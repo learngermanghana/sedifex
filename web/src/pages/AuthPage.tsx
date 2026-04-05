@@ -1426,8 +1426,8 @@ const PRICING_PLANS = [
     amount: 'GHS 100',
     cadence: '/ month',
     features: [
-      'Up to 2,000 active products',
-      'Up to 2,000 sales per day',
+      'Unlimited active products',
+      'Unlimited sales per day',
       'SMS credits sold separately',
       'Priority onboarding and support',
     ],

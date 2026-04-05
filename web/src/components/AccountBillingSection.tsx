@@ -16,14 +16,14 @@ type PlanOption = {
   id: string
   label: string
   monthlyAmountGhs: number
-  productLimit: number
-  dailySalesLimit: number
+  productLimit: number | 'Unlimited'
+  dailySalesLimit: number | 'Unlimited'
 }
 
 const PLANS: PlanOption[] = [
   { id: 'starter', label: 'Starter', monthlyAmountGhs: 20, productLimit: 100, dailySalesLimit: 100 },
   { id: 'growth', label: 'Growth', monthlyAmountGhs: 50, productLimit: 500, dailySalesLimit: 500 },
-  { id: 'scale', label: 'Scale', monthlyAmountGhs: 100, productLimit: 2000, dailySalesLimit: 2000 },
+  { id: 'scale', label: 'Scale', monthlyAmountGhs: 100, productLimit: 'Unlimited', dailySalesLimit: 'Unlimited' },
 ]
 
 const CADENCE_OPTIONS = [
@@ -291,7 +291,7 @@ export const AccountBillingSection: React.FC<Props> = ({
                 </p>
                 <p>Billing cadence: {selectedCadenceDescription}</p>
                 <p>
-                  Plan limits: up to {selectedPlan?.productLimit ?? '—'} products and{' '}
+                  Plan limits: {selectedPlan?.productLimit ?? '—'} products and{' '}
                   {selectedPlan?.dailySalesLimit ?? '—'} sales/day.
                 </p>
                 <p>
