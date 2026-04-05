@@ -25,6 +25,7 @@ import VerifyEmail from './pages/VerifyEmail'
 import InventorySystemGhana from './pages/InventorySystemGhana'
 import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
+import PublicPageSettings from './pages/PublicPageSettings'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -79,6 +80,7 @@ const router = createBrowserRouter([
           { path: 'onboarding', element: <Onboarding /> },
           { path: 'staff', element: <StaffManagement /> },
           { path: 'account', element: <AccountOverview /> },
+          { path: 'public-page', element: <PublicPageSettings /> },
           { path: 'support', element: <Support /> },
         ],
       },

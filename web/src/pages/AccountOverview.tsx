@@ -270,11 +270,15 @@ type HeadingLevel = 'h1' | 'h2' | 'h3' | 'h4'
 
 type AccountOverviewProps = {
   headingLevel?: HeadingLevel
+  viewMode?: 'full' | 'promotions'
 }
 
 type AccountTab = 'workspace' | 'integrations' | 'promotions' | 'operations'
 
-export default function AccountOverview({ headingLevel = 'h1' }: AccountOverviewProps) {
+export default function AccountOverview({
+  headingLevel = 'h1',
+  viewMode = 'full',
+}: AccountOverviewProps) {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
   const {
     memberships,
@@ -346,6 +350,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
   const [isCreatingIntegrationKey, setIsCreatingIntegrationKey] = useState(false)
   const [latestIntegrationToken, setLatestIntegrationToken] = useState<string | null>(null)
   const [actioningKeyId, setActioningKeyId] = useState<string | null>(null)
+  const isPromotionsView = viewMode === 'promotions'
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -357,6 +362,11 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
     () => roster.filter(member => member.status === 'pending'),
     [roster],
   )
+
+  useEffect(() => {
+    if (!isPromotionsView) return
+    setActiveTab('promotions')
+  }, [isPromotionsView])
 
   useEffect(() => {
     if (!storeId) {
@@ -1305,7 +1315,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
 
   return (
     <div className="account-overview">
-      <Heading>Account overview</Heading>
+      <Heading>{isPromotionsView ? 'Public page' : 'Account overview'}</Heading>
 
       {profile && (
         <p className="account-overview__subtitle">
@@ -1355,42 +1365,36 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       )}
 
 
-      <nav className="account-overview__tabs" aria-label="Account sections">
-        <button
-          type="button"
-          className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
-          aria-pressed={activeTab === 'workspace'}
-          onClick={() => setActiveTab('workspace')}
-        >
-          Workspace
-        </button>
-        <button
-          type="button"
-          className={`account-overview__tab ${activeTab === 'integrations' ? 'is-active' : ''}`}
-          aria-pressed={activeTab === 'integrations'}
-          onClick={() => setActiveTab('integrations')}
-        >
-          Integrations
-        </button>
-        <button
-          type="button"
-          className={`account-overview__tab ${activeTab === 'promotions' ? 'is-active' : ''}`}
-          aria-pressed={activeTab === 'promotions'}
-          onClick={() => setActiveTab('promotions')}
-        >
-          Promotions
-        </button>
-        <button
-          type="button"
-          className={`account-overview__tab ${activeTab === 'operations' ? 'is-active' : ''}`}
-          aria-pressed={activeTab === 'operations'}
-          onClick={() => setActiveTab('operations')}
-        >
-          Billing & team
-        </button>
-      </nav>
+      {!isPromotionsView && (
+        <nav className="account-overview__tabs" aria-label="Account sections">
+          <button
+            type="button"
+            className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'workspace'}
+            onClick={() => setActiveTab('workspace')}
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className={`account-overview__tab ${activeTab === 'integrations' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'integrations'}
+            onClick={() => setActiveTab('integrations')}
+          >
+            Integrations
+          </button>
+          <button
+            type="button"
+            className={`account-overview__tab ${activeTab === 'operations' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'operations'}
+            onClick={() => setActiveTab('operations')}
+          >
+            Billing & team
+          </button>
+        </nav>
+      )}
 
-      {profile && activeTab === 'workspace' && (
+      {profile && !isPromotionsView && activeTab === 'workspace' && (
         <section aria-labelledby="account-overview-profile" id="store-profile">
           <div className="account-overview__section-header">
             <h2 id="account-overview-profile">Store profile</h2>
@@ -1650,7 +1654,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
       )}
 
 
-      {profile && activeTab === 'integrations' && (
+      {profile && !isPromotionsView && activeTab === 'integrations' && (
         <section aria-labelledby="account-overview-integrations">
           <div className="account-overview__section-header">
             <h2 id="account-overview-integrations">Website integrations</h2>
@@ -1790,7 +1794,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         </section>
       )}
 
-      {profile && activeTab === 'promotions' && (
+      {profile && (isPromotionsView || activeTab === 'promotions') && (
         <section aria-labelledby="account-overview-promotions">
           <div className="account-overview__section-header">
             <h2 id="account-overview-promotions">Upcoming promos</h2>
@@ -2079,7 +2083,7 @@ export default function AccountOverview({ headingLevel = 'h1' }: AccountOverview
         </section>
       )}
 
-      {activeTab === 'operations' && (
+      {!isPromotionsView && activeTab === 'operations' && (
         <>
       {/* ✅ Billing summary: prefer profile.ownerEmail, fallback to auth email */}
       <AccountBillingSection
