@@ -398,6 +398,7 @@ export default function Sell() {
   const [priceInputs, setPriceInputs] = useState<Record<string, string>>({})
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [amountPaidInput, setAmountPaidInput] = useState('')
+  const [amountPaidEdited, setAmountPaidEdited] = useState(false)
   const [additionalTenders, setAdditionalTenders] = useState<{ id: string; method: PaymentMethod; amount: string }[]>([])
   const [discountInput, setDiscountInput] = useState('')
   const [taxInput, setTaxInput] = useState('')
@@ -450,6 +451,7 @@ export default function Sell() {
   function resetSaleDraft() {
     setCart([])
     setAmountPaidInput('')
+    setAmountPaidEdited(false)
     setAdditionalTenders([])
     setDiscountInput('')
     setTaxInput('')
@@ -810,10 +812,16 @@ export default function Sell() {
   }, [displaySessionId])
 
   const primaryAmountPaid = useMemo(() => {
+    if (!amountPaidInput.trim()) return totalAfterDiscount
     const raw = Number(amountPaidInput)
     if (!Number.isFinite(raw) || raw < 0) return 0
     return raw
-  }, [amountPaidInput])
+  }, [amountPaidInput, totalAfterDiscount])
+
+  useEffect(() => {
+    if (amountPaidEdited) return
+    setAmountPaidInput(totalAfterDiscount.toFixed(2))
+  }, [amountPaidEdited, totalAfterDiscount])
 
   const additionalAmountPaid = useMemo(
     () =>
@@ -827,10 +835,24 @@ export default function Sell() {
 
   const totalAmountPaid = useMemo(() => primaryAmountPaid + additionalAmountPaid, [additionalAmountPaid, primaryAmountPaid])
 
-  const hasExplicitPaymentInput = useMemo(() => {
-    if (amountPaidInput.trim().length > 0) return true
-    return additionalTenders.some(tender => tender.amount.trim().length > 0)
-  }, [additionalTenders, amountPaidInput])
+  const amountPaidError = useMemo(() => {
+    const value = amountPaidInput.trim()
+    if (!value) return null
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return 'Enter a valid amount paid.'
+    if (parsed < 0) return 'Amount paid cannot be negative.'
+    return null
+  }, [amountPaidInput])
+
+  const additionalTenderError = useMemo(() => {
+    const hasInvalidAmount = additionalTenders.some(tender => {
+      const value = tender.amount.trim()
+      if (!value) return false
+      const parsed = Number(value)
+      return !Number.isFinite(parsed) || parsed < 0
+    })
+    return hasInvalidAmount ? 'Additional payment amounts must be valid and not negative.' : null
+  }, [additionalTenders])
 
   const changeDue = useMemo(() => {
     const diff = totalAmountPaid - totalAfterDiscount
@@ -1431,9 +1453,8 @@ export default function Sell() {
     if (!cart.length) return setErrorMessage('Add at least one item to the cart.')
     if (taxError) return setErrorMessage('Please fix the VAT field before saving.')
     if (discountError) return setErrorMessage('Please fix the discount field before saving.')
-    if (!hasExplicitPaymentInput) {
-      return setErrorMessage("Enter Amount paid before recording the sale. If payment is partial, enter what the client paid so the remaining debt is calculated.")
-    }
+    if (amountPaidError) return setErrorMessage(amountPaidError)
+    if (additionalTenderError) return setErrorMessage(additionalTenderError)
     if (customerMode === 'named' && !customerNameInput.trim()) return setErrorMessage('Enter or choose a customer name.')
     if (cart.some(line => !Number.isFinite(line.price) || line.price <= 0)) {
       return setErrorMessage('Enter a valid price for every item before saving.')
@@ -1455,10 +1476,8 @@ export default function Sell() {
 
     const totals = { subTotal, taxTotal: effectiveTaxTotal, discount: discountAmount, total: totalAfterDiscount }
 
-    const amountPaidValue = hasExplicitPaymentInput ? totalAmountPaid : totalAfterDiscount
-    const changeDueValue = hasExplicitPaymentInput
-      ? Math.abs(amountPaidValue - totalAfterDiscount)
-      : Math.max(0, amountPaidValue - totalAfterDiscount)
+    const amountPaidValue = totalAmountPaid
+    const changeDueValue = Math.abs(amountPaidValue - totalAfterDiscount)
 
     const parsedAdditionalTenders: ReceiptTender[] = additionalTenders
       .map(t => ({ method: t.method, amount: Number(t.amount) }))
@@ -2056,16 +2075,21 @@ export default function Sell() {
                 </div>
 
                 <div className="field">
-                  <label className="field__label">Amount paid (if client did not pay full, enter amount paid to calculate remaining debt)</label>
+                  <label className="field__label">Amount paid (auto-filled; edit for partial payments)</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     placeholder="Enter amount paid by client"
                     value={amountPaidInput}
-                    onChange={e => setAmountPaidInput(e.target.value)}
+                    onChange={e => {
+                      const value = e.target.value
+                      setAmountPaidInput(value)
+                      setAmountPaidEdited(value.trim().length > 0)
+                    }}
                   />
-                  <span className="field__hint">Required. Enter partial payment to track outstanding balance correctly.</span>
+                  <span className="field__hint">Auto-fills to the sale total. Edit this for partial payments to calculate debt live.</span>
+                  {amountPaidError && <p className="sell-page__change is-short">{amountPaidError}</p>}
                   {totalAmountPaid > 0 && (
                     <p className={'sell-page__change ' + (isShortPayment ? 'is-short' : '')}>
                       {isShortPayment ? `Short by ${formatCurrency(totalAfterDiscount - totalAmountPaid)}` : `Change due: ${formatCurrency(changeDue)}`}
