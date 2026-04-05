@@ -111,6 +111,8 @@ type PromoGalleryDraftItem = {
   isPublished: boolean
 }
 
+const MAX_PROMO_GALLERY_ITEMS = 3
+
 function toNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() !== '' ? value : null
 }
@@ -343,6 +345,10 @@ export default function AccountOverview({
   const [promoGalleryDraft, setPromoGalleryDraft] = useState<PromoGalleryDraftItem[]>([])
   const [promoGalleryLoading, setPromoGalleryLoading] = useState(false)
   const [isSavingPromoGallery, setIsSavingPromoGallery] = useState(false)
+  const [promoGalleryImageFile, setPromoGalleryImageFile] = useState<File | null>(null)
+  const [promoGalleryUploadTargetId, setPromoGalleryUploadTargetId] = useState<string | null>(null)
+  const [isUploadingPromoGalleryImage, setIsUploadingPromoGalleryImage] = useState(false)
+  const [promoGalleryImageUploadError, setPromoGalleryImageUploadError] = useState<string | null>(null)
   const [publicPageTab, setPublicPageTab] = useState<PublicPageTab>('overview')
   const [endpointToTest, setEndpointToTest] = useState('')
   const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
@@ -532,7 +538,7 @@ export default function AccountOverview({
         const galleryQuery = query(
           collection(db, 'stores', storeId, 'promoGallery'),
           orderBy('sortOrder', 'asc'),
-          limit(36),
+          limit(MAX_PROMO_GALLERY_ITEMS),
         )
         const snapshot = await getDocs(galleryQuery)
         if (cancelled) return
@@ -877,6 +883,13 @@ export default function AccountOverview({
   }
 
   function handleAddPromoGalleryItem() {
+    if (promoGalleryDraft.length >= MAX_PROMO_GALLERY_ITEMS) {
+      publish({
+        message: `You can upload up to ${MAX_PROMO_GALLERY_ITEMS} gallery photos per store.`,
+        tone: 'error',
+      })
+      return
+    }
     setPromoGalleryDraft(current => [
       ...current,
       {
@@ -907,6 +920,14 @@ export default function AccountOverview({
 
   async function handleSavePromoGallery() {
     if (!storeId || !isOwner) return
+    if (promoGalleryDraft.length > MAX_PROMO_GALLERY_ITEMS) {
+      publish({
+        message: `Save only ${MAX_PROMO_GALLERY_ITEMS} gallery photos to control storage costs.`,
+        tone: 'error',
+      })
+      return
+    }
+
     const trimmedItems = promoGalleryDraft
       .map(item => ({
         ...item,
@@ -942,7 +963,7 @@ export default function AccountOverview({
       const galleryQuery = query(
         collection(db, 'stores', storeId, 'promoGallery'),
         orderBy('sortOrder', 'asc'),
-        limit(36),
+        limit(MAX_PROMO_GALLERY_ITEMS),
       )
       const snapshot = await getDocs(galleryQuery)
       setPromoGalleryDraft(
@@ -963,6 +984,32 @@ export default function AccountOverview({
       publish({ message: 'Unable to save promo gallery.', tone: 'error' })
     } finally {
       setIsSavingPromoGallery(false)
+    }
+  }
+
+  async function handleUploadPromoGalleryImage(itemId: string) {
+    if (!promoGalleryImageFile || promoGalleryUploadTargetId !== itemId) {
+      setPromoGalleryImageUploadError('Choose an image file for this gallery item before uploading.')
+      return
+    }
+
+    setPromoGalleryImageUploadError(null)
+    setIsUploadingPromoGalleryImage(true)
+    try {
+      const uploadedUrl = await uploadProductImage(promoGalleryImageFile)
+      updatePromoGalleryDraft(itemId, 'url', uploadedUrl)
+      setPromoGalleryImageFile(null)
+      setPromoGalleryUploadTargetId(null)
+      publish({ tone: 'success', message: 'Gallery image uploaded successfully.' })
+    } catch (error) {
+      console.error('[account] Failed to upload promo gallery image', error)
+      if (error instanceof ProductImageUploadError) {
+        setPromoGalleryImageUploadError(error.message)
+      } else {
+        setPromoGalleryImageUploadError('Image upload failed. Please try again.')
+      }
+    } finally {
+      setIsUploadingPromoGalleryImage(false)
     }
   }
 
@@ -2042,6 +2089,7 @@ export default function AccountOverview({
                     type="button"
                     className="button button--secondary"
                     onClick={handleAddPromoGalleryItem}
+                    disabled={promoGalleryDraft.length >= MAX_PROMO_GALLERY_ITEMS}
                   >
                     Add gallery item
                   </button>
@@ -2058,10 +2106,14 @@ export default function AccountOverview({
                 {promoGalleryDraft.length === 0 && !promoGalleryLoading ? (
                   <p className="account-overview__hint">No gallery items yet.</p>
                 ) : null}
+                <p className="account-overview__hint" style={{ marginTop: 0 }}>
+                  To save storage costs, each store can upload up to {MAX_PROMO_GALLERY_ITEMS} photos.
+                </p>
                 <div style={{ display: 'grid', gap: 12 }}>
                   {promoGalleryDraft.map(item => (
                     <div
                       key={item.id}
+                      className="account-overview__gallery-item"
                       style={{
                         border: '1px solid #e5e7eb',
                         borderRadius: 12,
@@ -2071,9 +2123,10 @@ export default function AccountOverview({
                       }}
                     >
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span>Image URL</span>
+                        <span className="account-overview__gallery-label">Image URL</span>
                         <input
                           type="url"
+                          className="account-overview__gallery-input"
                           value={item.url}
                           onChange={event =>
                             updatePromoGalleryDraft(item.id, 'url', event.target.value)
@@ -2082,9 +2135,10 @@ export default function AccountOverview({
                         />
                       </label>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span>Alt text</span>
+                        <span className="account-overview__gallery-label">Alt text</span>
                         <input
                           type="text"
+                          className="account-overview__gallery-input"
                           value={item.alt}
                           onChange={event =>
                             updatePromoGalleryDraft(item.id, 'alt', event.target.value)
@@ -2093,9 +2147,10 @@ export default function AccountOverview({
                         />
                       </label>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span>Caption</span>
+                        <span className="account-overview__gallery-label">Caption</span>
                         <input
                           type="text"
+                          className="account-overview__gallery-input"
                           value={item.caption}
                           onChange={event =>
                             updatePromoGalleryDraft(item.id, 'caption', event.target.value)
@@ -2104,15 +2159,45 @@ export default function AccountOverview({
                         />
                       </label>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span>Sort order</span>
+                        <span className="account-overview__gallery-label">Sort order</span>
                         <input
                           type="number"
+                          className="account-overview__gallery-input"
                           value={item.sortOrder}
                           onChange={event =>
                             updatePromoGalleryDraft(item.id, 'sortOrder', Number(event.target.value))
                           }
                         />
                       </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span className="account-overview__gallery-label">Upload image</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="account-overview__gallery-input"
+                          onChange={event => {
+                            setPromoGalleryImageFile(event.target.files?.[0] ?? null)
+                            setPromoGalleryUploadTargetId(item.id)
+                            setPromoGalleryImageUploadError(null)
+                          }}
+                        />
+                      </label>
+                      <div>
+                        <button
+                          type="button"
+                          className="button button--secondary"
+                          onClick={() => handleUploadPromoGalleryImage(item.id)}
+                          disabled={
+                            isUploadingPromoGalleryImage ||
+                            !promoGalleryImageFile ||
+                            promoGalleryUploadTargetId !== item.id
+                          }
+                        >
+                          {isUploadingPromoGalleryImage && promoGalleryUploadTargetId === item.id
+                            ? 'Uploading image…'
+                            : 'Upload image'}
+                        </button>
+                      </div>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                         <input
                           type="checkbox"
@@ -2135,6 +2220,11 @@ export default function AccountOverview({
                     </div>
                   ))}
                 </div>
+                {promoGalleryImageUploadError ? (
+                  <p role="alert" style={{ color: '#dc2626', marginTop: 4 }}>
+                    {promoGalleryImageUploadError}
+                  </p>
+                ) : null}
               </div>
               )}
               {publicPageTab === 'website-sync' && (

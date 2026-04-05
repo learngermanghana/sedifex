@@ -378,3 +378,17 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
   background: #ffffff;
 }
+
+.account-overview__gallery-item .account-overview__gallery-label {
+  color: #111827;
+  font-weight: 600;
+}
+
+.account-overview__gallery-item .account-overview__gallery-input {
+  color: #0f172a;
+}
+
+.account-overview__gallery-item .account-overview__gallery-input::placeholder {
+  color: #475569;
+  opacity: 1;
+}
