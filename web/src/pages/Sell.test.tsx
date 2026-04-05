@@ -204,7 +204,7 @@ describe('Sell page', () => {
     const productButton = await screen.findByRole('button', { name: /iced coffee/i })
     await user.click(productButton)
 
-    const cashInput = screen.getByLabelText(/cash received/i)
+    const cashInput = screen.getByLabelText(/amount paid/i)
     await user.clear(cashInput)
     await user.type(cashInput, '15')
 
@@ -229,7 +229,7 @@ describe('Sell page', () => {
     // Skip UI assertion to avoid flakiness in headless environment.
   })
 
-  it('requires amount paid before recording a sale', async () => {
+  it('auto-fills amount paid with total before recording a sale', async () => {
     const user = userEvent.setup()
 
     renderWithProviders(<Sell />)
@@ -237,11 +237,15 @@ describe('Sell page', () => {
     const productButton = await screen.findByRole('button', { name: /iced coffee/i })
     await user.click(productButton)
 
+    const amountPaidInput = screen.getByLabelText(/amount paid/i) as HTMLInputElement
+    expect(amountPaidInput.value).toBe('12.00')
+
     const recordButton = screen.getByRole('button', { name: /record sale/i })
     await user.click(recordButton)
 
-    expect(await screen.findByText(/enter amount paid before recording the sale/i)).toBeInTheDocument()
-    expect(mockCommitSale).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(mockCommitSale).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('stores outstanding balance in change due when payment is short', async () => {
@@ -252,7 +256,7 @@ describe('Sell page', () => {
     const productButton = await screen.findByRole('button', { name: /iced coffee/i })
     await user.click(productButton)
 
-    const cashInput = screen.getByLabelText(/cash received/i)
+    const cashInput = screen.getByLabelText(/amount paid/i)
     await user.clear(cashInput)
     await user.type(cashInput, '10')
 
@@ -282,7 +286,7 @@ describe('Sell page', () => {
     const productButton = await screen.findByRole('button', { name: /iced coffee/i })
     await user.click(productButton)
 
-    const cashInput = screen.getByLabelText(/cash received/i)
+    const cashInput = screen.getByLabelText(/amount paid/i)
     await user.clear(cashInput)
     await user.type(cashInput, '15')
 
