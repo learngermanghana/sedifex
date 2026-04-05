@@ -1255,6 +1255,14 @@ export const commitSale = functions.https.onCall(
 
     const saleRef = db.collection('sales').doc(saleId)
     const saleItemsRef = db.collection('saleItems')
+    const normalizedCustomer =
+      customer && typeof customer === 'object'
+        ? {
+            id: typeof customer.id === 'string' ? customer.id.trim() || null : null,
+            name: typeof customer.name === 'string' ? customer.name.trim() || null : null,
+            phone: typeof customer.phone === 'string' ? customer.phone.trim() || null : null,
+          }
+        : null
 
     await db.runTransaction(async tx => {
       // 1️⃣ ALL READS FIRST
@@ -1292,7 +1300,10 @@ export const commitSale = functions.https.onCall(
         total: totals?.total ?? 0,
         taxTotal: totals?.taxTotal ?? 0,
         payment: payment ?? null,
-        customer: customer ?? null,
+        customer: normalizedCustomer,
+        customerId: normalizedCustomer?.id ?? null,
+        customerName: normalizedCustomer?.name ?? null,
+        customerPhone: normalizedCustomer?.phone ?? null,
         items: normalizedItems,
         createdBy: context.auth?.uid ?? null,
         createdAt: timestamp,

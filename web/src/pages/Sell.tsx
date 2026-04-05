@@ -715,6 +715,11 @@ export default function Sell() {
 
   const totalAmountPaid = useMemo(() => primaryAmountPaid + additionalAmountPaid, [additionalAmountPaid, primaryAmountPaid])
 
+  const hasExplicitPaymentInput = useMemo(() => {
+    if (amountPaidInput.trim().length > 0) return true
+    return additionalTenders.some(tender => tender.amount.trim().length > 0)
+  }, [additionalTenders, amountPaidInput])
+
   const changeDue = useMemo(() => {
     const diff = totalAmountPaid - totalAfterDiscount
     if (!Number.isFinite(diff)) return 0
@@ -1424,7 +1429,7 @@ export default function Sell() {
 
     const totals = { subTotal, taxTotal: effectiveTaxTotal, discount: discountAmount, total: totalAfterDiscount }
 
-    const amountPaidValue = totalAmountPaid > 0 ? totalAmountPaid : totalAfterDiscount
+    const amountPaidValue = hasExplicitPaymentInput ? totalAmountPaid : totalAfterDiscount
     const changeDueValue = Math.max(0, amountPaidValue - totalAfterDiscount)
 
     const parsedAdditionalTenders: ReceiptTender[] = additionalTenders
@@ -1495,6 +1500,7 @@ export default function Sell() {
         companyLogoUrl: storeLogoUrl,
         customerName,
         customerPhone,
+        customerId: selectedCustomerId,
       } as any
 
       await setDoc(doc(db, 'receipts', saleId), {

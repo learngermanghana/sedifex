@@ -29,6 +29,7 @@ type ReceiptPayload = {
   customerName?: string | null
   customerPhone?: string | null
   customerEmail?: string | null
+  customerId?: string | null
 }
 
 function formatCurrency(amount: number | null | undefined): string {
