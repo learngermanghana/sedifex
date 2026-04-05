@@ -111,7 +111,41 @@ type PromoGalleryDraftItem = {
   isPublished: boolean
 }
 
-const MAX_PROMO_GALLERY_ITEMS = 3
+type PlanGalleryLimit = {
+  label: string
+  maxItems: number
+  maxFileSizeMb: number
+}
+
+const DEFAULT_GALLERY_GUIDE = {
+  recommendedWidthPx: 1600,
+  recommendedHeightPx: 900,
+}
+
+const PLAN_GALLERY_LIMITS: Record<string, PlanGalleryLimit> = {
+  free: { label: 'Free', maxItems: 3, maxFileSizeMb: 2 },
+  trial: { label: 'Free trial', maxItems: 3, maxFileSizeMb: 2 },
+  starter: { label: 'Starter', maxItems: 8, maxFileSizeMb: 4 },
+  growth: { label: 'Growth', maxItems: 15, maxFileSizeMb: 6 },
+  scale: { label: 'Scale', maxItems: 30, maxFileSizeMb: 10 },
+}
+
+function normalizePlanKey(plan: string | null): string {
+  if (!plan) return 'free'
+  const normalized = plan.trim().toLowerCase()
+  if (!normalized) return 'free'
+  if (normalized.includes('starter')) return 'starter'
+  if (normalized.includes('growth')) return 'growth'
+  if (normalized.includes('scale')) return 'scale'
+  if (normalized.includes('trial')) return 'trial'
+  if (normalized.includes('free')) return 'free'
+  return 'free'
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
 
 function toNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() !== '' ? value : null
@@ -372,6 +406,9 @@ export default function AccountOverview({
     () => roster.filter(member => member.status === 'pending'),
     [roster],
   )
+  const billingPlan = subscriptionProfile?.plan ?? profile?.billingPlan ?? null
+  const activePlanKey = normalizePlanKey(billingPlan)
+  const activeGalleryLimit = PLAN_GALLERY_LIMITS[activePlanKey] ?? PLAN_GALLERY_LIMITS.free
 
   useEffect(() => {
     if (!isPromotionsView) return
@@ -538,7 +575,7 @@ export default function AccountOverview({
         const galleryQuery = query(
           collection(db, 'stores', storeId, 'promoGallery'),
           orderBy('sortOrder', 'asc'),
-          limit(MAX_PROMO_GALLERY_ITEMS),
+          limit(activeGalleryLimit.maxItems),
         )
         const snapshot = await getDocs(galleryQuery)
         if (cancelled) return
@@ -568,7 +605,7 @@ export default function AccountOverview({
     return () => {
       cancelled = true
     }
-  }, [isOwner, publish, storeId])
+  }, [activeGalleryLimit.maxItems, isOwner, publish, storeId])
 
   async function refreshIntegrationApiKeys() {
     if (!isOwner) {
@@ -769,8 +806,6 @@ export default function AccountOverview({
   const contractStatus =
     subscriptionProfile?.status ?? profile?.contractStatus ?? profile?.status ?? null
 
-  const billingPlan = subscriptionProfile?.plan ?? profile?.billingPlan ?? null
-
   const isTrial = contractStatus === 'trial' || billingPlan === 'trial'
 
   const lastPaymentDisplay = formatTimestamp(
@@ -883,9 +918,9 @@ export default function AccountOverview({
   }
 
   function handleAddPromoGalleryItem() {
-    if (promoGalleryDraft.length >= MAX_PROMO_GALLERY_ITEMS) {
+    if (promoGalleryDraft.length >= activeGalleryLimit.maxItems) {
       publish({
-        message: `You can upload up to ${MAX_PROMO_GALLERY_ITEMS} gallery photos per store.`,
+        message: `Your ${activeGalleryLimit.label} plan allows up to ${activeGalleryLimit.maxItems} gallery photos.`,
         tone: 'error',
       })
       return
@@ -920,9 +955,9 @@ export default function AccountOverview({
 
   async function handleSavePromoGallery() {
     if (!storeId || !isOwner) return
-    if (promoGalleryDraft.length > MAX_PROMO_GALLERY_ITEMS) {
+    if (promoGalleryDraft.length > activeGalleryLimit.maxItems) {
       publish({
-        message: `Save only ${MAX_PROMO_GALLERY_ITEMS} gallery photos to control storage costs.`,
+        message: `Save only ${activeGalleryLimit.maxItems} gallery photos on the ${activeGalleryLimit.label} plan.`,
         tone: 'error',
       })
       return
@@ -963,7 +998,7 @@ export default function AccountOverview({
       const galleryQuery = query(
         collection(db, 'stores', storeId, 'promoGallery'),
         orderBy('sortOrder', 'asc'),
-        limit(MAX_PROMO_GALLERY_ITEMS),
+        limit(activeGalleryLimit.maxItems),
       )
       const snapshot = await getDocs(galleryQuery)
       setPromoGalleryDraft(
@@ -990,6 +1025,13 @@ export default function AccountOverview({
   async function handleUploadPromoGalleryImage(itemId: string) {
     if (!promoGalleryImageFile || promoGalleryUploadTargetId !== itemId) {
       setPromoGalleryImageUploadError('Choose an image file for this gallery item before uploading.')
+      return
+    }
+    const maxAllowedBytes = activeGalleryLimit.maxFileSizeMb * 1024 * 1024
+    if (promoGalleryImageFile.size > maxAllowedBytes) {
+      setPromoGalleryImageUploadError(
+        `This file is ${formatFileSize(promoGalleryImageFile.size)}. ${activeGalleryLimit.label} plan limit is ${activeGalleryLimit.maxFileSizeMb} MB per image.`,
+      )
       return
     }
 
@@ -2089,7 +2131,7 @@ export default function AccountOverview({
                     type="button"
                     className="button button--secondary"
                     onClick={handleAddPromoGalleryItem}
-                    disabled={promoGalleryDraft.length >= MAX_PROMO_GALLERY_ITEMS}
+                    disabled={promoGalleryDraft.length >= activeGalleryLimit.maxItems}
                   >
                     Add gallery item
                   </button>
@@ -2107,7 +2149,17 @@ export default function AccountOverview({
                   <p className="account-overview__hint">No gallery items yet.</p>
                 ) : null}
                 <p className="account-overview__hint" style={{ marginTop: 0 }}>
-                  To save storage costs, each store can upload up to {MAX_PROMO_GALLERY_ITEMS} photos.
+                  Plan guide: <strong>{activeGalleryLimit.label}</strong> allows up to{' '}
+                  <strong>{activeGalleryLimit.maxItems}</strong> gallery photos.
+                </p>
+                <p className="account-overview__hint" style={{ marginTop: 0 }}>
+                  Upload guide: keep each image under <strong>{activeGalleryLimit.maxFileSizeMb} MB</strong>{' '}
+                  and aim for{' '}
+                  <strong>
+                    {DEFAULT_GALLERY_GUIDE.recommendedWidthPx}×
+                    {DEFAULT_GALLERY_GUIDE.recommendedHeightPx}px
+                  </strong>{' '}
+                  for better quality and faster loading.
                 </p>
                 <div style={{ display: 'grid', gap: 12 }}>
                   {promoGalleryDraft.map(item => (
