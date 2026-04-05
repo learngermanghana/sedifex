@@ -14,8 +14,8 @@ import './Shell.css'
 import './Workspace.css'
 import { usePwaContext } from '../context/PwaContext'
 
-function navLinkClass(isActive: boolean) {
-  return `shell__nav-link${isActive ? ' is-active' : ''}`
+function navLinkClass(isActive: boolean, isSubItem: boolean) {
+  return `shell__nav-link${isSubItem ? ' shell__nav-link--sub' : ''}${isActive ? ' is-active' : ''}`
 }
 
 type BannerVariant = 'offline' | 'degraded' | 'pending' | 'processing' | 'error'
@@ -341,7 +341,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                     key={item.to}
                     to={item.to}
                     end={item.end}
-                    className={({ isActive }) => navLinkClass(isActive)}
+                    className={({ isActive }) => navLinkClass(isActive, Boolean(item.parentTo))}
                   >
                     {item.label}
                   </NavLink>
