@@ -2062,19 +2062,47 @@ async function resolvePromoStoreForRead(
     return null
   }
 
-  const storeBySlug = await db
+  const activeStoreByPromoSlug = await db
     .collection('stores')
     .where('promoSlug', '==', promoSlug)
     .where('promoEnabled', '==', true)
     .limit(1)
     .get()
 
-  if (storeBySlug.empty) {
+  if (!activeStoreByPromoSlug.empty) {
+    const matchedStoreDoc = activeStoreByPromoSlug.docs[0]
+    return {
+      storeId: matchedStoreDoc.id,
+      data: (matchedStoreDoc.data() ?? {}) as Record<string, unknown>,
+    }
+  }
+
+  const storeByPromoSlug = await db
+    .collection('stores')
+    .where('promoSlug', '==', promoSlug)
+    .limit(1)
+    .get()
+
+  if (!storeByPromoSlug.empty) {
+    const matchedStoreDoc = storeByPromoSlug.docs[0]
+    return {
+      storeId: matchedStoreDoc.id,
+      data: (matchedStoreDoc.data() ?? {}) as Record<string, unknown>,
+    }
+  }
+
+  const storeByLegacySlug = await db
+    .collection('stores')
+    .where('slug', '==', promoSlug)
+    .limit(1)
+    .get()
+
+  if (storeByLegacySlug.empty) {
     res.status(404).json({ error: 'promo-not-found' })
     return null
   }
 
-  const matchedStoreDoc = storeBySlug.docs[0]
+  const matchedStoreDoc = storeByLegacySlug.docs[0]
   return {
     storeId: matchedStoreDoc.id,
     data: (matchedStoreDoc.data() ?? {}) as Record<string, unknown>,

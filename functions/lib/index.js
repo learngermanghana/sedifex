@@ -928,6 +928,13 @@ exports.commitSale = functions.https.onCall(async (data, context) => {
     }
     const saleRef = firestore_1.defaultDb.collection('sales').doc(saleId);
     const saleItemsRef = firestore_1.defaultDb.collection('saleItems');
+    const normalizedCustomer = customer && typeof customer === 'object'
+        ? {
+            id: typeof customer.id === 'string' ? customer.id.trim() || null : null,
+            name: typeof customer.name === 'string' ? customer.name.trim() || null : null,
+            phone: typeof customer.phone === 'string' ? customer.phone.trim() || null : null,
+        }
+        : null;
     await firestore_1.defaultDb.runTransaction(async (tx) => {
         // 1️⃣ ALL READS FIRST
         // prevent duplicates
@@ -957,7 +964,10 @@ exports.commitSale = functions.https.onCall(async (data, context) => {
             total: totals?.total ?? 0,
             taxTotal: totals?.taxTotal ?? 0,
             payment: payment ?? null,
-            customer: customer ?? null,
+            customer: normalizedCustomer,
+            customerId: normalizedCustomer?.id ?? null,
+            customerName: normalizedCustomer?.name ?? null,
+            customerPhone: normalizedCustomer?.phone ?? null,
             items: normalizedItems,
             createdBy: context.auth?.uid ?? null,
             createdAt: timestamp,
@@ -1555,17 +1565,41 @@ async function resolvePromoStoreForRead(req, res) {
         res.status(400).json({ error: 'missing-promo-slug' });
         return null;
     }
-    const storeBySlug = await firestore_1.defaultDb
+    const activeStoreByPromoSlug = await firestore_1.defaultDb
         .collection('stores')
         .where('promoSlug', '==', promoSlug)
         .where('promoEnabled', '==', true)
         .limit(1)
         .get();
-    if (storeBySlug.empty) {
+    if (!activeStoreByPromoSlug.empty) {
+        const matchedStoreDoc = activeStoreByPromoSlug.docs[0];
+        return {
+            storeId: matchedStoreDoc.id,
+            data: (matchedStoreDoc.data() ?? {}),
+        };
+    }
+    const storeByPromoSlug = await firestore_1.defaultDb
+        .collection('stores')
+        .where('promoSlug', '==', promoSlug)
+        .limit(1)
+        .get();
+    if (!storeByPromoSlug.empty) {
+        const matchedStoreDoc = storeByPromoSlug.docs[0];
+        return {
+            storeId: matchedStoreDoc.id,
+            data: (matchedStoreDoc.data() ?? {}),
+        };
+    }
+    const storeByLegacySlug = await firestore_1.defaultDb
+        .collection('stores')
+        .where('slug', '==', promoSlug)
+        .limit(1)
+        .get();
+    if (storeByLegacySlug.empty) {
         res.status(404).json({ error: 'promo-not-found' });
         return null;
     }
-    const matchedStoreDoc = storeBySlug.docs[0];
+    const matchedStoreDoc = storeByLegacySlug.docs[0];
     return {
         storeId: matchedStoreDoc.id,
         data: (matchedStoreDoc.data() ?? {}),
