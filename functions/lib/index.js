@@ -1644,20 +1644,24 @@ async function resolvePromoStoreForRead(req, res) {
             data: (matchedStoreDoc.data() ?? {}),
         };
     }
-    const storeByLegacySlug = await firestore_1.defaultDb
-        .collection('stores')
-        .where('slug', '==', promoSlug)
-        .limit(1)
-        .get();
-    if (storeByLegacySlug.empty) {
-        res.status(404).json({ error: 'promo-not-found' });
-        return null;
+    const legacySlugFields = ['slug', 'workspaceSlug'];
+    for (const legacySlugField of legacySlugFields) {
+        const storeByLegacySlug = await firestore_1.defaultDb
+            .collection('stores')
+            .where(legacySlugField, '==', promoSlug)
+            .limit(1)
+            .get();
+        if (storeByLegacySlug.empty) {
+            continue;
+        }
+        const matchedStoreDoc = storeByLegacySlug.docs[0];
+        return {
+            storeId: matchedStoreDoc.id,
+            data: (matchedStoreDoc.data() ?? {}),
+        };
     }
-    const matchedStoreDoc = storeByLegacySlug.docs[0];
-    return {
-        storeId: matchedStoreDoc.id,
-        data: (matchedStoreDoc.data() ?? {}),
-    };
+    res.status(404).json({ error: 'promo-not-found' });
+    return null;
 }
 function normalizeTimestampIso(value) {
     if (value instanceof firestore_1.admin.firestore.Timestamp) {

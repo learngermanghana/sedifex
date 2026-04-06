@@ -2149,22 +2149,28 @@ async function resolvePromoStoreForRead(
     }
   }
 
-  const storeByLegacySlug = await db
-    .collection('stores')
-    .where('slug', '==', promoSlug)
-    .limit(1)
-    .get()
+  const legacySlugFields: Array<'slug' | 'workspaceSlug'> = ['slug', 'workspaceSlug']
 
-  if (storeByLegacySlug.empty) {
-    res.status(404).json({ error: 'promo-not-found' })
-    return null
+  for (const legacySlugField of legacySlugFields) {
+    const storeByLegacySlug = await db
+      .collection('stores')
+      .where(legacySlugField, '==', promoSlug)
+      .limit(1)
+      .get()
+
+    if (storeByLegacySlug.empty) {
+      continue
+    }
+
+    const matchedStoreDoc = storeByLegacySlug.docs[0]
+    return {
+      storeId: matchedStoreDoc.id,
+      data: (matchedStoreDoc.data() ?? {}) as Record<string, unknown>,
+    }
   }
 
-  const matchedStoreDoc = storeByLegacySlug.docs[0]
-  return {
-    storeId: matchedStoreDoc.id,
-    data: (matchedStoreDoc.data() ?? {}) as Record<string, unknown>,
-  }
+  res.status(404).json({ error: 'promo-not-found' })
+  return null
 }
 
 function normalizeTimestampIso(value: unknown): string | null {
