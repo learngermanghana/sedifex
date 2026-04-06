@@ -12,7 +12,7 @@ export default function IntegrationQuickstartPage() {
         <ul>
           <li>Product fields: <code>id</code>, <code>storeId</code>, <code>name</code>, <code>category</code>, <code>description</code>, <code>price</code>, <code>stockCount</code>, and media metadata.</li>
           <li>Integration flow with API key auth via <code>GET /integrationProducts?storeId=&lt;storeId&gt;</code>.</li>
-          <li>Companion endpoints for promotions, promo galleries, and customers: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code>, <code>GET /integrationGallery?storeId=&lt;storeId&gt;</code>, and <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>.</li>
+          <li>Companion endpoints for promotions, promo galleries, customers, and top sellers: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code>, <code>GET /integrationGallery?storeId=&lt;storeId&gt;</code>, <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>, and <code>GET /integrationTopSelling?storeId=&lt;storeId&gt;&amp;days=30&amp;limit=10</code>.</li>
           <li>Dedupe, fallback data, category grouping, and cache strategy recommendations.</li>
         </ul>
       </section>
@@ -26,6 +26,15 @@ export default function IntegrationQuickstartPage() {
           <li>Fallback to static products if fetch fails.</li>
           <li>Render products grouped by category and choose cache mode based on stock volatility.</li>
         </ol>
+      </section>
+
+      <section>
+        <h2>Top-selling products integration</h2>
+        <ul>
+          <li>Use <code>integrationTopSelling</code> when you want "Best Sellers" on your site.</li>
+          <li>Optional query params: <code>days</code> (1-365, default 30) and <code>limit</code> (1-50, default 10).</li>
+          <li>The payload returns <code>qtySold</code>, <code>grossSales</code>, and <code>lastSoldAt</code> for each top product.</li>
+        </ul>
       </section>
 
       <section>
