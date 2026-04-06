@@ -275,12 +275,17 @@ body.shell--menu-open {
 .shell select,
 .shell textarea {
   font: inherit;
-  color: inherit;
+  color: #0f172a;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid #cbd5f5;
   background: #ffffff;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+
+.shell label {
+  color: #0f172a;
 }
 
 .shell input:focus,
@@ -289,6 +294,12 @@ body.shell--menu-open {
   border-color: #4338ca;
   box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
   outline: none;
+}
+
+.shell fieldset:disabled input,
+.shell fieldset:disabled select,
+.shell fieldset:disabled textarea {
+  color: #334155;
 }
 
 .shell button {
