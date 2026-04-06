@@ -376,6 +376,22 @@ export default function DocumentsGenerator() {
 
           <div className="documents-generator__section">
             <h3 className="card__title">Line items</h3>
+            <div className="documents-generator__line-item-preview" aria-label="Invoice line items preview">
+              <div className="documents-generator__line-item-preview-header">
+                <span>Name</span>
+                <span>Qty</span>
+                <span>Price (GHS)</span>
+                <span>Detail (optional)</span>
+              </div>
+              {lineItems.map((item, index) => (
+                <div key={`preview-${item.id}`} className="documents-generator__line-item-preview-row">
+                  <span>{item.name.trim() || `Item ${index + 1}`}</span>
+                  <span>{item.qty || '0'}</span>
+                  <span>{item.price || '0.00'}</span>
+                  <span>{item.detail.trim() || '—'}</span>
+                </div>
+              ))}
+            </div>
             <div className="documents-generator__items">
               {lineItems.map((item, index) => (
                 <div key={item.id} className="documents-generator__item">

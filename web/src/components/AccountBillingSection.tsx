@@ -26,12 +26,7 @@ const PLANS: PlanOption[] = [
   { id: 'scale', label: 'Scale', monthlyAmountGhs: 100, productLimit: 'Unlimited', dailySalesLimit: 'Unlimited' },
 ]
 
-const CADENCE_OPTIONS = [
-  { months: 1, label: '1 month' },
-  { months: 3, label: '3 months' },
-  { months: 6, label: '6 months' },
-  { months: 12, label: '12 months' },
-]
+const YEARLY_CONTRACT_MONTHS = 12
 
 export const AccountBillingSection: React.FC<Props> = ({
   storeId,
@@ -45,19 +40,17 @@ export const AccountBillingSection: React.FC<Props> = ({
   const { isPwaApp } = usePwaContext()
   const defaultPlanId = PLANS[0]?.id ?? ''
   const [selectedPlanId, setSelectedPlanId] = useState<string>(defaultPlanId)
-  const [selectedMonths, setSelectedMonths] = useState<number>(12)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const selectedPlan = PLANS.find(plan => plan.id === selectedPlanId) ?? null
-  const selectedCadence = CADENCE_OPTIONS.find(option => option.months === selectedMonths)
-  const selectedCadenceLabel = selectedCadence?.label ?? `${selectedMonths} months`
-  const selectedCadenceDescription = 'Fixed contract. No automatic recurring charge.'
-  const selectedAmount = selectedPlan ? selectedPlan.monthlyAmountGhs * selectedMonths : null
+  const selectedCadenceLabel = '12 months (yearly payment)'
+  const selectedCadenceDescription = 'Fixed yearly contract. No automatic recurring charge.'
+  const selectedAmount = selectedPlan ? selectedPlan.monthlyAmountGhs * YEARLY_CONTRACT_MONTHS : null
   const nextChargeDate = (() => {
     const base = new Date()
     const nextDate = new Date(base)
-    nextDate.setMonth(base.getMonth() + selectedMonths)
+    nextDate.setMonth(base.getMonth() + YEARLY_CONTRACT_MONTHS)
     return nextDate
   })()
   const nextChargeDisplay = nextChargeDate.toLocaleDateString(undefined, {
@@ -105,9 +98,9 @@ export const AccountBillingSection: React.FC<Props> = ({
       const response = await startPaystackCheckout({
         email: ownerEmail,
         storeId,
-        amount: targetPlan.monthlyAmountGhs * selectedMonths,
+        amount: targetPlan.monthlyAmountGhs * YEARLY_CONTRACT_MONTHS,
         plan: targetPlan.id,
-        contractMonths: selectedMonths,
+        contractMonths: YEARLY_CONTRACT_MONTHS,
         redirectUrl,
         metadata: {
           source: 'account-contract-billing',
@@ -215,6 +208,9 @@ export const AccountBillingSection: React.FC<Props> = ({
             <p className="text-sm text-gray-600">
               Next renewal: <strong>{contractEndDate ?? '—'}</strong>
             </p>
+            <p className="text-sm text-gray-600">
+              Need to renew or change plan now? Start a new yearly Paystack checkout below.
+            </p>
 
             <div className="rounded border border-gray-200 bg-white p-3 space-y-2">
               <p className="text-sm font-medium text-gray-900">Contract billing</p>
@@ -225,103 +221,85 @@ export const AccountBillingSection: React.FC<Props> = ({
             </div>
           </div>
         </div>
-      ) : (
-        <>
-          {(isPendingContract || isFailedContract) && (
-            <div
-              className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 mb-4"
-              role="status"
-            >
-              {isPendingContract
-                ? 'Your last payment was not completed yet. If you already paid, refresh in a few minutes. Otherwise, start a new checkout below.'
-                : 'Your last payment attempt did not go through. Please start a new checkout below.'}
-            </div>
-          )}
-          <p className="text-sm text-gray-600 mb-4">
-            Choose a plan and contract term. You’ll be redirected to Paystack where clients can pay
-            with supported methods like mobile money.
-          </p>
+      ) : null}
 
-          <form
-            onSubmit={handleStartCheckout}
-            className="account-overview__form max-w-md space-y-4"
-          >
-            <fieldset
-              disabled={loading}
-              className={loading ? 'opacity-70 pointer-events-none' : undefined}
-            >
-              <label className="block text-sm font-medium">
-                <span>Plan</span>
-                <select
-                  value={selectedPlanId}
-                  onChange={event => setSelectedPlanId(event.target.value)}
-                  className="border rounded px-3 py-2 w-full"
-                >
-                  {PLANS.map(plan => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.label} – GHS {plan.monthlyAmountGhs.toFixed(2)}/month
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block text-sm font-medium">
-                <span>Contract term</span>
-                <select
-                  value={String(selectedMonths)}
-                  onChange={event => setSelectedMonths(Number(event.target.value))}
-                  className="border rounded px-3 py-2 w-full"
-                >
-                  {CADENCE_OPTIONS.map(option => (
-                    <option key={option.months} value={option.months}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 space-y-1">
-                <p className="font-medium">Plan summary</p>
-                <p>
-                  Price:{' '}
-                  <strong>
-                    GHS {selectedAmount?.toFixed(2) ?? '—'}
-                  </strong>{' '}
-                  ({selectedCadenceLabel})
-                </p>
-                <p>Billing cadence: {selectedCadenceDescription}</p>
-                <p>
-                  Plan limits: {selectedPlan?.productLimit ?? '—'} products and{' '}
-                  {selectedPlan?.dailySalesLimit ?? '—'} sales/day.
-                </p>
-                <p>
-                  Contract-based access: when your term ends without payment, this workspace is
-                  downgraded until renewed.
-                </p>
-                <p>
-                  Contract end (if paid now): <strong>{nextChargeDisplay}</strong>.
-                </p>
-                <p>
-                  Upgrading before your current contract ends automatically applies remaining credit
-                  to the new plan charge.
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="button button--primary"
-              >
-                {loading ? 'Starting checkout…' : 'Pay with Paystack'}
-              </button>
-
-              <p className="text-xs text-gray-500">
-                You will be redirected to Paystack’s secure page to complete your subscription.
-              </p>
-            </fieldset>
-          </form>
-        </>
+      {(isPendingContract || isFailedContract) && (
+        <div
+          className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 mb-4"
+          role="status"
+        >
+          {isPendingContract
+            ? 'Your last payment was not completed yet. If you already paid, refresh in a few minutes. Otherwise, start a new checkout below.'
+            : 'Your last payment attempt did not go through. Please start a new checkout below.'}
+        </div>
       )}
+      <p className="text-sm text-gray-600 mb-4">
+        Choose a plan. Billing is charged yearly in one payment through Paystack (12 months upfront).
+      </p>
+
+      <form
+        onSubmit={handleStartCheckout}
+        className="account-overview__form max-w-md space-y-4"
+      >
+        <fieldset
+          disabled={loading}
+          className={loading ? 'opacity-70 pointer-events-none' : undefined}
+        >
+          <label className="block text-sm font-medium">
+            <span>Plan</span>
+            <select
+              value={selectedPlanId}
+              onChange={event => setSelectedPlanId(event.target.value)}
+              className="border rounded px-3 py-2 w-full"
+            >
+              {PLANS.map(plan => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.label} – GHS {plan.monthlyAmountGhs.toFixed(2)}/month
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 space-y-1">
+            <p className="font-medium">Paystack checkout summary</p>
+            <p>
+              Price:{' '}
+              <strong>
+                GHS {selectedAmount?.toFixed(2) ?? '—'}
+              </strong>{' '}
+              ({selectedCadenceLabel})
+            </p>
+            <p>Billing cadence: {selectedCadenceDescription}</p>
+            <p>
+              Plan limits: up to {selectedPlan?.productLimit ?? '—'} products and{' '}
+              {selectedPlan?.dailySalesLimit ?? '—'} sales/day.
+            </p>
+            <p>
+              Contract-based access: when your term ends without payment, this workspace is
+              downgraded until renewed.
+            </p>
+            <p>
+              Contract end (if paid now): <strong>{nextChargeDisplay}</strong>.
+            </p>
+            <p>
+              Upgrading before your current contract ends automatically applies remaining credit
+              to the new plan charge.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="button button--primary"
+          >
+            {loading ? 'Starting checkout…' : 'Pay with Paystack'}
+          </button>
+
+          <p className="text-xs text-gray-500">
+            You will be redirected to Paystack’s secure page to complete your yearly subscription.
+          </p>
+        </fieldset>
+      </form>
     </section>
   )
 }

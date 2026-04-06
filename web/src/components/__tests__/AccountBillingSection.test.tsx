@@ -93,6 +93,7 @@ describe('AccountBillingSection', () => {
     render(<AccountBillingSection storeId="store-123" ownerEmail="owner@example.com" isOwner />)
 
     expect(screen.getByText(/up to 100 products and 100 sales\/day/i)).toBeInTheDocument()
+    expect(screen.getByText(/12 months \(yearly payment\)/i)).toBeInTheDocument()
   })
 
   it('surfaces backend errors when checkout fails', async () => {
@@ -106,7 +107,7 @@ describe('AccountBillingSection', () => {
     expect(await screen.findByText(/unable to start checkout/i)).toBeInTheDocument()
   })
 
-  it('shows a paid contract summary instead of the checkout form', () => {
+  it('shows a paid contract summary and still allows renewal checkout', () => {
     render(
       <AccountBillingSection
         storeId="store-123"
@@ -120,6 +121,6 @@ describe('AccountBillingSection', () => {
 
     expect(screen.getByText(/contract is active on the growth plan/i)).toBeInTheDocument()
     expect(screen.getByText(/Dec 31, 2026, 10:00 AM/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /pay with paystack/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /pay with paystack/i })).toBeInTheDocument()
   })
 })
