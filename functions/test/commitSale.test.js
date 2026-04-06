@@ -52,6 +52,11 @@ Module._load = function patchedLoad(request, parent, isMain) {
 async function run() {
   currentDb = new MockFirestore({
     'products/prod-1': { stockCount: 5 },
+    'customers/customer-1': {
+      storeId: 'branch-1',
+      displayName: 'Alice',
+      debt: { outstandingCents: 500 },
+    },
   })
 
   delete require.cache[require.resolve('../lib/index.js')]
@@ -69,8 +74,8 @@ async function run() {
     cashierId: 'cashier-1',
     saleId: 'sale-123',
     totals: { total: 100, taxTotal: 10 },
-    payment: { method: 'cash' },
-    customer: { name: 'Alice' },
+    payment: { method: 'cash', amountPaid: 70 },
+    customer: { id: 'customer-1', name: 'Alice' },
     items: [{ productId: 'prod-1', name: 'Widget', qty: 1, price: 100, taxRate: 0.1 }],
   }
 
@@ -88,6 +93,8 @@ async function run() {
 
   const productDoc = currentDb.getDoc('products/prod-1')
   assert.strictEqual(productDoc.stockCount, 4)
+  const updatedCustomer = currentDb.getDoc('customers/customer-1')
+  assert.strictEqual(updatedCustomer.debt.outstandingCents, 3500)
 
   let error
   try {
@@ -107,6 +114,7 @@ async function run() {
   const madeToOrderPayload = {
     ...payload,
     saleId: 'sale-456',
+    payment: { method: 'cash', amountPaid: 100 },
     items: [
       {
         productId: 'prod-1',
@@ -125,6 +133,17 @@ async function run() {
   assert.strictEqual(currentDb.getDoc('products/prod-1').stockCount, 4)
   const ledgerAfterNonInventory = currentDb.listCollection('ledger')
   assert.strictEqual(ledgerAfterNonInventory.length, 1)
+
+  // Walk-in sales with partial payments should not mutate customer debt records.
+  const walkInPayload = {
+    ...payload,
+    saleId: 'sale-789',
+    customer: null,
+    payment: { method: 'cash', amountPaid: 80 },
+  }
+  await commitSale.run(walkInPayload, context)
+  const customerAfterWalkIn = currentDb.getDoc('customers/customer-1')
+  assert.strictEqual(customerAfterWalkIn.debt.outstandingCents, 3500)
 
   console.log('commitSale tests passed')
 }

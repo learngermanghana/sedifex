@@ -1263,6 +1263,8 @@ export const commitSale = functions.https.onCall(
             phone: typeof customer.phone === 'string' ? customer.phone.trim() || null : null,
           }
         : null
+    const customerRef =
+      normalizedCustomer?.id ? db.collection('customers').doc(normalizedCustomer.id) : null
 
     await db.runTransaction(async tx => {
       // 1️⃣ ALL READS FIRST
@@ -1345,6 +1347,39 @@ export const commitSale = functions.https.onCall(
             storeId: normalizedBranchId,
             createdAt: timestamp,
           })
+        }
+      }
+
+      const saleTotal = Number(totals?.total ?? 0)
+      const amountPaid = Number(payment?.amountPaid ?? saleTotal)
+      const shortfallAmount = Math.max(0, saleTotal - amountPaid)
+      const shortfallCents = Math.round(shortfallAmount * 100)
+      if (customerRef && shortfallCents > 0) {
+        const customerSnap = await tx.get(customerRef)
+        if (customerSnap.exists) {
+          const customerData = customerSnap.data() as Record<string, unknown>
+          const customerStoreId =
+            typeof customerData.storeId === 'string' ? customerData.storeId.trim() : null
+          if (!customerStoreId || customerStoreId === normalizedBranchId) {
+            const existingDebt =
+              customerData.debt && typeof customerData.debt === 'object'
+                ? (customerData.debt as Record<string, unknown>)
+                : null
+            const existingOutstandingRaw = Number(existingDebt?.outstandingCents ?? 0)
+            const existingOutstanding = Number.isFinite(existingOutstandingRaw)
+              ? Math.max(0, Math.round(existingOutstandingRaw))
+              : 0
+            const nextOutstanding = existingOutstanding + shortfallCents
+
+            tx.update(customerRef, {
+              debt: {
+                outstandingCents: nextOutstanding,
+                dueDate: existingDebt?.dueDate ?? null,
+                lastReminderAt: existingDebt?.lastReminderAt ?? null,
+              },
+              updatedAt: timestamp,
+            })
+          }
         }
       }
     })
