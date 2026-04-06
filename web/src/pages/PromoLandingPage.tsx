@@ -6,6 +6,7 @@ import './PromoLandingPage.css'
 type PromoProfile = {
   storeId: string
   storeName: string
+  storePhone: string | null
   promoEnabled: boolean
   title: string | null
   summary: string | null
@@ -35,6 +36,7 @@ type PromoApiResponse = {
     websiteUrl?: string | null
     imageUrl?: string | null
     imageAlt?: string | null
+    phone?: string | null
     storeName?: string | null
   }
   storeId?: string
@@ -106,6 +108,16 @@ function getIntegrationEndpoint(path: string): string {
     throw new Error('Missing Firebase project configuration for promo endpoint')
   }
   return `https://${functionsRegion}-${projectId}.cloudfunctions.net/${path}`
+}
+
+function setOrCreateMetaTag(attribute: 'name' | 'property', key: string, content: string) {
+  let tag = document.head.querySelector(`meta[${attribute}="${key}"]`) as HTMLMetaElement | null
+  if (!tag) {
+    tag = document.createElement('meta')
+    tag.setAttribute(attribute, key)
+    document.head.appendChild(tag)
+  }
+  tag.setAttribute('content', content)
 }
 
 export default function PromoLandingPage() {
@@ -244,6 +256,7 @@ export default function PromoLandingPage() {
             typeof promo.storeName === 'string' && promo.storeName.trim()
               ? promo.storeName.trim()
               : 'Sedifex Store',
+          storePhone: typeof promo.phone === 'string' && promo.phone.trim() ? promo.phone.trim() : null,
           promoEnabled: promo.enabled === true,
           title: typeof promo.title === 'string' ? promo.title : null,
           summary: typeof promo.summary === 'string' ? promo.summary : null,
@@ -275,6 +288,31 @@ export default function PromoLandingPage() {
       isMounted = false
     }
   }, [slug])
+
+  useEffect(() => {
+    if (!profile) {
+      return
+    }
+
+    const pageTitle = profile.title?.trim() || `Special offers at ${profile.storeName}`
+    const description = sanitizeSummary(profile.summary, profile.storeName)
+    const normalizedSlug = normalizeSlug(decodeURIComponent(slug))
+    const pageUrl = `https://sedifex.com/${encodeURIComponent(normalizedSlug)}`
+    const imageUrl = profile.imageUrl || gallery[0]?.url || 'https://sedifex.com/logo-512.png'
+
+    document.title = `${pageTitle} | Sedifex`
+    setOrCreateMetaTag('name', 'description', description)
+    setOrCreateMetaTag('name', 'robots', 'index,follow,max-image-preview:large')
+    setOrCreateMetaTag('property', 'og:type', 'website')
+    setOrCreateMetaTag('property', 'og:title', pageTitle)
+    setOrCreateMetaTag('property', 'og:description', description)
+    setOrCreateMetaTag('property', 'og:url', pageUrl)
+    setOrCreateMetaTag('property', 'og:image', imageUrl)
+    setOrCreateMetaTag('name', 'twitter:card', 'summary_large_image')
+    setOrCreateMetaTag('name', 'twitter:title', pageTitle)
+    setOrCreateMetaTag('name', 'twitter:description', description)
+    setOrCreateMetaTag('name', 'twitter:image', imageUrl)
+  }, [gallery, profile, slug])
 
   useEffect(() => {
     if (!activeGalleryItem) {
@@ -418,6 +456,11 @@ export default function PromoLandingPage() {
           ) : null}
           <h1>{promoTitle}</h1>
           <p className="promo-store">Store: {profile.storeName}</p>
+          {profile.storePhone ? (
+            <p className="promo-meta">
+              Contact: <a href={`tel:${profile.storePhone}`}>{profile.storePhone}</a>
+            </p>
+          ) : null}
           <p className="promo-summary">{promoSummary}</p>
           {(profile.startDate || profile.endDate) && (
             <p className="promo-dates">

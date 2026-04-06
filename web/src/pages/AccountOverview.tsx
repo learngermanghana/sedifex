@@ -30,7 +30,7 @@ import { useAuthUser } from '../hooks/useAuthUser'
 import { AccountBillingSection } from '../components/AccountBillingSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
-import { buildPromoSlug } from '../utils/promoSlug'
+import { buildPromoSlug, normalizePromoSlug } from '../utils/promoSlug'
 import {
   ProductImageUploadError,
   deleteUploadedImageByUrl,
@@ -835,7 +835,14 @@ export default function AccountOverview({
     setPromoDraft(current => ({ ...current, [key]: value }))
   }
 
-  const promoSlug = buildPromoSlug(profile?.promoSlug, profile?.displayName, profile?.name, storeId)
+  const existingPromoSlug = normalizePromoSlug(profile?.promoSlug ?? '')
+  const normalizedStoreId = normalizePromoSlug(storeId)
+  const looksLikeLegacyStoreIdSlug =
+    Boolean(existingPromoSlug) && Boolean(normalizedStoreId) && existingPromoSlug === normalizedStoreId
+
+  const promoSlug = looksLikeLegacyStoreIdSlug
+    ? buildPromoSlug(profile?.displayName, profile?.name, profile?.promoSlug, storeId)
+    : buildPromoSlug(profile?.promoSlug, profile?.displayName, profile?.name, storeId)
 
   async function handleSavePromo() {
     if (!storeId) return

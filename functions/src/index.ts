@@ -2290,6 +2290,7 @@ export const integrationPromo = functions.https.onRequest(async (req, res) => {
       websiteUrl: toTrimmedStringOrNull(data.promoWebsiteUrl),
       imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
       imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
+      phone: toTrimmedStringOrNull(data.phone),
       storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
       updatedAt: normalizeTimestampIso(data.updatedAt),
     },
