@@ -2471,6 +2471,162 @@ export const integrationCustomers = functions.https.onRequest(async (req, res) =
   res.status(200).json({ storeId, customers })
 })
 
+export const integrationTopSelling = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  const { storeId } = authContext
+
+  const limitRaw = Number(req.query.limit ?? 10)
+  const requestedLimit = Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 10
+  const limit = Math.min(Math.max(requestedLimit, 1), 50)
+
+  const daysRaw = Number(req.query.days ?? 30)
+  const requestedDays = Number.isFinite(daysRaw) ? Math.floor(daysRaw) : 30
+  const days = Math.min(Math.max(requestedDays, 1), 365)
+
+  const windowStartDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+  let saleItemsSnapshot: admin.firestore.QuerySnapshot
+  try {
+    saleItemsSnapshot = await db
+      .collection('saleItems')
+      .where('storeId', '==', storeId)
+      .where('createdAt', '>=', windowStartDate)
+      .orderBy('createdAt', 'desc')
+      .limit(5000)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    console.warn('[integrationTopSelling] Missing Firestore index for ordered saleItems query; falling back to unordered fetch', {
+      storeId,
+      code,
+    })
+    saleItemsSnapshot = await db.collection('saleItems').where('storeId', '==', storeId).limit(5000).get()
+  }
+
+  const topSellingByProduct = new Map<
+    string,
+    {
+      qtySold: number
+      grossSales: number
+      lastSoldAt: string | null
+    }
+  >()
+
+  for (const docSnap of saleItemsSnapshot.docs) {
+    const data = docSnap.data() as Record<string, unknown>
+    const productId = typeof data.productId === 'string' ? data.productId.trim() : ''
+    if (!productId) continue
+
+    const createdAtIso = normalizeTimestampIso(data.createdAt)
+    if (createdAtIso) {
+      const createdAtMillis = Date.parse(createdAtIso)
+      if (!Number.isNaN(createdAtMillis) && createdAtMillis < windowStartDate.getTime()) {
+        continue
+      }
+    }
+
+    const qtyRaw = Number(data.qty ?? 0)
+    const qty = Number.isFinite(qtyRaw) ? Math.max(0, Math.abs(qtyRaw)) : 0
+    if (qty <= 0) continue
+
+    const priceRaw = Number(data.price ?? 0)
+    const price = Number.isFinite(priceRaw) ? Math.max(0, priceRaw) : 0
+    const grossSales = qty * price
+
+    const existing = topSellingByProduct.get(productId) ?? {
+      qtySold: 0,
+      grossSales: 0,
+      lastSoldAt: null,
+    }
+    const nextLastSoldAt =
+      existing.lastSoldAt && createdAtIso && existing.lastSoldAt > createdAtIso
+        ? existing.lastSoldAt
+        : createdAtIso ?? existing.lastSoldAt
+
+    topSellingByProduct.set(productId, {
+      qtySold: existing.qtySold + qty,
+      grossSales: existing.grossSales + grossSales,
+      lastSoldAt: nextLastSoldAt,
+    })
+  }
+
+  const sortedRows = [...topSellingByProduct.entries()]
+    .map(([productId, aggregate]) => ({ productId, ...aggregate }))
+    .sort((a, b) => {
+      if (b.qtySold !== a.qtySold) return b.qtySold - a.qtySold
+      if (b.grossSales !== a.grossSales) return b.grossSales - a.grossSales
+      if (!a.lastSoldAt && !b.lastSoldAt) return 0
+      if (!a.lastSoldAt) return 1
+      if (!b.lastSoldAt) return -1
+      return a.lastSoldAt > b.lastSoldAt ? -1 : a.lastSoldAt < b.lastSoldAt ? 1 : 0
+    })
+    .slice(0, limit)
+
+  const productIds = sortedRows.map(row => row.productId)
+  const productInfoById = new Map<
+    string,
+    {
+      name: string | null
+      category: string | null
+      imageUrl: string | null
+      imageAlt: string | null
+      itemType: 'product' | 'service' | 'made_to_order'
+    }
+  >()
+
+  if (productIds.length > 0) {
+    const productRefs = productIds.map(productId => db.collection('products').doc(productId))
+    const productSnaps = await db.getAll(...productRefs)
+    for (const productSnap of productSnaps) {
+      if (!productSnap.exists) continue
+      const data = (productSnap.data() ?? {}) as Record<string, unknown>
+      productInfoById.set(productSnap.id, {
+        name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null,
+        category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+        imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
+        imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : null,
+        itemType:
+          data.itemType === 'service'
+            ? 'service'
+            : data.itemType === 'made_to_order'
+              ? 'made_to_order'
+              : 'product',
+      })
+    }
+  }
+
+  const topSelling = sortedRows.map(row => {
+    const productInfo = productInfoById.get(row.productId)
+    return {
+      productId: row.productId,
+      name: productInfo?.name ?? null,
+      category: productInfo?.category ?? null,
+      imageUrl: productInfo?.imageUrl ?? null,
+      imageAlt: productInfo?.imageAlt ?? null,
+      itemType: productInfo?.itemType ?? 'product',
+      qtySold: row.qtySold,
+      grossSales: row.grossSales,
+      lastSoldAt: row.lastSoldAt,
+    }
+  })
+
+  res.status(200).json({
+    storeId,
+    windowDays: days,
+    generatedAt: new Date().toISOString(),
+    topSelling,
+  })
+})
+
 /** ============================================================================
  *  WEBHOOKS: product.created / product.updated / product.deleted
  * ==========================================================================*/

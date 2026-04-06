@@ -5,7 +5,7 @@ Use this guide to auto-load products from Sedifex into either:
 - a **WordPress** site, or
 - a **Next.js site hosted on Vercel**.
 
-This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, and `integrationCustomers`), plus the product shape documented in the root README.
+This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, `integrationCustomers`, and `integrationTopSelling`), plus the product shape documented in the root README.
 
 ## What you get
 
@@ -93,6 +93,7 @@ Promo gallery data fields (stores/{storeId}/promoGallery/{itemId})
    - Promo data: `GET /integrationPromo?storeId=<storeId>`
    - Promo gallery data: `GET /integrationGallery?storeId=<storeId>`
    - Customer data: `GET /integrationCustomers?storeId=<storeId>`
+   - Top-selling products: `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
 3. Deduplicate products (important when combining multiple sources).
 4. Return fallback data when external fetch fails.
 5. Render a grouped menu UI by category.
@@ -221,7 +222,40 @@ export default async function MenuPage() {
 
 For promo + gallery integrations, use the same 30–120 second polling interval initially. If you later need sub-minute pushes, move to webhook-triggered cache invalidation.
 
-### 3) Optional live refresh with SWR
+### 3) Top-selling products endpoint (new)
+
+Use this endpoint when you want to render "best sellers" on your public website:
+
+- `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
+- Requires `Authorization: Bearer <integration_key>`
+- Query params:
+  - `days` (optional, default `30`, min `1`, max `365`)
+  - `limit` (optional, default `10`, min `1`, max `50`)
+
+Response shape:
+
+```json
+{
+  "storeId": "store_123",
+  "windowDays": 30,
+  "generatedAt": "2026-04-06T10:00:00.000Z",
+  "topSelling": [
+    {
+      "productId": "abc",
+      "name": "Jollof Rice",
+      "category": "Meals",
+      "imageUrl": "https://...",
+      "imageAlt": "Plate of jollof rice",
+      "itemType": "product",
+      "qtySold": 84,
+      "grossSales": 3780,
+      "lastSoldAt": "2026-04-06T08:10:11.000Z"
+    }
+  ]
+}
+```
+
+### 4) Optional live refresh with SWR
 
 Use SWR on top of server-rendered data for near-live stock while preserving fast first paint.
 
