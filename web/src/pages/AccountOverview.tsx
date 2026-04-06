@@ -947,7 +947,6 @@ export default function AccountOverview({
       return
     }
     setPromoGalleryDraft(current => [
-      ...current,
       {
         id: `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         url: '',
@@ -956,6 +955,7 @@ export default function AccountOverview({
         sortOrder: current.length,
         isPublished: true,
       },
+      ...current,
     ])
   }
 
@@ -2241,7 +2241,7 @@ export default function AccountOverview({
                         onClick={handleAddPromoGalleryItem}
                         disabled={promoGalleryDraft.length >= maxPromoGalleryItems}
                       >
-                        Add image slot
+                        Upload another image
                       </button>
                       <button
                         type="button"
@@ -2249,14 +2249,18 @@ export default function AccountOverview({
                         onClick={handleSavePromoGallery}
                         disabled={isSavingPromoGallery}
                       >
-                        {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery & view images'}
+                        {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery'}
                       </button>
                     </div>
+                    <p className="account-overview__hint" style={{ marginTop: 0 }}>
+                      Use <strong>Upload another image</strong> to add several gallery images. Click{' '}
+                      <strong>Save gallery</strong> when you are done so customers can see your updates.
+                    </p>
                     <p className="account-overview__hint" style={{ marginTop: 0 }}>
                       Free accounts can upload 5 images, Starter 10, Growth 15, Scale 20.
                     </p>
                     {promoGalleryDraft.length === 0 && !promoGalleryLoading ? (
-                      <p className="account-overview__hint">No gallery items yet. Add an image slot to begin.</p>
+                      <p className="account-overview__hint">No gallery items yet. Use Upload another image to begin.</p>
                     ) : null}
                     <div style={{ display: 'grid', gap: 12 }}>
                       {promoGalleryDraft.map(item => (
