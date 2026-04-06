@@ -71,6 +71,8 @@ type StoreProfile = {
   promoYoutubeUrl: string | null
   promoYoutubeChannelId: string | null
   promoTiktokUrl: string | null
+  tiktokConnectionStatus: string | null
+  tiktokConnectedAt: Timestamp | null
   promoImageUrl: string | null
   promoImageAlt: string | null
 }
@@ -244,6 +246,8 @@ function mapStoreSnapshot(
     promoYoutubeUrl: toNullableString((data as any).promoYoutubeUrl),
     promoYoutubeChannelId: toNullableString((data as any).promoYoutubeChannelId),
     promoTiktokUrl: toNullableString((data as any).promoTiktokUrl),
+    tiktokConnectionStatus: toNullableString((data as any).tiktokConnectionStatus),
+    tiktokConnectedAt: isTimestamp((data as any).tiktokConnectedAt) ? (data as any).tiktokConnectedAt : null,
     promoImageUrl: toNullableString((data as any).promoImageUrl),
     promoImageAlt: toNullableString((data as any).promoImageAlt),
   }
@@ -382,6 +386,7 @@ export default function AccountOverview({
   const [operationsTab, setOperationsTab] = useState<OperationsTab>('billing')
 
   const [isSavingPromo, setIsSavingPromo] = useState(false)
+  const [isConnectingTikTok, setIsConnectingTikTok] = useState(false)
   const [promoDraft, setPromoDraft] = useState({
     title: '',
     summary: '',
@@ -1349,6 +1354,41 @@ export default function AccountOverview({
     }
   }
 
+  async function handleConnectTikTok() {
+    if (!storeId) {
+      publish({ message: 'No store selected for TikTok connection.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsConnectingTikTok(true)
+      const callable = httpsCallable(functions, 'startTikTokConnect')
+      const response = await callable({ storeId })
+      const data = (response.data ?? {}) as { authorizationUrl?: unknown }
+      const authorizationUrl =
+        typeof data.authorizationUrl === 'string' ? data.authorizationUrl.trim() : ''
+
+      if (!authorizationUrl) {
+        publish({
+          message: 'TikTok connection could not start. Missing authorization URL.',
+          tone: 'error',
+        })
+        return
+      }
+
+      window.location.assign(authorizationUrl)
+    } catch (error) {
+      console.error('[account] Failed to start TikTok connect flow', error)
+      publish({
+        message:
+          'Unable to open TikTok connection right now. Ask support to confirm TikTok integration is configured.',
+        tone: 'error',
+      })
+    } finally {
+      setIsConnectingTikTok(false)
+    }
+  }
+
   async function handleTestSedifexProducts() {
     try {
       const listStoreProducts = httpsCallable(functions, 'listStoreProducts')
@@ -2185,6 +2225,26 @@ export default function AccountOverview({
                     data-testid="account-promo-tiktok"
                   />
                 </label>
+                <p className="account-overview__hint" style={{ marginTop: 6 }}>
+                  Add your TikTok profile URL above, then connect your TikTok account below so
+                  Sedifex can fetch feed content for integrations.
+                </p>
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={handleConnectTikTok}
+                    disabled={isConnectingTikTok || !isOwner}
+                  >
+                    {isConnectingTikTok ? 'Connecting TikTok…' : 'Connect TikTok account'}
+                  </button>
+                  <span className="account-overview__hint">
+                    Status:{' '}
+                    {profile?.tiktokConnectionStatus === 'connected'
+                      ? `Connected${profile.tiktokConnectedAt ? ` (${formatTimestamp(profile.tiktokConnectedAt)})` : ''}`
+                      : 'Not connected'}
+                  </span>
+                </div>
               </div>
               <div>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
