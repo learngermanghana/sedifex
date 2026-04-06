@@ -5,7 +5,7 @@ Use this guide to auto-load products from Sedifex into either:
 - a **WordPress** site, or
 - a **Next.js site hosted on Vercel**.
 
-This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, `integrationCustomers`, and `integrationTopSelling`), plus the product shape documented in the root README.
+This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, `integrationCustomers`, `integrationTopSelling`, and `integrationTikTokVideos`), plus the product shape documented in the root README.
 
 ## What you get
 
@@ -81,6 +81,38 @@ Promo gallery data fields (stores/{storeId}/promoGallery/{itemId})
 
     updatedAt
 
+TikTok feed data fields (stores/{storeId}/tiktokVideos/{videoId})
+
+    videoId
+
+    embedUrl
+
+    permalink
+
+    caption
+
+    thumbnailUrl
+
+    duration
+
+    viewCount
+
+    likeCount
+
+    commentCount
+
+    shareCount
+
+    sortOrder
+
+    isPublished
+
+    publishedAt
+
+    createdAt
+
+    updatedAt
+
 ## Prerequisites
 
 1. Sedifex Firebase project configured (Firestore + Functions).
@@ -95,6 +127,7 @@ Promo gallery data fields (stores/{storeId}/promoGallery/{itemId})
    - Promo gallery data: `GET /integrationGallery?storeId=<storeId>`
    - Customer data: `GET /integrationCustomers?storeId=<storeId>`
    - Top-selling products: `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
+   - TikTok feed: `GET /integrationTikTokVideos?storeId=<storeId>`
 3. Deduplicate products (important when combining multiple sources).
 4. Return fallback data when external fetch fails.
 5. Render a grouped menu UI by category.

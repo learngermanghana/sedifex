@@ -2479,6 +2479,112 @@ export const integrationGallery = functions.https.onRequest(async (req, res) => 
   res.status(200).json({ storeId, gallery })
 })
 
+export const integrationTikTokVideos = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  const { storeId } = authContext
+
+  let videosSnapshot: admin.firestore.QuerySnapshot
+  try {
+    videosSnapshot = await db
+      .collection('stores')
+      .doc(storeId)
+      .collection('tiktokVideos')
+      .orderBy('sortOrder', 'asc')
+      .orderBy('updatedAt', 'desc')
+      .limit(200)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    console.warn(
+      '[integrationTikTokVideos] Missing Firestore index for ordered tiktok video query; falling back to unordered fetch',
+      {
+        storeId,
+        code,
+      },
+    )
+    videosSnapshot = await db
+      .collection('stores')
+      .doc(storeId)
+      .collection('tiktokVideos')
+      .limit(200)
+      .get()
+  }
+
+  const videos = videosSnapshot.docs
+    .map(docSnap => {
+      const data = docSnap.data() as Record<string, unknown>
+      const videoId = typeof data.videoId === 'string' ? data.videoId.trim() : ''
+      const embedUrl = typeof data.embedUrl === 'string' ? data.embedUrl.trim() : ''
+      const permalink = typeof data.permalink === 'string' ? data.permalink.trim() : ''
+      const publishedAt = normalizeTimestampIso(data.publishedAt)
+      const updatedAt = normalizeTimestampIso(data.updatedAt)
+      const createdAt = normalizeTimestampIso(data.createdAt)
+      const isPublished = data.isPublished !== false
+
+      if (!isPublished) {
+        return null
+      }
+
+      if (!videoId && !embedUrl && !permalink) {
+        return null
+      }
+
+      return {
+        id: docSnap.id,
+        videoId: videoId || null,
+        embedUrl: embedUrl || null,
+        permalink: permalink || null,
+        caption: typeof data.caption === 'string' && data.caption.trim() ? data.caption.trim() : null,
+        thumbnailUrl:
+          typeof data.thumbnailUrl === 'string' && data.thumbnailUrl.trim() ? data.thumbnailUrl.trim() : null,
+        duration:
+          typeof data.duration === 'number' && Number.isFinite(data.duration) ? Math.max(0, data.duration) : null,
+        viewCount:
+          typeof data.viewCount === 'number' && Number.isFinite(data.viewCount)
+            ? Math.max(0, Math.floor(data.viewCount))
+            : null,
+        likeCount:
+          typeof data.likeCount === 'number' && Number.isFinite(data.likeCount)
+            ? Math.max(0, Math.floor(data.likeCount))
+            : null,
+        commentCount:
+          typeof data.commentCount === 'number' && Number.isFinite(data.commentCount)
+            ? Math.max(0, Math.floor(data.commentCount))
+            : null,
+        shareCount:
+          typeof data.shareCount === 'number' && Number.isFinite(data.shareCount)
+            ? Math.max(0, Math.floor(data.shareCount))
+            : null,
+        sortOrder: typeof data.sortOrder === 'number' && Number.isFinite(data.sortOrder) ? data.sortOrder : 0,
+        publishedAt,
+        createdAt,
+        updatedAt,
+      }
+    })
+    .filter(video => video !== null)
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      if (!a.updatedAt && !b.updatedAt) return 0
+      if (!a.updatedAt) return 1
+      if (!b.updatedAt) return -1
+      return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+    })
+
+  res.status(200).json({
+    storeId,
+    videos,
+  })
+})
+
 export const integrationPublicCatalog = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
   if (req.method === 'OPTIONS') {

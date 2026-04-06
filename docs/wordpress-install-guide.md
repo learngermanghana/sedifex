@@ -36,6 +36,12 @@ Create a frontend script that:
 
 Reference implementation: `docs/integration-quickstart.md`.
 
+If you also want to auto-show TikTok videos for the same store, call:
+
+- `integrationTikTokVideos?storeId=<storeId>` with `Authorization: Bearer <integration_key>`
+
+Then render each returned `embedUrl` (or fallback to `permalink`) inside your website section for social proof.
+
 ## Step 3: Create a shortcode
 
 Register a shortcode like `[sedifex_products]` that outputs:
