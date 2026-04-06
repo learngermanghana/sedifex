@@ -106,6 +106,10 @@ type RevokeIntegrationApiKeyPayload = {
   keyId?: unknown
 }
 
+type StartTikTokConnectPayload = {
+  storeId?: unknown
+}
+
 const VALID_ROLES = new Set(['owner', 'staff'])
 const TRIAL_DAYS = 14
 const GRACE_DAYS = 7
@@ -1766,6 +1770,11 @@ function hashIntegrationSecret(secret: string) {
   return crypto.createHash('sha256').update(secret).digest('hex')
 }
 
+function normalizeOptionalStoreId(value: unknown) {
+  const storeId = typeof value === 'string' ? value.trim() : ''
+  return storeId || null
+}
+
 function shortMask(value: string) {
   if (value.length <= 8) return '••••••••'
   return `${value.slice(0, 4)}••••${value.slice(-4)}`
@@ -2022,6 +2031,295 @@ export const rotateIntegrationApiKey = functions.https.onCall(
     }
   },
 )
+
+/** ============================================================================
+ *  CALLABLES: TikTok OAuth connect (owner)
+ * ==========================================================================*/
+
+const TIKTOK_CLIENT_KEY = defineString('TIKTOK_CLIENT_KEY')
+const TIKTOK_CLIENT_SECRET = defineString('TIKTOK_CLIENT_SECRET')
+const TIKTOK_REDIRECT_URI = defineString('TIKTOK_REDIRECT_URI')
+const TIKTOK_SUCCESS_REDIRECT_URL = defineString('TIKTOK_SUCCESS_REDIRECT_URL')
+const TIKTOK_ERROR_REDIRECT_URL = defineString('TIKTOK_ERROR_REDIRECT_URL')
+const DEFAULT_TIKTOK_SCOPES = 'user.info.basic,video.list'
+const TIKTOK_STATE_TTL_MILLIS = 1000 * 60 * 15
+
+export const startTikTokConnect = functions.https.onCall(
+  async (data: StartTikTokConnectPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const ownerStoreId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, ownerStoreId)
+
+    const requestedStoreId = normalizeOptionalStoreId(data?.storeId)
+    const storeId = requestedStoreId ?? ownerStoreId
+
+    if (storeId !== ownerStoreId) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You can only connect TikTok for your active owner store.',
+      )
+    }
+
+    const clientKey = TIKTOK_CLIENT_KEY.value().trim()
+    const redirectUri = TIKTOK_REDIRECT_URI.value().trim()
+
+    if (!clientKey || !redirectUri) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'TikTok connection is not configured. Ask support to set TikTok env vars.',
+      )
+    }
+
+    const state = crypto.randomBytes(24).toString('hex')
+    const createdAt = admin.firestore.Timestamp.now()
+
+    await db.collection('tiktokOAuthStates').doc(state).set({
+      storeId,
+      createdBy: uid,
+      createdAt,
+      status: 'pending',
+    })
+
+    const authUrl = new URL('https://www.tiktok.com/v2/auth/authorize/')
+    authUrl.searchParams.set('client_key', clientKey)
+    authUrl.searchParams.set('scope', DEFAULT_TIKTOK_SCOPES)
+    authUrl.searchParams.set('response_type', 'code')
+    authUrl.searchParams.set('redirect_uri', redirectUri)
+    authUrl.searchParams.set('state', state)
+
+    return {
+      ok: true,
+      authorizationUrl: authUrl.toString(),
+    }
+  },
+)
+
+function buildTikTokRedirectTarget(baseUrl: string | null, params: Record<string, string>) {
+  if (!baseUrl) return null
+  try {
+    const url = new URL(baseUrl)
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.set(key, value)
+    })
+    return url.toString()
+  } catch {
+    console.warn('[tiktok] Invalid redirect URL configured', { baseUrl })
+    return null
+  }
+}
+
+function sendTikTokHtmlResponse(res: functions.Response, title: string, message: string, isError: boolean) {
+  const statusCode = isError ? 400 : 200
+  const safeTitle = title.replace(/[<>&]/g, '')
+  const safeMessage = message.replace(/[<>&]/g, '')
+  res.status(statusCode).send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      main { max-width: 560px; margin: 64px auto; padding: 28px; background: #111827; border-radius: 14px; }
+      h1 { margin: 0 0 10px; font-size: 1.3rem; }
+      p { margin: 0 0 12px; line-height: 1.5; color: #cbd5e1; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${safeTitle}</h1>
+      <p>${safeMessage}</p>
+      <p>You can close this window and return to Sedifex.</p>
+    </main>
+  </body>
+</html>`)
+}
+
+export const tiktokOAuthCallback = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'GET') {
+    res.status(405).json({ ok: false, error: 'Method not allowed.' })
+    return
+  }
+
+  const state = typeof req.query.state === 'string' ? req.query.state.trim() : ''
+  const code = typeof req.query.code === 'string' ? req.query.code.trim() : ''
+  const error = typeof req.query.error === 'string' ? req.query.error.trim() : ''
+  const errorDescription =
+    typeof req.query.error_description === 'string' ? req.query.error_description.trim() : ''
+
+  const successRedirectBase = TIKTOK_SUCCESS_REDIRECT_URL.value().trim() || null
+  const errorRedirectBase = TIKTOK_ERROR_REDIRECT_URL.value().trim() || null
+
+  function handleError(message: string, reason: string) {
+    const target = buildTikTokRedirectTarget(errorRedirectBase, {
+      tiktokConnect: 'error',
+      reason,
+    })
+    if (target) {
+      res.redirect(302, target)
+      return
+    }
+    sendTikTokHtmlResponse(res, 'TikTok connection failed', message, true)
+  }
+
+  if (!state) {
+    handleError('Missing OAuth state. Please retry from Account Overview.', 'missing_state')
+    return
+  }
+
+  if (error) {
+    const detail = errorDescription || error
+    handleError(`TikTok authorization was not completed: ${detail}.`, 'authorization_denied')
+    return
+  }
+
+  if (!code) {
+    handleError('Missing authorization code from TikTok. Please retry.', 'missing_code')
+    return
+  }
+
+  const stateRef = db.collection('tiktokOAuthStates').doc(state)
+  const stateSnap = await stateRef.get()
+  if (!stateSnap.exists) {
+    handleError('This TikTok connection session has expired. Start again from Sedifex.', 'invalid_state')
+    return
+  }
+
+  const stateData = (stateSnap.data() ?? {}) as Record<string, unknown>
+  const storeId = typeof stateData.storeId === 'string' ? stateData.storeId.trim() : ''
+  const createdAt = stateData.createdAt instanceof admin.firestore.Timestamp ? stateData.createdAt : null
+  const isAlreadyUsed = stateData.status === 'completed'
+  const isExpired =
+    !createdAt || Date.now() - createdAt.toMillis() > TIKTOK_STATE_TTL_MILLIS
+
+  if (!storeId || isAlreadyUsed || isExpired) {
+    await stateRef.set(
+      {
+        status: isExpired ? 'expired' : 'invalid',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    handleError('This TikTok connection session is no longer valid. Please retry.', 'expired_state')
+    return
+  }
+
+  const clientKey = TIKTOK_CLIENT_KEY.value().trim()
+  const clientSecret = TIKTOK_CLIENT_SECRET.value().trim()
+  const redirectUri = TIKTOK_REDIRECT_URI.value().trim()
+  if (!clientKey || !clientSecret || !redirectUri) {
+    handleError('TikTok environment variables are missing on the server.', 'missing_server_config')
+    return
+  }
+
+  try {
+    const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+      }),
+    })
+
+    const tokenJson = (await tokenResponse.json()) as {
+      access_token?: string
+      refresh_token?: string
+      expires_in?: number
+      refresh_expires_in?: number
+      open_id?: string
+      scope?: string
+      token_type?: string
+      error?: { code?: string; message?: string; log_id?: string }
+      message?: string
+    }
+
+    if (!tokenResponse.ok || !tokenJson.access_token) {
+      console.error('[tiktok] OAuth token exchange failed', {
+        status: tokenResponse.status,
+        payload: tokenJson,
+      })
+      handleError('TikTok token exchange failed. Please retry.', 'token_exchange_failed')
+      return
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    const expiresInSeconds =
+      typeof tokenJson.expires_in === 'number' && Number.isFinite(tokenJson.expires_in)
+        ? tokenJson.expires_in
+        : null
+    const refreshExpiresInSeconds =
+      typeof tokenJson.refresh_expires_in === 'number' && Number.isFinite(tokenJson.refresh_expires_in)
+        ? tokenJson.refresh_expires_in
+        : null
+
+    const tiktokRef = db.collection('stores').doc(storeId).collection('integrations').doc('tiktok')
+    await tiktokRef.set(
+      {
+        provider: 'tiktok',
+        status: 'connected',
+        openId: typeof tokenJson.open_id === 'string' ? tokenJson.open_id : null,
+        scope: typeof tokenJson.scope === 'string' ? tokenJson.scope : DEFAULT_TIKTOK_SCOPES,
+        tokenType: typeof tokenJson.token_type === 'string' ? tokenJson.token_type : 'Bearer',
+        accessToken: tokenJson.access_token,
+        refreshToken: typeof tokenJson.refresh_token === 'string' ? tokenJson.refresh_token : null,
+        accessTokenExpiresInSeconds: expiresInSeconds,
+        refreshTokenExpiresInSeconds: refreshExpiresInSeconds,
+        accessTokenExpiresAt:
+          expiresInSeconds !== null
+            ? admin.firestore.Timestamp.fromMillis(Date.now() + expiresInSeconds * 1000)
+            : null,
+        refreshTokenExpiresAt:
+          refreshExpiresInSeconds !== null
+            ? admin.firestore.Timestamp.fromMillis(Date.now() + refreshExpiresInSeconds * 1000)
+            : null,
+        connectedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+
+    await db.collection('stores').doc(storeId).set(
+      {
+        tiktokConnectionStatus: 'connected',
+        tiktokConnectedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+
+    await stateRef.set(
+      {
+        status: 'completed',
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+
+    const successTarget = buildTikTokRedirectTarget(successRedirectBase, {
+      tiktokConnect: 'success',
+    })
+    if (successTarget) {
+      res.redirect(302, successTarget)
+      return
+    }
+    sendTikTokHtmlResponse(
+      res,
+      'TikTok connected',
+      'Your TikTok account is now connected. Sedifex can now store tokens for feed sync.',
+      false,
+    )
+  } catch (tokenError) {
+    console.error('[tiktok] Unexpected OAuth callback failure', tokenError)
+    handleError('Unexpected error while connecting TikTok. Please retry.', 'unexpected_error')
+  }
+})
 
 function setIntegrationResponseHeaders(res: functions.Response<any>) {
   const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim()
