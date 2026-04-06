@@ -6,6 +6,7 @@ import './PromoLandingPage.css'
 type PromoProfile = {
   storeId: string
   storeName: string
+  promoEnabled: boolean
   title: string | null
   summary: string | null
   startDate: string | null
@@ -170,7 +171,7 @@ export default function PromoLandingPage() {
         const catalogPayload = (await catalogResponse.json()) as CatalogApiResponse
         const promo = promoPayload.promo
         const storeId = typeof promoPayload.storeId === 'string' ? promoPayload.storeId : ''
-        if (!promo || !storeId || promo.enabled !== true) {
+        if (!promo || !storeId) {
           setProfile(null)
           setGallery([])
           setError('This promo link is not active.')
@@ -233,6 +234,7 @@ export default function PromoLandingPage() {
             typeof promo.storeName === 'string' && promo.storeName.trim()
               ? promo.storeName.trim()
               : 'Sedifex Store',
+          promoEnabled: promo.enabled === true,
           title: typeof promo.title === 'string' ? promo.title : null,
           summary: typeof promo.summary === 'string' ? promo.summary : null,
           startDate: typeof promo.startDate === 'string' ? promo.startDate : null,
@@ -337,6 +339,9 @@ export default function PromoLandingPage() {
         {activeTab === 'promo' && (
         <section id="promo-hero" className="promo-section">
           <p className="promo-label">Sedifex promo</p>
+          {!profile.promoEnabled ? (
+            <p className="promo-meta">No active promo is running right now. Check back soon.</p>
+          ) : null}
           {profile.imageUrl ? (
             <img
               className="promo-image"
