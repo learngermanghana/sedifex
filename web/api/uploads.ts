@@ -134,15 +134,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const file = bucket.file(objectName)
 
+    if (explicitStoragePath) {
+      await file.delete({ ignoreNotFound: true })
+    }
+
     await file.save(fileBuffer, {
       resumable: false,
       metadata: {
         contentType: mimeType, // moved inside metadata
-        cacheControl: 'public,max-age=31536000,immutable',
+        cacheControl: explicitStoragePath
+          ? 'no-cache,max-age=0,must-revalidate'
+          : 'public,max-age=31536000,immutable',
       },
     })
 
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(objectName)}`
+    const basePublicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(objectName)}`
+    const publicUrl = explicitStoragePath ? `${basePublicUrl}?v=${Date.now()}` : basePublicUrl
     return res.status(201).json({ url: publicUrl })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

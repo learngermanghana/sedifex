@@ -66,9 +66,18 @@ describe('uploads api', () => {
 
     expect(res.statusCode).toBe(201)
     expect(bucketFile).toHaveBeenCalledWith('stores/store-1/promo.jpg')
-    expect(res.payload).toEqual({
-      url: 'https://storage.googleapis.com/test-bucket/stores/store-1/promo.jpg',
-    })
+    expect(bucketFileDelete).toHaveBeenCalledWith({ ignoreNotFound: true })
+    expect(bucketFileSave).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          cacheControl: 'no-cache,max-age=0,must-revalidate',
+        }),
+      }),
+    )
+    expect((res.payload as { url?: string }).url).toMatch(
+      /^https:\/\/storage\.googleapis\.com\/test-bucket\/stores\/store-1\/promo\.jpg\?v=\d+$/,
+    )
   })
 
   it('creates a timestamped object path when no storagePath is provided', async () => {
@@ -88,6 +97,15 @@ describe('uploads api', () => {
     expect(bucketFile).toHaveBeenCalledTimes(1)
     const objectPath = bucketFile.mock.calls[0]?.[0]
     expect(objectPath).toMatch(/^product-images\/\d+-gallery\.png$/)
+    expect(bucketFileDelete).not.toHaveBeenCalled()
+    expect(bucketFileSave).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          cacheControl: 'public,max-age=31536000,immutable',
+        }),
+      }),
+    )
   })
 
   it('deletes an uploaded object when DELETE is called with a matching storage URL', async () => {
