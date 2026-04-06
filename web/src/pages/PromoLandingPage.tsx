@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import './PromoLandingPage.css'
@@ -116,6 +116,16 @@ export default function PromoLandingPage() {
   const [gallery, setGallery] = useState<PromoGalleryItem[]>([])
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [activeTab, setActiveTab] = useState<PromoSectionTab>('about')
+  const [activeGalleryImageId, setActiveGalleryImageId] = useState<string | null>(null)
+
+  const activeGalleryIndex = useMemo(() => {
+    if (!activeGalleryImageId) {
+      return -1
+    }
+    return gallery.findIndex(item => item.id === activeGalleryImageId)
+  }, [activeGalleryImageId, gallery])
+
+  const activeGalleryItem = activeGalleryIndex >= 0 ? gallery[activeGalleryIndex] : null
 
   useEffect(() => {
     let isMounted = true
@@ -266,6 +276,62 @@ export default function PromoLandingPage() {
     }
   }, [slug])
 
+  useEffect(() => {
+    if (!activeGalleryItem) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setActiveGalleryImageId(null)
+        return
+      }
+
+      if (!gallery.length) {
+        return
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        const nextIndex = (activeGalleryIndex + 1) % gallery.length
+        setActiveGalleryImageId(gallery[nextIndex].id)
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        const previousIndex = (activeGalleryIndex - 1 + gallery.length) % gallery.length
+        setActiveGalleryImageId(gallery[previousIndex].id)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeGalleryIndex, activeGalleryItem, gallery])
+
+  function openGalleryItem(itemId: string) {
+    setActiveGalleryImageId(itemId)
+  }
+
+  function closeGalleryViewer() {
+    setActiveGalleryImageId(null)
+  }
+
+  function showPreviousGalleryImage() {
+    if (!gallery.length || activeGalleryIndex < 0) {
+      return
+    }
+    const previousIndex = (activeGalleryIndex - 1 + gallery.length) % gallery.length
+    setActiveGalleryImageId(gallery[previousIndex].id)
+  }
+
+  function showNextGalleryImage() {
+    if (!gallery.length || activeGalleryIndex < 0) {
+      return
+    }
+    const nextIndex = (activeGalleryIndex + 1) % gallery.length
+    setActiveGalleryImageId(gallery[nextIndex].id)
+  }
+
   if (loading) {
     return (
       <main className="promo-page">
@@ -380,11 +446,18 @@ export default function PromoLandingPage() {
             <div className="promo-gallery-grid" role="list" aria-label="Promo gallery">
               {gallery.map(item => (
                 <figure key={item.id} className="promo-gallery-item" role="listitem">
-                  <img
-                    src={item.url}
-                    alt={item.alt || `${profile.storeName} gallery image`}
-                    loading="lazy"
-                  />
+                  <button
+                    type="button"
+                    className="promo-gallery-item__image-button"
+                    onClick={() => openGalleryItem(item.id)}
+                    aria-label={`Open image ${item.alt || item.caption || item.id}`}
+                  >
+                    <img
+                      src={item.url}
+                      alt={item.alt || `${profile.storeName} gallery image`}
+                      loading="lazy"
+                    />
+                  </button>
                   {item.caption ? <figcaption>{item.caption}</figcaption> : null}
                 </figure>
               ))}
@@ -394,6 +467,49 @@ export default function PromoLandingPage() {
           )}
         </section>
         )}
+        {activeGalleryItem ? (
+          <div
+            className="promo-gallery-viewer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Gallery image viewer"
+            onClick={closeGalleryViewer}
+          >
+            <div className="promo-gallery-viewer__content" onClick={event => event.stopPropagation()}>
+              <button
+                type="button"
+                className="promo-gallery-viewer__close"
+                aria-label="Close image viewer"
+                onClick={closeGalleryViewer}
+              >
+                ×
+              </button>
+              <button
+                type="button"
+                className="promo-gallery-viewer__nav"
+                onClick={showPreviousGalleryImage}
+                aria-label="View previous image"
+              >
+                ‹
+              </button>
+              <figure className="promo-gallery-viewer__figure">
+                <img
+                  src={activeGalleryItem.url}
+                  alt={activeGalleryItem.alt || `${profile?.storeName || 'Store'} gallery image`}
+                />
+                {activeGalleryItem.caption ? <figcaption>{activeGalleryItem.caption}</figcaption> : null}
+              </figure>
+              <button
+                type="button"
+                className="promo-gallery-viewer__nav"
+                onClick={showNextGalleryImage}
+                aria-label="View next image"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        ) : null}
         {activeTab === 'catalog' && (
           <section id="promo-catalog" className="promo-section">
             <div className="promo-gallery-header">
