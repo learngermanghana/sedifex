@@ -147,9 +147,37 @@ function sedifex_sync_shortcode() {
   ob_start();
   echo '<div class="sedifex-products">';
   foreach ($products as $product) {
-    $name = esc_html($product['name'] ?? 'Untitled product');
+    $name_raw = $product['name'] ?? 'Untitled product';
+    $name = esc_html($name_raw);
     $price = esc_html((string) ($product['price'] ?? '0'));
+    $image_urls = [];
+
+    if (isset($product['imageUrls']) && is_array($product['imageUrls'])) {
+      foreach ($product['imageUrls'] as $url) {
+        if (is_string($url) && trim($url) !== '') {
+          $image_urls[] = trim($url);
+        }
+      }
+    }
+
+    if (empty($image_urls) && isset($product['imageUrl']) && is_string($product['imageUrl']) && trim($product['imageUrl']) !== '') {
+      $image_urls[] = trim($product['imageUrl']);
+    }
+
+    $image_urls = array_slice(array_values(array_unique($image_urls)), 0, 3);
+    $image_alt_raw = isset($product['imageAlt']) && is_string($product['imageAlt']) && trim($product['imageAlt']) !== ''
+      ? trim($product['imageAlt'])
+      : $name_raw;
+    $image_alt = esc_attr($image_alt_raw);
+
     echo '<article class="sedifex-product">';
+    if (!empty($image_urls)) {
+      echo '<div class="sedifex-product-gallery">';
+      foreach ($image_urls as $url) {
+        echo '<img src="' . esc_url($url) . '" alt="' . $image_alt . '" loading="lazy" />';
+      }
+      echo '</div>';
+    }
     echo '<h3>' . $name . '</h3>';
     echo '<p>Price: ' . $price . '</p>';
     echo '</article>';

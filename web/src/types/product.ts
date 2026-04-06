@@ -12,6 +12,7 @@ export type Product = {
   reorderPoint: number | null
   itemType: ItemType
   imageUrl?: string | null
+  imageUrls?: string[]
   imageAlt?: string | null
   taxRate?: number | null
   expiryDate?: Date | null

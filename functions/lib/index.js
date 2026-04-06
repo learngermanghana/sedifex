@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationCustomers = exports.integrationPublicCatalog = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationPublicCatalog = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -935,6 +935,7 @@ exports.commitSale = functions.https.onCall(async (data, context) => {
             phone: typeof customer.phone === 'string' ? customer.phone.trim() || null : null,
         }
         : null;
+    const customerRef = normalizedCustomer?.id ? firestore_1.defaultDb.collection('customers').doc(normalizedCustomer.id) : null;
     await firestore_1.defaultDb.runTransaction(async (tx) => {
         // 1️⃣ ALL READS FIRST
         // prevent duplicates
@@ -1004,6 +1005,35 @@ exports.commitSale = functions.https.onCall(async (data, context) => {
                     storeId: normalizedBranchId,
                     createdAt: timestamp,
                 });
+            }
+        }
+        const saleTotal = Number(totals?.total ?? 0);
+        const amountPaid = Number(payment?.amountPaid ?? saleTotal);
+        const shortfallAmount = Math.max(0, saleTotal - amountPaid);
+        const shortfallCents = Math.round(shortfallAmount * 100);
+        if (customerRef && shortfallCents > 0) {
+            const customerSnap = await tx.get(customerRef);
+            if (customerSnap.exists) {
+                const customerData = customerSnap.data();
+                const customerStoreId = typeof customerData.storeId === 'string' ? customerData.storeId.trim() : null;
+                if (!customerStoreId || customerStoreId === normalizedBranchId) {
+                    const existingDebt = customerData.debt && typeof customerData.debt === 'object'
+                        ? customerData.debt
+                        : null;
+                    const existingOutstandingRaw = Number(existingDebt?.outstandingCents ?? 0);
+                    const existingOutstanding = Number.isFinite(existingOutstandingRaw)
+                        ? Math.max(0, Math.round(existingOutstandingRaw))
+                        : 0;
+                    const nextOutstanding = existingOutstanding + shortfallCents;
+                    tx.update(customerRef, {
+                        debt: {
+                            outstandingCents: nextOutstanding,
+                            dueDate: existingDebt?.dueDate ?? null,
+                            lastReminderAt: existingDebt?.lastReminderAt ?? null,
+                        },
+                        updatedAt: timestamp,
+                    });
+                }
             }
         }
     });
@@ -1258,10 +1288,7 @@ exports.listStoreProducts = functions.https.onCall(async (data, context) => {
                 ? data.stockCount
                 : null,
             itemType,
-            imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
-            imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim()
-                ? data.imageAlt.trim()
-                : null,
+            ...extractProductImageSet(data),
             updatedAt: data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt : null,
         };
     });
@@ -1539,6 +1566,33 @@ function toTrimmedStringOrNull(value) {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
 }
+function toTrimmedStringArray(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const unique = new Set();
+    for (const item of value) {
+        if (typeof item !== 'string')
+            continue;
+        const trimmed = item.trim();
+        if (!trimmed)
+            continue;
+        unique.add(trimmed);
+    }
+    return [...unique];
+}
+function extractProductImageSet(data) {
+    const primaryImageUrl = toTrimmedStringOrNull(data.imageUrl);
+    const imageUrls = toTrimmedStringArray(data.imageUrls);
+    if (primaryImageUrl && !imageUrls.includes(primaryImageUrl)) {
+        imageUrls.unshift(primaryImageUrl);
+    }
+    return {
+        imageUrl: primaryImageUrl,
+        imageUrls,
+        imageAlt: toTrimmedStringOrNull(data.imageAlt),
+    };
+}
 async function resolvePromoStoreForRead(req, res) {
     if (req.method !== 'GET') {
         res.status(405).json({ error: 'method-not-allowed' });
@@ -1671,8 +1725,7 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
                 : data.itemType === 'made_to_order'
                     ? 'made_to_order'
                     : 'product',
-            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
-            imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+            ...extractProductImageSet(data),
             updatedAt: data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
         };
     };
@@ -1733,6 +1786,7 @@ exports.integrationPromo = functions.https.onRequest(async (req, res) => {
             websiteUrl: toTrimmedStringOrNull(data.promoWebsiteUrl),
             imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
             imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
+            phone: toTrimmedStringOrNull(data.phone),
             storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
             updatedAt: normalizeTimestampIso(data.updatedAt),
         },
@@ -1818,8 +1872,7 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
             description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
             category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
             price: typeof data.price === 'number' ? data.price : null,
-            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
-            imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+            ...extractProductImageSet(data),
             itemType: data.itemType === 'service'
                 ? 'service'
                 : data.itemType === 'made_to_order'
@@ -1900,6 +1953,135 @@ exports.integrationCustomers = functions.https.onRequest(async (req, res) => {
         return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
     });
     res.status(200).json({ storeId, customers });
+});
+exports.integrationTopSelling = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    const authContext = await validateIntegrationTokenOrReply(req, res);
+    if (!authContext) {
+        return;
+    }
+    const { storeId } = authContext;
+    const limitRaw = Number(req.query.limit ?? 10);
+    const requestedLimit = Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 10;
+    const limit = Math.min(Math.max(requestedLimit, 1), 50);
+    const daysRaw = Number(req.query.days ?? 30);
+    const requestedDays = Number.isFinite(daysRaw) ? Math.floor(daysRaw) : 30;
+    const days = Math.min(Math.max(requestedDays, 1), 365);
+    const windowStartDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    let saleItemsSnapshot;
+    try {
+        saleItemsSnapshot = await firestore_1.defaultDb
+            .collection('saleItems')
+            .where('storeId', '==', storeId)
+            .where('createdAt', '>=', windowStartDate)
+            .orderBy('createdAt', 'desc')
+            .limit(5000)
+            .get();
+    }
+    catch (error) {
+        const code = error?.code;
+        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+        if (!isMissingIndex) {
+            throw error;
+        }
+        console.warn('[integrationTopSelling] Missing Firestore index for ordered saleItems query; falling back to unordered fetch', {
+            storeId,
+            code,
+        });
+        saleItemsSnapshot = await firestore_1.defaultDb.collection('saleItems').where('storeId', '==', storeId).limit(5000).get();
+    }
+    const topSellingByProduct = new Map();
+    for (const docSnap of saleItemsSnapshot.docs) {
+        const data = docSnap.data();
+        const productId = typeof data.productId === 'string' ? data.productId.trim() : '';
+        if (!productId)
+            continue;
+        const createdAtIso = normalizeTimestampIso(data.createdAt);
+        if (createdAtIso) {
+            const createdAtMillis = Date.parse(createdAtIso);
+            if (!Number.isNaN(createdAtMillis) && createdAtMillis < windowStartDate.getTime()) {
+                continue;
+            }
+        }
+        const qtyRaw = Number(data.qty ?? 0);
+        const qty = Number.isFinite(qtyRaw) ? Math.max(0, Math.abs(qtyRaw)) : 0;
+        if (qty <= 0)
+            continue;
+        const priceRaw = Number(data.price ?? 0);
+        const price = Number.isFinite(priceRaw) ? Math.max(0, priceRaw) : 0;
+        const grossSales = qty * price;
+        const existing = topSellingByProduct.get(productId) ?? {
+            qtySold: 0,
+            grossSales: 0,
+            lastSoldAt: null,
+        };
+        const nextLastSoldAt = existing.lastSoldAt && createdAtIso && existing.lastSoldAt > createdAtIso
+            ? existing.lastSoldAt
+            : createdAtIso ?? existing.lastSoldAt;
+        topSellingByProduct.set(productId, {
+            qtySold: existing.qtySold + qty,
+            grossSales: existing.grossSales + grossSales,
+            lastSoldAt: nextLastSoldAt,
+        });
+    }
+    const sortedRows = [...topSellingByProduct.entries()]
+        .map(([productId, aggregate]) => ({ productId, ...aggregate }))
+        .sort((a, b) => {
+        if (b.qtySold !== a.qtySold)
+            return b.qtySold - a.qtySold;
+        if (b.grossSales !== a.grossSales)
+            return b.grossSales - a.grossSales;
+        if (!a.lastSoldAt && !b.lastSoldAt)
+            return 0;
+        if (!a.lastSoldAt)
+            return 1;
+        if (!b.lastSoldAt)
+            return -1;
+        return a.lastSoldAt > b.lastSoldAt ? -1 : a.lastSoldAt < b.lastSoldAt ? 1 : 0;
+    })
+        .slice(0, limit);
+    const productIds = sortedRows.map(row => row.productId);
+    const productInfoById = new Map();
+    if (productIds.length > 0) {
+        const productRefs = productIds.map(productId => firestore_1.defaultDb.collection('products').doc(productId));
+        const productSnaps = await firestore_1.defaultDb.getAll(...productRefs);
+        for (const productSnap of productSnaps) {
+            if (!productSnap.exists)
+                continue;
+            const data = (productSnap.data() ?? {});
+            productInfoById.set(productSnap.id, {
+                name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null,
+                category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+                ...extractProductImageSet(data),
+                itemType: data.itemType === 'service'
+                    ? 'service'
+                    : data.itemType === 'made_to_order'
+                        ? 'made_to_order'
+                        : 'product',
+            });
+        }
+    }
+    const topSelling = sortedRows.map(row => {
+        const productInfo = productInfoById.get(row.productId);
+        return {
+            productId: row.productId,
+            name: productInfo?.name ?? null,
+            category: productInfo?.category ?? null,
+            imageUrl: productInfo?.imageUrl ?? null,
+            imageUrls: productInfo?.imageUrls ?? [],
+            imageAlt: productInfo?.imageAlt ?? null,
+            itemType: productInfo?.itemType ?? 'product',
+            qtySold: row.qtySold,
+            grossSales: row.grossSales,
+            lastSoldAt: row.lastSoldAt,
+        };
+    });
+    res.status(200).json({
+        storeId,
+        windowDays: days,
+        generatedAt: new Date().toISOString(),
+        topSelling,
+    });
 });
 /** ============================================================================
  *  WEBHOOKS: product.created / product.updated / product.deleted

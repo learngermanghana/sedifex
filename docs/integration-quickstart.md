@@ -19,7 +19,8 @@ After setup, Website A can fetch and render:
 - `price`
 - `stockCount`
 - `itemType`
-- `imageUrl`
+- `imageUrl` (primary image)
+- `imageUrls` (optional array for multiple product photos)
 - `imageAlt`
 - `updatedAt`
 
@@ -117,6 +118,7 @@ type Product = {
   price: number
   stockCount?: number
   imageUrl?: string | null
+  imageUrls?: string[]
 }
 
 const FALLBACK_PRODUCTS: Product[] = [
@@ -245,6 +247,7 @@ Response shape:
       "name": "Jollof Rice",
       "category": "Meals",
       "imageUrl": "https://...",
+      "imageUrls": ["https://...", "https://.../side-angle.jpg"],
       "imageAlt": "Plate of jollof rice",
       "itemType": "product",
       "qtySold": 84,
@@ -301,3 +304,9 @@ It removes repeated rows when multiple sources return the same product represent
 ---
 
 If you need this in another format (REST proxy endpoint, WordPress plugin, or server-side Node worker), keep the same product contract and tenant-scoped authorization model.
+
+
+### Product photos: one vs multiple images
+- `imageUrl` remains the primary/legacy photo field.
+- `imageUrls` can contain 1..n URLs when a merchant wants 2-3 product photos on downstream websites.
+- Consumers should prefer `imageUrls[0]` when present, then fall back to `imageUrl`.

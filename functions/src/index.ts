@@ -1729,12 +1729,7 @@ export const listStoreProducts = functions.https.onCall(
             ? data.stockCount
             : null,
         itemType,
-        imageUrl:
-          typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
-        imageAlt:
-          typeof data.imageAlt === 'string' && data.imageAlt.trim()
-            ? data.imageAlt.trim()
-            : null,
+        ...extractProductImageSet(data),
         updatedAt:
           data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt : null,
       }
@@ -2065,6 +2060,34 @@ function toTrimmedStringOrNull(value: unknown): string | null {
   return trimmed ? trimmed : null
 }
 
+
+function toTrimmedStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const unique = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const trimmed = item.trim()
+    if (!trimmed) continue
+    unique.add(trimmed)
+  }
+  return [...unique]
+}
+
+function extractProductImageSet(data: Record<string, unknown>): { imageUrl: string | null; imageUrls: string[]; imageAlt: string | null } {
+  const primaryImageUrl = toTrimmedStringOrNull(data.imageUrl)
+  const imageUrls = toTrimmedStringArray(data.imageUrls)
+  if (primaryImageUrl && !imageUrls.includes(primaryImageUrl)) {
+    imageUrls.unshift(primaryImageUrl)
+  }
+  return {
+    imageUrl: primaryImageUrl,
+    imageUrls,
+    imageAlt: toTrimmedStringOrNull(data.imageAlt),
+  }
+}
+
 async function resolvePromoStoreForRead(
   req: functions.https.Request,
   res: functions.Response<any>,
@@ -2227,8 +2250,7 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
           : data.itemType === 'made_to_order'
             ? 'made_to_order'
             : 'product',
-      imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
-      imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+      ...extractProductImageSet(data),
       updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
     }
   }
@@ -2382,8 +2404,7 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
           typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
         category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
         price: typeof data.price === 'number' ? data.price : null,
-        imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
-        imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+        ...extractProductImageSet(data),
         itemType:
           data.itemType === 'service'
             ? 'service'
@@ -2579,6 +2600,7 @@ export const integrationTopSelling = functions.https.onRequest(async (req, res) 
       name: string | null
       category: string | null
       imageUrl: string | null
+      imageUrls: string[]
       imageAlt: string | null
       itemType: 'product' | 'service' | 'made_to_order'
     }
@@ -2593,8 +2615,7 @@ export const integrationTopSelling = functions.https.onRequest(async (req, res) 
       productInfoById.set(productSnap.id, {
         name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null,
         category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
-        imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
-        imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : null,
+        ...extractProductImageSet(data),
         itemType:
           data.itemType === 'service'
             ? 'service'
@@ -2612,6 +2633,7 @@ export const integrationTopSelling = functions.https.onRequest(async (req, res) 
       name: productInfo?.name ?? null,
       category: productInfo?.category ?? null,
       imageUrl: productInfo?.imageUrl ?? null,
+      imageUrls: productInfo?.imageUrls ?? [],
       imageAlt: productInfo?.imageAlt ?? null,
       itemType: productInfo?.itemType ?? 'product',
       qtySold: row.qtySold,

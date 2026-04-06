@@ -134,6 +134,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
   const batchNumber = typeof data.batchNumber === 'string' ? data.batchNumber.trim() : ''
   const showOnReceipt = data.showOnReceipt === true
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+  const imageUrls = normalizeImageUrls(data.imageUrls, imageUrl)
   const imageAlt = typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : null
   const reorderPoint = sanitizeNumber(
     data.reorderPoint ?? data.reorderLevel ?? (data as any).reorderThreshold ?? null,
@@ -150,6 +151,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     reorderPoint,
     itemType,
     imageUrl,
+    imageUrls,
     imageAlt: imageUrl ? imageAlt || (nameRaw.trim() || 'Product image') : null,
     taxRate: sanitizeTaxRate(data.taxRate),
     expiryDate,
@@ -177,6 +179,10 @@ async function backfillProductDefaults(
   if (!('batchNumber' in data)) updates.batchNumber = null
   if (!('showOnReceipt' in data)) updates.showOnReceipt = false
   if (!('imageUrl' in data)) updates.imageUrl = null
+  if (!('imageUrls' in data)) {
+    const existingImageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+    updates.imageUrls = existingImageUrl ? [existingImageUrl] : []
+  }
   if (!('imageAlt' in data) && typeof data.imageUrl === 'string' && data.imageUrl.trim()) {
     updates.imageAlt = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null
   }
@@ -225,6 +231,21 @@ function normalizeImageUrl(value: string): string | null {
   } catch {
     return null
   }
+}
+
+
+function normalizeImageUrls(value: unknown, fallbackImageUrl: string | null): string[] {
+  const list = Array.isArray(value)
+    ? value
+        .map(item => (typeof item === 'string' ? normalizeImageUrl(item) : null))
+        .filter((item): item is string => Boolean(item))
+    : []
+
+  if (fallbackImageUrl && !list.includes(fallbackImageUrl)) {
+    list.unshift(fallbackImageUrl)
+  }
+
+  return list
 }
 
 function normalizeLookupValue(value: string | null | undefined): string {
@@ -297,6 +318,8 @@ export default function Products() {
   const [batchNumberInput, setBatchNumberInput] = useState('')
   const [showOnReceiptInput, setShowOnReceiptInput] = useState(false)
   const [imageUrlInput, setImageUrlInput] = useState('')
+  const [imageUrlInput2, setImageUrlInput2] = useState('')
+  const [imageUrlInput3, setImageUrlInput3] = useState('')
   const [imageAltInput, setImageAltInput] = useState('')
   const [draftProductKey, setDraftProductKey] = useState(() => createDraftProductKey())
   const [imageFileInput, setImageFileInput] = useState<File | null>(null)
@@ -323,6 +346,8 @@ export default function Products() {
   const [editBatchNumberInput, setEditBatchNumberInput] = useState('')
   const [editShowOnReceipt, setEditShowOnReceipt] = useState(false)
   const [editImageUrlInput, setEditImageUrlInput] = useState('')
+  const [editImageUrlInput2, setEditImageUrlInput2] = useState('')
+  const [editImageUrlInput3, setEditImageUrlInput3] = useState('')
   const [editImageAltInput, setEditImageAltInput] = useState('')
   const [editImageFileInput, setEditImageFileInput] = useState<File | null>(null)
   const [editImageUploadError, setEditImageUploadError] = useState<string | null>(null)
@@ -582,6 +607,12 @@ export default function Products() {
     const manufacturerName = manufacturerInput.trim()
     const batchNumber = batchNumberInput.trim()
     const normalizedImageUrl = normalizeImageUrl(imageUrlInput)
+    const normalizedImageUrl2 = normalizeImageUrl(imageUrlInput2)
+    const normalizedImageUrl3 = normalizeImageUrl(imageUrlInput3)
+    const normalizedImageUrls = Array.from(
+      new Set([normalizedImageUrl, normalizedImageUrl2, normalizedImageUrl3].filter(Boolean)),
+    ) as string[]
+    const primaryImageUrl = normalizedImageUrls[0] ?? null
     const imageAlt = imageAltInput.trim()
 
     if (!isService && (Number.isNaN(priceNumber) || priceNumber < 0)) {
@@ -602,6 +633,16 @@ export default function Products() {
     if (imageUrlInput.trim() && !normalizedImageUrl) {
       setFormStatus('error')
       setFormError('Image URL must start with http:// or https://')
+      return
+    }
+    if (imageUrlInput2.trim() && !normalizedImageUrl2) {
+      setFormStatus('error')
+      setFormError('Image URL 2 must start with http:// or https://')
+      return
+    }
+    if (imageUrlInput3.trim() && !normalizedImageUrl3) {
+      setFormStatus('error')
+      setFormError('Image URL 3 must start with http:// or https://')
       return
     }
 
@@ -664,8 +705,9 @@ export default function Products() {
         manufacturerName: !isService && manufacturerName ? manufacturerName : null,
         batchNumber: !isService && batchNumber ? batchNumber : null,
         showOnReceipt: !isService && showOnReceiptInput,
-        imageUrl: normalizedImageUrl,
-        imageAlt: normalizedImageUrl ? imageAlt || trimmedName : null,
+        imageUrl: primaryImageUrl,
+        imageUrls: normalizedImageUrls,
+        imageAlt: primaryImageUrl ? imageAlt || trimmedName : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -687,6 +729,8 @@ export default function Products() {
       setBatchNumberInput('')
       setShowOnReceiptInput(false)
       setImageUrlInput('')
+      setImageUrlInput2('')
+      setImageUrlInput3('')
       setImageAltInput('')
       setDraftProductKey(createDraftProductKey())
 
@@ -817,7 +861,9 @@ export default function Products() {
     setEditManufacturerInput(product.manufacturerName ?? '')
     setEditBatchNumberInput(product.batchNumber ?? '')
     setEditShowOnReceipt(product.showOnReceipt === true)
-    setEditImageUrlInput(product.imageUrl ?? '')
+    setEditImageUrlInput(product.imageUrls?.[0] ?? product.imageUrl ?? '')
+    setEditImageUrlInput2(product.imageUrls?.[1] ?? '')
+    setEditImageUrlInput3(product.imageUrls?.[2] ?? '')
     setEditImageAltInput(product.imageAlt ?? '')
     setEditImageFileInput(null)
     setEditImageUploadError(null)
@@ -867,6 +913,12 @@ export default function Products() {
     const manufacturerName = editManufacturerInput.trim()
     const batchNumber = editBatchNumberInput.trim()
     const normalizedImageUrl = normalizeImageUrl(editImageUrlInput)
+    const normalizedImageUrl2 = normalizeImageUrl(editImageUrlInput2)
+    const normalizedImageUrl3 = normalizeImageUrl(editImageUrlInput3)
+    const normalizedImageUrls = Array.from(
+      new Set([normalizedImageUrl, normalizedImageUrl2, normalizedImageUrl3].filter(Boolean)),
+    ) as string[]
+    const primaryImageUrl = normalizedImageUrls[0] ?? null
     const imageAlt = editImageAltInput.trim()
 
     if (!isStockTracked && (Number.isNaN(priceNumber) || priceNumber < 0)) {
@@ -885,6 +937,16 @@ export default function Products() {
     if (editImageUrlInput.trim() && !normalizedImageUrl) {
       setFormStatus('error')
       setFormError('Image URL must start with http:// or https://')
+      return
+    }
+    if (editImageUrlInput2.trim() && !normalizedImageUrl2) {
+      setFormStatus('error')
+      setFormError('Image URL 2 must start with http:// or https://')
+      return
+    }
+    if (editImageUrlInput3.trim() && !normalizedImageUrl3) {
+      setFormStatus('error')
+      setFormError('Image URL 3 must start with http:// or https://')
       return
     }
 
@@ -924,8 +986,9 @@ export default function Products() {
         manufacturerName: isStockTracked && manufacturerName ? manufacturerName : null,
         batchNumber: isStockTracked && batchNumber ? batchNumber : null,
         showOnReceipt: isStockTracked && editShowOnReceipt,
-        imageUrl: normalizedImageUrl,
-        imageAlt: normalizedImageUrl ? imageAlt || trimmedName : null,
+        imageUrl: primaryImageUrl,
+        imageUrls: normalizedImageUrls,
+        imageAlt: primaryImageUrl ? imageAlt || trimmedName : null,
         updatedAt: serverTimestamp(),
       })
 
@@ -1322,7 +1385,7 @@ export default function Products() {
 
               <div className="field">
                 <label className="field__label" htmlFor="add-image-url">
-                  Image URL <span className="field__optional">(optional)</span>
+                  Image URL 1 <span className="field__optional">(optional)</span>
                 </label>
                 <input
                   id="add-image-url"
@@ -1331,6 +1394,33 @@ export default function Products() {
                   value={imageUrlInput}
                   onChange={e => setImageUrlInput(e.target.value)}
                 />
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-url-2">
+                  Image URL 2 <span className="field__optional">(optional)</span>
+                </label>
+                <input
+                  id="add-image-url-2"
+                  type="url"
+                  placeholder="https://example.com/product-image-side.jpg"
+                  value={imageUrlInput2}
+                  onChange={e => setImageUrlInput2(e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-url-3">
+                  Image URL 3 <span className="field__optional">(optional)</span>
+                </label>
+                <input
+                  id="add-image-url-3"
+                  type="url"
+                  placeholder="https://example.com/product-image-back.jpg"
+                  value={imageUrlInput3}
+                  onChange={e => setImageUrlInput3(e.target.value)}
+                />
+                <p className="field__hint">Add up to 3 photos for website galleries.</p>
               </div>
 
               <div className="field">
@@ -1573,7 +1663,7 @@ export default function Products() {
                       )}
 
                       <div className="products-page__list-field">
-                        <label className="field__label">Image URL</label>
+                        <label className="field__label">Image URLs</label>
                         {isEditing ? (
                           <>
                             <div className="products-page__upload-actions">
@@ -1603,9 +1693,25 @@ export default function Products() {
                               onChange={event => setEditImageUrlInput(event.target.value)}
                               placeholder="https://example.com/image.jpg"
                             />
+                            <input
+                              type="url"
+                              value={editImageUrlInput2}
+                              onChange={event => setEditImageUrlInput2(event.target.value)}
+                              placeholder="https://example.com/image-side.jpg"
+                            />
+                            <input
+                              type="url"
+                              value={editImageUrlInput3}
+                              onChange={event => setEditImageUrlInput3(event.target.value)}
+                              placeholder="https://example.com/image-back.jpg"
+                            />
                           </>
                         ) : (
-                          <p className="products-page__list-value">{product.imageUrl || '—'}</p>
+                          <p className="products-page__list-value">
+                            {product.imageUrls?.length
+                              ? product.imageUrls.slice(0, 3).join(', ')
+                              : product.imageUrl || '—'}
+                          </p>
                         )}
                       </div>
 

@@ -10,6 +10,7 @@ export type ProductReadModel = {
   stockCount: number | null
   itemType: ProductItemType
   imageUrl: string | null
+  imageUrls: string[]
   imageAlt: string | null
   updatedAt: FirebaseFirestore.Timestamp | null
 }
