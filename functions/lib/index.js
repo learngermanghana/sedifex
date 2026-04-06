@@ -1549,15 +1549,97 @@ function getIntegrationAuthContext(req) {
     return { token, storeId };
 }
 function getPromoSlugFromRequest(req) {
-    if (typeof req.query.slug !== 'string') {
-        return '';
-    }
-    return req.query.slug
+    return normalizePublicSlugValue(typeof req.query.slug === 'string' ? req.query.slug : '');
+}
+function normalizePublicSlugValue(value) {
+    return value
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, '-')
         .replace(/-{2,}/g, '-')
         .replace(/^-|-$/g, '');
+}
+function buildStoreSlugCandidates(data) {
+    const candidates = new Set();
+    const rawCandidates = [
+        data.promoSlug,
+        data.slug,
+        data.workspaceSlug,
+        data.displayName,
+        data.name,
+    ];
+    for (const value of rawCandidates) {
+        if (typeof value !== 'string')
+            continue;
+        const normalized = normalizePublicSlugValue(value);
+        if (!normalized)
+            continue;
+        candidates.add(normalized);
+    }
+    return [...candidates];
+}
+async function findStoreByNormalizedSlugFallback(promoSlug) {
+    const pageSize = 500;
+    let storesCursor = null;
+    while (true) {
+        let storesQuery = firestore_1.defaultDb
+            .collection('stores')
+            .orderBy(firestore_1.admin.firestore.FieldPath.documentId())
+            .limit(pageSize);
+        if (storesCursor) {
+            storesQuery = storesQuery.startAfter(storesCursor);
+        }
+        const storesSnapshot = await storesQuery.get();
+        if (storesSnapshot.empty) {
+            break;
+        }
+        for (const storeDoc of storesSnapshot.docs) {
+            const storeData = (storeDoc.data() ?? {});
+            const slugCandidates = buildStoreSlugCandidates(storeData);
+            if (!slugCandidates.includes(promoSlug)) {
+                continue;
+            }
+            return {
+                storeId: storeDoc.id,
+                data: storeData,
+            };
+        }
+        storesCursor = storesSnapshot.docs[storesSnapshot.docs.length - 1];
+    }
+    let workspaceCursor = null;
+    while (true) {
+        let workspacesQuery = firestore_1.defaultDb
+            .collection('workspaces')
+            .orderBy(firestore_1.admin.firestore.FieldPath.documentId())
+            .limit(pageSize);
+        if (workspaceCursor) {
+            workspacesQuery = workspacesQuery.startAfter(workspaceCursor);
+        }
+        const workspacesSnapshot = await workspacesQuery.get();
+        if (workspacesSnapshot.empty) {
+            break;
+        }
+        for (const workspaceDoc of workspacesSnapshot.docs) {
+            const workspaceData = (workspaceDoc.data() ?? {});
+            const workspaceSlug = typeof workspaceData.slug === 'string' ? normalizePublicSlugValue(workspaceData.slug) : '';
+            if (!workspaceSlug || workspaceSlug !== promoSlug) {
+                continue;
+            }
+            const workspaceStoreId = typeof workspaceData.storeId === 'string' && workspaceData.storeId.trim()
+                ? workspaceData.storeId.trim()
+                : workspaceDoc.id;
+            const storeByWorkspace = await firestore_1.defaultDb.collection('stores').doc(workspaceStoreId).get();
+            if (!storeByWorkspace.exists) {
+                continue;
+            }
+            return {
+                storeId: storeByWorkspace.id,
+                data: (storeByWorkspace.data() ?? {}),
+            };
+        }
+        workspaceCursor = workspacesSnapshot.docs[workspacesSnapshot.docs.length - 1];
+    }
+    return null;
 }
 function toTrimmedStringOrNull(value) {
     if (typeof value !== 'string') {
@@ -1597,6 +1679,62 @@ function toYoutubeEmbedUrl(value) {
     if (!videoId)
         return null;
     return `https://www.youtube.com/embed/${videoId}`;
+}
+function extractXmlTag(source, tagName) {
+    const match = source.match(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, 'i'));
+    if (!match || typeof match[1] !== 'string')
+        return null;
+    const value = match[1].trim();
+    return value || null;
+}
+async function fetchYoutubeChannelVideos(channelId, limit = 5) {
+    const safeLimit = Math.max(1, Math.min(10, Math.floor(limit)));
+    const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
+    const response = await fetch(feedUrl, { method: 'GET' });
+    if (!response.ok) {
+        throw new Error(`YouTube feed request failed with status ${response.status}`);
+    }
+    const xml = await response.text();
+    const entryMatches = xml.match(/<entry>[\s\S]*?<\/entry>/gi) ?? [];
+    const videos = [];
+    for (const entry of entryMatches.slice(0, safeLimit)) {
+        const videoId = extractXmlTag(entry, 'yt:videoId');
+        if (!videoId)
+            continue;
+        const title = extractXmlTag(entry, 'title');
+        const publishedAt = extractXmlTag(entry, 'published');
+        videos.push({
+            videoId,
+            title,
+            publishedAt,
+            watchUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+            embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`,
+            thumbnailUrl: `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`,
+        });
+    }
+    return videos;
+}
+function toYoutubeChannelIdOrNull(value) {
+    if (!value)
+        return null;
+    const trimmed = value.trim();
+    if (!trimmed)
+        return null;
+    if (/^UC[a-zA-Z0-9_-]{10,}$/.test(trimmed)) {
+        return trimmed;
+    }
+    try {
+        const parsed = new URL(trimmed);
+        const parts = parsed.pathname.split('/').filter(Boolean);
+        const channelIndex = parts.findIndex(segment => segment === 'channel');
+        if (channelIndex >= 0 && parts[channelIndex + 1] && /^UC[a-zA-Z0-9_-]{10,}$/.test(parts[channelIndex + 1])) {
+            return parts[channelIndex + 1];
+        }
+    }
+    catch {
+        return null;
+    }
+    return null;
 }
 function toTrimmedStringArray(value) {
     if (!Array.isArray(value)) {
@@ -1691,6 +1829,29 @@ async function resolvePromoStoreForRead(req, res) {
             storeId: matchedStoreDoc.id,
             data: (matchedStoreDoc.data() ?? {}),
         };
+    }
+    const workspaceByExactSlug = await firestore_1.defaultDb
+        .collection('workspaces')
+        .where('slug', '==', promoSlug)
+        .limit(1)
+        .get();
+    if (!workspaceByExactSlug.empty) {
+        const workspaceDoc = workspaceByExactSlug.docs[0];
+        const workspaceData = (workspaceDoc.data() ?? {});
+        const workspaceStoreId = typeof workspaceData.storeId === 'string' && workspaceData.storeId.trim()
+            ? workspaceData.storeId.trim()
+            : workspaceDoc.id;
+        const storeByWorkspace = await firestore_1.defaultDb.collection('stores').doc(workspaceStoreId).get();
+        if (storeByWorkspace.exists) {
+            return {
+                storeId: storeByWorkspace.id,
+                data: (storeByWorkspace.data() ?? {}),
+            };
+        }
+    }
+    const normalizedFallbackMatch = await findStoreByNormalizedSlugFallback(promoSlug);
+    if (normalizedFallbackMatch) {
+        return normalizedFallbackMatch;
     }
     res.status(404).json({ error: 'promo-not-found' });
     return null;
@@ -1810,6 +1971,21 @@ exports.integrationPromo = functions.https.onRequest(async (req, res) => {
         return;
     }
     const { storeId, data } = storeContext;
+    const youtubeUrl = toTrimmedStringOrNull(data.promoYoutubeUrl);
+    const youtubeChannelId = toYoutubeChannelIdOrNull(toTrimmedStringOrNull(data.promoYoutubeChannelId));
+    let youtubeVideos = [];
+    if (youtubeChannelId) {
+        try {
+            youtubeVideos = await fetchYoutubeChannelVideos(youtubeChannelId, 5);
+        }
+        catch (error) {
+            console.warn('[integrationPromo] Unable to fetch YouTube channel videos', {
+                storeId,
+                youtubeChannelId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
     res.status(200).json({
         storeId,
         promo: {
@@ -1820,8 +1996,10 @@ exports.integrationPromo = functions.https.onRequest(async (req, res) => {
             startDate: toTrimmedStringOrNull(data.promoStartDate),
             endDate: toTrimmedStringOrNull(data.promoEndDate),
             websiteUrl: toTrimmedStringOrNull(data.promoWebsiteUrl),
-            youtubeUrl: toTrimmedStringOrNull(data.promoYoutubeUrl),
-            youtubeEmbedUrl: toYoutubeEmbedUrl(toTrimmedStringOrNull(data.promoYoutubeUrl)),
+            youtubeUrl,
+            youtubeEmbedUrl: toYoutubeEmbedUrl(youtubeUrl),
+            youtubeChannelId,
+            youtubeVideos,
             imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
             imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
             phone: toTrimmedStringOrNull(data.phone),

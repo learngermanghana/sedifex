@@ -2041,15 +2041,105 @@ function getIntegrationAuthContext(req: functions.https.Request) {
 }
 
 function getPromoSlugFromRequest(req: functions.https.Request): string {
-  if (typeof req.query.slug !== 'string') {
-    return ''
-  }
-  return req.query.slug
+  return normalizePublicSlugValue(typeof req.query.slug === 'string' ? req.query.slug : '')
+}
+
+function normalizePublicSlugValue(value: string): string {
+  return value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+function buildStoreSlugCandidates(data: Record<string, unknown>): string[] {
+  const candidates = new Set<string>()
+  const rawCandidates = [
+    data.promoSlug,
+    data.slug,
+    data.workspaceSlug,
+    data.displayName,
+    data.name,
+  ]
+  for (const value of rawCandidates) {
+    if (typeof value !== 'string') continue
+    const normalized = normalizePublicSlugValue(value)
+    if (!normalized) continue
+    candidates.add(normalized)
+  }
+  return [...candidates]
+}
+
+async function findStoreByNormalizedSlugFallback(
+  promoSlug: string,
+): Promise<{ storeId: string; data: Record<string, unknown> } | null> {
+  const pageSize = 500
+
+  let storesCursor: admin.firestore.QueryDocumentSnapshot | null = null
+  while (true) {
+    let storesQuery: admin.firestore.Query = db
+      .collection('stores')
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(pageSize)
+    if (storesCursor) {
+      storesQuery = storesQuery.startAfter(storesCursor)
+    }
+    const storesSnapshot = await storesQuery.get()
+    if (storesSnapshot.empty) {
+      break
+    }
+    for (const storeDoc of storesSnapshot.docs) {
+      const storeData = (storeDoc.data() ?? {}) as Record<string, unknown>
+      const slugCandidates = buildStoreSlugCandidates(storeData)
+      if (!slugCandidates.includes(promoSlug)) {
+        continue
+      }
+      return {
+        storeId: storeDoc.id,
+        data: storeData,
+      }
+    }
+    storesCursor = storesSnapshot.docs[storesSnapshot.docs.length - 1]
+  }
+
+  let workspaceCursor: admin.firestore.QueryDocumentSnapshot | null = null
+  while (true) {
+    let workspacesQuery: admin.firestore.Query = db
+      .collection('workspaces')
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(pageSize)
+    if (workspaceCursor) {
+      workspacesQuery = workspacesQuery.startAfter(workspaceCursor)
+    }
+    const workspacesSnapshot = await workspacesQuery.get()
+    if (workspacesSnapshot.empty) {
+      break
+    }
+    for (const workspaceDoc of workspacesSnapshot.docs) {
+      const workspaceData = (workspaceDoc.data() ?? {}) as Record<string, unknown>
+      const workspaceSlug =
+        typeof workspaceData.slug === 'string' ? normalizePublicSlugValue(workspaceData.slug) : ''
+      if (!workspaceSlug || workspaceSlug !== promoSlug) {
+        continue
+      }
+      const workspaceStoreId =
+        typeof workspaceData.storeId === 'string' && workspaceData.storeId.trim()
+          ? workspaceData.storeId.trim()
+          : workspaceDoc.id
+      const storeByWorkspace = await db.collection('stores').doc(workspaceStoreId).get()
+      if (!storeByWorkspace.exists) {
+        continue
+      }
+      return {
+        storeId: storeByWorkspace.id,
+        data: (storeByWorkspace.data() ?? {}) as Record<string, unknown>,
+      }
+    }
+    workspaceCursor = workspacesSnapshot.docs[workspacesSnapshot.docs.length - 1]
+  }
+
+  return null
 }
 
 function toTrimmedStringOrNull(value: unknown): string | null {
@@ -2261,6 +2351,33 @@ async function resolvePromoStoreForRead(
       storeId: matchedStoreDoc.id,
       data: (matchedStoreDoc.data() ?? {}) as Record<string, unknown>,
     }
+  }
+
+  const workspaceByExactSlug = await db
+    .collection('workspaces')
+    .where('slug', '==', promoSlug)
+    .limit(1)
+    .get()
+
+  if (!workspaceByExactSlug.empty) {
+    const workspaceDoc = workspaceByExactSlug.docs[0]
+    const workspaceData = (workspaceDoc.data() ?? {}) as Record<string, unknown>
+    const workspaceStoreId =
+      typeof workspaceData.storeId === 'string' && workspaceData.storeId.trim()
+        ? workspaceData.storeId.trim()
+        : workspaceDoc.id
+    const storeByWorkspace = await db.collection('stores').doc(workspaceStoreId).get()
+    if (storeByWorkspace.exists) {
+      return {
+        storeId: storeByWorkspace.id,
+        data: (storeByWorkspace.data() ?? {}) as Record<string, unknown>,
+      }
+    }
+  }
+
+  const normalizedFallbackMatch = await findStoreByNormalizedSlugFallback(promoSlug)
+  if (normalizedFallbackMatch) {
+    return normalizedFallbackMatch
   }
 
   res.status(404).json({ error: 'promo-not-found' })
