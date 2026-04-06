@@ -124,6 +124,7 @@ const MAX_PROMO_GALLERY_ITEMS_BY_PLAN = {
 } as const
 const DEFAULT_MAX_PROMO_GALLERY_ITEMS = MAX_PROMO_GALLERY_ITEMS_BY_PLAN.free
 const MAX_PROMO_GALLERY_QUERY_LIMIT = 100
+const PUBLIC_SEDIFEX_API_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
 
 function toNullableString(value: unknown) {
@@ -1813,6 +1814,34 @@ export default function AccountOverview({
                 WordPress tutorial
               </a>
             </p>
+            <p className="account-overview__hint">
+              Public <code>SEDIFEX_API_BASE_URL</code>:
+              {' '}
+              <code>{PUBLIC_SEDIFEX_API_BASE_URL}</code>
+              {' '}
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={() =>
+                  copyTextToClipboard(
+                    PUBLIC_SEDIFEX_API_BASE_URL,
+                    'SEDIFEX_API_BASE_URL copied.',
+                  ).catch(error => {
+                    console.error('[account] Failed to copy API base URL', error)
+                    publish({ message: 'Unable to copy API base URL.', tone: 'error' })
+                  })
+                }
+                style={{ marginLeft: 8 }}
+              >
+                Copy base URL
+              </button>
+            </p>
+            <p className="account-overview__hint">
+              Your Store ID for integration:
+              {' '}
+              <code>{storeId}</code>
+              . You can find it in <strong>Account overview → Workspace details</strong>.
+            </p>
             <div className="account-overview__website-sync-actions">
               <button
                 type="button"
@@ -2503,6 +2532,11 @@ export default function AccountOverview({
             <p className="account-overview__hint">
               Remove products, customers, sales, expenses, team members, the activity log, and your
               workspace profile from Sedifex. This action cannot be undone.
+            </p>
+            <p className="account-overview__hint">
+              Workspace Store ID:
+              {' '}
+              <code>{storeId}</code>
             </p>
             <div className="account-overview__danger-actions">
               <button

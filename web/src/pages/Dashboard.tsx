@@ -23,6 +23,19 @@ function formatPercent(value: number) {
   return `${sign}${value.toFixed(1)}%`
 }
 
+function getWeekdayFocusMessage(dayOfWeek: number): string {
+  const messages = [
+    'Sunday reset: review last week and prep inventory for Monday.',
+    'Monday momentum: focus on your top-priority tasks first.',
+    'Tuesday consistency: keep sales and follow-ups moving.',
+    'Wednesday check-in: review progress and adjust your targets.',
+    'Thursday growth push: follow up on customers and promotions.',
+    'Friday finish-strong: clear blockers before the weekend.',
+    'Saturday peak hours: stay close to customers and stock levels.',
+  ]
+  return messages[dayOfWeek] ?? messages[0]
+}
+
 // ---- Snapshot types & helpers ----
 type DashboardSaleItem = {
   name: string
@@ -335,6 +348,7 @@ export default function Dashboard() {
     shareProgressReport,
   } = useStoreMetrics()
   const { storeId } = useActiveStore()
+  const [storeDisplayName, setStoreDisplayName] = useState('your workspace')
 
   const [expiringProducts, setExpiringProducts] = useState<ExpiringProduct[]>([])
   const [isLoadingExpiries, setIsLoadingExpiries] = useState(false)
@@ -478,6 +492,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!storeId) {
+      setStoreDisplayName('your workspace')
       setBulkMessagingCredits(0)
       setIsLoadingBulkCredits(false)
       return () => {}
@@ -489,6 +504,13 @@ export default function Dashboard() {
       doc(db, 'stores', storeId),
       snapshot => {
         const data = snapshot.data() ?? {}
+        const displayName =
+          typeof data.displayName === 'string' && data.displayName.trim()
+            ? data.displayName.trim()
+            : typeof data.name === 'string' && data.name.trim()
+              ? data.name.trim()
+              : 'your workspace'
+        setStoreDisplayName(displayName)
         const rawCredits = data.bulkMessagingCredits
         const nextCredits =
           typeof rawCredits === 'number' && Number.isFinite(rawCredits) ? rawCredits : 0
@@ -497,6 +519,7 @@ export default function Dashboard() {
       },
       error => {
         console.error('[dashboard] Failed to load bulk messaging credits', error)
+        setStoreDisplayName('your workspace')
         setBulkMessagingCredits(0)
         setIsLoadingBulkCredits(false)
       },
@@ -728,6 +751,7 @@ export default function Dashboard() {
     revenueMetric && revenueMetric.changePercent !== null && revenueMetric.changePercent !== undefined
       ? formatPercent(revenueMetric.changePercent)
       : '—'
+  const weekdayFocusMessage = getWeekdayFocusMessage(now.getDay())
 
 
 
@@ -735,8 +759,8 @@ export default function Dashboard() {
     <div>
       <h2 style={{ color: '#4338CA', marginBottom: 8 }}>Dashboard</h2>
       <p style={{ color: '#475569', marginBottom: 24 }}>
-        Welcome back! Choose what you’d like to work on — the most important Sedifex pages
-        are just one tap away.
+        Welcome back, {storeDisplayName}! Choose what you’d like to work on — the most important
+        Sedifex pages are just one tap away. {weekdayFocusMessage}
       </p>
 
       <section
