@@ -70,6 +70,7 @@ type StoreProfile = {
   promoWebsiteUrl: string | null
   promoYoutubeUrl: string | null
   promoYoutubeChannelId: string | null
+  promoTiktokUrl: string | null
   promoImageUrl: string | null
   promoImageAlt: string | null
 }
@@ -242,6 +243,7 @@ function mapStoreSnapshot(
     promoWebsiteUrl: toNullableString((data as any).promoWebsiteUrl),
     promoYoutubeUrl: toNullableString((data as any).promoYoutubeUrl),
     promoYoutubeChannelId: toNullableString((data as any).promoYoutubeChannelId),
+    promoTiktokUrl: toNullableString((data as any).promoTiktokUrl),
     promoImageUrl: toNullableString((data as any).promoImageUrl),
     promoImageAlt: toNullableString((data as any).promoImageAlt),
   }
@@ -388,6 +390,7 @@ export default function AccountOverview({
     websiteUrl: '',
     youtubeUrl: '',
     youtubeChannelId: '',
+    tiktokUrl: '',
     imageUrl: '',
     imageAlt: '',
   })
@@ -574,6 +577,7 @@ export default function AccountOverview({
       websiteUrl: profile.promoWebsiteUrl ?? '',
       youtubeUrl: profile.promoYoutubeUrl ?? '',
       youtubeChannelId: profile.promoYoutubeChannelId ?? '',
+      tiktokUrl: profile.promoTiktokUrl ?? '',
       imageUrl: profile.promoImageUrl ?? '',
       imageAlt: profile.promoImageAlt ?? '',
     })
@@ -877,6 +881,7 @@ export default function AccountOverview({
         promoWebsiteUrl: normalizeInput(promoDraft.websiteUrl),
         promoYoutubeUrl: normalizeInput(promoDraft.youtubeUrl),
         promoYoutubeChannelId: normalizeInput(promoDraft.youtubeChannelId),
+        promoTiktokUrl: normalizeInput(promoDraft.tiktokUrl),
         promoImageUrl: normalizeInput(promoDraft.imageUrl),
         promoImageAlt: normalizeInput(promoDraft.imageAlt),
         updatedAt: Timestamp.now(),
@@ -897,6 +902,7 @@ export default function AccountOverview({
               promoWebsiteUrl: payload.promoWebsiteUrl,
               promoYoutubeUrl: payload.promoYoutubeUrl,
               promoYoutubeChannelId: payload.promoYoutubeChannelId,
+              promoTiktokUrl: payload.promoTiktokUrl,
               promoImageUrl: payload.promoImageUrl,
               promoImageAlt: payload.promoImageAlt,
               updatedAt: payload.updatedAt,
@@ -2165,6 +2171,18 @@ export default function AccountOverview({
                     onChange={e => updatePromoDraft('youtubeChannelId', e.target.value)}
                     placeholder="UC... or https://www.youtube.com/channel/UC..."
                     data-testid="account-promo-youtube-channel"
+                  />
+                </label>
+              </div>
+              <div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span>TikTok profile URL (optional)</span>
+                  <input
+                    type="url"
+                    value={promoDraft.tiktokUrl}
+                    onChange={e => updatePromoDraft('tiktokUrl', e.target.value)}
+                    placeholder="https://www.tiktok.com/@yourstore"
+                    data-testid="account-promo-tiktok"
                   />
                 </label>
               </div>
