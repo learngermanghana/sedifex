@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { doc, setDoc } from 'firebase/firestore'
 import {
   AuthForm,
   authFormInputClass,
@@ -9,9 +10,10 @@ import {
   authFormNoteClass,
 } from '../components/auth/AuthForm'
 import { useToast } from '../components/ToastProvider'
+import { uploadProductImage } from '../api/productImageUpload'
 import { afterSignupBootstrap } from '../controllers/accessController'
-import { ensureStoreDocument, ensureTeamMemberDocument, persistSession } from '../controllers/sessionController'
-import { auth } from '../firebase'
+import { ensureStoreDocument, persistSession } from '../controllers/sessionController'
+import { auth, db } from '../firebase'
 import { setOnboardingStatus } from '../utils/onboarding'
 import './AuthScreen.css'
 
@@ -63,6 +65,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('')
   // 🔹 New: storeId input for sign-up (to join an existing workspace)
   const [storeIdInput, setStoreIdInput] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { publish } = useToast()
@@ -90,6 +93,21 @@ export default function AuthScreen() {
       return nextMode
     })
   }, [])
+
+  async function persistSignupLogo(options: { storeId: string; uid: string }) {
+    if (!logoFile) return
+    const uploadedUrl = await uploadProductImage(logoFile, {
+      storagePath: `stores/${options.storeId}/assets/logo-${options.uid}`,
+    })
+    await setDoc(
+      doc(db, 'stores', options.storeId),
+      {
+        logoUrl: uploadedUrl,
+        logoAlt: 'Store logo',
+      },
+      { merge: true },
+    )
+  }
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -149,6 +167,7 @@ export default function AuthScreen() {
             storeId: result.storeId,
             role: result.role,
           })
+          await persistSignupLogo({ storeId: result.storeId, uid: user.uid })
 
           publish({
             message: 'Account created! Setting your workspace up now…',
@@ -172,7 +191,7 @@ export default function AuthScreen() {
         setLoading(false)
       }
     },
-    [email, loading, mode, navigate, password, publish, redirectTo, storeIdInput],
+    [email, loading, logoFile, mode, navigate, password, publish, redirectTo, storeIdInput],
   )
 
   const formTitle =
@@ -268,23 +287,40 @@ export default function AuthScreen() {
 
           {/* 🔹 NEW: Store ID field shown only on sign-up */}
           {mode === 'sign-up' && (
-            <label className={authFormInputGroupClass}>
-              <span className={authFormLabelClass}>Store ID (optional)</span>
-              <input
-                className={authFormInputClass}
-                type="text"
-                name="storeId"
-                placeholder="Enter your company’s Store ID to join as staff"
-                value={storeIdInput}
-                onChange={event => setStoreIdInput(event.target.value)}
-                disabled={loading}
-              />
-              <p className={authFormNoteClass}>
-                Leave this blank to create a new workspace. Enter an ID like
-                <br />
-                <code>QUVGe8MDvdScM99Q2AXdqBGEOht2</code> to join an existing one.
-              </p>
-            </label>
+            <>
+              <label className={authFormInputGroupClass}>
+                <span className={authFormLabelClass}>Store ID (optional)</span>
+                <input
+                  className={authFormInputClass}
+                  type="text"
+                  name="storeId"
+                  placeholder="Enter your company’s Store ID to join as staff"
+                  value={storeIdInput}
+                  onChange={event => setStoreIdInput(event.target.value)}
+                  disabled={loading}
+                />
+                <p className={authFormNoteClass}>
+                  Leave this blank to create a new workspace. Enter an ID like
+                  <br />
+                  <code>QUVGe8MDvdScM99Q2AXdqBGEOht2</code> to join an existing one.
+                </p>
+              </label>
+
+              <label className={authFormInputGroupClass}>
+                <span className={authFormLabelClass}>Store logo (optional)</span>
+                <input
+                  className={authFormInputClass}
+                  type="file"
+                  name="storeLogo"
+                  accept="image/*"
+                  onChange={event => setLogoFile(event.target.files?.[0] ?? null)}
+                  disabled={loading}
+                />
+                <p className={authFormNoteClass}>
+                  Upload now, or skip and add your logo later from Account settings.
+                </p>
+              </label>
+            </>
           )}
         </AuthForm>
       </div>
