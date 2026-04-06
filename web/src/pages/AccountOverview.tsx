@@ -127,6 +127,11 @@ function buildStableStoreImagePath(storeId: string, imageType: 'promo' | 'logo')
   return `stores/${storeId}/${imageType}.jpg`
 }
 
+function buildPromoGalleryImagePath(storeId: string, itemId: string): string {
+  const safeItemId = itemId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  return `stores/${storeId}/promo-gallery/${safeItemId}.jpg`
+}
+
 function buildUploadErrorMessage(error: unknown): string {
   if (error instanceof ProductImageUploadError) {
     return `${error.message} ${EXACT_UPLOAD_LIMIT_HINT}`.trim()
@@ -297,6 +302,7 @@ type AccountOverviewProps = {
 
 type AccountTab = 'workspace' | 'integrations' | 'promotions' | 'operations'
 type PublicPageTab = 'overview' | 'promo' | 'gallery' | 'website-sync'
+type PromoGalleryTab = 'upload' | 'view'
 
 export default function AccountOverview({
   headingLevel = 'h1',
@@ -367,6 +373,7 @@ export default function AccountOverview({
   const [promoGalleryUploadTargetId, setPromoGalleryUploadTargetId] = useState<string | null>(null)
   const [isUploadingPromoGalleryImage, setIsUploadingPromoGalleryImage] = useState(false)
   const [promoGalleryImageUploadError, setPromoGalleryImageUploadError] = useState<string | null>(null)
+  const [promoGalleryTab, setPromoGalleryTab] = useState<PromoGalleryTab>('upload')
   const [publicPageTab, setPublicPageTab] = useState<PublicPageTab>('overview')
   const [endpointToTest, setEndpointToTest] = useState('')
   const [endpointTestStatus, setEndpointTestStatus] = useState<string | null>(null)
@@ -1020,6 +1027,10 @@ export default function AccountOverview({
   }
 
   async function handleUploadPromoGalleryImage(itemId: string) {
+    if (!storeId) {
+      setPromoGalleryImageUploadError('Select a store before uploading gallery images.')
+      return
+    }
     if (!promoGalleryImageFile || promoGalleryUploadTargetId !== itemId) {
       setPromoGalleryImageUploadError('Choose an image file for this gallery item before uploading.')
       return
@@ -1028,7 +1039,9 @@ export default function AccountOverview({
     setPromoGalleryImageUploadError(null)
     setIsUploadingPromoGalleryImage(true)
     try {
-      const uploadedUrl = await uploadProductImage(promoGalleryImageFile)
+      const uploadedUrl = await uploadProductImage(promoGalleryImageFile, {
+        storagePath: buildPromoGalleryImagePath(storeId, itemId),
+      })
       updatePromoGalleryDraft(itemId, 'url', uploadedUrl)
       setPromoGalleryImageFile(null)
       setPromoGalleryUploadTargetId(null)
@@ -2120,77 +2133,56 @@ export default function AccountOverview({
                 <div className="account-overview__section-header" style={{ marginBottom: 10 }}>
                   <h3>Promo gallery</h3>
                   <p className="account-overview__subtitle">
-                    Add images for your public promo page and integration feeds.
+                    Manage gallery uploads and quickly preview what customers will see.
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <nav className="account-overview__tabs" aria-label="Promo gallery sections">
                   <button
                     type="button"
-                    className="button button--secondary"
-                    onClick={handleAddPromoGalleryItem}
-                    disabled={promoGalleryDraft.length >= MAX_PROMO_GALLERY_ITEMS}
+                    className={`account-overview__tab ${promoGalleryTab === 'upload' ? 'is-active' : ''}`}
+                    aria-pressed={promoGalleryTab === 'upload'}
+                    onClick={() => setPromoGalleryTab('upload')}
                   >
-                    Add gallery item
+                    Upload images
                   </button>
                   <button
                     type="button"
-                    className="button button--primary"
-                    onClick={handleSavePromoGallery}
-                    disabled={isSavingPromoGallery}
+                    className={`account-overview__tab ${promoGalleryTab === 'view' ? 'is-active' : ''}`}
+                    aria-pressed={promoGalleryTab === 'view'}
+                    onClick={() => setPromoGalleryTab('view')}
                   >
-                    {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery images'}
+                    View images
                   </button>
-                  <a
-                    className="button button--ghost"
-                    href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}#promo-gallery`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    View all images
-                  </a>
-                </div>
+                </nav>
                 {promoGalleryLoading ? <p>Loading gallery…</p> : null}
-                {promoGalleryDraft.length === 0 && !promoGalleryLoading ? (
-                  <p className="account-overview__hint">No gallery items yet.</p>
-                ) : null}
-                {promoGalleryDraft.length > 0 ? (
-                  <div style={{ marginBottom: 12 }}>
-                    <p className="account-overview__hint" style={{ marginTop: 0 }}>
-                      Uploaded gallery images preview
-                    </p>
-                    <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
-                      {promoGalleryDraft
-                        .filter(item => item.url.trim().length > 0)
-                        .map(item => (
-                          <figure
-                            key={`preview-${item.id}`}
-                            style={{
-                              margin: 0,
-                              border: '1px solid #e5e7eb',
-                              borderRadius: 10,
-                              overflow: 'hidden',
-                              background: '#fff',
-                            }}
-                          >
-                            <img
-                              src={item.url}
-                              alt={item.alt || 'Gallery image preview'}
-                              style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
-                              loading="lazy"
-                            />
-                            <figcaption style={{ padding: '6px 8px', fontSize: 12, color: '#4b5563' }}>
-                              {item.caption || item.alt || 'Gallery image'}
-                            </figcaption>
-                          </figure>
-                        ))}
+                {promoGalleryTab === 'upload' ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="button button--secondary"
+                        onClick={handleAddPromoGalleryItem}
+                        disabled={promoGalleryDraft.length >= MAX_PROMO_GALLERY_ITEMS}
+                      >
+                        Add image slot
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--primary"
+                        onClick={handleSavePromoGallery}
+                        disabled={isSavingPromoGallery}
+                      >
+                        {isSavingPromoGallery ? 'Saving gallery…' : 'Save gallery'}
+                      </button>
                     </div>
-                  </div>
-                ) : null}
-                <p className="account-overview__hint" style={{ marginTop: 0 }}>
-                  To save storage costs, each store can upload up to {MAX_PROMO_GALLERY_ITEMS} photos.
-                </p>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {promoGalleryDraft.map(item => (
+                    <p className="account-overview__hint" style={{ marginTop: 0 }}>
+                      To save storage costs, each store can upload up to {MAX_PROMO_GALLERY_ITEMS} photos.
+                    </p>
+                    {promoGalleryDraft.length === 0 && !promoGalleryLoading ? (
+                      <p className="account-overview__hint">No gallery items yet. Add an image slot to begin.</p>
+                    ) : null}
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {promoGalleryDraft.map(item => (
                     <div
                       key={item.id}
                       className="account-overview__gallery-item"
@@ -2311,8 +2303,56 @@ export default function AccountOverview({
                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {promoGalleryDraft.filter(item => item.url.trim().length > 0).length === 0 ? (
+                      <p className="account-overview__hint">No gallery images uploaded yet.</p>
+                    ) : (
+                      <div style={{ marginBottom: 12 }}>
+                        <p className="account-overview__hint" style={{ marginTop: 0 }}>
+                          Uploaded gallery images preview
+                        </p>
+                        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+                          {promoGalleryDraft
+                            .filter(item => item.url.trim().length > 0)
+                            .map(item => (
+                              <figure
+                                key={`preview-${item.id}`}
+                                style={{
+                                  margin: 0,
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: 10,
+                                  overflow: 'hidden',
+                                  background: '#fff',
+                                }}
+                              >
+                                <img
+                                  src={item.url}
+                                  alt={item.alt || 'Gallery image preview'}
+                                  style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
+                                  loading="lazy"
+                                />
+                                <figcaption style={{ padding: '6px 8px', fontSize: 12, color: '#4b5563' }}>
+                                  {item.caption || item.alt || 'Gallery image'}
+                                </figcaption>
+                              </figure>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    <a
+                      className="button button--ghost"
+                      href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}#promo-gallery`}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      Open public gallery
+                    </a>
+                  </>
+                )}
                 {promoGalleryImageUploadError ? (
                   <p role="alert" style={{ color: '#dc2626', marginTop: 4 }}>
                     {promoGalleryImageUploadError}
