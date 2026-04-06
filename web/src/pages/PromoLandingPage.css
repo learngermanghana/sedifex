@@ -71,7 +71,8 @@
 .promo-image {
   width: 100%;
   max-height: 280px;
-  object-fit: cover;
+  object-fit: contain;
+  background: #f8fafc;
   border-radius: 14px;
   border: 1px solid #dbeafe;
 }
@@ -151,7 +152,8 @@
 .promo-gallery-item img {
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
+  object-fit: contain;
+  background: #f8fafc;
   display: block;
 }
 

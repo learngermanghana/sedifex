@@ -2291,7 +2291,15 @@ export default function AccountOverview({
                         <img
                           src={item.url}
                           alt={item.alt || 'Gallery image'}
-                          style={{ width: '100%', maxWidth: 280, maxHeight: 180, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb' }}
+                          style={{
+                            width: '100%',
+                            maxWidth: 280,
+                            maxHeight: 180,
+                            objectFit: 'contain',
+                            background: '#f8fafc',
+                            borderRadius: 8,
+                            border: '1px solid #e5e7eb',
+                          }}
                           loading="lazy"
                         />
                       ) : null}
@@ -2413,7 +2421,13 @@ export default function AccountOverview({
                                 <img
                                   src={item.url}
                                   alt={item.alt || 'Gallery image preview'}
-                                  style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
+                                  style={{
+                                    width: '100%',
+                                    height: 120,
+                                    objectFit: 'contain',
+                                    background: '#f8fafc',
+                                    display: 'block',
+                                  }}
                                   loading="lazy"
                                 />
                                 <figcaption style={{ padding: '6px 8px', fontSize: 12, color: '#4b5563' }}>
