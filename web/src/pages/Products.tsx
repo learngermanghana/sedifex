@@ -107,8 +107,9 @@ function createDraftProductKey(): string {
   return `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function buildProductImagePath(storeId: string, productKey: string): string {
-  return `stores/${storeId}/products/${productKey}.jpg`
+function buildProductImagePath(storeId: string, productKey: string, slot: number = 0): string {
+  const safeSlot = Math.min(Math.max(slot, 0), 2)
+  return `stores/${storeId}/products/${productKey}-${safeSlot + 1}.jpg`
 }
 
 function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product {
@@ -246,6 +247,13 @@ function normalizeImageUrls(value: unknown, fallbackImageUrl: string | null): st
   }
 
   return list
+}
+
+function findNextImageSlot(urls: string[]): number | null {
+  for (let index = 0; index < 3; index += 1) {
+    if (!urls[index]?.trim()) return index
+  }
+  return null
 }
 
 function normalizeLookupValue(value: string | null | undefined): string {
@@ -768,12 +776,21 @@ export default function Products() {
     setImageUploadError(null)
     setIsUploadingImage(true)
     try {
+      const currentUrls = [imageUrlInput, imageUrlInput2, imageUrlInput3]
+      const nextSlot = findNextImageSlot(currentUrls)
+      if (nextSlot === null) {
+        setImageUploadError('You already have 3 images. Remove one URL before uploading another.')
+        return
+      }
+
       const uploadedUrl = await uploadProductImage(imageFileInput, {
-        storagePath: buildProductImagePath(activeStoreId, draftProductKey),
+        storagePath: buildProductImagePath(activeStoreId, draftProductKey, nextSlot),
       })
-      setImageUrlInput(uploadedUrl)
+      if (nextSlot === 0) setImageUrlInput(uploadedUrl)
+      if (nextSlot === 1) setImageUrlInput2(uploadedUrl)
+      if (nextSlot === 2) setImageUrlInput3(uploadedUrl)
       setImageFileInput(null)
-      publish({ tone: 'success', message: 'Image uploaded successfully.' })
+      publish({ tone: 'success', message: `Image ${nextSlot + 1} uploaded successfully.` })
       void playSound('action')
     } catch (error) {
       console.error('[products] Failed to upload product image', error)
@@ -1030,12 +1047,21 @@ export default function Products() {
     setEditImageUploadError(null)
     setIsUploadingEditImage(true)
     try {
+      const currentUrls = [editImageUrlInput, editImageUrlInput2, editImageUrlInput3]
+      const nextSlot = findNextImageSlot(currentUrls)
+      if (nextSlot === null) {
+        setEditImageUploadError('You already have 3 images. Remove one URL before uploading another.')
+        return
+      }
+
       const uploadedUrl = await uploadProductImage(editImageFileInput, {
-        storagePath: buildProductImagePath(activeStoreId, product.id),
+        storagePath: buildProductImagePath(activeStoreId, product.id, nextSlot),
       })
-      setEditImageUrlInput(uploadedUrl)
+      if (nextSlot === 0) setEditImageUrlInput(uploadedUrl)
+      if (nextSlot === 1) setEditImageUrlInput2(uploadedUrl)
+      if (nextSlot === 2) setEditImageUrlInput3(uploadedUrl)
       setEditImageFileInput(null)
-      publish({ tone: 'success', message: 'Image uploaded successfully.' })
+      publish({ tone: 'success', message: `Image ${nextSlot + 1} uploaded successfully.` })
       void playSound('action')
     } catch (error) {
       console.error('[products] Failed to upload product image while editing', error)
@@ -1379,7 +1405,7 @@ export default function Products() {
                   ) : null}
                 </div>
                 <p className="field__hint">
-                  Uploads to your own backend endpoint and auto-fills Image URL.
+                  Uploads to your backend and auto-fills the next empty image URL slot (up to 3).
                 </p>
               </div>
 
