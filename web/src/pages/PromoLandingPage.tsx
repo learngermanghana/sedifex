@@ -158,6 +158,27 @@ function formatPublishedDate(value: string | null): string | null {
   })
 }
 
+function normalizePhoneForLinks(value: string | null): string | null {
+  if (!value) return null
+  const compact = value.replace(/[^\d+]/g, '')
+  if (!compact) return null
+  if (compact.startsWith('+')) {
+    const digits = compact.slice(1).replace(/\D/g, '')
+    return digits ? `+${digits}` : null
+  }
+  const digits = compact.replace(/\D/g, '')
+  return digits || null
+}
+
+function buildWhatsAppLink(phone: string | null, storeName: string): string | null {
+  const normalized = normalizePhoneForLinks(phone)
+  if (!normalized) return null
+  const digitsOnly = normalized.replace(/^\+/, '')
+  if (!digitsOnly) return null
+  const text = encodeURIComponent(`Hello ${storeName}, I saw your Sedifex page and need more details.`)
+  return `https://wa.me/${digitsOnly}?text=${text}`
+}
+
 function getIntegrationEndpoint(path: string): string {
   const functionsRegion = import.meta.env.VITE_FB_FUNCTIONS_REGION ?? 'us-central1'
   const projectId = import.meta.env.VITE_FB_PROJECT_ID
@@ -197,12 +218,16 @@ export default function PromoLandingPage() {
 
   const activeGalleryItem = activeGalleryIndex >= 0 ? gallery[activeGalleryIndex] : null
   const normalizedCatalogSearchTerm = catalogSearchTerm.trim().toLowerCase()
+  const catalogItemsWithImages = useMemo(
+    () => catalogItems.filter(item => typeof item.imageUrl === 'string' && item.imageUrl.trim().length > 0),
+    [catalogItems],
+  )
   const filteredCatalogItems = useMemo(() => {
     if (!normalizedCatalogSearchTerm) {
-      return catalogItems
+      return catalogItemsWithImages
     }
 
-    return catalogItems.filter(item => {
+    return catalogItemsWithImages.filter(item => {
       const searchableText = [
         item.name,
         item.description ?? '',
@@ -214,7 +239,7 @@ export default function PromoLandingPage() {
         .toLowerCase()
       return searchableText.includes(normalizedCatalogSearchTerm)
     })
-  }, [catalogItems, normalizedCatalogSearchTerm])
+  }, [catalogItemsWithImages, normalizedCatalogSearchTerm])
   const totalCatalogPages = Math.max(1, Math.ceil(filteredCatalogItems.length / CATALOG_PAGE_SIZE))
   const currentCatalogPage = Math.min(catalogPage, totalCatalogPages)
   const paginatedCatalogItems = useMemo(() => {
@@ -319,7 +344,8 @@ export default function PromoLandingPage() {
               category:
                 typeof item.category === 'string' && item.category.trim() ? item.category.trim() : null,
               price: typeof item.price === 'number' ? item.price : null,
-              imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
+              imageUrl:
+                typeof item.imageUrl === 'string' && item.imageUrl.trim() ? item.imageUrl.trim() : null,
               imageAlt: typeof item.imageAlt === 'string' ? item.imageAlt : null,
               itemType:
                 item.itemType === 'service'
@@ -518,6 +544,8 @@ export default function PromoLandingPage() {
 
   const promoTitle = profile.title?.trim() || `Special offers at ${profile.storeName}`
   const promoSummary = sanitizeSummary(profile.summary, profile.storeName)
+  const directChatLink = profile.storePhone ? `sms:${profile.storePhone}` : null
+  const whatsappLink = buildWhatsAppLink(profile.storePhone, profile.storeName)
   const primaryPromoVideoEmbedUrl = profile.youtubeVideos[0]?.embedUrl ?? profile.youtubeEmbedUrl
   return (
     <main className="promo-page">
@@ -572,6 +600,20 @@ export default function PromoLandingPage() {
             <p className="promo-meta">
               Contact: <a href={`tel:${profile.storePhone}`}>{profile.storePhone}</a>
             </p>
+          ) : null}
+          {directChatLink || whatsappLink ? (
+            <div className="promo-contact-actions">
+              {directChatLink ? (
+                <a className="promo-nav__button" href={directChatLink}>
+                  Direct chat
+                </a>
+              ) : null}
+              {whatsappLink ? (
+                <a className="promo-nav__button" href={whatsappLink} target="_blank" rel="noreferrer noopener">
+                  Contact on WhatsApp
+                </a>
+              ) : null}
+            </div>
           ) : null}
           <p className="promo-summary">{promoSummary}</p>
           {primaryPromoVideoEmbedUrl ? (
@@ -752,9 +794,9 @@ export default function PromoLandingPage() {
               </div>
             ) : (
               <p className="promo-gallery-empty">
-                {catalogItems.length
-                  ? 'No products match your search yet.'
-                  : 'Products and services will appear here soon.'}
+                {catalogItemsWithImages.length
+                  ? 'No products or services with images match your search yet.'
+                  : 'Products and services with pictures will appear here soon.'}
               </p>
             )}
             {filteredCatalogItems.length > CATALOG_PAGE_SIZE ? (
