@@ -25,6 +25,7 @@ import {
 } from '../utils/offlineCache'
 import { normalizeBarcode } from '../utils/barcode'
 import { useStorePreferences } from '../hooks/useStorePreferences'
+import { useStoreBilling } from '../hooks/useStoreBilling'
 import type { ItemType, Product } from '../types/product'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import { useToast } from '../components/ToastProvider'
@@ -222,6 +223,24 @@ function parseDateInput(input: string): Date | null {
   return parsed
 }
 
+function resolveProductLimit(input: {
+  billingStatus: string | null
+  paymentStatus: string | null
+  planKey: string | null
+}): number | null {
+  const billingStatus = input.billingStatus?.toLowerCase() ?? null
+  const paymentStatus = input.paymentStatus?.toLowerCase() ?? null
+  const planKey = input.planKey?.toLowerCase() ?? null
+
+  if (billingStatus === 'trial' || paymentStatus === 'trial') return 10
+  if (!planKey) return 10
+  if (planKey.includes('scale')) return null
+  if (planKey.includes('growth')) return 500
+  if (planKey.includes('starter') || planKey.includes('standard')) return 100
+  if (planKey.includes('free') || planKey.includes('trial')) return 10
+  return 10
+}
+
 function normalizeImageUrl(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -303,6 +322,7 @@ export default function Products() {
   const { memberships } = useMemberships()
   const user = useAuthUser()
   const { preferences } = useStorePreferences(activeStoreId)
+  const { billing } = useStoreBilling()
   const { publish } = useToast()
 
   const [products, setProducts] = useState<Product[]>([])
@@ -361,6 +381,16 @@ export default function Products() {
   const [editImageUploadError, setEditImageUploadError] = useState<string | null>(null)
   const [isUploadingEditImage, setIsUploadingEditImage] = useState(false)
   const [salesError, setSalesError] = useState<string | null>(null)
+
+  const maxProductsAllowed = useMemo(
+    () =>
+      resolveProductLimit({
+        billingStatus: billing?.status ?? null,
+        paymentStatus: billing?.paymentStatus ?? null,
+        planKey: billing?.planKey ?? null,
+      }),
+    [billing?.paymentStatus, billing?.planKey, billing?.status],
+  )
 
   useEffect(() => {
     if (editingId) return
@@ -684,6 +714,14 @@ export default function Products() {
         setFormError(`SKU "${trimmedSku}" is already assigned to another item.`)
         return
       }
+    }
+
+    if (maxProductsAllowed !== null && products.length >= maxProductsAllowed) {
+      setFormStatus('error')
+      setFormError(
+        `Your current plan allows up to ${maxProductsAllowed} active products. Upgrade your plan to add more.`,
+      )
+      return
     }
 
     setIsSaving(true)
