@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addDoc,
   collection,
@@ -616,6 +617,8 @@ export default function Products() {
       }).length,
     [products],
   )
+  const hasReachedProductLimit =
+    maxProductsAllowed !== null && products.length >= maxProductsAllowed
 
   /**
    * Add item handler
@@ -719,7 +722,7 @@ export default function Products() {
     if (maxProductsAllowed !== null && products.length >= maxProductsAllowed) {
       setFormStatus('error')
       setFormError(
-        `Your current plan allows up to ${maxProductsAllowed} active products. Upgrade your plan to add more.`,
+        `Your current plan allows up to ${maxProductsAllowed} active products. Upgrade from Account to add more items.`,
       )
       return
     }
@@ -1195,6 +1198,13 @@ export default function Products() {
             Capture both physical products and services you offer so sales and records
             stay accurate.
           </p>
+
+          {hasReachedProductLimit && (
+            <p className="products__message products__message--error" role="alert">
+              You have reached your plan limit ({maxProductsAllowed} active products). Upgrade your
+              plan to add more items. <Link to="/account">Upgrade now</Link>.
+            </p>
+          )}
 
           {formStatus === 'success' && formError === null && (
             <p className="products__message products__message--success">

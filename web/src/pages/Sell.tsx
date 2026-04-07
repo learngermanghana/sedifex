@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { FirebaseError } from 'firebase/app'
 import {
   addDoc,
@@ -42,6 +42,7 @@ import {
 } from '@zxing/library'
 import { useKeyboardScanner } from '../components/BarcodeScanner'
 import { useToast } from '../components/ToastProvider'
+import { useStoreBilling } from '../hooks/useStoreBilling'
 
 import { type EscPosReceiptSize } from '../utils/escpos'
 import { PaymentMethod, buildReceiptPdf, type ReceiptLine, type ReceiptPayload, type ReceiptTender } from '../utils/receipt'
@@ -235,6 +236,24 @@ function createPairCode(length = 6) {
   return result
 }
 
+function resolveDailySalesLimit(input: {
+  billingStatus: string | null
+  paymentStatus: string | null
+  planKey: string | null
+}): number | null {
+  const billingStatus = input.billingStatus?.toLowerCase() ?? null
+  const paymentStatus = input.paymentStatus?.toLowerCase() ?? null
+  const planKey = input.planKey?.toLowerCase() ?? null
+
+  if (billingStatus === 'trial' || paymentStatus === 'trial') return 10
+  if (!planKey) return 10
+  if (planKey.includes('scale')) return null
+  if (planKey.includes('growth')) return 500
+  if (planKey.includes('starter') || planKey.includes('standard')) return 100
+  if (planKey.includes('free') || planKey.includes('trial')) return 10
+  return 10
+}
+
 type ReceiptPrintOptions = {
   saleId: string
   items: { name: string; qty: number; price: number; metadata?: string[] }[]
@@ -384,6 +403,7 @@ async function downloadOrSharePdf(fileName: string, blobUrl: string, shareText?:
 
 export default function Sell() {
   const { storeId: activeStoreId } = useActiveStore()
+  const { billing } = useStoreBilling()
   const user = useAuthUser()
   const { publish } = useToast()
   const [searchParams] = useSearchParams()
@@ -405,6 +425,7 @@ export default function Sell() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [dailySalesCount, setDailySalesCount] = useState(0)
   const [awaitingNextSale, setAwaitingNextSale] = useState(false)
 
   const activityActor = user?.displayName || user?.email || 'Team member'
@@ -1441,6 +1462,49 @@ export default function Sell() {
     }
   }
 
+  const dailySalesLimit = useMemo(
+    () =>
+      resolveDailySalesLimit({
+        billingStatus: billing?.status ?? null,
+        paymentStatus: billing?.paymentStatus ?? null,
+        planKey: billing?.planKey ?? null,
+      }),
+    [billing?.paymentStatus, billing?.planKey, billing?.status],
+  )
+  const reachedDailySalesLimit =
+    dailySalesLimit !== null && dailySalesCount >= dailySalesLimit
+
+  useEffect(() => {
+    if (!activeStoreId) {
+      setDailySalesCount(0)
+      return
+    }
+
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 1)
+
+    const q = query(
+      collection(db, 'sales'),
+      where('storeId', '==', activeStoreId),
+      where('createdAt', '>=', Timestamp.fromDate(start)),
+      where('createdAt', '<', Timestamp.fromDate(end)),
+    )
+
+    const unsubscribe = onSnapshot(
+      q,
+      snapshot => {
+        setDailySalesCount(snapshot.docs.length)
+      },
+      () => {
+        setDailySalesCount(0)
+      },
+    )
+
+    return () => unsubscribe()
+  }, [activeStoreId])
+
   async function handleCommitSale() {
     setErrorMessage(null)
     setSuccessMessage(null)
@@ -1450,6 +1514,11 @@ export default function Sell() {
     }
 
     if (!activeStoreId) return setErrorMessage('Select a workspace before recording a sale.')
+    if (reachedDailySalesLimit) {
+      return setErrorMessage(
+        `Daily sales limit reached (${dailySalesLimit}). Upgrade your plan in Account to continue selling today.`,
+      )
+    }
     if (!cart.length) return setErrorMessage('Add at least one item to the cart.')
     if (taxError) return setErrorMessage('Please fix the VAT field before saving.')
     if (discountError) return setErrorMessage('Please fix the discount field before saving.')
@@ -1642,7 +1711,13 @@ export default function Sell() {
         }
       }
       const normalizedCode = typeof error?.code === 'string' ? error.code.toLowerCase() : ''
-      if (normalizedCode.includes('internal') || normalizedCode.includes('unavailable')) {
+      if (normalizedCode.includes('resource-exhausted')) {
+        setErrorMessage(
+          typeof error?.message === 'string'
+            ? error.message
+            : 'Daily sales limit reached for this plan. Upgrade in Account to continue.',
+        )
+      } else if (normalizedCode.includes('internal') || normalizedCode.includes('unavailable')) {
         setErrorMessage('We could not save this sale right now. Please try again once your connection is stable.')
       } else {
         setErrorMessage(typeof error?.message === 'string' ? error.message : 'We could not save this sale. Please try again.')
@@ -1662,6 +1737,13 @@ export default function Sell() {
           </p>
         </div>
       </header>
+
+      {reachedDailySalesLimit && (
+        <p className="products__message products__message--error" role="alert">
+          You have hit your daily sales limit ({dailySalesLimit} sales/day). Upgrade your plan to
+          continue recording sales today. <Link to="/account">Upgrade now</Link>.
+        </p>
+      )}
 
       <div className="sell-page__grid">
         <div className="sell-page__flow-tabs" role="tablist" aria-label="Sell flow">

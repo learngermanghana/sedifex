@@ -1224,6 +1224,69 @@ export const commitSale = functions.https.onCall(
       )
     }
     const normalizedBranchId = normalizedBranchIdRaw
+    const storeRef = db.collection('stores').doc(normalizedBranchId)
+
+    function resolveDailySalesLimit(input: {
+      billingStatus: string | null
+      paymentStatus: string | null
+      planKey: string | null
+    }): number | null {
+      const billingStatus = input.billingStatus?.toLowerCase() ?? null
+      const paymentStatus = input.paymentStatus?.toLowerCase() ?? null
+      const planKey = input.planKey?.toLowerCase() ?? null
+
+      if (billingStatus === 'trial' || paymentStatus === 'trial') return 10
+      if (!planKey) return 10
+      if (planKey.includes('scale')) return null
+      if (planKey.includes('growth')) return 500
+      if (planKey.includes('starter') || planKey.includes('standard')) return 100
+      if (planKey.includes('free') || planKey.includes('trial')) return 10
+      return 10
+    }
+
+    const storeSnap = await storeRef.get()
+    const storeData = storeSnap.data() as Record<string, unknown> | undefined
+    const billingData =
+      storeData?.billing && typeof storeData.billing === 'object'
+        ? (storeData.billing as Record<string, unknown>)
+        : {}
+    const dailySalesLimit = resolveDailySalesLimit({
+      billingStatus:
+        typeof billingData.status === 'string'
+          ? billingData.status
+          : typeof storeData?.contractStatus === 'string'
+            ? storeData.contractStatus
+            : null,
+      paymentStatus:
+        typeof billingData.paymentStatus === 'string' ? billingData.paymentStatus : null,
+      planKey:
+        typeof billingData.planKey === 'string'
+          ? billingData.planKey
+          : typeof storeData?.billingPlan === 'string'
+            ? storeData.billingPlan
+            : null,
+    })
+
+    if (dailySalesLimit !== null) {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(start)
+      end.setDate(end.getDate() + 1)
+      const salesCountSnapshot = await db
+        .collection('sales')
+        .where('storeId', '==', normalizedBranchId)
+        .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(start))
+        .where('createdAt', '<', admin.firestore.Timestamp.fromDate(end))
+        .count()
+        .get()
+      const dailySalesCount = salesCountSnapshot.data().count
+      if (dailySalesCount >= dailySalesLimit) {
+        throw new functions.https.HttpsError(
+          'resource-exhausted',
+          `Daily sales limit reached (${dailySalesLimit}/day). Upgrade your plan in Account to continue selling today.`,
+        )
+      }
+    }
 
     // Normalize items ONCE outside the transaction
     const normalizedItems = Array.isArray(items)
