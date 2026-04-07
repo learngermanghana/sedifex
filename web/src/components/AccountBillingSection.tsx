@@ -24,6 +24,13 @@ const PLANS: PlanOption[] = [
   { id: 'starter', label: 'Starter', monthlyAmountGhs: 20, productLimit: 100, dailySalesLimit: 100 },
   { id: 'growth', label: 'Growth', monthlyAmountGhs: 50, productLimit: 500, dailySalesLimit: 500 },
   { id: 'scale', label: 'Scale', monthlyAmountGhs: 100, productLimit: 'Unlimited', dailySalesLimit: 'Unlimited' },
+  {
+    id: 'scale_plus',
+    label: 'Scale Plus',
+    monthlyAmountGhs: 2000,
+    productLimit: 'Unlimited',
+    dailySalesLimit: 'Unlimited',
+  },
 ]
 
 const YEARLY_CONTRACT_MONTHS = 12
@@ -296,7 +303,8 @@ export const AccountBillingSection: React.FC<Props> = ({
           </button>
 
           <p className="text-xs text-gray-500">
-            You will be redirected to Paystack’s secure page to complete your yearly subscription.
+            You will be redirected to Paystack’s secure page to complete your yearly subscription
+            using Mobile Money or card.
           </p>
         </fieldset>
       </form>

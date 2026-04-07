@@ -58,6 +58,19 @@ const PLANS = [
     cta: 'Talk to Sales',
     to: 'mailto:info@sedifex.com',
   },
+  {
+    name: 'Scale Plus',
+    subtitle: 'For businesses that need unlimited uploads and website creation',
+    points: [
+      'Everything in Scale',
+      'Unlimited uploads',
+      'Website creation support',
+      'Enterprise onboarding and account management',
+      'Price: GHS 2000',
+    ],
+    cta: 'Talk to Sales',
+    to: 'mailto:info@sedifex.com',
+  },
 ]
 
 const FAQS = [

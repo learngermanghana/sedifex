@@ -1437,6 +1437,22 @@ const PRICING_PLANS = [
     },
     note: 'Need more? Contact sales for custom limits.',
   },
+  {
+    name: 'Scale Plus',
+    summary: 'Unlimited uploads and website creation for enterprise growth.',
+    amount: 'GHS 2000',
+    cadence: '/ month',
+    features: [
+      'Unlimited active products',
+      'Unlimited sales per day',
+      'Unlimited uploads',
+      'Website creation support included',
+    ],
+    cta: {
+      type: 'button' as const,
+      label: 'Sign up',
+    },
+  },
 ] as const
 
 async function cleanupFailedSignup(_user: User) {
