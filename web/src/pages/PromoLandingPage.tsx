@@ -99,6 +99,8 @@ type CatalogApiResponse = {
   }>
 }
 
+const CATALOG_PAGE_SIZE = 24
+
 function normalizeSlug(value: string): string {
   return value
     .trim()
@@ -183,6 +185,8 @@ export default function PromoLandingPage() {
   const [gallery, setGallery] = useState<PromoGalleryItem[]>([])
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [activeGalleryImageId, setActiveGalleryImageId] = useState<string | null>(null)
+  const [catalogSearchTerm, setCatalogSearchTerm] = useState('')
+  const [catalogPage, setCatalogPage] = useState(1)
 
   const activeGalleryIndex = useMemo(() => {
     if (!activeGalleryImageId) {
@@ -192,6 +196,31 @@ export default function PromoLandingPage() {
   }, [activeGalleryImageId, gallery])
 
   const activeGalleryItem = activeGalleryIndex >= 0 ? gallery[activeGalleryIndex] : null
+  const normalizedCatalogSearchTerm = catalogSearchTerm.trim().toLowerCase()
+  const filteredCatalogItems = useMemo(() => {
+    if (!normalizedCatalogSearchTerm) {
+      return catalogItems
+    }
+
+    return catalogItems.filter(item => {
+      const searchableText = [
+        item.name,
+        item.description ?? '',
+        item.category ?? '',
+        item.id,
+        item.itemType,
+      ]
+        .join(' ')
+        .toLowerCase()
+      return searchableText.includes(normalizedCatalogSearchTerm)
+    })
+  }, [catalogItems, normalizedCatalogSearchTerm])
+  const totalCatalogPages = Math.max(1, Math.ceil(filteredCatalogItems.length / CATALOG_PAGE_SIZE))
+  const currentCatalogPage = Math.min(catalogPage, totalCatalogPages)
+  const paginatedCatalogItems = useMemo(() => {
+    const start = (currentCatalogPage - 1) * CATALOG_PAGE_SIZE
+    return filteredCatalogItems.slice(start, start + CATALOG_PAGE_SIZE)
+  }, [currentCatalogPage, filteredCatalogItems])
 
   useEffect(() => {
     let isMounted = true
@@ -435,6 +464,10 @@ export default function PromoLandingPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeGalleryIndex, activeGalleryItem, gallery])
 
+  useEffect(() => {
+    setCatalogPage(1)
+  }, [normalizedCatalogSearchTerm])
+
   function openGalleryItem(itemId: string) {
     setActiveGalleryImageId(itemId)
   }
@@ -519,6 +552,7 @@ export default function PromoLandingPage() {
             automatically.
           </p>
         </section>
+        <div className="promo-section-divider" aria-hidden="true" />
         <section id="promo-hero" className="promo-section promo-section--panel">
           <p className="promo-label">Sedifex promo</p>
           {!profile.promoEnabled ? (
@@ -598,6 +632,7 @@ export default function PromoLandingPage() {
             </a>
           ) : null}
         </section>
+        <div className="promo-section-divider" aria-hidden="true" />
         <section id="promo-gallery" className="promo-section promo-section--panel">
           <div className="promo-gallery-header">
             <h2>Gallery</h2>
@@ -670,14 +705,29 @@ export default function PromoLandingPage() {
             </div>
           </div>
         ) : null}
+        <div className="promo-section-divider" aria-hidden="true" />
         <section id="promo-catalog" className="promo-section promo-section--panel">
             <div className="promo-gallery-header">
               <h2>Products & services</h2>
               <p>Available offerings from {profile.storeName}.</p>
             </div>
-            {catalogItems.length ? (
+            <div className="promo-catalog-controls">
+              <label className="promo-catalog-search">
+                <span>Search products</span>
+                <input
+                  type="search"
+                  value={catalogSearchTerm}
+                  onChange={event => setCatalogSearchTerm(event.target.value)}
+                  placeholder="Search by name, category, part number, or description"
+                />
+              </label>
+              <p className="promo-meta">
+                Showing {paginatedCatalogItems.length} of {filteredCatalogItems.length} matching items
+              </p>
+            </div>
+            {filteredCatalogItems.length ? (
               <div className="promo-gallery-grid" role="list" aria-label="Store catalog">
-                {catalogItems.map(item => (
+                {paginatedCatalogItems.map(item => (
                   <article key={item.id} className="promo-gallery-item" role="listitem">
                     {item.imageUrl ? (
                       <img
@@ -695,13 +745,41 @@ export default function PromoLandingPage() {
                         {item.category || 'General'} · {item.itemType === 'service' ? 'Service' : 'Product'}
                         {typeof item.price === 'number' ? ` · ${item.price.toFixed(2)}` : ''}
                       </p>
+                      <p className="promo-meta">Part #: {item.id}</p>
                     </div>
                   </article>
                 ))}
               </div>
             ) : (
-              <p className="promo-gallery-empty">Products and services will appear here soon.</p>
+              <p className="promo-gallery-empty">
+                {catalogItems.length
+                  ? 'No products match your search yet.'
+                  : 'Products and services will appear here soon.'}
+              </p>
             )}
+            {filteredCatalogItems.length > CATALOG_PAGE_SIZE ? (
+              <nav className="promo-pagination" aria-label="Catalog page navigation">
+                <button
+                  type="button"
+                  className="promo-nav__button"
+                  onClick={() => setCatalogPage(page => Math.max(1, page - 1))}
+                  disabled={currentCatalogPage === 1}
+                >
+                  Previous
+                </button>
+                <span className="promo-meta">
+                  Page {currentCatalogPage} of {totalCatalogPages}
+                </span>
+                <button
+                  type="button"
+                  className="promo-nav__button"
+                  onClick={() => setCatalogPage(page => Math.min(totalCatalogPages, page + 1))}
+                  disabled={currentCatalogPage >= totalCatalogPages}
+                >
+                  Next
+                </button>
+              </nav>
+            ) : null}
         </section>
       </article>
     </main>

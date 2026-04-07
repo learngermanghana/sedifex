@@ -71,6 +71,12 @@
   scroll-margin-top: 18px;
 }
 
+.promo-section-divider {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, #c7d2fe, transparent);
+}
+
 .promo-card h1 {
   margin: 0;
   font-size: clamp(1.9rem, 4vw, 2.5rem);
@@ -246,6 +252,40 @@
 .promo-gallery-empty {
   margin: 0;
   color: #64748b;
+}
+
+.promo-catalog-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.promo-catalog-search {
+  display: grid;
+  gap: 6px;
+}
+
+.promo-catalog-search span {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.promo-catalog-search input {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.promo-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.promo-nav__button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .promo-gallery-viewer {
