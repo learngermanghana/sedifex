@@ -1,6 +1,6 @@
 // functions/src/plans.ts
 
-export type PlanId = 'starter' | 'growth' | 'scale'
+export type PlanId = 'starter' | 'growth' | 'scale' | 'scale_plus'
 
 export type Plan = {
   id: PlanId
@@ -40,6 +40,14 @@ const PLAN_CATALOG: Record<PlanId, Plan> = {
     totalPriceGhs: 100,
     discountPercent: null,
   },
+  scale_plus: {
+    id: 'scale_plus',
+    label: 'Scale Plus',
+    months: 1,
+    monthlyPriceGhs: 2000,
+    totalPriceGhs: 2000,
+    discountPercent: null,
+  },
 }
 
 export function getBillingConfig() {
@@ -54,6 +62,9 @@ const PLAN_ALIAS_MAP: Record<string, PlanId> = {
   starter: 'starter',
   growth: 'growth',
   scale: 'scale',
+  scale_plus: 'scale_plus',
+  'scale-plus': 'scale_plus',
+  'scale plus': 'scale_plus',
 }
 
 export function normalizePlanId(raw: unknown): PlanId | null {

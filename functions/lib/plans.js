@@ -33,6 +33,14 @@ const PLAN_CATALOG = {
         totalPriceGhs: 100,
         discountPercent: null,
     },
+    scale_plus: {
+        id: 'scale_plus',
+        label: 'Scale Plus',
+        months: 1,
+        monthlyPriceGhs: 2000,
+        totalPriceGhs: 2000,
+        discountPercent: null,
+    },
 };
 function getBillingConfig() {
     return {
@@ -45,6 +53,9 @@ const PLAN_ALIAS_MAP = {
     starter: 'starter',
     growth: 'growth',
     scale: 'scale',
+    scale_plus: 'scale_plus',
+    'scale-plus': 'scale_plus',
+    'scale plus': 'scale_plus',
 };
 function normalizePlanId(raw) {
     if (!raw || typeof raw !== 'string')

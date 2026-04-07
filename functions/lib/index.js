@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -899,6 +899,60 @@ exports.commitSale = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'A valid branch identifier is required');
     }
     const normalizedBranchId = normalizedBranchIdRaw;
+    const storeRef = firestore_1.defaultDb.collection('stores').doc(normalizedBranchId);
+    function resolveDailySalesLimit(input) {
+        const billingStatus = input.billingStatus?.toLowerCase() ?? null;
+        const paymentStatus = input.paymentStatus?.toLowerCase() ?? null;
+        const planKey = input.planKey?.toLowerCase() ?? null;
+        if (billingStatus === 'trial' || paymentStatus === 'trial')
+            return 10;
+        if (!planKey)
+            return 10;
+        if (planKey.includes('scale'))
+            return null;
+        if (planKey.includes('growth'))
+            return 500;
+        if (planKey.includes('starter') || planKey.includes('standard'))
+            return 100;
+        if (planKey.includes('free') || planKey.includes('trial'))
+            return 10;
+        return 10;
+    }
+    const storeSnap = await storeRef.get();
+    const storeData = storeSnap.data();
+    const billingData = storeData?.billing && typeof storeData.billing === 'object'
+        ? storeData.billing
+        : {};
+    const dailySalesLimit = resolveDailySalesLimit({
+        billingStatus: typeof billingData.status === 'string'
+            ? billingData.status
+            : typeof storeData?.contractStatus === 'string'
+                ? storeData.contractStatus
+                : null,
+        paymentStatus: typeof billingData.paymentStatus === 'string' ? billingData.paymentStatus : null,
+        planKey: typeof billingData.planKey === 'string'
+            ? billingData.planKey
+            : typeof storeData?.billingPlan === 'string'
+                ? storeData.billingPlan
+                : null,
+    });
+    if (dailySalesLimit !== null) {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        const salesCountSnapshot = await firestore_1.defaultDb
+            .collection('sales')
+            .where('storeId', '==', normalizedBranchId)
+            .where('createdAt', '>=', firestore_1.admin.firestore.Timestamp.fromDate(start))
+            .where('createdAt', '<', firestore_1.admin.firestore.Timestamp.fromDate(end))
+            .count()
+            .get();
+        const dailySalesCount = salesCountSnapshot.data().count;
+        if (dailySalesCount >= dailySalesLimit) {
+            throw new functions.https.HttpsError('resource-exhausted', `Daily sales limit reached (${dailySalesLimit}/day). Upgrade your plan in Account to continue selling today.`);
+        }
+    }
     // Normalize items ONCE outside the transaction
     const normalizedItems = Array.isArray(items)
         ? items.map((it) => {
@@ -1318,6 +1372,10 @@ function generateIntegrationSecret() {
 function hashIntegrationSecret(secret) {
     return crypto.createHash('sha256').update(secret).digest('hex');
 }
+function normalizeOptionalStoreId(value) {
+    const storeId = typeof value === 'string' ? value.trim() : '';
+    return storeId || null;
+}
 function shortMask(value) {
     if (value.length <= 8)
         return '••••••••';
@@ -1532,6 +1590,225 @@ exports.rotateIntegrationApiKey = functions.https.onCall(async (data, context) =
         },
         token,
     };
+});
+/** ============================================================================
+ *  CALLABLES: TikTok OAuth connect (owner)
+ * ==========================================================================*/
+const TIKTOK_CLIENT_KEY = (0, params_1.defineString)('TIKTOK_CLIENT_KEY');
+const TIKTOK_CLIENT_SECRET = (0, params_1.defineString)('TIKTOK_CLIENT_SECRET');
+const TIKTOK_REDIRECT_URI = (0, params_1.defineString)('TIKTOK_REDIRECT_URI');
+const TIKTOK_SUCCESS_REDIRECT_URL = (0, params_1.defineString)('TIKTOK_SUCCESS_REDIRECT_URL');
+const TIKTOK_ERROR_REDIRECT_URL = (0, params_1.defineString)('TIKTOK_ERROR_REDIRECT_URL');
+const DEFAULT_TIKTOK_SCOPES = 'user.info.basic,video.list';
+const TIKTOK_STATE_TTL_MILLIS = 1000 * 60 * 15;
+exports.startTikTokConnect = functions.https.onCall(async (data, context) => {
+    assertOwnerAccess(context);
+    const uid = context.auth.uid;
+    const ownerStoreId = await resolveStaffStoreId(uid);
+    await verifyOwnerForStore(uid, ownerStoreId);
+    const requestedStoreId = normalizeOptionalStoreId(data?.storeId);
+    const storeId = requestedStoreId ?? ownerStoreId;
+    if (storeId !== ownerStoreId) {
+        throw new functions.https.HttpsError('permission-denied', 'You can only connect TikTok for your active owner store.');
+    }
+    const clientKey = TIKTOK_CLIENT_KEY.value().trim();
+    const redirectUri = TIKTOK_REDIRECT_URI.value().trim();
+    if (!clientKey || !redirectUri) {
+        throw new functions.https.HttpsError('failed-precondition', 'TikTok connection is not configured. Ask support to set TikTok env vars.');
+    }
+    const state = crypto.randomBytes(24).toString('hex');
+    const createdAt = firestore_1.admin.firestore.Timestamp.now();
+    await firestore_1.defaultDb.collection('tiktokOAuthStates').doc(state).set({
+        storeId,
+        createdBy: uid,
+        createdAt,
+        status: 'pending',
+    });
+    const authUrl = new URL('https://www.tiktok.com/v2/auth/authorize/');
+    authUrl.searchParams.set('client_key', clientKey);
+    authUrl.searchParams.set('scope', DEFAULT_TIKTOK_SCOPES);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('state', state);
+    return {
+        ok: true,
+        authorizationUrl: authUrl.toString(),
+    };
+});
+function buildTikTokRedirectTarget(baseUrl, params) {
+    if (!baseUrl)
+        return null;
+    try {
+        const url = new URL(baseUrl);
+        Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.set(key, value);
+        });
+        return url.toString();
+    }
+    catch {
+        console.warn('[tiktok] Invalid redirect URL configured', { baseUrl });
+        return null;
+    }
+}
+function sendTikTokHtmlResponse(res, title, message, isError) {
+    const statusCode = isError ? 400 : 200;
+    const safeTitle = title.replace(/[<>&]/g, '');
+    const safeMessage = message.replace(/[<>&]/g, '');
+    res.status(statusCode).send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      main { max-width: 560px; margin: 64px auto; padding: 28px; background: #111827; border-radius: 14px; }
+      h1 { margin: 0 0 10px; font-size: 1.3rem; }
+      p { margin: 0 0 12px; line-height: 1.5; color: #cbd5e1; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${safeTitle}</h1>
+      <p>${safeMessage}</p>
+      <p>You can close this window and return to Sedifex.</p>
+    </main>
+  </body>
+</html>`);
+}
+exports.tiktokOAuthCallback = functions.https.onRequest(async (req, res) => {
+    if (req.method !== 'GET') {
+        res.status(405).json({ ok: false, error: 'Method not allowed.' });
+        return;
+    }
+    const state = typeof req.query.state === 'string' ? req.query.state.trim() : '';
+    const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
+    const error = typeof req.query.error === 'string' ? req.query.error.trim() : '';
+    const errorDescription = typeof req.query.error_description === 'string' ? req.query.error_description.trim() : '';
+    const successRedirectBase = TIKTOK_SUCCESS_REDIRECT_URL.value().trim() || null;
+    const errorRedirectBase = TIKTOK_ERROR_REDIRECT_URL.value().trim() || null;
+    function handleError(message, reason) {
+        const target = buildTikTokRedirectTarget(errorRedirectBase, {
+            tiktokConnect: 'error',
+            reason,
+        });
+        if (target) {
+            res.redirect(302, target);
+            return;
+        }
+        sendTikTokHtmlResponse(res, 'TikTok connection failed', message, true);
+    }
+    if (!state) {
+        handleError('Missing OAuth state. Please retry from Account Overview.', 'missing_state');
+        return;
+    }
+    if (error) {
+        const detail = errorDescription || error;
+        handleError(`TikTok authorization was not completed: ${detail}.`, 'authorization_denied');
+        return;
+    }
+    if (!code) {
+        handleError('Missing authorization code from TikTok. Please retry.', 'missing_code');
+        return;
+    }
+    const stateRef = firestore_1.defaultDb.collection('tiktokOAuthStates').doc(state);
+    const stateSnap = await stateRef.get();
+    if (!stateSnap.exists) {
+        handleError('This TikTok connection session has expired. Start again from Sedifex.', 'invalid_state');
+        return;
+    }
+    const stateData = (stateSnap.data() ?? {});
+    const storeId = typeof stateData.storeId === 'string' ? stateData.storeId.trim() : '';
+    const createdAt = stateData.createdAt instanceof firestore_1.admin.firestore.Timestamp ? stateData.createdAt : null;
+    const isAlreadyUsed = stateData.status === 'completed';
+    const isExpired = !createdAt || Date.now() - createdAt.toMillis() > TIKTOK_STATE_TTL_MILLIS;
+    if (!storeId || isAlreadyUsed || isExpired) {
+        await stateRef.set({
+            status: isExpired ? 'expired' : 'invalid',
+            updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        handleError('This TikTok connection session is no longer valid. Please retry.', 'expired_state');
+        return;
+    }
+    const clientKey = TIKTOK_CLIENT_KEY.value().trim();
+    const clientSecret = TIKTOK_CLIENT_SECRET.value().trim();
+    const redirectUri = TIKTOK_REDIRECT_URI.value().trim();
+    if (!clientKey || !clientSecret || !redirectUri) {
+        handleError('TikTok environment variables are missing on the server.', 'missing_server_config');
+        return;
+    }
+    try {
+        const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                client_key: clientKey,
+                client_secret: clientSecret,
+                code,
+                grant_type: 'authorization_code',
+                redirect_uri: redirectUri,
+            }),
+        });
+        const tokenJson = (await tokenResponse.json());
+        if (!tokenResponse.ok || !tokenJson.access_token) {
+            console.error('[tiktok] OAuth token exchange failed', {
+                status: tokenResponse.status,
+                payload: tokenJson,
+            });
+            handleError('TikTok token exchange failed. Please retry.', 'token_exchange_failed');
+            return;
+        }
+        const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+        const expiresInSeconds = typeof tokenJson.expires_in === 'number' && Number.isFinite(tokenJson.expires_in)
+            ? tokenJson.expires_in
+            : null;
+        const refreshExpiresInSeconds = typeof tokenJson.refresh_expires_in === 'number' && Number.isFinite(tokenJson.refresh_expires_in)
+            ? tokenJson.refresh_expires_in
+            : null;
+        const tiktokRef = firestore_1.defaultDb.collection('stores').doc(storeId).collection('integrations').doc('tiktok');
+        await tiktokRef.set({
+            provider: 'tiktok',
+            status: 'connected',
+            openId: typeof tokenJson.open_id === 'string' ? tokenJson.open_id : null,
+            scope: typeof tokenJson.scope === 'string' ? tokenJson.scope : DEFAULT_TIKTOK_SCOPES,
+            tokenType: typeof tokenJson.token_type === 'string' ? tokenJson.token_type : 'Bearer',
+            accessToken: tokenJson.access_token,
+            refreshToken: typeof tokenJson.refresh_token === 'string' ? tokenJson.refresh_token : null,
+            accessTokenExpiresInSeconds: expiresInSeconds,
+            refreshTokenExpiresInSeconds: refreshExpiresInSeconds,
+            accessTokenExpiresAt: expiresInSeconds !== null
+                ? firestore_1.admin.firestore.Timestamp.fromMillis(Date.now() + expiresInSeconds * 1000)
+                : null,
+            refreshTokenExpiresAt: refreshExpiresInSeconds !== null
+                ? firestore_1.admin.firestore.Timestamp.fromMillis(Date.now() + refreshExpiresInSeconds * 1000)
+                : null,
+            connectedAt: now,
+            updatedAt: now,
+        }, { merge: true });
+        await firestore_1.defaultDb.collection('stores').doc(storeId).set({
+            tiktokConnectionStatus: 'connected',
+            tiktokConnectedAt: now,
+            updatedAt: now,
+        }, { merge: true });
+        await stateRef.set({
+            status: 'completed',
+            updatedAt: now,
+        }, { merge: true });
+        const successTarget = buildTikTokRedirectTarget(successRedirectBase, {
+            tiktokConnect: 'success',
+        });
+        if (successTarget) {
+            res.redirect(302, successTarget);
+            return;
+        }
+        sendTikTokHtmlResponse(res, 'TikTok connected', 'Your TikTok account is now connected. Sedifex can now store tokens for feed sync.', false);
+    }
+    catch (tokenError) {
+        console.error('[tiktok] Unexpected OAuth callback failure', tokenError);
+        handleError('Unexpected error while connecting TikTok. Please retry.', 'unexpected_error');
+    }
 });
 function setIntegrationResponseHeaders(res) {
     const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim();
@@ -2734,6 +3011,7 @@ const PAYSTACK_STANDARD_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STANDAR
 const PAYSTACK_STARTER_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STARTER_PLAN_CODE');
 const PAYSTACK_GROWTH_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_GROWTH_PLAN_CODE');
 const PAYSTACK_SCALE_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_SCALE_PLAN_CODE');
+const PAYSTACK_SCALE_PLUS_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_SCALE_PLUS_PLAN_CODE');
 const PAYSTACK_CURRENCY = (0, params_1.defineString)('PAYSTACK_CURRENCY');
 // Fixed packages (GHS)
 const BULK_CREDITS_PACKAGES = {
@@ -2749,6 +3027,7 @@ function getPaystackConfig() {
     const starterPlan = PAYSTACK_STARTER_PLAN_CODE.value() || PAYSTACK_STANDARD_PLAN_CODE.value();
     const growthPlan = PAYSTACK_GROWTH_PLAN_CODE.value();
     const scalePlan = PAYSTACK_SCALE_PLAN_CODE.value();
+    const scalePlusPlan = PAYSTACK_SCALE_PLUS_PLAN_CODE.value();
     if (!paystackConfigLogged) {
         console.log('[paystack] startup config', {
             hasSecret: !!secret,
@@ -2757,6 +3036,7 @@ function getPaystackConfig() {
             hasStarterPlan: !!starterPlan,
             hasGrowthPlan: !!growthPlan,
             hasScalePlan: !!scalePlan,
+            hasScalePlusPlan: !!scalePlusPlan,
         });
         paystackConfigLogged = true;
     }
@@ -2768,6 +3048,7 @@ function getPaystackConfig() {
             starter: starterPlan,
             growth: growthPlan,
             scale: scalePlan,
+            scale_plus: scalePlusPlan,
         },
     };
 }
@@ -2807,6 +3088,8 @@ function resolvePlanDefaultAmount(planKey) {
     if (!planKey)
         return 20;
     const lower = planKey.toLowerCase();
+    if (lower.includes('scale plus') || lower.includes('scale_plus'))
+        return 2000;
     if (lower.includes('scale'))
         return 100;
     if (lower.includes('growth'))
@@ -2820,6 +3103,8 @@ function resolvePlanRank(planKey) {
     if (!planKey)
         return 0;
     const lower = planKey.toLowerCase();
+    if (lower.includes('scale plus') || lower.includes('scale_plus'))
+        return 4;
     if (lower.includes('scale'))
         return 3;
     if (lower.includes('growth'))

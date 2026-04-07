@@ -3794,7 +3794,7 @@ const PAYSTACK_SCALE_PLAN_CODE = defineString('PAYSTACK_SCALE_PLAN_CODE')
 
 const PAYSTACK_CURRENCY = defineString('PAYSTACK_CURRENCY')
 
-type PaystackPlanKey = 'starter' | 'growth' | 'scale' | string
+type PaystackPlanKey = 'starter' | 'growth' | 'scale' | 'scale_plus' | string
 
 // Fixed packages (GHS)
 const BULK_CREDITS_PACKAGES: Record<string, { credits: number; amount: number }> = {
@@ -3877,6 +3877,7 @@ function resolvePlanMonths(_planKey: string | null): number {
 function resolvePlanDefaultAmount(planKey: string | null): number {
   if (!planKey) return 20
   const lower = planKey.toLowerCase()
+  if (lower.includes('scale plus') || lower.includes('scale_plus')) return 2000
   if (lower.includes('scale')) return 100
   if (lower.includes('growth')) return 50
   return 20
@@ -3889,6 +3890,7 @@ function toTwoDecimals(value: number): number {
 function resolvePlanRank(planKey: string | null): number {
   if (!planKey) return 0
   const lower = planKey.toLowerCase()
+  if (lower.includes('scale plus') || lower.includes('scale_plus')) return 4
   if (lower.includes('scale')) return 3
   if (lower.includes('growth')) return 2
   if (lower.includes('starter')) return 1
