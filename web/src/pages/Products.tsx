@@ -130,6 +130,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
 
   const itemType = data.itemType === 'service' ? 'service' : 'product'
   const category = typeof data.category === 'string' ? data.category.trim() : ''
+  const description = typeof data.description === 'string' ? data.description.trim() : ''
 
   const expiryDate = toDate(data.expiryDate)
   const productionDate = toDate(data.productionDate)
@@ -146,6 +147,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
   return {
     id,
     name: nameRaw.trim() || 'Untitled item',
+    description: description || null,
     category: category || null,
     sku: skuRaw.trim() || null,
     barcode: normalizedBarcode || null,
@@ -337,6 +339,7 @@ export default function Products() {
   const [itemType, setItemType] = useState<ItemType>('product')
   const [sku, setSku] = useState('')
   const [categoryInput, setCategoryInput] = useState('')
+  const [descriptionInput, setDescriptionInput] = useState('')
   const [priceInput, setPriceInput] = useState('')
   const [taxRateInput, setTaxRateInput] = useState('')
   const [reorderPointInput, setReorderPointInput] = useState('')
@@ -365,6 +368,7 @@ export default function Products() {
   const [editItemType, setEditItemType] = useState<ItemType>('product')
   const [editSku, setEditSku] = useState('')
   const [editCategoryInput, setEditCategoryInput] = useState('')
+  const [editDescriptionInput, setEditDescriptionInput] = useState('')
   const [editPriceInput, setEditPriceInput] = useState('')
   const [editTaxRateInput, setEditTaxRateInput] = useState('')
   const [editReorderPointInput, setEditReorderPointInput] = useState('')
@@ -593,9 +597,10 @@ export default function Products() {
       result = result.filter(p => {
         const inName = p.name.toLowerCase().includes(term)
         const inCategory = (p.category ?? '').toLowerCase().includes(term)
+        const inDescription = (p.description ?? '').toLowerCase().includes(term)
         const inSku = (p.sku ?? '').toLowerCase().includes(term)
         const inBarcode = (p.barcode ?? '').toLowerCase().includes(term)
-        return inName || inCategory || inSku || inBarcode
+        return inName || inCategory || inDescription || inSku || inBarcode
       })
     }
 
@@ -694,6 +699,7 @@ export default function Products() {
 
     const trimmedSku = sku.trim()
     const trimmedCategory = categoryInput.trim()
+    const trimmedDescription = descriptionInput.trim()
     const normalizedName = normalizeLookupValue(trimmedName)
     const normalizedSku = normalizeBarcode(trimmedSku)
 
@@ -736,6 +742,7 @@ export default function Products() {
         name: trimmedName,
         itemType,
         category: trimmedCategory || null,
+        description: trimmedDescription || null,
         price: finalPrice,
         // 🔹 Keep SKU as typed, but also store a normalized barcode field
         sku: isService ? null : trimmedSku || null,
@@ -769,6 +776,7 @@ export default function Products() {
       setItemType('product')
       setSku('')
       setCategoryInput('')
+      setDescriptionInput('')
       setPriceInput('')
       setTaxRateInput('')
       setReorderPointInput('')
@@ -894,6 +902,7 @@ export default function Products() {
     setEditItemType(product.itemType)
     setEditSku(product.sku ?? '')
     setEditCategoryInput(product.category ?? '')
+    setEditDescriptionInput(product.description ?? '')
     setEditPriceInput(
       typeof product.price === 'number' && Number.isFinite(product.price)
         ? String(product.price)
@@ -1018,6 +1027,7 @@ export default function Products() {
 
     const trimmedSku = editSku.trim()
     const trimmedCategory = editCategoryInput.trim()
+    const trimmedDescription = editDescriptionInput.trim()
 
     setFormStatus('idle')
     setFormError(null)
@@ -1028,6 +1038,7 @@ export default function Products() {
         name: trimmedName,
         itemType: editItemType,
         category: trimmedCategory || null,
+        description: trimmedDescription || null,
         sku: isStockTracked ? trimmedSku || null : null,
         barcode: isStockTracked ? normalizeBarcode(trimmedSku) || null : null,
         price: finalPrice,
@@ -1301,6 +1312,19 @@ export default function Products() {
                 placeholder="e.g. Beverages, Skin Care, Electronics"
                 value={categoryInput}
                 onChange={e => setCategoryInput(e.target.value)}
+              />
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="add-description">
+                Description <span className="field__optional">(optional)</span>
+              </label>
+              <textarea
+                id="add-description"
+                placeholder="Helpful product details for marketplaces and sync partners"
+                value={descriptionInput}
+                onChange={e => setDescriptionInput(e.target.value)}
+                rows={3}
               />
             </div>
 
@@ -1815,6 +1839,20 @@ export default function Products() {
                           />
                         ) : (
                           <p className="products-page__list-value">{product.category || '—'}</p>
+                        )}
+                      </div>
+
+                      <div className="products-page__list-field">
+                        <label className="field__label">Description</label>
+                        {isEditing ? (
+                          <textarea
+                            value={editDescriptionInput}
+                            onChange={event => setEditDescriptionInput(event.target.value)}
+                            rows={3}
+                            placeholder="Helpful product details for marketplaces and sync partners"
+                          />
+                        ) : (
+                          <p className="products-page__list-value">{product.description || '—'}</p>
                         )}
                       </div>
 
