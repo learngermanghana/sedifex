@@ -31,6 +31,7 @@ import { AccountBillingSection } from '../components/AccountBillingSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
 import { buildPromoSlug, normalizePromoSlug } from '../utils/promoSlug'
+import { normalizeGhanaPhoneDigits, normalizeGhanaPhoneE164 } from '../utils/phone'
 import {
   ProductImageUploadError,
   deleteUploadedImageByUrl,
@@ -752,7 +753,8 @@ export default function AccountOverview({
         email: normalizeInput(profileDraft.email),
         // ✅ keep ownerEmail in sync so billing can always use it
         ownerEmail: normalizeInput(profileDraft.email),
-        phone: normalizeInput(profileDraft.phone),
+        phone: normalizeInput(normalizeGhanaPhoneE164(profileDraft.phone)),
+        whatsappNumber: normalizeInput(normalizeGhanaPhoneDigits(profileDraft.phone)),
         addressLine1: normalizeInput(profileDraft.addressLine1),
         addressLine2: normalizeInput(profileDraft.addressLine2),
         city: normalizeInput(profileDraft.city),

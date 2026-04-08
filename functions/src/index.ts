@@ -3,7 +3,7 @@ import * as functions from 'firebase-functions/v1'
 import * as crypto from 'crypto'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb as db } from './firestore'
-import { normalizePhoneE164 } from './phone'
+import { normalizePhoneE164, normalizePhoneForWhatsApp } from './phone'
 import type { ProductReadModel } from './types/product'
 export { checkSignupUnlock } from './paystack'
 
@@ -723,6 +723,9 @@ export const initializeStore = functions.https.onCall(
         name: baseStoreData.name || profile.businessName || null,
         displayName,
         phone: profile.phone ?? baseStoreData.phone ?? resolvedPhone ?? null,
+        whatsappNumber: normalizePhoneForWhatsApp(
+          profile.phone ?? baseStoreData.phone ?? resolvedPhone ?? '',
+        ) || null,
         country: profile.country ?? baseStoreData.country ?? null,
         city: profile.city ?? baseStoreData.city ?? null,
         addressLine1: profile.addressLine1 ?? baseStoreData.addressLine1 ?? null,
@@ -2908,7 +2911,7 @@ export const integrationPromo = functions.https.onRequest(async (req, res) => {
       youtubeVideos,
       imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
       imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
-      phone: toTrimmedStringOrNull(data.phone),
+      phone: toTrimmedStringOrNull(data.whatsappNumber) ?? toTrimmedStringOrNull(data.phone),
       storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
       updatedAt: normalizeTimestampIso(data.updatedAt),
     },

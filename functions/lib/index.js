@@ -532,6 +532,7 @@ exports.initializeStore = functions.https.onCall(async (data, context) => {
             name: baseStoreData.name || profile.businessName || null,
             displayName,
             phone: profile.phone ?? baseStoreData.phone ?? resolvedPhone ?? null,
+            whatsappNumber: (0, phone_1.normalizePhoneForWhatsApp)(profile.phone ?? baseStoreData.phone ?? resolvedPhone ?? '') || null,
             country: profile.country ?? baseStoreData.country ?? null,
             city: profile.city ?? baseStoreData.city ?? null,
             addressLine1: profile.addressLine1 ?? baseStoreData.addressLine1 ?? null,
@@ -2279,7 +2280,7 @@ exports.integrationPromo = functions.https.onRequest(async (req, res) => {
             youtubeVideos,
             imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
             imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
-            phone: toTrimmedStringOrNull(data.phone),
+            phone: toTrimmedStringOrNull(data.whatsappNumber) ?? toTrimmedStringOrNull(data.phone),
             storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
             updatedAt: normalizeTimestampIso(data.updatedAt),
         },
@@ -3011,7 +3012,6 @@ const PAYSTACK_STANDARD_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STANDAR
 const PAYSTACK_STARTER_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STARTER_PLAN_CODE');
 const PAYSTACK_GROWTH_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_GROWTH_PLAN_CODE');
 const PAYSTACK_SCALE_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_SCALE_PLAN_CODE');
-const PAYSTACK_SCALE_PLUS_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_SCALE_PLUS_PLAN_CODE');
 const PAYSTACK_CURRENCY = (0, params_1.defineString)('PAYSTACK_CURRENCY');
 // Fixed packages (GHS)
 const BULK_CREDITS_PACKAGES = {
@@ -3027,7 +3027,6 @@ function getPaystackConfig() {
     const starterPlan = PAYSTACK_STARTER_PLAN_CODE.value() || PAYSTACK_STANDARD_PLAN_CODE.value();
     const growthPlan = PAYSTACK_GROWTH_PLAN_CODE.value();
     const scalePlan = PAYSTACK_SCALE_PLAN_CODE.value();
-    const scalePlusPlan = PAYSTACK_SCALE_PLUS_PLAN_CODE.value();
     if (!paystackConfigLogged) {
         console.log('[paystack] startup config', {
             hasSecret: !!secret,
@@ -3036,7 +3035,6 @@ function getPaystackConfig() {
             hasStarterPlan: !!starterPlan,
             hasGrowthPlan: !!growthPlan,
             hasScalePlan: !!scalePlan,
-            hasScalePlusPlan: !!scalePlusPlan,
         });
         paystackConfigLogged = true;
     }
@@ -3048,7 +3046,6 @@ function getPaystackConfig() {
             starter: starterPlan,
             growth: growthPlan,
             scale: scalePlan,
-            scale_plus: scalePlusPlan,
         },
     };
 }
@@ -3096,6 +3093,15 @@ function resolvePlanDefaultAmount(planKey) {
         return 50;
     return 20;
 }
+function resolveContractGrossAmount(planKey, contractMonths) {
+    if (!planKey)
+        return toTwoDecimals(resolvePlanDefaultAmount(planKey) * contractMonths);
+    const lower = planKey.toLowerCase();
+    if (lower.includes('scale plus') || lower.includes('scale_plus')) {
+        return 2000;
+    }
+    return toTwoDecimals(resolvePlanDefaultAmount(planKey) * contractMonths);
+}
 function toTwoDecimals(value) {
     return Math.round(value * 100) / 100;
 }
@@ -3125,8 +3131,7 @@ function resolveContractMonths(raw) {
     return rounded;
 }
 function resolveContractQuote(input) {
-    const targetPlanAmount = resolvePlanDefaultAmount(input.targetPlanKey);
-    const grossAmount = toTwoDecimals(targetPlanAmount * input.contractMonths);
+    const grossAmount = resolveContractGrossAmount(input.targetPlanKey, input.contractMonths);
     const isUpgrade = resolvePlanRank(input.targetPlanKey) > resolvePlanRank(input.currentPlanKey);
     if (!isUpgrade) {
         return {

@@ -20,6 +20,36 @@ const AFRICAN_COUNTRY_CODES = [
 
 const DEFAULT_AFRICAN_COUNTRY_CODE = '233'
 
+export function normalizeGhanaPhoneDigits(input: string): string {
+  const trimmed = input.trim()
+  if (!trimmed) return ''
+
+  let digits = trimmed.replace(/\D/g, '')
+  if (!digits) return ''
+
+  if (digits.startsWith('00')) {
+    digits = digits.replace(/^00+/, '')
+  }
+
+  if (digits.startsWith('2330')) {
+    digits = `233${digits.slice(4)}`
+  }
+
+  if (digits.startsWith('233')) {
+    return digits
+  }
+
+  if (digits.startsWith('0')) {
+    return `233${digits.slice(1)}`
+  }
+
+  if (digits.length === 9) {
+    return `233${digits}`
+  }
+
+  return digits
+}
+
 export function normalizePhoneE164(
   input: string,
   options?: { defaultCountryCode?: string },
@@ -34,9 +64,15 @@ export function normalizePhoneE164(
   if (!withoutWhatsApp) return ''
 
   const hasPlus = withoutWhatsApp.startsWith('+')
-  const digits = withoutWhatsApp.replace(/\D/g, '')
+  const defaultCountryCode = options?.defaultCountryCode ?? DEFAULT_AFRICAN_COUNTRY_CODE
+  const rawDigits = withoutWhatsApp.replace(/\D/g, '')
 
-  if (!digits) return ''
+  if (!rawDigits) return ''
+
+  const digits =
+    defaultCountryCode === '233'
+      ? normalizeGhanaPhoneDigits(rawDigits)
+      : rawDigits
 
   if (hasPlus) {
     return `+${digits}`
@@ -48,7 +84,7 @@ export function normalizePhoneE164(
 
   if (withoutWhatsApp.startsWith('0')) {
     const rest = digits.replace(/^0/, '')
-    const countryCode = options?.defaultCountryCode ?? DEFAULT_AFRICAN_COUNTRY_CODE
+    const countryCode = defaultCountryCode
     return `+${countryCode}${rest}`
   }
 
@@ -60,4 +96,9 @@ export function normalizePhoneE164(
   }
 
   return `+${digits}`
+}
+
+export function normalizePhoneForWhatsApp(input: string): string {
+  const e164 = normalizePhoneE164(input)
+  return e164.replace(/^\+/, '')
 }

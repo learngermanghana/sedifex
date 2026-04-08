@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { normalizeGhanaPhoneDigits } from '../utils/phone'
 
 import './PromoLandingPage.css'
 
@@ -160,23 +161,15 @@ function formatPublishedDate(value: string | null): string | null {
 
 function normalizePhoneForLinks(value: string | null): string | null {
   if (!value) return null
-  const compact = value.replace(/[^\d+]/g, '')
-  if (!compact) return null
-  if (compact.startsWith('+')) {
-    const digits = compact.slice(1).replace(/\D/g, '')
-    return digits ? `+${digits}` : null
-  }
-  const digits = compact.replace(/\D/g, '')
+  const digits = normalizeGhanaPhoneDigits(value)
   return digits || null
 }
 
 function buildWhatsAppLink(phone: string | null, storeName: string): string | null {
   const normalized = normalizePhoneForLinks(phone)
   if (!normalized) return null
-  const digitsOnly = normalized.replace(/^\+/, '')
-  if (!digitsOnly) return null
   const text = encodeURIComponent(`Hello ${storeName}, I saw your Sedifex page and need more details.`)
-  return `https://wa.me/${digitsOnly}?text=${text}`
+  return `https://wa.me/${normalized}?text=${text}`
 }
 
 function getIntegrationEndpoint(path: string): string {

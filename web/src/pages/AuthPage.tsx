@@ -29,6 +29,7 @@ import {
 } from '../controllers/accessController'
 import { auth, db } from '../firebase'
 import { setOnboardingStatus } from '../utils/onboarding'
+import { normalizeGhanaPhoneE164 } from '../utils/phone'
 
 const LOGI_PARTNER_IMAGE_URL =
   'https://raw.githubusercontent.com/learngermanghana/sedifexbiz/main/photos/pexels-omotayo-tajudeen-1650120-3213283%281%29.jpg'
@@ -70,7 +71,7 @@ interface PartnerStoreSnippet {
 }
 
 function sanitizePhone(value: string): string {
-  return value.replace(/\D+/g, '')
+  return normalizeGhanaPhoneE164(value)
 }
 
 function evaluatePasswordStrength(password: string): PasswordStrength {
