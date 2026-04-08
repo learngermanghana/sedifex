@@ -213,7 +213,8 @@ export default function RefundPage() {
 
         <p>
           For more information about how we handle your information, please see
-          our <strong>Privacy Policy</strong> at <code>/privacy</code>.
+          our <strong>Privacy Policy</strong> at <code>/privacy</code> and
+          <strong> Terms of Service</strong> at <code>/terms</code>.
         </p>
       </section>
 
