@@ -40,6 +40,7 @@ const crypto = __importStar(require("crypto"));
 const params_1 = require("firebase-functions/params");
 const firestore_1 = require("./firestore");
 const phone_1 = require("./phone");
+const publicSlug_1 = require("./utils/publicSlug");
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
 const VALID_ROLES = new Set(['owner', 'staff']);
@@ -1827,15 +1828,7 @@ function getIntegrationAuthContext(req) {
     return { token, storeId };
 }
 function getPromoSlugFromRequest(req) {
-    return normalizePublicSlugValue(typeof req.query.slug === 'string' ? req.query.slug : '');
-}
-function normalizePublicSlugValue(value) {
-    return value
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, '-')
-        .replace(/-{2,}/g, '-')
-        .replace(/^-|-$/g, '');
+    return (0, publicSlug_1.normalizePublicSlugValue)(typeof req.query.slug === 'string' ? req.query.slug : '');
 }
 function buildStoreSlugCandidates(data) {
     const candidates = new Set();
@@ -1849,7 +1842,7 @@ function buildStoreSlugCandidates(data) {
     for (const value of rawCandidates) {
         if (typeof value !== 'string')
             continue;
-        const normalized = normalizePublicSlugValue(value);
+        const normalized = (0, publicSlug_1.normalizePublicSlugValue)(value);
         if (!normalized)
             continue;
         candidates.add(normalized);
@@ -1899,7 +1892,7 @@ async function findStoreByNormalizedSlugFallback(promoSlug) {
         }
         for (const workspaceDoc of workspacesSnapshot.docs) {
             const workspaceData = (workspaceDoc.data() ?? {});
-            const workspaceSlug = typeof workspaceData.slug === 'string' ? normalizePublicSlugValue(workspaceData.slug) : '';
+            const workspaceSlug = typeof workspaceData.slug === 'string' ? (0, publicSlug_1.normalizePublicSlugValue)(workspaceData.slug) : '';
             if (!workspaceSlug || workspaceSlug !== promoSlug) {
                 continue;
             }

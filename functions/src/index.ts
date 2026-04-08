@@ -4,6 +4,7 @@ import * as crypto from 'crypto'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb as db } from './firestore'
 import { normalizePhoneE164, normalizePhoneForWhatsApp } from './phone'
+import { normalizePublicSlugValue } from './utils/publicSlug'
 import type { ProductReadModel } from './types/product'
 export { checkSignupUnlock } from './paystack'
 
@@ -2406,15 +2407,6 @@ function getIntegrationAuthContext(req: functions.https.Request) {
 
 function getPromoSlugFromRequest(req: functions.https.Request): string {
   return normalizePublicSlugValue(typeof req.query.slug === 'string' ? req.query.slug : '')
-}
-
-function normalizePublicSlugValue(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^-|-$/g, '')
 }
 
 function buildStoreSlugCandidates(data: Record<string, unknown>): string[] {
