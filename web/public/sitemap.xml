@@ -30,4 +30,9 @@
     <priority>0.6</priority>
     <changefreq>weekly</changefreq>
   </url>
+  <url>
+    <loc>https://sedifex.com/legal/terms</loc>
+    <priority>0.7</priority>
+    <changefreq>weekly</changefreq>
+  </url>
 </urlset>

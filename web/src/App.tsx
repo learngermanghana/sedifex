@@ -41,7 +41,9 @@ export default function App() {
     '/legal/privacy',
     '/legal/cookies',
     '/legal/refund',
+    '/legal/terms',
     '/privacy',
+    '/terms',
     '/cookies',
     '/refund',
   ]

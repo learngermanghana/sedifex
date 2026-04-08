@@ -16,9 +16,10 @@ export default function PrivacyPage() {
       <p className="mb-8 text-sm text-slate-500">Last updated: {today}</p>
 
       <p className="text-sm text-slate-500">
-        This Privacy Policy explains how <strong>Sedifex</strong> ("Sedifex",
-        "we", "us", or "our") collects, uses and protects information in connection
-        with our products and services. Sedifex is owned and operated by
+        This Privacy Policy explains how <strong>Sedifex — Inventory &amp; POS</strong>
+        ("Sedifex", "we", "us", or "our") collects, uses and protects information
+        in connection with the Sedifex app and related services available at
+        <code> https://sedifex.com</code>. Sedifex is owned and operated by
         <strong> Learn Language Education Academy</strong>.
       </p>
 

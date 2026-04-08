@@ -23,6 +23,7 @@ const PATH_CANONICAL_OVERRIDES: Record<string, string> = {
   '/legal/privacy': '/privacy',
   '/legal/cookies': '/cookies',
   '/legal/refund': '/refund',
+  '/legal/terms': '/terms',
 }
 
 /**
