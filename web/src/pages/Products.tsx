@@ -276,6 +276,14 @@ function findNextImageSlot(urls: string[]): number | null {
   return null
 }
 
+
+function normalizeProductName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\b[a-z]/g, character => character.toUpperCase())
+}
+
 function normalizeLookupValue(value: string | null | undefined): string {
   if (!value) return ''
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -630,8 +638,8 @@ export default function Products() {
     setFormStatus('idle')
     setFormError(null)
 
-    const trimmedName = name.trim()
-    if (!trimmedName) {
+    const normalizedProductName = normalizeProductName(name)
+    if (!normalizedProductName) {
       setFormStatus('error')
       setFormError('Please enter a name for this item.')
       return
@@ -694,7 +702,7 @@ export default function Products() {
 
     const trimmedSku = sku.trim()
     const trimmedCategory = categoryInput.trim()
-    const normalizedName = normalizeLookupValue(trimmedName)
+    const normalizedName = normalizeLookupValue(normalizedProductName)
     const normalizedSku = normalizeBarcode(trimmedSku)
 
     const duplicateNameProduct = products.find(
@@ -702,7 +710,7 @@ export default function Products() {
     )
     if (duplicateNameProduct) {
       setFormStatus('error')
-      setFormError(`"${trimmedName}" already exists. Update the existing item instead.`)
+      setFormError(`"${normalizedProductName}" already exists. Update the existing item instead.`)
       return
     }
 
@@ -733,7 +741,7 @@ export default function Products() {
 
       await setDoc(productRef, {
         storeId: activeStoreId,
-        name: trimmedName,
+        name: normalizedProductName,
         itemType,
         category: trimmedCategory || null,
         price: finalPrice,
@@ -756,7 +764,7 @@ export default function Products() {
         showOnReceipt: !isService && showOnReceiptInput,
         imageUrl: primaryImageUrl,
         imageUrls: normalizedImageUrls,
-        imageAlt: primaryImageUrl ? imageAlt || trimmedName : null,
+        imageAlt: primaryImageUrl ? imageAlt || normalizedProductName : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -784,7 +792,7 @@ export default function Products() {
       setDraftProductKey(createDraftProductKey())
 
       await logInventoryActivity(
-        `Added ${trimmedName}`,
+        `Added ${normalizedProductName}`,
         isService
           ? 'Service added to catalogue'
           : `SKU ${trimmedSku || '—'} · Price ${finalPrice !== null ? `GHS ${finalPrice.toFixed(2)}` : '—'}`,
@@ -951,8 +959,8 @@ export default function Products() {
     if (!canManageProducts) return
     if (!editingId || editingId !== product.id) return
 
-    const trimmedName = editName.trim()
-    if (!trimmedName) {
+    const normalizedProductName = normalizeProductName(editName)
+    if (!normalizedProductName) {
       setFormStatus('error')
       setFormError('Please enter a name for this item.')
       return
@@ -1025,7 +1033,7 @@ export default function Products() {
     try {
       const ref = doc(db, 'products', product.id)
       await updateDoc(ref, {
-        name: trimmedName,
+        name: normalizedProductName,
         itemType: editItemType,
         category: trimmedCategory || null,
         sku: isStockTracked ? trimmedSku || null : null,
@@ -1046,7 +1054,7 @@ export default function Products() {
         showOnReceipt: isStockTracked && editShowOnReceipt,
         imageUrl: primaryImageUrl,
         imageUrls: normalizedImageUrls,
-        imageAlt: primaryImageUrl ? imageAlt || trimmedName : null,
+        imageAlt: primaryImageUrl ? imageAlt || normalizedProductName : null,
         updatedAt: serverTimestamp(),
       })
 
@@ -1055,7 +1063,7 @@ export default function Products() {
       setFormError('Item updated successfully.')
 
       await logInventoryActivity(
-        `Updated ${trimmedName}`,
+        `Updated ${normalizedProductName}`,
         isStockTracked
           ? `SKU ${trimmedSku || '—'} · Stock ${
               typeof finalStock === 'number' ? finalStock : '—'
