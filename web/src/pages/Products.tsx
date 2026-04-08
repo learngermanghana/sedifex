@@ -46,6 +46,7 @@ type SaleRecord = {
   }>
 }
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
+const DEFAULT_PRODUCT_IMAGE_URL = 'https://storage.googleapis.com/sedifeximage/stores/Y5ivjrJUBtWl7KzoR0aVszFu1c93/logo.jpg?v=1775656136764'
 
 /**
  * Helpers
@@ -116,6 +117,7 @@ function buildProductImagePath(storeId: string, productKey: string, slot: number
 
 function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product {
   const nameRaw = typeof data.name === 'string' ? data.name : ''
+  const normalizedName = normalizeProductName(nameRaw)
   const skuRaw = typeof data.sku === 'string' ? data.sku : ''
 
   // 🔹 Prefer explicit barcode field; fall back to sku (for old data)
@@ -145,7 +147,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
 
   return {
     id,
-    name: nameRaw.trim() || 'Untitled item',
+    name: normalizedName || 'Untitled item',
     category: category || null,
     sku: skuRaw.trim() || null,
     barcode: normalizedBarcode || null,
@@ -155,7 +157,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     itemType,
     imageUrl,
     imageUrls,
-    imageAlt: imageUrl ? imageAlt || (nameRaw.trim() || 'Product image') : null,
+    imageAlt: imageUrl ? imageAlt || (normalizedName || 'Product image') : null,
     taxRate: sanitizeTaxRate(data.taxRate),
     expiryDate,
     productionDate,
@@ -181,13 +183,29 @@ async function backfillProductDefaults(
   if (!('productionDate' in data)) updates.productionDate = null
   if (!('batchNumber' in data)) updates.batchNumber = null
   if (!('showOnReceipt' in data)) updates.showOnReceipt = false
-  if (!('imageUrl' in data)) updates.imageUrl = null
-  if (!('imageUrls' in data)) {
-    const existingImageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
-    updates.imageUrls = existingImageUrl ? [existingImageUrl] : []
+  const existingImageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+  const existingImageUrlFromList = Array.isArray(data.imageUrls)
+    ? data.imageUrls.find((item): item is string => typeof item === 'string' && item.trim().length > 0) ?? null
+    : null
+  const resolvedImageUrl = existingImageUrl ?? existingImageUrlFromList
+
+  if (!('imageUrl' in data) || !existingImageUrl) {
+    updates.imageUrl = resolvedImageUrl || DEFAULT_PRODUCT_IMAGE_URL
   }
-  if (!('imageAlt' in data) && typeof data.imageUrl === 'string' && data.imageUrl.trim()) {
+
+  if (!('imageUrls' in data)) {
+    updates.imageUrls = resolvedImageUrl ? [resolvedImageUrl] : [DEFAULT_PRODUCT_IMAGE_URL]
+  }
+
+  if (!('imageAlt' in data) && resolvedImageUrl) {
     updates.imageAlt = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null
+  }
+
+  if (typeof data.name === 'string') {
+    const normalizedProductName = normalizeProductName(data.name)
+    if (normalizedProductName && normalizedProductName !== data.name.trim()) {
+      updates.name = normalizedProductName
+    }
   }
 
   if (!Object.keys(updates).length) return
@@ -274,6 +292,14 @@ function findNextImageSlot(urls: string[]): number | null {
     if (!urls[index]?.trim()) return index
   }
   return null
+}
+
+
+function normalizeProductName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\b[a-z]/g, character => character.toUpperCase())
 }
 
 function normalizeLookupValue(value: string | null | undefined): string {
@@ -630,8 +656,8 @@ export default function Products() {
     setFormStatus('idle')
     setFormError(null)
 
-    const trimmedName = name.trim()
-    if (!trimmedName) {
+    const normalizedProductName = normalizeProductName(name)
+    if (!normalizedProductName) {
       setFormStatus('error')
       setFormError('Please enter a name for this item.')
       return
@@ -694,7 +720,7 @@ export default function Products() {
 
     const trimmedSku = sku.trim()
     const trimmedCategory = categoryInput.trim()
-    const normalizedName = normalizeLookupValue(trimmedName)
+    const normalizedName = normalizeLookupValue(normalizedProductName)
     const normalizedSku = normalizeBarcode(trimmedSku)
 
     const duplicateNameProduct = products.find(
@@ -702,7 +728,7 @@ export default function Products() {
     )
     if (duplicateNameProduct) {
       setFormStatus('error')
-      setFormError(`"${trimmedName}" already exists. Update the existing item instead.`)
+      setFormError(`"${normalizedProductName}" already exists. Update the existing item instead.`)
       return
     }
 
@@ -733,7 +759,7 @@ export default function Products() {
 
       await setDoc(productRef, {
         storeId: activeStoreId,
-        name: trimmedName,
+        name: normalizedProductName,
         itemType,
         category: trimmedCategory || null,
         price: finalPrice,
@@ -756,7 +782,7 @@ export default function Products() {
         showOnReceipt: !isService && showOnReceiptInput,
         imageUrl: primaryImageUrl,
         imageUrls: normalizedImageUrls,
-        imageAlt: primaryImageUrl ? imageAlt || trimmedName : null,
+        imageAlt: primaryImageUrl ? imageAlt || normalizedProductName : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -784,7 +810,7 @@ export default function Products() {
       setDraftProductKey(createDraftProductKey())
 
       await logInventoryActivity(
-        `Added ${trimmedName}`,
+        `Added ${normalizedProductName}`,
         isService
           ? 'Service added to catalogue'
           : `SKU ${trimmedSku || '—'} · Price ${finalPrice !== null ? `GHS ${finalPrice.toFixed(2)}` : '—'}`,
@@ -951,8 +977,8 @@ export default function Products() {
     if (!canManageProducts) return
     if (!editingId || editingId !== product.id) return
 
-    const trimmedName = editName.trim()
-    if (!trimmedName) {
+    const normalizedProductName = normalizeProductName(editName)
+    if (!normalizedProductName) {
       setFormStatus('error')
       setFormError('Please enter a name for this item.')
       return
@@ -1025,7 +1051,7 @@ export default function Products() {
     try {
       const ref = doc(db, 'products', product.id)
       await updateDoc(ref, {
-        name: trimmedName,
+        name: normalizedProductName,
         itemType: editItemType,
         category: trimmedCategory || null,
         sku: isStockTracked ? trimmedSku || null : null,
@@ -1046,7 +1072,7 @@ export default function Products() {
         showOnReceipt: isStockTracked && editShowOnReceipt,
         imageUrl: primaryImageUrl,
         imageUrls: normalizedImageUrls,
-        imageAlt: primaryImageUrl ? imageAlt || trimmedName : null,
+        imageAlt: primaryImageUrl ? imageAlt || normalizedProductName : null,
         updatedAt: serverTimestamp(),
       })
 
@@ -1055,7 +1081,7 @@ export default function Products() {
       setFormError('Item updated successfully.')
 
       await logInventoryActivity(
-        `Updated ${trimmedName}`,
+        `Updated ${normalizedProductName}`,
         isStockTracked
           ? `SKU ${trimmedSku || '—'} · Stock ${
               typeof finalStock === 'number' ? finalStock : '—'
