@@ -46,6 +46,7 @@ type SaleRecord = {
   }>
 }
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
+const DEFAULT_PRODUCT_IMAGE_URL = 'https://storage.googleapis.com/sedifeximage/stores/Y5ivjrJUBtWl7KzoR0aVszFu1c93/logo.jpg?v=1775656136764'
 
 /**
  * Helpers
@@ -116,6 +117,7 @@ function buildProductImagePath(storeId: string, productKey: string, slot: number
 
 function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product {
   const nameRaw = typeof data.name === 'string' ? data.name : ''
+  const normalizedName = normalizeProductName(nameRaw)
   const skuRaw = typeof data.sku === 'string' ? data.sku : ''
 
   // 🔹 Prefer explicit barcode field; fall back to sku (for old data)
@@ -145,7 +147,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
 
   return {
     id,
-    name: nameRaw.trim() || 'Untitled item',
+    name: normalizedName || 'Untitled item',
     category: category || null,
     sku: skuRaw.trim() || null,
     barcode: normalizedBarcode || null,
@@ -155,7 +157,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     itemType,
     imageUrl,
     imageUrls,
-    imageAlt: imageUrl ? imageAlt || (nameRaw.trim() || 'Product image') : null,
+    imageAlt: imageUrl ? imageAlt || (normalizedName || 'Product image') : null,
     taxRate: sanitizeTaxRate(data.taxRate),
     expiryDate,
     productionDate,
@@ -181,13 +183,29 @@ async function backfillProductDefaults(
   if (!('productionDate' in data)) updates.productionDate = null
   if (!('batchNumber' in data)) updates.batchNumber = null
   if (!('showOnReceipt' in data)) updates.showOnReceipt = false
-  if (!('imageUrl' in data)) updates.imageUrl = null
-  if (!('imageUrls' in data)) {
-    const existingImageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
-    updates.imageUrls = existingImageUrl ? [existingImageUrl] : []
+  const existingImageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+  const existingImageUrlFromList = Array.isArray(data.imageUrls)
+    ? data.imageUrls.find((item): item is string => typeof item === 'string' && item.trim().length > 0) ?? null
+    : null
+  const resolvedImageUrl = existingImageUrl ?? existingImageUrlFromList
+
+  if (!('imageUrl' in data) || !existingImageUrl) {
+    updates.imageUrl = resolvedImageUrl || DEFAULT_PRODUCT_IMAGE_URL
   }
-  if (!('imageAlt' in data) && typeof data.imageUrl === 'string' && data.imageUrl.trim()) {
+
+  if (!('imageUrls' in data)) {
+    updates.imageUrls = resolvedImageUrl ? [resolvedImageUrl] : [DEFAULT_PRODUCT_IMAGE_URL]
+  }
+
+  if (!('imageAlt' in data) && resolvedImageUrl) {
     updates.imageAlt = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null
+  }
+
+  if (typeof data.name === 'string') {
+    const normalizedProductName = normalizeProductName(data.name)
+    if (normalizedProductName && normalizedProductName !== data.name.trim()) {
+      updates.name = normalizedProductName
+    }
   }
 
   if (!Object.keys(updates).length) return

@@ -2007,6 +2007,15 @@ function toYoutubeChannelIdOrNull(value) {
     }
     return null;
 }
+const DEFAULT_PRODUCT_IMAGE_URL = 'https://storage.googleapis.com/sedifeximage/stores/Y5ivjrJUBtWl7KzoR0aVszFu1c93/logo.jpg?v=1775656136764';
+function normalizeProductName(value) {
+    if (typeof value !== 'string')
+        return '';
+    return value
+        .trim()
+        .toLowerCase()
+        .replace(/\b[a-z]/g, character => character.toUpperCase());
+}
 function toTrimmedStringArray(value) {
     if (!Array.isArray(value)) {
         return [];
@@ -2028,8 +2037,12 @@ function extractProductImageSet(data) {
     if (primaryImageUrl && !imageUrls.includes(primaryImageUrl)) {
         imageUrls.unshift(primaryImageUrl);
     }
+    const fallbackImageUrl = imageUrls[0] ?? primaryImageUrl ?? DEFAULT_PRODUCT_IMAGE_URL;
+    if (!imageUrls.length) {
+        imageUrls.push(fallbackImageUrl);
+    }
     return {
-        imageUrl: primaryImageUrl,
+        imageUrl: fallbackImageUrl,
         imageUrls,
         imageAlt: toTrimmedStringOrNull(data.imageAlt),
     };
@@ -2178,10 +2191,11 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
     const { storeId } = authContext;
     const mapProductDoc = (docSnap) => {
         const data = docSnap.data();
+        const normalizedName = normalizeProductName(data.name);
         return {
             id: docSnap.id,
             storeId,
-            name: typeof data.name === 'string' ? data.name : 'Untitled item',
+            name: normalizedName || 'Untitled item',
             category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
             description: typeof data.description === 'string' && data.description.trim()
                 ? data.description.trim()
