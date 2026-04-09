@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 
+import {
+  beginGoogleAdsOAuth,
+  createOrUpdateCampaign,
+  pauseOrResumeCampaign,
+  saveCampaignBrief,
+} from '../api/googleAdsAutomation'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './AdsCampaigns.css'
@@ -163,6 +169,26 @@ export default function AdsCampaigns() {
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const oauthState = params.get('googleOAuth')
+    const oauthMessage = params.get('message')
+    if (!oauthState) return
+
+    if (oauthState === 'success') {
+      setNotice(oauthMessage || 'Google Ads connected.')
+    } else {
+      setNotice(oauthMessage || 'Google OAuth failed.')
+    }
+
+    params.delete('googleOAuth')
+    params.delete('message')
+    const nextQuery = params.toString()
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`
+    window.history.replaceState({}, '', nextUrl)
+  }, [])
+
+  useEffect(() => {
     if (!storeId) {
       setSettings(DEFAULT_SETTINGS)
       return undefined
@@ -228,17 +254,24 @@ export default function AdsCampaigns() {
       return
     }
 
-    await saveChanges({
-      connection: {
-        ...settings.connection,
-        connected: true,
-        connectedAt: serverTimestamp(),
-      },
-      campaign: {
-        ...settings.campaign,
-        updatedAt: serverTimestamp(),
-      },
-    })
+    if (!storeId) return
+
+    setSaving(true)
+    setNotice(null)
+    try {
+      const { url } = await beginGoogleAdsOAuth({
+        storeId,
+        accountEmail: settings.connection.accountEmail,
+        customerId: settings.connection.customerId,
+        managerId: settings.connection.managerId,
+      })
+      window.location.assign(url)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start Google OAuth.'
+      setNotice(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleBillingConfirm(event: React.FormEvent<HTMLFormElement>) {
@@ -263,34 +296,38 @@ export default function AdsCampaigns() {
       return
     }
 
-    const leads = settings.metrics.leads
-    const spend = settings.metrics.spend
-    await saveChanges({
-      campaign: {
-        status: 'live',
-        campaignId:
-          settings.campaign.campaignId || `SFX-${Date.now().toString().slice(-6)}`,
-        adGroupName:
-          settings.campaign.adGroupName || `${settings.brief.goal.toUpperCase()}-Primary`,
-        updatedAt: serverTimestamp(),
-      },
-      metrics: {
-        leads,
-        spend,
-        cpa: leads > 0 ? Number((spend / leads).toFixed(2)) : settings.brief.dailyBudget,
-      },
-    })
+    if (!storeId) return
+
+    setSaving(true)
+    setNotice(null)
+    try {
+      await createOrUpdateCampaign({
+        storeId,
+        brief: settings.brief,
+      })
+      setNotice('Campaign is live.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create campaign.'
+      setNotice(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handlePauseToggle() {
-    const nextStatus = settings.campaign.status === 'paused' ? 'live' : 'paused'
-    await saveChanges({
-      campaign: {
-        ...settings.campaign,
-        status: nextStatus,
-        updatedAt: serverTimestamp(),
-      },
-    })
+    if (!storeId) return
+    setSaving(true)
+    setNotice(null)
+    try {
+      const resume = settings.campaign.status === 'paused'
+      await pauseOrResumeCampaign({ storeId, resume })
+      setNotice(resume ? 'Campaign resumed.' : 'Campaign paused.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to change campaign state.'
+      setNotice(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -541,9 +578,20 @@ export default function AdsCampaigns() {
               className="button button--ghost"
               disabled={saving}
               onClick={() =>
-                void saveChanges({
-                  brief: settings.brief,
-                })
+                void (async () => {
+                  if (!storeId) return
+                  setSaving(true)
+                  setNotice(null)
+                  try {
+                    await saveCampaignBrief({ storeId, brief: settings.brief })
+                    setNotice('Brief saved.')
+                  } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Unable to save brief.'
+                    setNotice(message)
+                  } finally {
+                    setSaving(false)
+                  }
+                })()
               }
             >
               Save brief
