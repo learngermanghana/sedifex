@@ -2,7 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   buildOAuthStartUrl,
   persistOAuthState,
-  requireCustomerId,
   requireStoreId,
 } from '../_google-ads.js'
 import { requireApiUser, requireStoreMembership } from '../_api-auth.js'
@@ -16,7 +15,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = await requireApiUser(req)
     const storeId = requireStoreId(req.body?.storeId)
     await requireStoreMembership(user.uid, storeId)
-    const customerId = requireCustomerId(req.body?.customerId)
+    const customerId =
+      typeof req.body?.customerId === 'string' ? req.body.customerId.trim() : ''
     const managerId =
       typeof req.body?.managerId === 'string' ? req.body.managerId.trim() : ''
     const accountEmail =

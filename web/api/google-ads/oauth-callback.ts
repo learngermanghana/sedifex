@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   consumeOAuthState,
+  discoverGoogleAdsCustomerId,
   exchangeCodeForTokens,
   storeGoogleTokens,
   getOAuthClientConfig,
@@ -41,12 +42,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const statePayload = await consumeOAuthState(state)
     const tokenPayload = await exchangeCodeForTokens(code)
+    const accessToken =
+      typeof tokenPayload.access_token === 'string' ? tokenPayload.access_token : ''
+    const customerId =
+      statePayload.customerId ||
+      (accessToken
+        ? await discoverGoogleAdsCustomerId({
+            accessToken,
+            managerId: statePayload.managerId,
+          })
+        : '')
 
     await storeGoogleTokens({
       storeId: statePayload.storeId,
       uid: statePayload.uid,
       email: statePayload.email,
-      customerId: statePayload.customerId,
+      customerId,
       managerId: statePayload.managerId,
       tokenPayload,
     })

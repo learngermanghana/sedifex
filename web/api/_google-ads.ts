@@ -140,7 +140,7 @@ export async function persistOAuthState(params: {
   uid: string
   storeId: string
   rawState: string
-  customerId: string
+  customerId?: string
   managerId?: string
   email?: string
 }) {
@@ -148,7 +148,7 @@ export async function persistOAuthState(params: {
   await db().collection('googleAdsOAuthStates').doc(hashedState).set({
     uid: params.uid,
     storeId: params.storeId,
-    customerId: params.customerId,
+    customerId: params.customerId || '',
     managerId: params.managerId || '',
     email: params.email || '',
     createdAt: FieldValue.serverTimestamp(),
@@ -184,9 +184,34 @@ export async function consumeOAuthState(rawState: string): Promise<{
   const customerId = typeof data.customerId === 'string' ? data.customerId : ''
   const managerId = typeof data.managerId === 'string' ? data.managerId : ''
   const email = typeof data.email === 'string' ? data.email : ''
-  if (!uid || !storeId || !customerId) throw new Error('invalid-state')
+  if (!uid || !storeId) throw new Error('invalid-state')
 
   return { uid, storeId, customerId, managerId, email }
+}
+
+export async function discoverGoogleAdsCustomerId(params: {
+  accessToken: string
+  managerId?: string
+}): Promise<string> {
+  const url = `${GOOGLE_ADS_API_BASE}/${GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: googleAdsHeaders({
+      accessToken: params.accessToken,
+      managerId: params.managerId || '',
+    }),
+  })
+
+  if (!response.ok) return ''
+
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
+  const names = Array.isArray(payload.resourceNames) ? payload.resourceNames : []
+  const first = typeof names[0] === 'string' ? names[0] : ''
+  if (!first) return ''
+
+  const parts = first.split('/')
+  const candidate = parts[parts.length - 1] || ''
+  return candidate.trim()
 }
 
 export async function exchangeCodeForTokens(code: string) {

@@ -33,7 +33,7 @@ async function parseApiResult<T>(response: Response): Promise<T> {
 
 export async function beginGoogleAdsOAuth(input: {
   storeId: string
-  customerId: string
+  customerId?: string
   managerId?: string
   accountEmail?: string
 }) {
