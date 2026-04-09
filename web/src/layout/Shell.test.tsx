@@ -45,9 +45,9 @@ vi.mock('firebase/auth', () => ({
   signOut: vi.fn(),
 }))
 
-function renderShell() {
+function renderShell(initialEntries: string[] = ['/']) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <ToastProvider>
         <Shell>
           <div>Content</div>
@@ -68,7 +68,7 @@ describe('Shell', () => {
     mockUseWorkspaceIdentity.mockReset()
     mockUseMemberships.mockReset()
 
-    mockUseAuthUser.mockReturnValue({ email: 'owner@example.com' })
+    mockUseAuthUser.mockReturnValue({ uid: 'user-123', email: 'owner@example.com' })
     mockUseActiveStore.mockReturnValue({ storeId: 'store-123', isLoading: false, error: null })
     mockUseWorkspaceIdentity.mockReturnValue({ name: 'Demo Store', loading: false })
     mockUseMemberships.mockReturnValue({ memberships: [], loading: false, error: null })
@@ -160,5 +160,33 @@ describe('Shell', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Account' })).toBeInTheDocument()
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('filters navigation links using page search', async () => {
+    renderShell(['/dashboard'])
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('searchbox', { name: /search pages/i }), 'cust')
+
+    expect(screen.getByRole('link', { name: 'Customers' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
+  })
+
+  it('offers return-to-last-page action when a previous path exists', async () => {
+    localStorage.setItem('sedifex-last-path-user-123', '/customers')
+    renderShell(['/dashboard'])
+
+    expect(screen.getByText('Return to where you left off?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Return' })).toBeInTheDocument()
+  })
+
+  it('allows dismissing the return-to-last-page prompt', async () => {
+    localStorage.setItem('sedifex-last-path-user-123', '/customers')
+    renderShell(['/dashboard'])
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+
+    expect(screen.queryByText('Return to where you left off?')).not.toBeInTheDocument()
   })
 })

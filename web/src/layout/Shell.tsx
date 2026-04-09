@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
 import { auth } from '../firebase'
@@ -40,6 +40,7 @@ type BillingNotice = {
 
 const CONTRACT_END_WARNING_DAYS = 14
 const DISMISS_KEY_PREFIX = 'sedifex-billing-dismissed-'
+const LAST_PATH_KEY_PREFIX = 'sedifex-last-path-'
 
 function formatRequestCount(count: number) {
   if (count <= 0) return 'queued request'
@@ -91,6 +92,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const { name: workspaceName, loading: workspaceLoading } = useWorkspaceIdentity()
 
   const [dismissedOn, setDismissedOn] = useState<string | null>(null)
+  const [navSearchQuery, setNavSearchQuery] = useState('')
+  const [resumePath, setResumePath] = useState<string | null>(null)
+  const [dismissedResumePath, setDismissedResumePath] = useState<string | null>(null)
+  const shouldSkipInitialPathPersist = useRef(true)
 
   const trialEndsAt = billing?.trialEndsAt?.toDate?.() ?? null
   const hasTrialEnded = Boolean(
@@ -134,6 +139,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         })),
     [navItems],
   )
+  const filteredNavItems = useMemo(() => {
+    const normalizedQuery = navSearchQuery.trim().toLowerCase()
+    if (!normalizedQuery) return navItems
+    return navItems.filter(item => item.label.toLowerCase().includes(normalizedQuery))
+  }, [navItems, navSearchQuery])
 
   const billingNotice = useMemo<BillingNotice | null>(() => {
     if (!billing) return null
@@ -202,6 +212,54 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setIsMenuOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    shouldSkipInitialPathPersist.current = true
+  }, [user?.uid])
+
+  useEffect(() => {
+    if (!user?.uid) return
+    if (shouldSkipInitialPathPersist.current) {
+      shouldSkipInitialPathPersist.current = false
+      return
+    }
+
+    const currentPath = `${location.pathname}${location.search}${location.hash}`
+    if (!currentPath.startsWith('/')) return
+
+    try {
+      localStorage.setItem(`${LAST_PATH_KEY_PREFIX}${user.uid}`, currentPath)
+    } catch (error) {
+      console.warn('[shell] Unable to persist last visited path', error)
+    }
+  }, [location.hash, location.pathname, location.search, user?.uid])
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setResumePath(null)
+      return
+    }
+
+    const key = `${LAST_PATH_KEY_PREFIX}${user.uid}`
+    const storedPath = localStorage.getItem(key)
+    if (!storedPath || !storedPath.startsWith('/')) {
+      setResumePath(null)
+      return
+    }
+
+    const currentPath = `${location.pathname}${location.search}${location.hash}`
+    if (storedPath === currentPath) {
+      setResumePath(null)
+      return
+    }
+
+    if (dismissedResumePath === storedPath) {
+      setResumePath(null)
+      return
+    }
+
+    setResumePath(storedPath)
+  }, [dismissedResumePath, location.hash, location.pathname, location.search, user?.uid])
 
   useEffect(() => {
     document.body.classList.toggle('shell--menu-open', isMenuOpen)
@@ -347,7 +405,18 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 aria-label="Primary"
                 id="primary-nav"
               >
-                {navItems.map(item => (
+                <label className="shell__nav-search">
+                  <span className="shell__nav-search-label">Search pages</span>
+                  <input
+                    type="search"
+                    placeholder="Find a page…"
+                    value={navSearchQuery}
+                    onChange={event => setNavSearchQuery(event.target.value)}
+                    className="shell__nav-search-input"
+                  />
+                </label>
+
+                {filteredNavItems.map(item => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -357,10 +426,46 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                     {item.label}
                   </NavLink>
                 ))}
+
+                {filteredNavItems.length === 0 && (
+                  <p className="shell__nav-empty" role="status">
+                    No pages match “{navSearchQuery.trim()}”.
+                  </p>
+                )}
               </nav>
             </div>
 
             <div className="shell__controls">
+              {resumePath && (
+                <div className="shell__resume-banner" role="status" aria-live="polite">
+                  <span>Return to where you left off?</span>
+                  <div className="shell__resume-actions">
+                    <button
+                      type="button"
+                      className="button button--primary button--small"
+                      onClick={() => {
+                        const targetPath = resumePath
+                        setResumePath(null)
+                        setDismissedResumePath(targetPath)
+                        navigate(targetPath)
+                      }}
+                    >
+                      Return
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--ghost button--small"
+                      onClick={() => {
+                        setDismissedResumePath(resumePath)
+                        setResumePath(null)
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div
                 className="shell__store-switcher"
                 role="status"
