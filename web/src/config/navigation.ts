@@ -19,4 +19,5 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/finance', label: 'Invoice', parentTo: '/sell', roles: ['owner'] },
   { to: '/account', label: 'Account', roles: ['owner'] },
   { to: '/public-page', label: 'Public page', roles: ['owner'] },
+  { to: '/ads', label: 'Google Ads', roles: ['owner'] },
 ]
