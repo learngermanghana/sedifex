@@ -144,6 +144,82 @@ Set these in your Vercel project:
 - Add the env vars above to your hosting provider.
 - Set your domain `app.sedifex.com` to the deployed frontend.
 
+## Google Ads backend deployment checklist (Vercel)
+
+Use this checklist when deploying the Google Ads integration so OAuth, callbacks, and backend syncs work correctly.
+
+### 1) Set required environment variables (Vercel project env)
+
+Minimum backend vars:
+
+- `GOOGLE_ADS_CLIENT_ID`
+- `GOOGLE_ADS_CLIENT_SECRET`
+- `GOOGLE_ADS_REDIRECT_URI`
+- `APP_BASE_URL`
+- `CRON_SECRET` **or** `GOOGLE_ADS_SYNC_SECRET` (either works)
+
+These are required by OAuth/token exchange and callback redirect logic.
+
+Also required for Firebase Admin in API routes (choose one JSON or base64 option):
+
+- `ADMIN_SERVICE_ACCOUNT_JSON` **or** `ADMIN_SERVICE_ACCOUNT_BASE64`
+- Fallback aliases are also supported: `FIREBASE_SERVICE_ACCOUNT_JSON` / `FIREBASE_SERVICE_ACCOUNT_BASE64`
+
+### 2) Configure Google OAuth in Google Cloud Console
+
+In your OAuth client:
+
+- Add authorized redirect URI exactly matching:
+  - `https://<your-domain>/api/google-ads/oauth-callback`
+- Ensure Google Ads scope is allowed:
+  - `https://www.googleapis.com/auth/adwords`
+
+The backend builds the OAuth URL with that redirect URI and exchanges auth code for tokens.
+
+### 3) Deploy where Vercel API routes run
+
+This implementation depends on Vercel serverless API routes under:
+
+- `/api/google-ads/*`
+
+It also depends on cron config in:
+
+- `vercel.json` and/or `web/vercel.json`
+
+### 4) Verify app flow in the UI
+
+In the Ads page:
+
+1. Enter Google account email + customer ID.
+2. Click **Connect Google Ads** (starts OAuth via backend).
+3. Complete Google consent.
+4. Callback should return to `/ads` and show success/failure notice.
+5. Confirm billing.
+6. Save brief, create campaign, and pause/resume.
+
+Those actions now call backend endpoints instead of client-only writes.
+
+### 5) Ensure Firestore writes succeed
+
+Server writes target:
+
+- `storeSettings/{storeId}.googleAdsAutomation.*`
+- `storeSettings/{storeId}.integrations.googleAds.*`
+- `googleAdsOAuthStates/{hashedState}`
+
+These are Admin SDK writes, so Firestore client security rules do not block them. Project health, billing status, and index/state health still matter.
+
+### 6) Cron expectations
+
+Cron runs every 30 minutes and hits:
+
+- `/api/google-ads/metrics-sync`
+
+For auth, choose one:
+
+- Set `CRON_SECRET` (recommended for native Vercel cron bearer-token auth), **or**
+- Keep custom secret flow using `GOOGLE_ADS_SYNC_SECRET` with custom header/query auth.
+
 ## Firebase setup notes
 - Enable **Authentication → Phone** and **Email/Password** (optional).
 - Enable **Firestore** and publish `firestore.rules`.
