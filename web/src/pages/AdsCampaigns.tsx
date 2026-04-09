@@ -350,7 +350,7 @@ export default function AdsCampaigns() {
           </p>
         </div>
 
-        <form onSubmit={handleConnectSubmit} className="ads-campaigns__form-grid">
+        <form onSubmit={handleConnectSubmit} className="ads-campaigns__form-grid" noValidate>
           <label>
             <span>Google account email</span>
             <input
@@ -366,7 +366,6 @@ export default function AdsCampaigns() {
                 }))
               }
               placeholder="owner@business.com"
-              required
             />
           </label>
 
@@ -385,7 +384,6 @@ export default function AdsCampaigns() {
                 }))
               }
               placeholder="123-456-7890"
-              required
             />
           </label>
 
@@ -425,7 +423,7 @@ export default function AdsCampaigns() {
           <p>Capture consent before Sedifex starts spending ad budget.</p>
         </div>
 
-        <form onSubmit={handleBillingConfirm} className="ads-campaigns__form-grid">
+        <form onSubmit={handleBillingConfirm} className="ads-campaigns__form-grid" noValidate>
           <label>
             <span>Business legal name</span>
             <input
@@ -440,7 +438,6 @@ export default function AdsCampaigns() {
                 }))
               }
               placeholder="Sedifex Biz Ltd"
-              required
             />
           </label>
           <div className="ads-campaigns__actions">
