@@ -4,11 +4,42 @@
   align-content: start;
   justify-items: center;
   gap: 16px;
-  padding: 24px;
+  padding: 24px 24px 92px;
   scroll-behavior: smooth;
   background:
     radial-gradient(circle at top, rgba(79, 70, 229, 0.18), transparent 45%),
     linear-gradient(180deg, #eef2ff 0%, #e2e8f0 100%);
+}
+
+.promo-whatsapp-float {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  width: min(520px, calc(100vw - 28px));
+  border-radius: 999px;
+  padding: 10px 18px;
+  text-decoration: none;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  box-shadow:
+    0 16px 28px rgba(21, 128, 61, 0.33),
+    0 0 0 1px rgba(255, 255, 255, 0.22) inset;
+}
+
+.promo-whatsapp-float:hover {
+  background: linear-gradient(135deg, #15803d, #166534);
+}
+
+.promo-whatsapp-float:focus-visible {
+  outline: 3px solid rgba(22, 163, 74, 0.35);
+  outline-offset: 2px;
 }
 
 .promo-nav {
