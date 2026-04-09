@@ -4,14 +4,17 @@ import { Link } from 'react-router-dom'
 import '../App.css'
 import './InventorySystemGhana.css'
 
-const PAGE_TITLE = 'Sedifex Pricing | Inventory, Bulk SMS & Free Store Page'
+const PAGE_TITLE =
+  'Sedifex Pricing | Inventory, Bulk SMS, Google Ads Automation & Free Store Page'
 const PAGE_DESCRIPTION =
-  'Choose a Sedifex plan for inventory management, branded Bulk SMS, free public store page, social video integration, and connected business communication in Ghana.'
+  'Choose a Sedifex plan for inventory management, branded Bulk SMS, Google Ads automation, free public store page, social video integration, and connected business communication in Ghana.'
 
 const CORE_FEATURES = [
   'Real-time inventory tracking',
   'Product and stock movement records',
   'Branded Bulk SMS capabilities',
+  'Google Ads automation for campaign performance',
+  'SEO-friendly landing page content',
   'Free public store page',
   'TikTok and YouTube display on website',
   'Website updates reflected from Sedifex',
@@ -38,6 +41,7 @@ const PLANS = [
     points: [
       'Everything in Starter',
       'Branded Bulk SMS features',
+      'Google Ads automation',
       'Advanced inventory insights',
       'More team access',
       'Priority support',
@@ -52,6 +56,7 @@ const PLANS = [
       'Everything in Growth',
       'Multi-branch support',
       'Higher SMS and usage capacity',
+      'Advanced Google Ads automation and optimization',
       'Advanced analytics and controls',
       'Dedicated onboarding support',
     ],
@@ -88,6 +93,11 @@ const FAQS = [
       'Growth and Scale are ideal for businesses that want stronger branded communication at scale.',
   },
   {
+    question: 'Do you support Google Ads automation?',
+    answer:
+      'Yes. Growth, Scale, and Scale Plus include Google Ads automation to help businesses launch and optimize campaigns faster.',
+  },
+  {
     question: 'Is Sedifex suitable for SMEs in Ghana?',
     answer: 'Yes. Sedifex is built for Ghana SMEs and teams expanding across locations.',
   },
@@ -112,6 +122,11 @@ export default function PricingPage() {
     upsertMetaTag('property', 'og:description', PAGE_DESCRIPTION)
     upsertMetaTag('property', 'og:type', 'website')
     upsertMetaTag('property', 'og:url', window.location.href)
+    upsertMetaTag(
+      'name',
+      'keywords',
+      'Sedifex pricing, Google Ads automation, SEO, inventory system Ghana, bulk SMS Ghana, retail software Ghana',
+    )
   }, [])
 
   return (
@@ -122,7 +137,8 @@ export default function PricingPage() {
           <h1>Simple, affordable pricing for growing businesses.</h1>
           <p>
             Choose a plan that fits your business. Sedifex combines inventory control, branded
-            Bulk SMS, free public store pages, and social video integration in one platform.
+            Bulk SMS, Google Ads automation, free public store pages, and social video
+            integration in one platform.
           </p>
           <div className="seo-page__hero-actions">
             <Link className="seo-page__cta" to="/">
