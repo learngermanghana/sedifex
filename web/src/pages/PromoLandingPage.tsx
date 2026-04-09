@@ -172,6 +172,8 @@ function buildWhatsAppLink(phone: string | null, storeName: string): string | nu
   return `https://wa.me/${normalized}?text=${text}`
 }
 
+const LANDING_WHATSAPP_NUMBER = '0205706589'
+
 function getIntegrationEndpoint(path: string): string {
   const functionsRegion = import.meta.env.VITE_FB_FUNCTIONS_REGION ?? 'us-central1'
   const projectId = import.meta.env.VITE_FB_PROJECT_ID
@@ -539,6 +541,7 @@ export default function PromoLandingPage() {
   const promoSummary = sanitizeSummary(profile.summary, profile.storeName)
   const directChatLink = profile.storePhone ? `sms:${profile.storePhone}` : null
   const whatsappLink = buildWhatsAppLink(profile.storePhone, profile.storeName)
+  const landingSupportWhatsappLink = buildWhatsAppLink(LANDING_WHATSAPP_NUMBER, 'Sedifex team')
   const primaryPromoVideoEmbedUrl = profile.youtubeVideos[0]?.embedUrl ?? profile.youtubeEmbedUrl
   return (
     <main className="promo-page">
@@ -817,6 +820,17 @@ export default function PromoLandingPage() {
             ) : null}
         </section>
       </article>
+      {landingSupportWhatsappLink ? (
+        <a
+          className="promo-whatsapp-float"
+          href={landingSupportWhatsappLink}
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label={`Reach out on WhatsApp at ${LANDING_WHATSAPP_NUMBER}`}
+        >
+          WhatsApp us: {LANDING_WHATSAPP_NUMBER}
+        </a>
+      ) : null}
     </main>
   )
 }
