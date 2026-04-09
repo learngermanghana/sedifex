@@ -347,7 +347,7 @@ export default function AdsCampaigns() {
           </p>
         </div>
 
-        <div className="ads-campaigns__form-grid">
+        <form onSubmit={handleConnectSubmit} className="ads-campaigns__form-grid" noValidate>
           <label>
             <span>Google account email</span>
             <input
@@ -363,6 +363,24 @@ export default function AdsCampaigns() {
                 }))
               }
               placeholder="owner@business.com"
+            />
+          </label>
+
+          <label>
+            <span>Google Ads customer ID</span>
+            <input
+              type="text"
+              value={settings.connection.customerId}
+              onChange={event =>
+                setSettings(previous => ({
+                  ...previous,
+                  connection: {
+                    ...previous.connection,
+                    customerId: event.target.value,
+                  },
+                }))
+              }
+              placeholder="123-456-7890"
             />
           </label>
 
@@ -407,7 +425,7 @@ export default function AdsCampaigns() {
           <p>Capture consent before Sedifex starts spending ad budget.</p>
         </div>
 
-        <div className="ads-campaigns__form-grid">
+        <form onSubmit={handleBillingConfirm} className="ads-campaigns__form-grid" noValidate>
           <label>
             <span>Business legal name</span>
             <input
