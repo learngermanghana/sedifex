@@ -64,6 +64,18 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_MERCHANT_SCOPES = ['https://www.googleapis.com/auth/content', 'openid', 'email', 'profile']
 const DEFAULT_INTEGRATION_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
 
+function canonicalizeSedifexUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.hostname === 'sedifex.com') parsed.hostname = 'www.sedifex.com'
+    return parsed.toString()
+  } catch {
+    return trimmed
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object') return {}
   return value as Record<string, unknown>
@@ -86,7 +98,7 @@ function setCors(res: functions.Response<any>) {
 function getOAuthClientConfig() {
   const clientId = process.env.GOOGLE_MERCHANT_CLIENT_ID?.trim() || ''
   const clientSecret = process.env.GOOGLE_MERCHANT_CLIENT_SECRET?.trim() || ''
-  const redirectUri = process.env.GOOGLE_MERCHANT_REDIRECT_URI?.trim() || ''
+  const redirectUri = canonicalizeSedifexUrl(process.env.GOOGLE_MERCHANT_REDIRECT_URI?.trim() || '')
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('google-merchant-oauth-config-missing')
@@ -177,7 +189,7 @@ function oauthCallbackDoneUrl(params: {
   pendingSelectionId?: string
   refreshTokenMissing?: boolean
 }) {
-  const appOrigin = process.env.APP_BASE_URL?.trim() || ''
+  const appOrigin = canonicalizeSedifexUrl(process.env.APP_BASE_URL?.trim() || '')
   if (!appOrigin) return null
 
   const callbackUrl = new URL('/google-shopping', appOrigin)

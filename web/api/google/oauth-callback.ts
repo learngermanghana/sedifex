@@ -1,8 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { consumeGoogleOAuthState, exchangeGoogleCode, storeUnifiedGoogleTokens } from '../_google-oauth.js'
 
+function canonicalizeSedifexUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.hostname === 'sedifex.com') parsed.hostname = 'www.sedifex.com'
+    return parsed.toString()
+  } catch {
+    return trimmed
+  }
+}
+
 function callbackDoneUrl(params: { ok: boolean; message: string; storeId?: string; integrations?: string[] }) {
-  const appOrigin = process.env.APP_BASE_URL?.trim() || ''
+  const appOrigin = canonicalizeSedifexUrl(process.env.APP_BASE_URL?.trim() || '')
   if (!appOrigin) return null
 
   const url = new URL('/account?tab=integrations', appOrigin)

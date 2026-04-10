@@ -154,8 +154,8 @@ Minimum backend vars:
 
 - `GOOGLE_ADS_CLIENT_ID`
 - `GOOGLE_ADS_CLIENT_SECRET`
-- `GOOGLE_ADS_REDIRECT_URI`
-- `APP_BASE_URL`
+- `GOOGLE_ADS_REDIRECT_URI` (set to `https://www.sedifex.com/api/google-ads/oauth-callback`)
+- `APP_BASE_URL` (set to `https://www.sedifex.com`)
 - `GOOGLE_ADS_SYNC_SECRET` (used by the optional manual sync endpoint)
 
 These are required by OAuth/token exchange and callback redirect logic.
@@ -167,11 +167,11 @@ Firebase Functions uses its runtime service account by default, so no extra Admi
 In your OAuth client:
 
 - Add authorized redirect URI exactly matching:
-  - `https://<your-firebase-hosting-domain>/api/google-ads/oauth-callback`
+  - `https://www.sedifex.com/api/google-ads/oauth-callback`
 - Ensure Google Ads scope is allowed:
   - `https://www.googleapis.com/auth/adwords`
 
-The backend builds the OAuth URL with that redirect URI and exchanges auth code for tokens.
+The backend builds the OAuth URL with that redirect URI and exchanges auth code for tokens. The URI in Google Cloud Console must be an exact string match with `GOOGLE_ADS_REDIRECT_URI`.
 
 ### 3) Deploy Firebase Hosting + Cloud Functions
 
@@ -218,6 +218,12 @@ Metrics sync runs every 30 minutes through:
 Optional manual sync endpoint:
 
 - `POST /api/google-ads/metrics-sync` with `x-google-ads-sync-secret: <GOOGLE_ADS_SYNC_SECRET>` (or `?secret=...`)
+
+### 7) Quick sanity notes
+
+- Use a single canonical Sedifex domain for OAuth callback-related variables to avoid redirect mismatches. Recommended canonical base: `https://www.sedifex.com`.
+- If you still have duplicate `PAYSTACK_STANDARD_PLAN_CODE` entries in runtime config, remove duplicates and keep one source of truth.
+- After updating env variables, redeploy and retry Google connect.
 
 ## Firebase setup notes
 - Enable **Authentication → Phone** and **Email/Password** (optional).

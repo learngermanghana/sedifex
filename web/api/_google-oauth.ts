@@ -8,6 +8,18 @@ const GOOGLE_OAUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const SHARED_CALLBACK_PATH = '/api/google/oauth-callback'
 
+function canonicalizeSedifexUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.hostname === 'sedifex.com') parsed.hostname = 'www.sedifex.com'
+    return parsed.toString()
+  } catch {
+    return trimmed
+  }
+}
+
 const INTEGRATION_SCOPES: Record<GoogleIntegration, string> = {
   business: 'https://www.googleapis.com/auth/business.manage',
   ads: 'https://www.googleapis.com/auth/adwords',
@@ -22,8 +34,10 @@ function getOAuthConfig() {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim() || process.env.GOOGLE_ADS_CLIENT_ID?.trim() || ''
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || process.env.GOOGLE_ADS_CLIENT_SECRET?.trim() || ''
 
-  const appBase = process.env.APP_BASE_URL?.trim() || ''
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI?.trim() || (appBase ? new URL(SHARED_CALLBACK_PATH, appBase).toString() : '')
+  const appBase = canonicalizeSedifexUrl(process.env.APP_BASE_URL?.trim() || '')
+  const redirectUri =
+    canonicalizeSedifexUrl(process.env.GOOGLE_REDIRECT_URI?.trim() || '') ||
+    (appBase ? new URL(SHARED_CALLBACK_PATH, appBase).toString() : '')
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('google-oauth-config-missing')

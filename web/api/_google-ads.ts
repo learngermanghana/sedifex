@@ -14,6 +14,18 @@ const GOOGLE_SCOPES = [
 const GOOGLE_ADS_API_BASE = 'https://googleads.googleapis.com'
 const GOOGLE_ADS_API_VERSION = process.env.GOOGLE_ADS_API_VERSION?.trim() || 'v18'
 
+function canonicalizeSedifexUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.hostname === 'sedifex.com') parsed.hostname = 'www.sedifex.com'
+    return parsed.toString()
+  } catch {
+    return trimmed
+  }
+}
+
 export type CampaignGoal = 'leads' | 'sales' | 'traffic' | 'calls' | 'awareness'
 export type CampaignStatus = 'draft' | 'live' | 'paused'
 
@@ -100,7 +112,7 @@ function decryptToken(payload: GoogleAdsSecretsCipher | undefined): string {
 export function getOAuthClientConfig() {
   const clientId = process.env.GOOGLE_ADS_CLIENT_ID?.trim() || ''
   const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET?.trim() || ''
-  const redirectUri = process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || ''
+  const redirectUri = canonicalizeSedifexUrl(process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || '')
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error(

@@ -53,6 +53,18 @@ const GOOGLE_SCOPES = [
 const GOOGLE_ADS_API_BASE = 'https://googleads.googleapis.com'
 const GOOGLE_ADS_API_VERSION = process.env.GOOGLE_ADS_API_VERSION?.trim() || 'v18'
 
+function canonicalizeSedifexUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.hostname === 'sedifex.com') parsed.hostname = 'www.sedifex.com'
+    return parsed.toString()
+  } catch {
+    return trimmed
+  }
+}
+
 function hashSecret(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -104,7 +116,7 @@ function decryptToken(payload: GoogleAdsSecretsCipher | undefined): string {
 function getOAuthClientConfig() {
   const clientId = process.env.GOOGLE_ADS_CLIENT_ID?.trim() || ''
   const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET?.trim() || ''
-  const redirectUri = process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || ''
+  const redirectUri = canonicalizeSedifexUrl(process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || '')
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error(
@@ -707,7 +719,7 @@ async function fetchGoogleAdsCampaignMetrics(params: {
 }
 
 function callbackDoneUrl(params: { ok: boolean; message: string; storeId?: string }) {
-  const appOrigin = process.env.APP_BASE_URL?.trim() || ''
+  const appOrigin = canonicalizeSedifexUrl(process.env.APP_BASE_URL?.trim() || '')
   if (!appOrigin) return null
 
   const url = new URL('/ads', appOrigin)
