@@ -1,12 +1,32 @@
-import React, { useMemo, useState } from 'react'
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import React, { useEffect, useMemo, useState } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
 
-import { triggerGoogleShoppingSync, type GoogleShoppingSyncSummary } from '../api/googleShopping'
+import {
+  getGoogleMerchantPendingAccounts,
+  selectGoogleMerchantAccount,
+  startGoogleMerchantOAuth,
+  triggerGoogleShoppingSync,
+  type GoogleMerchantAccount,
+  type GoogleShoppingSyncSummary,
+} from '../api/googleShopping'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './GoogleShopping.css'
 
 type WizardStep = 'connect' | 'map' | 'fix' | 'status'
+
+type OAuthQueryState = {
+  oauthStatus: 'success' | 'failed' | ''
+  oauthMessage: string
+  oauthMerchantId: string
+  pendingSelectionId: string
+  refreshTokenMissing: boolean
+}
+
+type GoogleShoppingConnection = {
+  connected: boolean
+  merchantId: string
+}
 
 const STEP_LABELS: Record<WizardStep, string> = {
   connect: '1. Connect account',
@@ -15,13 +35,37 @@ const STEP_LABELS: Record<WizardStep, string> = {
   status: '4. View sync status',
 }
 
+function parseOAuthQueryState(): OAuthQueryState {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    oauthStatus:
+      params.get('googleMerchantOAuth') === 'success'
+        ? 'success'
+        : params.get('googleMerchantOAuth') === 'failed'
+          ? 'failed'
+          : '',
+    oauthMessage: params.get('message') || '',
+    oauthMerchantId: params.get('merchantId') || '',
+    pendingSelectionId: params.get('pendingSelectionId') || '',
+    refreshTokenMissing: params.get('refreshTokenMissing') === '1',
+  }
+}
+
+function clearOAuthQueryState() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('googleMerchantOAuth')
+  url.searchParams.delete('message')
+  url.searchParams.delete('merchantId')
+  url.searchParams.delete('pendingSelectionId')
+  url.searchParams.delete('refreshTokenMissing')
+  url.searchParams.delete('storeId')
+  window.history.replaceState({}, '', url.toString())
+}
+
 export default function GoogleShopping() {
   const { storeId } = useActiveStore()
   const [step, setStep] = useState<WizardStep>('connect')
-  const [merchantId, setMerchantId] = useState('')
-  const [adsCustomerId, setAdsCustomerId] = useState('')
   const [integrationApiKey, setIntegrationApiKey] = useState('')
-  const [merchantAccessToken, setMerchantAccessToken] = useState('')
   const [integrationBaseUrl, setIntegrationBaseUrl] = useState(
     'https://us-central1-sedifex-web.cloudfunctions.net',
   )
@@ -29,6 +73,11 @@ export default function GoogleShopping() {
   const [status, setStatus] = useState<string | null>(null)
   const [summary, setSummary] = useState<GoogleShoppingSyncSummary | null>(null)
   const [saving, setSaving] = useState(false)
+  const [oauthConnecting, setOauthConnecting] = useState(false)
+  const [pendingSelectionId, setPendingSelectionId] = useState('')
+  const [pendingAccounts, setPendingAccounts] = useState<GoogleMerchantAccount[]>([])
+  const [selectedMerchantId, setSelectedMerchantId] = useState('')
+  const [connection, setConnection] = useState<GoogleShoppingConnection>({ connected: false, merchantId: '' })
 
   const checklist = useMemo(
     () => [
@@ -36,44 +85,136 @@ export default function GoogleShopping() {
       'Website claimed and verified in Merchant Center',
       'Shipping settings configured',
       'Tax settings configured for target markets',
-      'Google Merchant Center and Google Ads accounts linked',
+      'Google Merchant Center account is active and approved',
     ],
     [],
   )
 
-  async function saveConnectionSettings() {
+  useEffect(() => {
+    const queryState = parseOAuthQueryState()
+    if (queryState.oauthStatus === 'failed') {
+      setStatus(queryState.oauthMessage || 'We could not connect your Google Merchant account. Please try again.')
+    }
+
+    if (queryState.oauthStatus === 'success') {
+      if (queryState.pendingSelectionId) {
+        setPendingSelectionId(queryState.pendingSelectionId)
+        setStatus('We found multiple Merchant accounts. Please choose the one you want to connect.')
+      } else if (queryState.oauthMerchantId) {
+        const message = queryState.refreshTokenMissing
+          ? `Connected to Merchant ID ${queryState.oauthMerchantId}. Note: Google did not return a refresh token, so reconnect may be required later.`
+          : `Connected to Merchant ID ${queryState.oauthMerchantId}.`
+        setStatus(message)
+      } else {
+        setStatus(queryState.oauthMessage || 'Google Merchant connected successfully.')
+      }
+      setStep('connect')
+    }
+
+    if (queryState.oauthStatus) {
+      clearOAuthQueryState()
+    }
+  }, [])
+
+  useEffect(() => {
     if (!storeId) return
+
+    const unsubscribe = onSnapshot(doc(db, 'storeSettings', storeId), (snap) => {
+      const data = snap.data() as Record<string, any> | undefined
+      const googleShopping = (data?.googleShopping ?? {}) as Record<string, any>
+      const connectionRecord = (googleShopping.connection ?? {}) as Record<string, any>
+      const catalogSync = (googleShopping.catalogSync ?? {}) as Record<string, any>
+
+      setConnection({
+        connected: connectionRecord.connected === true,
+        merchantId: typeof connectionRecord.merchantId === 'string' ? connectionRecord.merchantId : '',
+      })
+
+      setIntegrationApiKey(typeof catalogSync.integrationApiKey === 'string' ? catalogSync.integrationApiKey : '')
+      setIntegrationBaseUrl(
+        typeof catalogSync.integrationBaseUrl === 'string'
+          ? catalogSync.integrationBaseUrl
+          : 'https://us-central1-sedifex-web.cloudfunctions.net',
+      )
+      setAutoSyncEnabled(catalogSync.autoSyncEnabled !== false)
+    })
+
+    return () => unsubscribe()
+  }, [storeId])
+
+  useEffect(() => {
+    if (!pendingSelectionId) return
+
+    let mounted = true
+    setSaving(true)
+
+    getGoogleMerchantPendingAccounts({ pendingSelectionId })
+      .then((payload) => {
+        if (!mounted) return
+        setPendingAccounts(payload.accounts)
+        setSelectedMerchantId(payload.accounts[0]?.id || '')
+        if (payload.refreshTokenMissing) {
+          setStatus('Google did not return a refresh token in this connection. You can still connect now.')
+        }
+      })
+      .catch((error) => {
+        if (!mounted) return
+        const message = error instanceof Error ? error.message : 'Unable to load Merchant accounts for selection.'
+        setStatus(message)
+        setPendingSelectionId('')
+      })
+      .finally(() => {
+        if (mounted) setSaving(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [pendingSelectionId])
+
+  async function connectGoogleMerchant() {
+    if (!storeId) {
+      setStatus('Please select a store before connecting Google Merchant.')
+      return
+    }
+
+    setOauthConnecting(true)
+    setStatus(null)
+
+    try {
+      const url = await startGoogleMerchantOAuth({ storeId })
+      window.location.assign(url)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start Google Merchant connection.'
+      setStatus(message)
+      setOauthConnecting(false)
+    }
+  }
+
+  async function confirmMerchantSelection() {
+    if (!pendingSelectionId || !selectedMerchantId) {
+      setStatus('Please select a Merchant account to continue.')
+      return
+    }
+
     setSaving(true)
     setStatus(null)
+
     try {
-      await setDoc(
-        doc(db, 'storeSettings', storeId),
-        {
-          googleShopping: {
-            connection: {
-              connected: true,
-              merchantId: merchantId.trim(),
-              adsCustomerId: adsCustomerId.trim(),
-            },
-            catalogSync: {
-              integrationApiKey: integrationApiKey.trim(),
-              integrationBaseUrl: integrationBaseUrl.trim(),
-              accessToken: merchantAccessToken.trim(),
-              autoSyncEnabled,
-            },
-            status: {
-              state: 'idle',
-              message: 'Ready for initial full sync.',
-              updatedAt: serverTimestamp(),
-            },
-          },
-        },
-        { merge: true },
-      )
-      setStatus('Connection saved. Continue to field mapping.')
-      setStep('map')
+      const payload = await selectGoogleMerchantAccount({
+        pendingSelectionId,
+        merchantId: selectedMerchantId,
+      })
+
+      const message = payload.refreshTokenMissing
+        ? `Connected to Merchant ID ${payload.merchantId}. Note: Google did not return a refresh token, so reconnect may be required later.`
+        : `Connected to Merchant ID ${payload.merchantId}.`
+      setStatus(message)
+      setPendingSelectionId('')
+      setPendingAccounts([])
+      setSelectedMerchantId('')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save Google Shopping settings.'
+      const message = error instanceof Error ? error.message : 'Unable to save selected Merchant account.'
       setStatus(message)
     } finally {
       setSaving(false)
@@ -106,13 +247,13 @@ export default function GoogleShopping() {
       <header className="google-shopping-page__header">
         <h1>Google Shopping</h1>
         <p>
-          Setup wizard for Merchant sync, validation, and ongoing catalog updates (runs on Firebase
-          Cloud Functions, not Vercel).
+          Connect your Merchant account once, then Sedifex can sync your catalog automatically. No
+          manual Merchant ID entry required.
         </p>
       </header>
 
       <nav className="google-shopping-page__steps" aria-label="Google Shopping setup steps">
-        {(Object.keys(STEP_LABELS) as WizardStep[]).map(stepKey => (
+        {(Object.keys(STEP_LABELS) as WizardStep[]).map((stepKey) => (
           <button
             key={stepKey}
             type="button"
@@ -127,40 +268,53 @@ export default function GoogleShopping() {
       {step === 'connect' && (
         <section className="google-shopping-panel">
           <h2>Connect account</h2>
-          <label>
-            Merchant Center ID
-            <input value={merchantId} onChange={event => setMerchantId(event.target.value)} />
-          </label>
-          <label>
-            Google Ads Customer ID (linked)
-            <input value={adsCustomerId} onChange={event => setAdsCustomerId(event.target.value)} />
-          </label>
+          <p>
+            Click below to sign in with Google. Sedifex will discover your Merchant accounts and
+            connect automatically when possible.
+          </p>
+
+          <button type="button" disabled={oauthConnecting || saving} onClick={connectGoogleMerchant}>
+            {oauthConnecting ? 'Connecting…' : connection.connected ? 'Reconnect Google Merchant' : 'Connect Google Merchant'}
+          </button>
+
+          {connection.connected && (
+            <p className="google-shopping-panel__connected">Connected Merchant ID: <strong>{connection.merchantId}</strong></p>
+          )}
+
+          {pendingAccounts.length > 1 && (
+            <div className="google-shopping-panel__picker">
+              <h3>Choose your Merchant account</h3>
+              <label>
+                Merchant account
+                <select
+                  value={selectedMerchantId}
+                  onChange={(event) => setSelectedMerchantId(event.target.value)}
+                >
+                  {pendingAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.displayName} ({account.id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" disabled={saving} onClick={confirmMerchantSelection}>
+                {saving ? 'Saving…' : 'Use this Merchant account'}
+              </button>
+            </div>
+          )}
+
           <label>
             Sedifex Integration API key
-            <input value={integrationApiKey} onChange={event => setIntegrationApiKey(event.target.value)} />
-          </label>
-          <label>
-            Merchant OAuth access token
-            <input
-              value={merchantAccessToken}
-              onChange={event => setMerchantAccessToken(event.target.value)}
-            />
+            <input value={integrationApiKey} readOnly />
           </label>
           <label>
             Integration feed base URL
-            <input value={integrationBaseUrl} onChange={event => setIntegrationBaseUrl(event.target.value)} />
+            <input value={integrationBaseUrl} readOnly />
           </label>
           <label className="google-shopping-panel__checkbox">
-            <input
-              type="checkbox"
-              checked={autoSyncEnabled}
-              onChange={event => setAutoSyncEnabled(event.target.checked)}
-            />
-            Enable scheduled incremental sync (every 30 minutes via Firebase Function)
+            <input type="checkbox" checked={autoSyncEnabled} readOnly />
+            Scheduled incremental sync is enabled
           </label>
-          <button type="button" disabled={saving} onClick={saveConnectionSettings}>
-            {saving ? 'Saving…' : 'Save connection'}
-          </button>
         </section>
       )}
 
@@ -181,10 +335,14 @@ export default function GoogleShopping() {
             Sedifex uses <code>integrationProducts</code> as the source feed for full and incremental sync.
           </p>
           <div className="google-shopping-panel__actions">
-            <button type="button" disabled={saving} onClick={() => runSync('full')}>
+            <button type="button" disabled={saving || !connection.connected} onClick={() => runSync('full')}>
               {saving ? 'Syncing…' : 'Run initial full catalog upload'}
             </button>
-            <button type="button" disabled={saving} onClick={() => runSync('incremental')}>
+            <button
+              type="button"
+              disabled={saving || !connection.connected}
+              onClick={() => runSync('incremental')}
+            >
               {saving ? 'Syncing…' : 'Run incremental sync'}
             </button>
           </div>
@@ -196,7 +354,7 @@ export default function GoogleShopping() {
           <h2>Fix errors</h2>
           <p>Products with missing fields or Merchant disapprovals are listed after each sync.</p>
           <ul>
-            {summary?.errors?.slice(0, 20).map(error => (
+            {summary?.errors?.slice(0, 20).map((error) => (
               <li key={`${error.productId}-${error.reason}`}>
                 <strong>{error.productId}</strong>: {error.reason}
               </li>
@@ -241,7 +399,7 @@ export default function GoogleShopping() {
 
           <h3>Merchant checklist</h3>
           <ul>
-            {checklist.map(item => (
+            {checklist.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
