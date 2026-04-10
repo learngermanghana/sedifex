@@ -17,6 +17,26 @@ export type GoogleBusinessUploadResult = {
   }
 }
 
+export type GoogleBusinessErrorKind =
+  | 'not_connected'
+  | 'missing_scope'
+  | 'not_authenticated'
+  | 'unknown'
+
+export class GoogleBusinessApiError extends Error {
+  code: string
+  status: number
+  kind: GoogleBusinessErrorKind
+
+  constructor(params: { message: string; code: string; status: number; kind: GoogleBusinessErrorKind }) {
+    super(params.message)
+    this.name = 'GoogleBusinessApiError'
+    this.code = params.code
+    this.status = params.status
+    this.kind = params.kind
+  }
+}
+
 async function getAuthHeader() {
   const token = await auth.currentUser?.getIdToken()
   if (!token) throw new Error('Sign in again to continue.')
@@ -24,14 +44,76 @@ async function getAuthHeader() {
   return { authorization: `Bearer ${token}` }
 }
 
+function inferErrorKind(code: string, status: number): GoogleBusinessErrorKind {
+  if (code === 'google-business-not-connected' || code === 'google-business-missing-tokens') {
+    return 'not_connected'
+  }
+
+  if (
+    code.includes('scope') ||
+    code.includes('insufficient') ||
+    code.includes('permission') ||
+    code.includes('forbidden') ||
+    code.includes('business.manage')
+  ) {
+    return 'missing_scope'
+  }
+
+  if (code === 'not-authenticated' || status === 401) {
+    return 'not_authenticated'
+  }
+
+  return 'unknown'
+}
+
+function defaultErrorMessage(kind: GoogleBusinessErrorKind): string {
+  if (kind === 'not_connected') {
+    return 'Google Business Profile is not connected for this store.'
+  }
+  if (kind === 'missing_scope') {
+    return 'Google Business Profile access is missing the required business.manage permission.'
+  }
+  if (kind === 'not_authenticated') {
+    return 'Your session has expired. Sign in again to continue.'
+  }
+
+  return 'Request failed.'
+}
+
 async function parseApiResponse<T>(response: Response): Promise<T> {
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok) {
-    const message = typeof body.error === 'string' ? body.error : 'Request failed.'
-    throw new Error(message)
+    const rawError = typeof body.error === 'string' ? body.error : ''
+    const normalizedCode = rawError.trim().toLowerCase()
+    const kind = inferErrorKind(normalizedCode, response.status)
+
+    throw new GoogleBusinessApiError({
+      message: rawError || defaultErrorMessage(kind),
+      code: normalizedCode || 'request-failed',
+      status: response.status,
+      kind,
+    })
   }
 
   return body as T
+}
+
+export function parseGoogleBusinessApiError(error: unknown) {
+  if (error instanceof GoogleBusinessApiError) {
+    return {
+      kind: error.kind,
+      code: error.code,
+      status: error.status,
+      message: error.message,
+    }
+  }
+
+  return {
+    kind: 'unknown' as const,
+    code: '',
+    status: 0,
+    message: error instanceof Error ? error.message : 'Request failed.',
+  }
 }
 
 export async function listGoogleBusinessLocations(params: { storeId: string }): Promise<GoogleBusinessLocationOption[]> {
