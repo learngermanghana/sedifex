@@ -48,10 +48,10 @@ export default function GoogleBusinessProfile() {
   return (
     <main className="google-shopping-page">
       <header className="google-shopping-page__header">
-        <h1>Google Business Profile</h1>
+        <h1>Upload photos to your business on Google</h1>
         <p>
-          Upload location media directly to Google Business Profile. Sedifex stores only media metadata
-          after Google confirms upload.
+          Add photos to your Google business listing so customers can see them in Google Search and
+          Google Maps.
         </p>
       </header>
 
@@ -69,8 +69,8 @@ export default function GoogleBusinessProfile() {
               {!hasGoogleConnection
                 ? 'Connect your Google account to continue.'
                 : !isConnected
-                  ? 'Your Google account is connected. Grant Google Business Profile access to continue.'
-                  : 'Google Business Profile access is connected for this store.'}
+                  ? 'Your Google account is connected. Allow Google Business Profile access to continue.'
+                  : 'Your Google Business Profile connection is ready.'}
             </p>
             {isLoading ? <p className="google-shopping-panel__hint">Checking Google connection…</p> : null}
             {!isConnected && !isLoading ? (
@@ -80,7 +80,13 @@ export default function GoogleBusinessProfile() {
             ) : null}
           </section>
 
-          {isConnected ? <GoogleBusinessMediaUploader storeId={storeId} /> : null}
+          {isConnected ? (
+            <GoogleBusinessMediaUploader
+              storeId={storeId}
+              onReconnectGoogle={() => void startOAuth()}
+              isReconnectingGoogle={isStartingOAuth}
+            />
+          ) : null}
         </>
       )}
     </main>
