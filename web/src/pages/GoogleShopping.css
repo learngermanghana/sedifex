@@ -92,3 +92,15 @@
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
 }
+
+.google-business-preview {
+  width: min(420px, 100%);
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.google-business-thumb {
+  width: min(220px, 100%);
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}

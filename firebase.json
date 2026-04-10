@@ -1,7 +1,9 @@
 {
   "functions": {
     "source": "functions",
-    "predeploy": ["npm --prefix functions run build"]
+    "predeploy": [
+      "npm --prefix functions run build"
+    ]
   },
   "hosting": {
     "public": "web/dist",
@@ -26,6 +28,14 @@
       {
         "source": "/api/google-ads/metrics-sync",
         "function": "googleAdsMetricsSync"
+      },
+      {
+        "source": "/api/google-business/locations",
+        "function": "googleBusinessLocations"
+      },
+      {
+        "source": "/api/google-business/upload-location-media",
+        "function": "googleBusinessUploadLocationMedia"
       },
       {
         "source": "**",

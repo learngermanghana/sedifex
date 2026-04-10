@@ -22,6 +22,10 @@ export {
   googleShoppingSync,
   googleShoppingSyncScheduled,
 } from './googleShopping'
+export {
+  googleBusinessLocations,
+  googleBusinessUploadLocationMedia,
+} from './googleBusinessProfile'
 
 /**
  * SINGLE FIRESTORE INSTANCE
