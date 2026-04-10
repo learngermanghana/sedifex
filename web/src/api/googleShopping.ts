@@ -93,3 +93,29 @@ export async function triggerGoogleShoppingSync(params: {
 
   return payload.summary
 }
+
+export async function ensureGoogleShoppingSetupConfig(params: {
+  storeId: string
+}): Promise<{
+  integrationApiKey: string
+  integrationBaseUrl: string
+  autoSyncEnabled: boolean
+  generated: boolean
+}> {
+  const payload = await authedPost<{
+    integrationApiKey?: string
+    integrationBaseUrl?: string
+    autoSyncEnabled?: boolean
+    generated?: boolean
+  }>('googleShoppingSetupConfig', params)
+
+  return {
+    integrationApiKey: typeof payload.integrationApiKey === 'string' ? payload.integrationApiKey : '',
+    integrationBaseUrl:
+      typeof payload.integrationBaseUrl === 'string'
+        ? payload.integrationBaseUrl
+        : 'https://us-central1-sedifex-web.cloudfunctions.net',
+    autoSyncEnabled: payload.autoSyncEnabled !== false,
+    generated: payload.generated === true,
+  }
+}

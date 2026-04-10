@@ -480,6 +480,53 @@ async function saveGoogleMerchantConnection(params: {
   return { refreshTokenStored: Boolean(refreshToken) }
 }
 
+async function ensureGoogleShoppingCatalogSyncConfig(params: {
+  storeId: string
+  uid: string
+}): Promise<{
+  integrationApiKey: string
+  integrationBaseUrl: string
+  autoSyncEnabled: boolean
+  generated: boolean
+}> {
+  const settingsRef = db.collection('storeSettings').doc(params.storeId)
+  const settingsSnap = await settingsRef.get()
+  const settingsData = asRecord(settingsSnap.data())
+  const googleShopping = asRecord(settingsData.googleShopping)
+  const catalogSync = asRecord(googleShopping.catalogSync)
+
+  const existingIntegrationApiKey = normalizeString(catalogSync.integrationApiKey)
+  const integrationApiKey = await ensureIntegrationApiKey({
+    storeId: params.storeId,
+    uid: params.uid,
+    existingIntegrationApiKey,
+  })
+  const integrationBaseUrl = normalizeString(catalogSync.integrationBaseUrl) || DEFAULT_INTEGRATION_BASE_URL
+  const autoSyncEnabled = catalogSync.autoSyncEnabled === false ? false : true
+
+  await settingsRef.set(
+    {
+      googleShopping: {
+        catalogSync: {
+          integrationApiKey,
+          integrationBaseUrl,
+          autoSyncEnabled,
+          tokenUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    },
+    { merge: true },
+  )
+
+  return {
+    integrationApiKey,
+    integrationBaseUrl,
+    autoSyncEnabled,
+    generated: !existingIntegrationApiKey,
+  }
+}
+
 async function persistPendingSelection(params: {
   uid: string
   storeId: string
@@ -1082,6 +1129,48 @@ export const googleMerchantSelectAccount = functions.https.onRequest(async (req,
   } catch (error) {
     const message = normalizeError(error)
     functions.logger.error('[googleMerchantSelectAccount] failed', { message })
+
+    if (message === 'missing-auth' || message === 'invalid-auth') {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+
+    if (message === 'store-access-denied') {
+      res.status(403).json({ error: 'forbidden' })
+      return
+    }
+
+    res.status(400).json({ error: message })
+  }
+})
+
+export const googleShoppingSetupConfig = functions.https.onRequest(async (req, res) => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  try {
+    const user = await requireApiUser(req)
+    const body = asRecord(req.body)
+    const storeId = normalizeString(body.storeId)
+    if (!storeId) {
+      res.status(400).json({ error: 'missing-store-id' })
+      return
+    }
+
+    await requireStoreMembership(user.uid, storeId)
+    const config = await ensureGoogleShoppingCatalogSyncConfig({ storeId, uid: user.uid })
+
+    res.status(200).json(config)
+  } catch (error) {
+    const message = normalizeError(error)
+    functions.logger.error('[googleShoppingSetupConfig] failed', { message })
 
     if (message === 'missing-auth' || message === 'invalid-auth') {
       res.status(401).json({ error: 'unauthorized' })

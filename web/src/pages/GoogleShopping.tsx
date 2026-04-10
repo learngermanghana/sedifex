@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
 
 import {
+  ensureGoogleShoppingSetupConfig,
   getGoogleMerchantPendingAccounts,
   selectGoogleMerchantAccount,
   triggerGoogleShoppingSync,
@@ -23,10 +24,10 @@ type GoogleShoppingConnection = {
 }
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  connect: '1. Connect account',
-  map: '2. Map fields',
+  connect: '1. Connect Google',
+  map: '2. Sync products',
   fix: '3. Fix errors',
-  status: '4. View sync status',
+  status: '4. View status',
 }
 
 export default function GoogleShopping() {
@@ -37,6 +38,7 @@ export default function GoogleShopping() {
     'https://us-central1-sedifex-web.cloudfunctions.net',
   )
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true)
+  const [setupConfigLoading, setSetupConfigLoading] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [summary, setSummary] = useState<GoogleShoppingSyncSummary | null>(null)
   const [saving, setSaving] = useState(false)
@@ -156,6 +158,43 @@ export default function GoogleShopping() {
     if (!oauthError) return
     setStatus(oauthError)
   }, [oauthError])
+
+  useEffect(() => {
+    if (!storeId) return
+
+    let cancelled = false
+    setSetupConfigLoading(true)
+
+    ensureGoogleShoppingSetupConfig({ storeId })
+      .then((config) => {
+        if (cancelled) return
+        setIntegrationApiKey(config.integrationApiKey)
+        setIntegrationBaseUrl(config.integrationBaseUrl)
+        setAutoSyncEnabled(config.autoSyncEnabled)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : 'Unable to prepare store sync settings.'
+        setStatus((current) => current || message)
+      })
+      .finally(() => {
+        if (!cancelled) setSetupConfigLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId])
+
+  async function copyApiKey() {
+    if (!integrationApiKey) return
+    try {
+      await navigator.clipboard.writeText(integrationApiKey)
+      setStatus('Store API key copied.')
+    } catch {
+      setStatus('Unable to copy Store API key from this browser. You can still select and copy it manually.')
+    }
+  }
 
   async function connectGoogleMerchant() {
     if (!storeId) {
@@ -290,25 +329,42 @@ export default function GoogleShopping() {
               </div>
             )}
 
-            <label>
-              Sedifex Integration API key
-              <input value={integrationApiKey} readOnly />
-            </label>
-            <label>
-              Integration feed base URL
-              <input value={integrationBaseUrl} readOnly />
-            </label>
-            <label className="google-shopping-panel__checkbox">
-              <input type="checkbox" checked={autoSyncEnabled} readOnly />
-              Scheduled incremental sync is enabled
-            </label>
+            <details className="google-shopping-panel__advanced">
+              <summary>Advanced settings</summary>
+              <p className="google-shopping-panel__hint">
+                These values are auto-managed by Sedifex and only needed for advanced troubleshooting.
+              </p>
+              <label>
+                Store API key
+                <input
+                  value={setupConfigLoading && !integrationApiKey ? 'Creating key…' : integrationApiKey}
+                  readOnly
+                />
+                <small className="google-shopping-panel__helper">
+                  Automatically created by Sedifex for Google sync.
+                </small>
+              </label>
+              <div className="google-shopping-panel__actions">
+                <button type="button" onClick={copyApiKey} disabled={!integrationApiKey}>
+                  Copy key
+                </button>
+              </div>
+              <label>
+                Integration feed base URL
+                <input value={integrationBaseUrl} readOnly />
+              </label>
+              <label className="google-shopping-panel__checkbox">
+                <input type="checkbox" checked={autoSyncEnabled} readOnly />
+                Scheduled incremental sync is enabled
+              </label>
+            </details>
           </section>
         </>
       )}
 
       {step === 'map' && (
         <section className="google-shopping-panel">
-          <h2>Map fields</h2>
+          <h2>Sync products</h2>
           <ul>
             <li>title ← name</li>
             <li>description ← description</li>

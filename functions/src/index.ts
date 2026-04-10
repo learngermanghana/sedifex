@@ -19,6 +19,7 @@ export {
   googleMerchantOAuthCallback,
   googleMerchantPendingAccounts,
   googleMerchantSelectAccount,
+  googleShoppingSetupConfig,
   googleShoppingSync,
   googleShoppingSyncScheduled,
 } from './googleShopping'
