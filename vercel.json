@@ -1,11 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
-    {
-      "path": "/api/google-ads/metrics-sync",
-      "schedule": "*/30 * * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/((?!api/|assets/|.*\\..*).*)",

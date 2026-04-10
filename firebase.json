@@ -12,6 +12,22 @@
     ],
     "rewrites": [
       {
+        "source": "/api/google-ads/oauth-start",
+        "function": "googleAdsOAuthStart"
+      },
+      {
+        "source": "/api/google-ads/oauth-callback",
+        "function": "googleAdsOAuthCallback"
+      },
+      {
+        "source": "/api/google-ads/campaign",
+        "function": "googleAdsCampaign"
+      },
+      {
+        "source": "/api/google-ads/metrics-sync",
+        "function": "googleAdsMetricsSync"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

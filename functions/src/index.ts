@@ -7,6 +7,13 @@ import { normalizePhoneE164, normalizePhoneForWhatsApp } from './phone'
 import { normalizePublicSlugValue } from './utils/publicSlug'
 import type { ProductReadModel } from './types/product'
 export { checkSignupUnlock } from './paystack'
+export {
+  googleAdsOAuthStart,
+  googleAdsOAuthCallback,
+  googleAdsCampaign,
+  googleAdsMetricsSync,
+  googleAdsMetricsSyncScheduled,
+} from './googleAds'
 
 /**
  * SINGLE FIRESTORE INSTANCE
