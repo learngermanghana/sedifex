@@ -228,6 +228,18 @@ export default function AdsCampaigns() {
     return 'Campaign draft is ready for launch.'
   }, [settings.campaign.status])
 
+  const connectLabel = useMemo(() => {
+    if (settings.connection.connected) return 'Connected'
+    const hasIdentity =
+      settings.connection.accountEmail.trim().length > 0 &&
+      settings.connection.customerId.trim().length > 0
+    return hasIdentity ? 'Grant Google Ads access' : 'Connect Google'
+  }, [
+    settings.connection.accountEmail,
+    settings.connection.connected,
+    settings.connection.customerId,
+  ])
+
   async function saveChanges(changes: Partial<AdsAutomationSettings>) {
     if (!storeId) return
     setSaving(true)
@@ -252,6 +264,8 @@ export default function AdsCampaigns() {
   }
 
   async function handleConnectClick() {
+    if (settings.connection.connected) return
+
     if (!settings.connection.accountEmail.trim()) {
       setNotice('Add the Google account email first.')
       return
@@ -416,10 +430,10 @@ export default function AdsCampaigns() {
             <button
               type="button"
               className="button button--primary"
-              disabled={saving}
+              disabled={saving || settings.connection.connected}
               onClick={handleConnectClick}
             >
-              {settings.connection.connected ? 'Update connection' : 'Connect Google Ads'}
+              {connectLabel}
             </button>
             <p>
               Connected: <strong>{settings.connection.connected ? 'Yes' : 'No'}</strong> · Last updated:{' '}

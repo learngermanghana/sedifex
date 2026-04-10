@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import {
-  buildOAuthStartUrl,
-  persistOAuthState,
-  requireStoreId,
-} from '../_google-ads.js'
 import { requireApiUser, requireStoreMembership } from '../_api-auth.js'
+import { buildGoogleOAuthStartUrl } from '../_google-oauth.js'
+
+function requireStoreId(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) throw new Error('invalid-store-id')
+  return raw.trim()
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -21,15 +22,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       typeof req.body?.managerId === 'string' ? req.body.managerId.trim() : ''
     const accountEmail =
       typeof req.body?.accountEmail === 'string' ? req.body.accountEmail.trim() : ''
-    const { url, rawState } = buildOAuthStartUrl({ storeId, uid: user.uid })
-
-    await persistOAuthState({
+    const { url } = await buildGoogleOAuthStartUrl({
       uid: user.uid,
       storeId,
-      rawState,
-      customerId,
-      managerId,
-      email: accountEmail || user.email,
+      integrations: ['ads'],
+      adsCustomerId: customerId,
+      adsManagerId: managerId,
+      accountEmail: accountEmail || user.email,
     })
 
     return res.status(200).json({ url })
