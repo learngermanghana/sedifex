@@ -108,14 +108,18 @@ function parseSettings(raw: Record<string, unknown> | undefined): AdsAutomationS
 
   const goal = typeof briefRaw.goal === 'string' ? briefRaw.goal : DEFAULT_SETTINGS.brief.goal
   const status = typeof campaignRaw.status === 'string' ? campaignRaw.status : DEFAULT_SETTINGS.campaign.status
+  const accountEmail =
+    typeof connectionRaw.accountEmail === 'string' ? connectionRaw.accountEmail : ''
+  const customerId = typeof connectionRaw.customerId === 'string' ? connectionRaw.customerId : ''
+  const managerId = typeof connectionRaw.managerId === 'string' ? connectionRaw.managerId : ''
+  const hasConnectionDetails = accountEmail.trim().length > 0 && customerId.trim().length > 0
 
   return {
     connection: {
-      connected: connectionRaw.connected === true,
-      accountEmail:
-        typeof connectionRaw.accountEmail === 'string' ? connectionRaw.accountEmail : '',
-      customerId: typeof connectionRaw.customerId === 'string' ? connectionRaw.customerId : '',
-      managerId: typeof connectionRaw.managerId === 'string' ? connectionRaw.managerId : '',
+      connected: connectionRaw.connected === true && hasConnectionDetails,
+      accountEmail,
+      customerId,
+      managerId,
       connectedAt: connectionRaw.connectedAt,
     },
     billing: {
@@ -260,6 +264,7 @@ export default function AdsCampaigns() {
     try {
       const { url } = await beginGoogleAdsOAuth({
         storeId,
+        customerId: settings.connection.customerId,
         accountEmail: settings.connection.accountEmail,
         managerId: settings.connection.managerId,
       })
@@ -416,7 +421,7 @@ export default function AdsCampaigns() {
               {toIso(settings.connection.connectedAt)}
             </p>
           </div>
-        </div>
+        </form>
       </section>
 
       <section className="ads-campaigns__section" aria-labelledby="billing-ownership">
@@ -456,7 +461,7 @@ export default function AdsCampaigns() {
               {toIso(settings.billing.confirmedAt)}
             </p>
           </div>
-        </div>
+        </form>
       </section>
 
       <section className="ads-campaigns__section" aria-labelledby="campaign-brief">
