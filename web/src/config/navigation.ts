@@ -19,7 +19,8 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/finance', label: 'Invoice', parentTo: '/sell', roles: ['owner'] },
   { to: '/account', label: 'Account', roles: ['owner'] },
   { to: '/public-page', label: 'Public page', roles: ['owner'] },
-  { to: '/ads', label: 'Google Ads', roles: ['owner'] },
-  { to: '/google-shopping', label: 'Google Shopping', roles: ['owner'] },
-  { to: '/google-business', label: 'Google Business', roles: ['owner'] },
+  { to: '/google-connect', label: 'Google Connect', roles: ['owner'] },
+  { to: '/ads', label: 'Google Ads', parentTo: '/google-connect', roles: ['owner'] },
+  { to: '/google-shopping', label: 'Google Shopping', parentTo: '/google-connect', roles: ['owner'] },
+  { to: '/google-business', label: 'Google Business', parentTo: '/google-connect', roles: ['owner'] },
 ]

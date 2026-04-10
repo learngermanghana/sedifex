@@ -31,6 +31,7 @@ import PublicPageSettings from './pages/PublicPageSettings'
 import AdsCampaigns from './pages/AdsCampaigns'
 import GoogleShopping from './pages/GoogleShopping'
 import GoogleBusinessProfile from './pages/GoogleBusinessProfile'
+import GoogleConnect from './pages/GoogleConnect'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -89,6 +90,7 @@ const router = createBrowserRouter([
           { path: 'account', element: <AccountOverview /> },
           { path: 'account/overview', element: <AccountOverview /> },
           { path: 'public-page', element: <PublicPageSettings /> },
+          { path: 'google-connect', element: <GoogleConnect /> },
           { path: 'ads', element: <AdsCampaigns /> },
           { path: 'google-shopping', element: <GoogleShopping /> },
           { path: 'google-business', element: <GoogleBusinessProfile /> },

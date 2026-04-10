@@ -1,0 +1,46 @@
+.google-connect-page {
+  display: grid;
+  gap: 16px;
+}
+
+.google-connect-page__header h1 {
+  margin: 0;
+}
+
+.google-connect-page__header p {
+  margin: 6px 0 0;
+  color: #4b5563;
+}
+
+.google-connect-page__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.google-connect-page__tab {
+  text-decoration: none;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: #111827;
+  background: #fff;
+  font-weight: 600;
+}
+
+.google-connect-page__tab.is-active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.google-connect-page__panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #f9fafb;
+}
+
+.google-connect-page__panel p {
+  margin: 0;
+}
