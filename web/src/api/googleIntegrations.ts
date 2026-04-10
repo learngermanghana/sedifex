@@ -14,7 +14,13 @@ async function authHeaders() {
   return { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
 }
 
-export async function startGoogleOAuth(params: { storeId: string; integrations: GoogleIntegrationKey[] }) {
+export async function startGoogleOAuth(params: {
+  storeId: string
+  integrations: GoogleIntegrationKey[]
+  customerId?: string
+  managerId?: string
+  accountEmail?: string
+}) {
   const headers = await authHeaders()
   const response = await fetch('/api/google/oauth-start', {
     method: 'POST',

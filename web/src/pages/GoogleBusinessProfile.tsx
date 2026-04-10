@@ -1,17 +1,27 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
-import { fetchGoogleIntegrationOverview, startGoogleOAuth, type GoogleIntegrationStatus } from '../api/googleIntegrations'
 import GoogleBusinessMediaUploader from '../components/GoogleBusinessMediaUploader'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useGoogleIntegrationStatus } from '../hooks/useGoogleIntegrationStatus'
 import './GoogleShopping.css'
 
 export default function GoogleBusinessProfile() {
   const { storeId } = useActiveStore()
-  const [status, setStatus] = useState<GoogleIntegrationStatus>('Needs permission')
-  const [hasGoogleConnection, setHasGoogleConnection] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [connecting, setConnecting] = useState(false)
   const [message, setMessage] = useState('')
+
+  const {
+    isLoading,
+    isStartingOAuth,
+    isConnected,
+    hasGoogleConnection,
+    buttonLabel,
+    stateTitle,
+    error,
+    startOAuth,
+  } = useGoogleIntegrationStatus({
+    integration: 'business',
+    storeId,
+  })
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -33,53 +43,9 @@ export default function GoogleBusinessProfile() {
   }, [])
 
   useEffect(() => {
-    if (!storeId) {
-      setStatus('Needs permission')
-      setHasGoogleConnection(false)
-      return
-    }
-
-    let mounted = true
-    setLoading(true)
-    fetchGoogleIntegrationOverview(storeId)
-      .then((overview) => {
-        if (!mounted) return
-        setStatus(overview.statuses.business)
-        setHasGoogleConnection(overview.hasGoogleConnection)
-      })
-      .catch((error) => {
-        if (!mounted) return
-        setMessage(error instanceof Error ? error.message : 'Unable to load Google integration status.')
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [storeId])
-
-  const isConnected = status === 'Connected'
-  const stateTitle = useMemo(() => {
-    if (!hasGoogleConnection) return '1) Connect Google'
-    if (!isConnected) return '2) Grant Google Business access'
-    return '3) Connected'
-  }, [hasGoogleConnection, isConnected])
-  const buttonLabel = !hasGoogleConnection ? 'Connect Google' : 'Grant Google Business access'
-
-  async function handleConnect() {
-    if (!storeId || connecting) return
-    setConnecting(true)
-    setMessage('')
-    try {
-      const url = await startGoogleOAuth({ storeId, integrations: ['business'] })
-      window.location.assign(url)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to start Google OAuth.')
-      setConnecting(false)
-    }
-  }
+    if (!error) return
+    setMessage(error)
+  }, [error])
 
   return (
     <main className="google-shopping-page">
@@ -106,10 +72,10 @@ export default function GoogleBusinessProfile() {
                   ? 'Your Google account is connected. Grant Google Business Profile access to continue.'
                   : 'Google Business Profile access is connected for this store.'}
             </p>
-            {loading ? <p className="google-shopping-panel__hint">Checking Google connection…</p> : null}
-            {!isConnected && !loading ? (
-              <button type="button" onClick={handleConnect} disabled={connecting}>
-                {connecting ? 'Connecting…' : buttonLabel}
+            {isLoading ? <p className="google-shopping-panel__hint">Checking Google connection…</p> : null}
+            {!isConnected && !isLoading ? (
+              <button type="button" onClick={() => void startOAuth()} disabled={isStartingOAuth}>
+                {isStartingOAuth ? 'Connecting…' : buttonLabel}
               </button>
             ) : null}
             {message ? <p className="google-shopping-panel__hint">{message}</p> : null}
