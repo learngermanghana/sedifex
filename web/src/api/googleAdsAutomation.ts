@@ -74,7 +74,18 @@ export async function createOrUpdateCampaign(input: { storeId: string; brief: Ca
     }),
   })
 
-  return parseApiResult<{ ok: boolean; status: string }>(response)
+  return parseApiResult<{
+    ok: boolean
+    status: string
+    campaignCreatedInGoogleAds?: boolean
+    customerId?: string
+    loginCustomerId?: string
+    campaignId?: string
+    campaignResourceName?: string
+    adGroupId?: string
+    adGroupResourceName?: string
+    warnings?: string[]
+  }>(response)
 }
 
 export async function pauseOrResumeCampaign(input: { storeId: string; resume: boolean }) {

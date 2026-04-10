@@ -226,6 +226,34 @@ export async function discoverGoogleAdsCustomerId(params: {
   return candidate.trim()
 }
 
+export async function listAccessibleGoogleAdsCustomers(params: {
+  accessToken: string
+  managerId?: string
+}): Promise<string[]> {
+  const url = `${GOOGLE_ADS_API_BASE}/${GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: googleAdsHeaders({
+      accessToken: params.accessToken,
+      managerId: params.managerId || '',
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
+  if (!response.ok) {
+    throw new Error(
+      `google-ads-accessible-customers-failed:${typeof payload.message === 'string' ? payload.message : response.status}`,
+    )
+  }
+
+  const names = Array.isArray(payload.resourceNames) ? payload.resourceNames : []
+  const customerIds = names
+    .map(entry => (typeof entry === 'string' ? entry.split('/').pop()?.trim() || '' : ''))
+    .filter(Boolean)
+
+  return Array.from(new Set(customerIds))
+}
+
 export async function exchangeCodeForTokens(code: string) {
   const { clientId, clientSecret, redirectUri } = getOAuthClientConfig()
 
@@ -381,7 +409,9 @@ export async function getGoogleAdsAuthContext(storeId: string): Promise<{
   customerId: string
   managerId: string
   accessToken: string
+  accessibleCustomerIds: string[]
 }> {
+  console.info(JSON.stringify({ event: 'google_ads.auth.start', storeId }))
   const settingsRef = db().doc(`storeSettings/${storeId}`)
   const snap = await settingsRef.get()
   const data = (snap.data() ?? {}) as Record<string, any>
@@ -406,12 +436,13 @@ export async function getGoogleAdsAuthContext(storeId: string): Promise<{
     refreshToken = sharedGoogle.refreshToken
   }
 
-  if (!customerId || !accessToken) {
+  if (!accessToken) {
     throw new Error('google-ads-not-connected')
   }
 
   const expired = toMillis(googleAds.expiresAt) <= Date.now() + 15_000
   if (expired) {
+    console.info(JSON.stringify({ event: 'google_ads.auth.token_refresh.start', storeId }))
     if (!refreshToken) throw new Error('google-ads-refresh-token-missing')
 
     const refreshed = await refreshGoogleAccessToken(refreshToken)
@@ -446,9 +477,46 @@ export async function getGoogleAdsAuthContext(storeId: string): Promise<{
       },
       { merge: true },
     )
+    console.info(JSON.stringify({ event: 'google_ads.auth.token_refresh.success', storeId }))
   }
 
-  return { customerId, managerId, accessToken }
+  const accessibleCustomerIds = await listAccessibleGoogleAdsCustomers({ accessToken, managerId })
+  let resolvedCustomerId = customerId ? normalizeCustomerId(customerId) : ''
+  if (!resolvedCustomerId && accessibleCustomerIds[0]) {
+    resolvedCustomerId = normalizeCustomerId(accessibleCustomerIds[0])
+    await settingsRef.set(
+      {
+        integrations: {
+          googleAds: {
+            customerId: resolvedCustomerId,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        },
+        googleAdsAutomation: {
+          connection: {
+            customerId: resolvedCustomerId,
+            tokenValidatedAt: FieldValue.serverTimestamp(),
+          },
+        },
+      },
+      { merge: true },
+    )
+  }
+
+  if (!resolvedCustomerId) {
+    throw new Error('google-ads-customer-id-missing')
+  }
+
+  console.info(
+    JSON.stringify({
+      event: 'google_ads.auth.success',
+      storeId,
+      customerId: resolvedCustomerId,
+      loginCustomerId: managerId || null,
+      accessibleCustomerCount: accessibleCustomerIds.length,
+    }),
+  )
+  return { customerId: resolvedCustomerId, managerId, accessToken, accessibleCustomerIds }
 }
 
 function normalizeCustomerId(customerId: string): string {
@@ -480,6 +548,14 @@ export async function googleAdsMutate(params: {
 }): Promise<Record<string, unknown>> {
   const customerId = normalizeCustomerId(params.customerId)
   const url = `${GOOGLE_ADS_API_BASE}/${GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:mutate`
+  console.info(
+    JSON.stringify({
+      event: 'google_ads.mutate.start',
+      customerId,
+      loginCustomerId: params.managerId ? normalizeCustomerId(params.managerId) : null,
+      operations: params.operations.length,
+    }),
+  )
 
   const response = await fetch(url, {
     method: 'POST',
@@ -489,11 +565,31 @@ export async function googleAdsMutate(params: {
 
   const payload = (await response.json()) as Record<string, unknown>
   if (!response.ok) {
+    const details = Array.isArray((payload as Record<string, unknown>).details)
+      ? JSON.stringify((payload as Record<string, unknown>).details)
+      : ''
+    console.error(
+      JSON.stringify({
+        event: 'google_ads.mutate.error',
+        customerId,
+        loginCustomerId: params.managerId ? normalizeCustomerId(params.managerId) : null,
+        status: response.status,
+        message: payload.message || null,
+        details: (payload as Record<string, unknown>).details || null,
+      }),
+    )
     throw new Error(
-      `google-ads-mutate-failed:${typeof payload.message === 'string' ? payload.message : response.status}`,
+      `google-ads-mutate-failed:${typeof payload.message === 'string' ? payload.message : response.status}${details ? `:${details}` : ''}`,
     )
   }
 
+  console.info(
+    JSON.stringify({
+      event: 'google_ads.mutate.success',
+      customerId,
+      loginCustomerId: params.managerId ? normalizeCustomerId(params.managerId) : null,
+    }),
+  )
   return payload
 }
 
@@ -507,11 +603,29 @@ export async function createGoogleAdsCampaign(params: {
   accessToken: string
   brief: CampaignBrief
   campaignName: string
-}): Promise<{ campaignId: string; adGroupName: string }> {
+}): Promise<{
+  budgetResourceName: string
+  budgetId: string
+  campaignResourceName: string
+  campaignId: string
+  adGroupResourceName: string
+  adGroupId: string
+  adResourceName: string
+  keywordResourceName: string | null
+  adGroupName: string
+}> {
   const normalizedCustomerId = normalizeCustomerId(params.customerId)
   const micros = Math.max(1_000_000, Math.round(params.brief.dailyBudget * 1_000_000))
   const campaignName = params.campaignName.slice(0, 120)
   const adGroupName = `${params.brief.goal.toUpperCase()} Primary`.slice(0, 120)
+  const keywordText = params.brief.headline
+    .replace(/[^\w\s-]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(' ')
+    .slice(0, 80)
+  const hasKeyword = keywordText.length > 0
 
   const payload = await googleAdsMutate({
     customerId: params.customerId,
@@ -564,6 +678,22 @@ export async function createGoogleAdsCampaign(params: {
           },
         },
       },
+      ...(hasKeyword
+        ? [
+            {
+              adGroupCriterionOperation: {
+                create: {
+                  adGroup: `customers/${normalizedCustomerId}/adGroups/-3`,
+                  status: 'ENABLED',
+                  keyword: {
+                    text: keywordText,
+                    matchType: 'PHRASE',
+                  },
+                },
+              },
+            },
+          ]
+        : []),
     ],
   })
 
@@ -571,15 +701,44 @@ export async function createGoogleAdsCampaign(params: {
     ? payload.mutateOperationResponses
     : []
 
+  const budgetResourceName = parseResourceName(
+    (mutateResponses[0] as Record<string, any> | undefined)?.campaignBudgetResult?.resourceName,
+  )
   const campaignResourceName = parseResourceName(
     (mutateResponses[1] as Record<string, any> | undefined)?.campaignResult?.resourceName,
   )
+  const adGroupResourceName = parseResourceName(
+    (mutateResponses[2] as Record<string, any> | undefined)?.adGroupResult?.resourceName,
+  )
+  const adResourceName = parseResourceName(
+    (mutateResponses[3] as Record<string, any> | undefined)?.adGroupAdResult?.resourceName,
+  )
+  const keywordResourceName = hasKeyword
+    ? parseResourceName(
+        (mutateResponses[4] as Record<string, any> | undefined)?.adGroupCriterionResult?.resourceName,
+      ) || null
+    : null
 
-  const match = campaignResourceName.match(/\/campaigns\/(\d+)/)
-  const campaignId = match?.[1] || campaignResourceName || `SFX-${Date.now().toString().slice(-6)}`
+  if (!budgetResourceName || !campaignResourceName || !adGroupResourceName || !adResourceName) {
+    throw new Error('google-ads-mutate-incomplete:missing-resource-name')
+  }
+
+  const campaignId = campaignResourceName.match(/\/campaigns\/(\d+)/)?.[1] || ''
+  const budgetId = budgetResourceName.match(/\/campaignBudgets\/(\d+)/)?.[1] || ''
+  const adGroupId = adGroupResourceName.match(/\/adGroups\/(\d+)/)?.[1] || ''
+  if (!campaignId || !budgetId || !adGroupId) {
+    throw new Error('google-ads-mutate-incomplete:missing-entity-id')
+  }
 
   return {
+    budgetResourceName,
+    budgetId,
+    campaignResourceName,
     campaignId,
+    adGroupResourceName,
+    adGroupId,
+    adResourceName,
+    keywordResourceName,
     adGroupName,
   }
 }

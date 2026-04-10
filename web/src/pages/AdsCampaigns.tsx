@@ -321,14 +321,26 @@ export default function AdsCampaigns() {
     setSaving(true)
     setNotice(null)
     try {
-      await createOrUpdateCampaign({
+      const result = await createOrUpdateCampaign({
         storeId,
         brief: settings.brief,
       })
-      setNotice('Campaign is live.')
+      if (!result.campaignCreatedInGoogleAds) {
+        setNotice('Campaign was not confirmed in Google Ads. Check logs and retry.')
+        return
+      }
+
+      const warningText = Array.isArray(result.warnings) && result.warnings.length > 0 ? ` Warnings: ${result.warnings.join(' ')}` : ''
+      setNotice(
+        `Campaign created in Google Ads (customer ${result.customerId || 'unknown'}, campaign ${result.campaignId || 'unknown'}).${warningText}`,
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create campaign.'
-      setNotice(message)
+      if (message.includes('google-ads-mutate-failed:')) {
+        setNotice(`Google Ads API rejected campaign creation: ${message.replace('google-ads-mutate-failed:', '')}`)
+      } else {
+        setNotice(message)
+      }
     } finally {
       setSaving(false)
     }

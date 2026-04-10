@@ -13,6 +13,20 @@ import { requireApiUser, requireStoreMembership } from '../_api-auth.js'
 
 type CampaignAction = 'create' | 'pause' | 'resume' | 'edit'
 
+type CampaignCreateResponse = {
+  ok: boolean
+  status: string
+  campaignCreatedInGoogleAds: boolean
+  customerId: string
+  loginCustomerId: string
+  campaignId: string
+  campaignResourceName: string
+  budgetId?: string
+  adGroupId?: string
+  adGroupResourceName?: string
+  warnings: string[]
+}
+
 function parseAction(raw: unknown): CampaignAction {
   if (raw === 'pause' || raw === 'resume' || raw === 'edit') return raw
   return 'create'
@@ -43,6 +57,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const existingMetrics = (googleAdsAutomation.metrics ?? {}) as Record<string, any>
 
     const auth = await getGoogleAdsAuthContext(storeId)
+    const normalizedConfiguredCustomer = connection.customerId ? String(connection.customerId).replace(/\D/g, '') : ''
+    console.info(
+      JSON.stringify({
+        event: 'google_ads_campaign.auth_context',
+        storeId,
+        action,
+        configuredCustomerId: normalizedConfiguredCustomer || null,
+        resolvedCustomerId: auth.customerId,
+        loginCustomerId: auth.managerId || null,
+        accessibleCustomerIds: auth.accessibleCustomerIds,
+      }),
+    )
 
     if (action === 'pause' || action === 'resume') {
       if (!existingCampaign.campaignId) {
@@ -91,8 +117,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isCreate = action === 'create'
     let campaignId = typeof existingCampaign.campaignId === 'string' ? existingCampaign.campaignId : ''
     let adGroupName = typeof existingCampaign.adGroupName === 'string' ? existingCampaign.adGroupName : ''
+    let createResponse: CampaignCreateResponse | null = null
 
     if (isCreate) {
+      const warnings: string[] = []
+      if (normalizedConfiguredCustomer && normalizedConfiguredCustomer !== auth.customerId) {
+        warnings.push(
+          `Selected customer ID ${normalizedConfiguredCustomer} differs from authenticated customer ID ${auth.customerId}.`,
+        )
+      }
+      if (!auth.accessibleCustomerIds.includes(auth.customerId)) {
+        warnings.push(`Authenticated customer ID ${auth.customerId} is not in accessible customer list.`)
+      }
+
       const created = await createGoogleAdsCampaign({
         customerId: auth.customerId,
         managerId: auth.managerId,
@@ -102,6 +139,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       campaignId = created.campaignId
       adGroupName = created.adGroupName
+      createResponse = {
+        ok: true,
+        status: 'live',
+        campaignCreatedInGoogleAds: true,
+        customerId: auth.customerId,
+        loginCustomerId: auth.managerId || '',
+        campaignId: created.campaignId,
+        campaignResourceName: created.campaignResourceName,
+        budgetId: created.budgetId,
+        adGroupId: created.adGroupId,
+        adGroupResourceName: created.adGroupResourceName,
+        warnings,
+      }
+      console.info(
+        JSON.stringify({
+          event: 'google_ads_campaign.create_result',
+          storeId,
+          customerId: auth.customerId,
+          loginCustomerId: auth.managerId || null,
+          budgetResourceName: created.budgetResourceName,
+          budgetId: created.budgetId,
+          campaignResourceName: created.campaignResourceName,
+          campaignId: created.campaignId,
+          adGroupResourceName: created.adGroupResourceName,
+          adGroupId: created.adGroupId,
+          adResourceName: created.adResourceName,
+          keywordResourceName: created.keywordResourceName,
+          warnings,
+        }),
+      )
     }
 
     if (action === 'edit' && campaignId) {
@@ -124,6 +191,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             status: isCreate ? 'live' : existingCampaign.status || 'draft',
             campaignId,
             adGroupName,
+            customerId: isCreate ? auth.customerId : existingCampaign.customerId || auth.customerId,
+            loginCustomerId: isCreate ? auth.managerId || '' : existingCampaign.loginCustomerId || auth.managerId || '',
+            campaignResourceName:
+              isCreate && createResponse ? createResponse.campaignResourceName : existingCampaign.campaignResourceName || '',
+            adGroupId: isCreate && createResponse ? createResponse.adGroupId || '' : existingCampaign.adGroupId || '',
+            adGroupResourceName:
+              isCreate && createResponse ? createResponse.adGroupResourceName || '' : existingCampaign.adGroupResourceName || '',
+            budgetId: isCreate && createResponse ? createResponse.budgetId || '' : existingCampaign.budgetId || '',
             updatedAt: FieldValue.serverTimestamp(),
           },
           metrics: {
@@ -137,9 +212,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { merge: true },
     )
 
+    if (isCreate && createResponse) {
+      return res.status(200).json(createResponse)
+    }
+
     return res.status(200).json({ ok: true, status: isCreate ? 'live' : 'edited', campaignId })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'campaign-update-failed'
+    console.error(
+      JSON.stringify({
+        event: 'google_ads_campaign.create_error',
+        error: message,
+        storeId: typeof req.body?.storeId === 'string' ? req.body.storeId : null,
+        action: typeof req.body?.action === 'string' ? req.body.action : 'create',
+      }),
+    )
     if (message === 'missing-auth' || message === 'invalid-auth') {
       return res.status(401).json({ error: 'Unauthorized' })
     }
