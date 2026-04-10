@@ -20,4 +20,5 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/account', label: 'Account', roles: ['owner'] },
   { to: '/public-page', label: 'Public page', roles: ['owner'] },
   { to: '/ads', label: 'Google Ads', roles: ['owner'] },
+  { to: '/google-shopping', label: 'Google Shopping', roles: ['owner'] },
 ]

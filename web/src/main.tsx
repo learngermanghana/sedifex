@@ -29,6 +29,7 @@ import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
 import PublicPageSettings from './pages/PublicPageSettings'
 import AdsCampaigns from './pages/AdsCampaigns'
+import GoogleShopping from './pages/GoogleShopping'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -88,6 +89,7 @@ const router = createBrowserRouter([
           { path: 'account/overview', element: <AccountOverview /> },
           { path: 'public-page', element: <PublicPageSettings /> },
           { path: 'ads', element: <AdsCampaigns /> },
+          { path: 'google-shopping', element: <GoogleShopping /> },
           { path: 'support', element: <Support /> },
         ],
       },

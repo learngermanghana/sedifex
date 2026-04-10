@@ -1,0 +1,79 @@
+.google-shopping-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.google-shopping-page__header p {
+  color: #4b5563;
+}
+
+.google-shopping-page__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.google-shopping-page__step {
+  border: 1px solid #cbd5e1;
+  background: white;
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+}
+
+.google-shopping-page__step.is-active {
+  border-color: #0ea5e9;
+  color: #0369a1;
+}
+
+.google-shopping-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  background: #fff;
+}
+
+.google-shopping-panel label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.google-shopping-panel input {
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+}
+
+.google-shopping-panel__checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+
+.google-shopping-panel__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.google-shopping-panel__hint {
+  color: #4b5563;
+}
+
+.google-shopping-panel__status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.google-shopping-page__status {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}

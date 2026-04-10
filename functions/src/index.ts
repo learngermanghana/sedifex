@@ -14,6 +14,7 @@ export {
   googleAdsMetricsSync,
   googleAdsMetricsSyncScheduled,
 } from './googleAds'
+export { googleShoppingSync, googleShoppingSyncScheduled } from './googleShopping'
 
 /**
  * SINGLE FIRESTORE INSTANCE
