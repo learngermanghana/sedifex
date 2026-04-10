@@ -37,6 +37,7 @@ function getOAuthConfig() {
   const appBase = canonicalizeSedifexUrl(process.env.APP_BASE_URL?.trim() || '')
   const redirectUri =
     canonicalizeSedifexUrl(process.env.GOOGLE_REDIRECT_URI?.trim() || '') ||
+    canonicalizeSedifexUrl(process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || '') ||
     (appBase ? new URL(SHARED_CALLBACK_PATH, appBase).toString() : '')
 
   if (!clientId || !clientSecret || !redirectUri) {
