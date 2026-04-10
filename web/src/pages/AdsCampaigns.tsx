@@ -435,7 +435,14 @@ export default function AdsCampaigns() {
           <p>Capture consent before Sedifex starts spending ad budget.</p>
         </div>
 
-        <form onSubmit={handleBillingConfirm} className="ads-campaigns__form-grid" noValidate>
+        <form
+          onSubmit={event => {
+            event.preventDefault()
+            void handleBillingConfirmClick()
+          }}
+          className="ads-campaigns__form-grid"
+          noValidate
+        >
           <label>
             <span>Business legal name</span>
             <input
