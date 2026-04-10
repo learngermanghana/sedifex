@@ -46,13 +46,13 @@ export async function fetchGoogleIntegrationStatus(storeId: string): Promise<Rec
 
 export async function fetchGoogleIntegrationOverview(
   storeId: string,
-  integrations?: GoogleIntegrationKey[],
+  requestedIntegrations?: GoogleIntegrationKey[],
 ): Promise<GoogleIntegrationOverview> {
   const headers = await authHeaders()
   const response = await fetch('/api/google/status', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ storeId, integrations }),
+    body: JSON.stringify({ storeId, integrations: requestedIntegrations }),
   })
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok) {
@@ -60,7 +60,7 @@ export async function fetchGoogleIntegrationOverview(
   }
 
   const rawIntegrations = (payload.integrations ?? {}) as Record<string, unknown>
-  const integrations: Record<GoogleIntegrationKey, { connected: boolean; hasRequiredScope: boolean }> = {
+  const integrationStates: Record<GoogleIntegrationKey, { connected: boolean; hasRequiredScope: boolean }> = {
     business: {
       connected: Boolean((rawIntegrations.business as Record<string, unknown> | undefined)?.connected),
       hasRequiredScope: Boolean(
@@ -85,7 +85,7 @@ export async function fetchGoogleIntegrationOverview(
 
   return {
     connected,
-    integrations,
+    integrations: integrationStates,
     grantedScopes,
   }
 }

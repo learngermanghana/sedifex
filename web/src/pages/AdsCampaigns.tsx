@@ -7,8 +7,10 @@ import {
   pauseOrResumeCampaign,
   saveCampaignBrief,
 } from '../api/googleAdsAutomation'
+import GoogleConnectionStatusCard from '../components/GoogleConnectionStatusCard'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { clearGoogleOAuthQueryState, isReconnectRequiredError, parseGoogleOAuthQueryState } from '../utils/googleOAuthCallback'
 import './AdsCampaigns.css'
 
 type CampaignGoal = 'leads' | 'sales' | 'traffic' | 'calls' | 'awareness'
@@ -174,21 +176,18 @@ export default function AdsCampaigns() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const oauthState = params.get('googleOAuth')
-    const oauthMessage = params.get('message')
-    if (!oauthState) return
+    const queryState = parseGoogleOAuthQueryState(window.location.search)
+    if (!queryState.status) return
 
-    if (oauthState === 'success') {
-      setNotice(oauthMessage || 'Google Ads connected.')
+    if (queryState.status === 'success') {
+      setNotice(queryState.message || 'Google Ads connected.')
+    } else if (isReconnectRequiredError(queryState.message)) {
+      setNotice('Reconnect Google')
     } else {
-      setNotice(oauthMessage || 'Google OAuth failed.')
+      setNotice(queryState.message || 'Google OAuth failed.')
     }
 
-    params.delete('googleOAuth')
-    params.delete('message')
-    const nextQuery = params.toString()
-    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`
+    const nextUrl = clearGoogleOAuthQueryState(window.location.href)
     window.history.replaceState({}, '', nextUrl)
   }, [])
 
@@ -362,6 +361,7 @@ export default function AdsCampaigns() {
 
       {loading ? <p className="ads-campaigns__status">Loading Google Ads workspace…</p> : null}
       {notice ? <p className="ads-campaigns__status">{notice}</p> : null}
+      {storeId ? <GoogleConnectionStatusCard storeId={storeId} currentIntegration="ads" message={notice} /> : null}
 
       <section className="ads-campaigns__section" aria-labelledby="google-connect">
         <div>

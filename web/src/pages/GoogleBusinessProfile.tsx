@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 
 import GoogleBusinessMediaUploader from '../components/GoogleBusinessMediaUploader'
+import GoogleConnectionStatusCard from '../components/GoogleConnectionStatusCard'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useGoogleIntegrationStatus } from '../hooks/useGoogleIntegrationStatus'
+import { clearGoogleOAuthQueryState, parseGoogleOAuthQueryState } from '../utils/googleOAuthCallback'
 import './GoogleShopping.css'
 
 export default function GoogleBusinessProfile() {
@@ -25,20 +27,16 @@ export default function GoogleBusinessProfile() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const oauthState = params.get('googleOAuth')
-    if (!oauthState) return
+    const queryState = parseGoogleOAuthQueryState(window.location.search)
+    if (!queryState.status) return
 
-    if (oauthState === 'success') {
-      setMessage(params.get('message') || 'Google connected successfully.')
+    if (queryState.status === 'success') {
+      setMessage(queryState.message || 'Google connected successfully.')
     } else {
-      setMessage(params.get('message') || 'Google OAuth failed.')
+      setMessage(queryState.message || 'Google OAuth failed.')
     }
 
-    params.delete('googleOAuth')
-    params.delete('message')
-    const nextQuery = params.toString()
-    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`
+    const nextUrl = clearGoogleOAuthQueryState(window.location.href)
     window.history.replaceState({}, '', nextUrl)
   }, [])
 
@@ -63,6 +61,8 @@ export default function GoogleBusinessProfile() {
         </section>
       ) : (
         <>
+          <GoogleConnectionStatusCard storeId={storeId} currentIntegration="business" message={message} />
+
           <section className="google-shopping-panel">
             <h2>{stateTitle}</h2>
             <p>
@@ -78,7 +78,6 @@ export default function GoogleBusinessProfile() {
                 {isStartingOAuth ? 'Connecting…' : buttonLabel}
               </button>
             ) : null}
-            {message ? <p className="google-shopping-panel__hint">{message}</p> : null}
           </section>
 
           {isConnected ? <GoogleBusinessMediaUploader storeId={storeId} /> : null}
