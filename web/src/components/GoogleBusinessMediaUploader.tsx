@@ -9,6 +9,8 @@ import {
 
 type Props = {
   storeId: string
+  onReconnectGoogle?: () => void
+  isReconnectingGoogle?: boolean
 }
 
 type UploadState = 'idle' | 'loading' | 'success' | 'error'
@@ -30,24 +32,40 @@ const CATEGORIES = [
   'ADDITIONAL',
 ] as const
 
+const PHOTO_TYPE_LABELS: Record<(typeof CATEGORIES)[number], string> = {
+  COVER: 'Cover photo',
+  PROFILE: 'Profile photo',
+  LOGO: 'Logo',
+  EXTERIOR: 'Outside your business',
+  INTERIOR: 'Inside your business',
+  PRODUCT: 'Product photo',
+  AT_WORK: 'At work',
+  FOOD_AND_DRINK: 'Food and drink',
+  MENU: 'Menu',
+  COMMON_AREA: 'Common area',
+  ROOMS: 'Rooms',
+  TEAMS: 'Team photo',
+  ADDITIONAL: 'Other photo',
+}
+
 function getLocationMessage(state: LocationState, fallbackMessage: string): string {
   if (state === 'not_connected') {
-    return 'Google Business Profile is not connected for this store. Connect Google first, then try again.'
+    return 'Google Business Profile is not connected. Connect your Google account to upload photos.'
   }
   if (state === 'missing_scope') {
-    return 'Google Business Profile access is missing permission. Reconnect Google and grant Business Profile access.'
+    return 'Google Business Profile permission is missing. Reconnect Google and allow Business Profile access.'
   }
   if (state === 'empty') {
-    return 'No Google Business locations were found for the connected account.'
+    return 'No Google Business locations found. Make sure your Google account is connected and your business profile is available.'
   }
   if (state === 'error') {
-    return fallbackMessage || 'Unable to load Google Business locations right now.'
+    return fallbackMessage || 'We could not load your Google Business locations right now. Please try again.'
   }
 
   return ''
 }
 
-export default function GoogleBusinessMediaUploader({ storeId }: Props) {
+export default function GoogleBusinessMediaUploader({ storeId, onReconnectGoogle, isReconnectingGoogle = false }: Props) {
   const [locations, setLocations] = useState<GoogleBusinessLocationOption[]>([])
   const [selectedLocationKey, setSelectedLocationKey] = useState('')
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('ADDITIONAL')
@@ -126,13 +144,13 @@ export default function GoogleBusinessMediaUploader({ storeId }: Props) {
   async function handleUpload() {
     if (!selectedLocation) {
       setUploadState('error')
-      setUploadMessage('Please choose a location.')
+      setUploadMessage('Please choose a business location.')
       return
     }
 
     if (!file) {
       setUploadState('error')
-      setUploadMessage('Please choose an image file.')
+      setUploadMessage('Please choose a photo to upload.')
       return
     }
 
@@ -154,38 +172,43 @@ export default function GoogleBusinessMediaUploader({ storeId }: Props) {
         uploadedAt: new Date().toISOString(),
       })
       setUploadState('success')
-      setUploadMessage('Image uploaded to Google Business Profile successfully.')
+      setUploadMessage('Your photo was uploaded to Google Business Profile.')
     } catch (error) {
       const parsed = parseGoogleBusinessApiError(error)
       setUploadState('error')
 
       if (parsed.kind === 'not_connected') {
-        setUploadMessage('Google Business Profile is no longer connected. Reconnect Google and try again.')
+        setUploadMessage('Google Business Profile is not connected right now. Reconnect Google and try again.')
         return
       }
 
       if (parsed.kind === 'missing_scope') {
-        setUploadMessage('Google Business Profile permission is missing. Reconnect Google and grant Business Profile access.')
+        setUploadMessage('Google Business Profile permission is missing. Reconnect Google and allow Business Profile access.')
         return
       }
 
-      setUploadMessage(parsed.message || 'Upload failed.')
+      setUploadMessage(parsed.message || 'Photo upload failed. Please try again.')
     }
   }
 
   return (
     <section className="google-shopping-panel" aria-labelledby="google-business-uploader-heading">
-      <h2 id="google-business-uploader-heading">Google Business Profile media upload</h2>
-      <p>Select a location, pick a category, and upload directly to Google Business Profile.</p>
+      <h2 id="google-business-uploader-heading">Upload photos to your business on Google</h2>
+      <p>These photos can appear on your Google business listing in Search and Maps.</p>
+      <p>Use this to add shop photos, logo, cover image, product photos, and more.</p>
+      <p className="google-shopping-page__status">
+        This uploads a photo to your Google Business Profile. It does not create a text post or promotion.
+      </p>
 
       <label>
-        <span>Location</span>
+        <span>Business location</span>
+        <small className="google-shopping-panel__hint">Select the Google business location you want to update.</small>
         <select
           value={selectedLocationKey}
           onChange={(event) => setSelectedLocationKey(event.target.value)}
           disabled={locationState === 'loading' || uploadState === 'loading' || uploadBlocked}
         >
-          {!locations.length && <option value="">No locations available</option>}
+          {!locations.length && <option value="">No business locations available</option>}
           {locations.map((option) => {
             const value = `${option.accountId}:${option.locationId}`
             return (
@@ -198,7 +221,8 @@ export default function GoogleBusinessMediaUploader({ storeId }: Props) {
       </label>
 
       <label>
-        <span>Category</span>
+        <span>Photo type</span>
+        <small className="google-shopping-panel__hint">Choose what kind of photo this is.</small>
         <select
           value={category}
           onChange={(event) => setCategory(event.target.value as (typeof CATEGORIES)[number])}
@@ -206,14 +230,15 @@ export default function GoogleBusinessMediaUploader({ storeId }: Props) {
         >
           {CATEGORIES.map((categoryOption) => (
             <option key={categoryOption} value={categoryOption}>
-              {categoryOption}
+              {PHOTO_TYPE_LABELS[categoryOption]}
             </option>
           ))}
         </select>
       </label>
 
       <label>
-        <span>Image file (JPEG/PNG)</span>
+        <span>Choose photo</span>
+        <small className="google-shopping-panel__hint">Upload a JPG or PNG image.</small>
         <input
           type="file"
           accept="image/jpeg,image/png"
@@ -230,12 +255,24 @@ export default function GoogleBusinessMediaUploader({ storeId }: Props) {
           onClick={handleUpload}
           disabled={uploadState === 'loading' || !file || !selectedLocation || uploadBlocked}
         >
-          {uploadState === 'loading' ? 'Uploading…' : 'Upload image'}
+          {uploadState === 'loading' ? 'Uploading…' : 'Upload photo to Google'}
         </button>
       </div>
 
       {locationState !== 'ready' && locationState !== 'loading' && (
-        <p className="google-shopping-panel__hint">{getLocationMessage(locationState, locationMessage)}</p>
+        <article className="google-shopping-page__status" aria-live="polite">
+          <h3>{locationState === 'empty' ? 'No Google Business locations found.' : 'Google Business setup needed'}</h3>
+          <p>{getLocationMessage(locationState, locationMessage)}</p>
+          {onReconnectGoogle ? (
+            <button type="button" onClick={onReconnectGoogle} disabled={isReconnectingGoogle}>
+              {isReconnectingGoogle
+                ? 'Connecting…'
+                : locationState === 'not_connected'
+                  ? 'Connect Google Business'
+                  : 'Reconnect Google'}
+            </button>
+          ) : null}
+        </article>
       )}
 
       {locationState === 'loading' && <p className="google-shopping-panel__hint">Loading Google Business locations…</p>}
@@ -244,8 +281,8 @@ export default function GoogleBusinessMediaUploader({ storeId }: Props) {
 
       {uploadState === 'success' && uploadedResult && (
         <article className="google-shopping-page__status" aria-live="polite">
-          <h3>Upload complete</h3>
-          <p>Category: {category}</p>
+          <h3>Your photo was uploaded to Google Business Profile.</h3>
+          <p>Photo type: {PHOTO_TYPE_LABELS[category]}</p>
           <p>Uploaded: {new Date(uploadedResult.uploadedAt).toLocaleString()}</p>
           {uploadedResult.thumbnailUrl ? <img src={uploadedResult.thumbnailUrl} alt="Uploaded media thumbnail" className="google-business-thumb" /> : null}
           {uploadedResult.googleUrl ? (
