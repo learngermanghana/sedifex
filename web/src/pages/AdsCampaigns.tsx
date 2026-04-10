@@ -277,6 +277,11 @@ export default function AdsCampaigns() {
     }
   }
 
+  function handleConnectSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void handleConnectClick()
+  }
+
   async function handleBillingConfirmClick() {
     if (!settings.billing.legalName.trim()) {
       setNotice('Enter the business legal name used for billing.')
