@@ -38,10 +38,10 @@ export async function beginGoogleAdsOAuth(input: {
   accountEmail?: string
 }) {
   const headers = await getAuthHeaders()
-  const response = await fetch('/api/google-ads/oauth-start', {
+  const response = await fetch('/api/google/oauth-start', {
     method: 'POST',
     headers,
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, integrations: ['ads'] }),
   })
 
   return parseApiResult<{ url: string }>(response)

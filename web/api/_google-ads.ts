@@ -374,6 +374,7 @@ export async function getGoogleAdsAuthContext(storeId: string): Promise<{
   const snap = await settingsRef.get()
   const data = (snap.data() ?? {}) as Record<string, any>
   const googleAds = (data.integrations?.googleAds ?? {}) as GoogleAdsIntegrationDoc
+  const sharedGoogle = (data.integrations?.googleOAuth ?? {}) as GoogleAdsIntegrationDoc
 
   const customerId = typeof googleAds.customerId === 'string' ? googleAds.customerId.trim() : ''
   const managerId = typeof googleAds.managerId === 'string' ? googleAds.managerId.trim() : ''
@@ -385,6 +386,12 @@ export async function getGoogleAdsAuthContext(storeId: string): Promise<{
   }
   if (!refreshToken && typeof googleAds.refreshToken === 'string') {
     refreshToken = googleAds.refreshToken
+  }
+  if (!accessToken && typeof sharedGoogle.accessToken === 'string') {
+    accessToken = sharedGoogle.accessToken
+  }
+  if (!refreshToken && typeof sharedGoogle.refreshToken === 'string') {
+    refreshToken = sharedGoogle.refreshToken
   }
 
   if (!customerId || !accessToken) {
@@ -403,6 +410,14 @@ export async function getGoogleAdsAuthContext(storeId: string): Promise<{
     await settingsRef.set(
       {
         integrations: {
+          googleOAuth: {
+            accessToken,
+            refreshToken,
+            tokenType: refreshedType,
+            scope: refreshedScope,
+            expiresAt: parseTokenExpiry(refreshed),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
           googleAds: {
             secrets: {
               accessTokenCipher: encryptToken(accessToken),

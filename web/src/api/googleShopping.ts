@@ -48,7 +48,17 @@ async function authedPost<T>(functionName: string, payload: unknown): Promise<T>
 }
 
 export async function startGoogleMerchantOAuth(params: { storeId: string }): Promise<string> {
-  const payload = await authedPost<{ url?: string }>('googleMerchantOAuthStart', params)
+  const token = await getToken()
+  const response = await fetch('/api/google/oauth-start', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ ...params, integrations: ['merchant'] }),
+  })
+  const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string }
+  if (!response.ok) throw new Error(payload.error || 'Unable to start Google Merchant connection right now.')
   if (!payload.url) throw new Error('Unable to start Google Merchant connection right now.')
   return payload.url
 }

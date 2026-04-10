@@ -28,6 +28,7 @@ import { useMemberships, type Membership } from '../hooks/useMemberships'
 import { useToast } from '../components/ToastProvider'
 import { useAuthUser } from '../hooks/useAuthUser'
 import { AccountBillingSection } from '../components/AccountBillingSection'
+import GoogleIntegrationSettings from '../components/GoogleIntegrationSettings'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
 import { buildPromoSlug, normalizePromoSlug } from '../utils/promoSlug'
@@ -2026,6 +2027,8 @@ export default function AccountOverview({
             </div>
             {endpointTestStatus && <p className="account-overview__hint">{endpointTestStatus}</p>}
           </div>
+
+          <GoogleIntegrationSettings storeId={storeId} />
         </section>
       )}
 
