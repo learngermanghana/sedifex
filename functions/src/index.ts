@@ -14,7 +14,14 @@ export {
   googleAdsMetricsSync,
   googleAdsMetricsSyncScheduled,
 } from './googleAds'
-export { googleShoppingSync, googleShoppingSyncScheduled } from './googleShopping'
+export {
+  googleMerchantOAuthStart,
+  googleMerchantOAuthCallback,
+  googleMerchantPendingAccounts,
+  googleMerchantSelectAccount,
+  googleShoppingSync,
+  googleShoppingSyncScheduled,
+} from './googleShopping'
 
 /**
  * SINGLE FIRESTORE INSTANCE

@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1'
-import { FieldValue } from 'firebase-admin/firestore'
+import { randomBytes, createHash } from 'node:crypto'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 
 import { admin, defaultDb as db } from './firestore'
 
@@ -46,7 +47,21 @@ type SyncSummary = {
   errors: Array<{ productId: string; reason: string }>
 }
 
+type PendingMerchantAccount = {
+  id: string
+  displayName: string
+  accountName: string
+}
+
+type ApiUser = {
+  uid: string
+  email: string
+}
+
 const GOOGLE_MERCHANT_API_BASE = 'https://shoppingcontent.googleapis.com/content/v2.1'
+const GOOGLE_OAUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth'
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const GOOGLE_MERCHANT_SCOPES = ['https://www.googleapis.com/auth/content', 'openid', 'email', 'profile']
 const DEFAULT_INTEGRATION_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -58,33 +73,50 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function isLikelyGtin(value: string): boolean {
-  return /^\d{8}(\d{4})?(\d{1})?$/.test(value)
+function normalizeError(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown-error'
 }
 
-function resolveGoogleProductCategory(category: string | null): string {
-  if (!category) return '222'
-  const normalized = category.toLowerCase()
-  if (normalized.includes('shoe') || normalized.includes('cloth') || normalized.includes('fashion')) return '166'
-  if (normalized.includes('food') || normalized.includes('drink')) return '412'
-  if (normalized.includes('phone') || normalized.includes('electronics')) return '293'
-  return '222'
+function setCors(res: functions.Response<any>) {
+  res.set('Access-Control-Allow-Origin', '*')
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
 }
 
-async function requireApiUser(req: functions.https.Request): Promise<{ uid: string; email: string }> {
-  const authHeader = req.headers.authorization
-  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
-    throw new Error('missing-auth')
+function getOAuthClientConfig() {
+  const clientId = process.env.GOOGLE_MERCHANT_CLIENT_ID?.trim() || ''
+  const clientSecret = process.env.GOOGLE_MERCHANT_CLIENT_SECRET?.trim() || ''
+  const redirectUri = process.env.GOOGLE_MERCHANT_REDIRECT_URI?.trim() || ''
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('google-merchant-oauth-config-missing')
   }
 
-  const token = authHeader.slice('Bearer '.length).trim()
-  const decoded = await admin.auth().verifyIdToken(token)
-  if (!decoded.uid) throw new Error('invalid-auth')
+  return { clientId, clientSecret, redirectUri }
+}
 
-  return {
-    uid: decoded.uid,
-    email: typeof decoded.email === 'string' ? decoded.email : '',
+function hashValue(value: string): string {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function parseTokenExpiry(tokenPayload: Record<string, unknown>): Timestamp | null {
+  const expiresInRaw = tokenPayload.expires_in
+  const expiresIn = typeof expiresInRaw === 'number' ? expiresInRaw : Number(expiresInRaw || 0)
+  if (!Number.isFinite(expiresIn) || expiresIn <= 0) return null
+  return Timestamp.fromMillis(Date.now() + expiresIn * 1000)
+}
+
+function tokenExpiryMillis(value: unknown): number {
+  if (!value) return 0
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
   }
+  if (typeof value === 'object') {
+    const candidate = value as { toMillis?: () => number }
+    if (typeof candidate.toMillis === 'function') return candidate.toMillis()
+  }
+  return 0
 }
 
 function extractStoreId(record: Record<string, unknown>): string {
@@ -107,7 +139,27 @@ function extractStoreId(record: Record<string, unknown>): string {
   return ''
 }
 
+async function requireApiUser(req: functions.https.Request): Promise<ApiUser> {
+  const authHeader = req.headers.authorization
+  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    throw new Error('missing-auth')
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim()
+  if (!token) throw new Error('missing-auth')
+
+  const decoded = await admin.auth().verifyIdToken(token)
+  if (!decoded.uid) throw new Error('invalid-auth')
+
+  return {
+    uid: decoded.uid,
+    email: typeof decoded.email === 'string' ? decoded.email : '',
+  }
+}
+
 async function requireStoreMembership(uid: string, storeId: string): Promise<void> {
+  if (!storeId) throw new Error('invalid-store-id')
+
   const membershipSnaps = await db.collection('teamMembers').where('uid', '==', uid).limit(50).get()
   const hasMembership = membershipSnaps.docs.some((docSnap) => {
     const data = asRecord(docSnap.data())
@@ -115,6 +167,341 @@ async function requireStoreMembership(uid: string, storeId: string): Promise<voi
   })
 
   if (!hasMembership) throw new Error('store-access-denied')
+}
+
+function oauthCallbackDoneUrl(params: {
+  ok: boolean
+  message: string
+  storeId?: string
+  connectedMerchantId?: string
+  pendingSelectionId?: string
+  refreshTokenMissing?: boolean
+}) {
+  const appOrigin = process.env.APP_BASE_URL?.trim() || ''
+  if (!appOrigin) return null
+
+  const callbackUrl = new URL('/google-shopping', appOrigin)
+  callbackUrl.searchParams.set('googleMerchantOAuth', params.ok ? 'success' : 'failed')
+  callbackUrl.searchParams.set('message', params.message)
+  if (params.storeId) callbackUrl.searchParams.set('storeId', params.storeId)
+  if (params.connectedMerchantId) callbackUrl.searchParams.set('merchantId', params.connectedMerchantId)
+  if (params.pendingSelectionId) callbackUrl.searchParams.set('pendingSelectionId', params.pendingSelectionId)
+  if (params.refreshTokenMissing) callbackUrl.searchParams.set('refreshTokenMissing', '1')
+  return callbackUrl.toString()
+}
+
+function buildOAuthStartUrl(params: { storeId: string; uid: string }): { url: string; rawState: string } {
+  const { clientId, redirectUri } = getOAuthClientConfig()
+
+  const rawState = Buffer.from(
+    JSON.stringify({
+      nonce: randomBytes(16).toString('hex'),
+      uid: params.uid,
+      storeId: params.storeId,
+      issuedAt: Date.now(),
+    }),
+    'utf8',
+  ).toString('base64url')
+
+  const url = new URL(GOOGLE_OAUTH_BASE)
+  url.searchParams.set('client_id', clientId)
+  url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('scope', GOOGLE_MERCHANT_SCOPES.join(' '))
+  url.searchParams.set('access_type', 'offline')
+  url.searchParams.set('prompt', 'consent')
+  url.searchParams.set('state', rawState)
+
+  return { url: url.toString(), rawState }
+}
+
+async function persistOAuthState(params: { uid: string; storeId: string; rawState: string }) {
+  const stateHash = hashValue(params.rawState)
+  await db.collection('googleMerchantOAuthStates').doc(stateHash).set({
+    uid: params.uid,
+    storeId: params.storeId,
+    createdAt: FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + 10 * 60 * 1000),
+  })
+}
+
+async function consumeOAuthState(rawState: string): Promise<{ uid: string; storeId: string }> {
+  const stateHash = hashValue(rawState)
+  const stateRef = db.collection('googleMerchantOAuthStates').doc(stateHash)
+  const stateSnap = await stateRef.get()
+  if (!stateSnap.exists) throw new Error('invalid-state')
+
+  const stateData = asRecord(stateSnap.data())
+  await stateRef.delete()
+
+  const uid = normalizeString(stateData.uid)
+  const storeId = normalizeString(stateData.storeId)
+  const expiresAt = stateData.expiresAt as Timestamp | undefined
+
+  if (!uid || !storeId || !expiresAt || expiresAt.toMillis() < Date.now()) {
+    throw new Error('expired-state')
+  }
+
+  return { uid, storeId }
+}
+
+async function exchangeCodeForTokens(code: string): Promise<Record<string, unknown>> {
+  const { clientId, clientSecret, redirectUri } = getOAuthClientConfig()
+  const body = new URLSearchParams({
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  })
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
+  if (!response.ok) {
+    throw new Error(`token-exchange-failed:${normalizeString(payload.error) || response.status}`)
+  }
+
+  return payload
+}
+
+async function refreshGoogleMerchantAccessToken(refreshToken: string): Promise<Record<string, unknown>> {
+  const { clientId, clientSecret } = getOAuthClientConfig()
+
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: 'refresh_token',
+  })
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
+  if (!response.ok) {
+    throw new Error(`token-refresh-failed:${normalizeString(payload.error) || response.status}`)
+  }
+
+  return payload
+}
+
+async function listMerchantAccounts(accessToken: string): Promise<PendingMerchantAccount[]> {
+  const authInfoRes = await fetch(`${GOOGLE_MERCHANT_API_BASE}/accounts/authinfo`, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+  })
+
+  const authInfoPayload = (await authInfoRes.json().catch(() => ({}))) as Record<string, unknown>
+  if (!authInfoRes.ok) {
+    throw new Error(`merchant-authinfo-failed:${normalizeString(authInfoPayload.error) || authInfoRes.status}`)
+  }
+
+  const identifiers = Array.isArray(authInfoPayload.accountIdentifiers)
+    ? authInfoPayload.accountIdentifiers
+    : []
+
+  const merchantIds = Array.from(
+    new Set(
+      identifiers
+        .map((item) => {
+          const entry = asRecord(item)
+          const directMerchantId = normalizeString(entry.merchantId)
+          if (directMerchantId) return directMerchantId
+          const nested = asRecord(entry.accountIdentifier)
+          return normalizeString(nested.merchantId)
+        })
+        .filter(Boolean),
+    ),
+  )
+
+  const accounts = await Promise.all(
+    merchantIds.map(async (merchantId) => {
+      const detailsRes = await fetch(`${GOOGLE_MERCHANT_API_BASE}/${merchantId}/accounts/${merchantId}`, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+      })
+
+      const detailsPayload = (await detailsRes.json().catch(() => ({}))) as Record<string, unknown>
+      const accountName = normalizeString(detailsPayload.name)
+      const websiteUrl = normalizeString(detailsPayload.websiteUrl)
+      const displayName = accountName || websiteUrl || `Merchant account ${merchantId}`
+
+      return {
+        id: merchantId,
+        displayName,
+        accountName,
+      }
+    }),
+  )
+
+  return accounts
+}
+
+async function saveGoogleMerchantConnection(params: {
+  storeId: string
+  uid: string
+  merchantId: string
+  tokenPayload: Record<string, unknown>
+}) {
+  const settingsRef = db.collection('storeSettings').doc(params.storeId)
+  const settingsSnap = await settingsRef.get()
+  const settingsData = asRecord(settingsSnap.data())
+  const googleShopping = asRecord(settingsData.googleShopping)
+  const catalogSync = asRecord(googleShopping.catalogSync)
+
+  const accessToken = normalizeString(params.tokenPayload.access_token)
+  const refreshToken = normalizeString(params.tokenPayload.refresh_token)
+  const tokenType = normalizeString(params.tokenPayload.token_type)
+  const scope = normalizeString(params.tokenPayload.scope)
+  const tokenExpiry = parseTokenExpiry(params.tokenPayload)
+
+  const existingIntegrationApiKey = normalizeString(catalogSync.integrationApiKey)
+  const existingIntegrationBaseUrl = normalizeString(catalogSync.integrationBaseUrl)
+  const existingAutoSyncEnabled = catalogSync.autoSyncEnabled === false ? false : true
+
+  const catalogSyncUpdate: Record<string, unknown> = {
+    accessToken,
+    tokenType: tokenType || 'Bearer',
+    tokenScope: scope,
+    tokenUpdatedAt: FieldValue.serverTimestamp(),
+    autoSyncEnabled: existingAutoSyncEnabled,
+    integrationBaseUrl: existingIntegrationBaseUrl || DEFAULT_INTEGRATION_BASE_URL,
+    integrationApiKey: existingIntegrationApiKey,
+    ...(tokenExpiry ? { tokenExpiry } : {}),
+  }
+
+  if (refreshToken) {
+    catalogSyncUpdate.refreshToken = refreshToken
+  }
+
+  await settingsRef.set(
+    {
+      googleShopping: {
+        connection: {
+          connected: true,
+          merchantId: params.merchantId,
+          connectedAt: FieldValue.serverTimestamp(),
+          connectedByUid: params.uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        catalogSync: catalogSyncUpdate,
+        status: {
+          state: 'idle',
+          message: 'Google Merchant is connected and ready for sync.',
+          updatedAt: FieldValue.serverTimestamp(),
+          refreshTokenMissing: !refreshToken,
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    },
+    { merge: true },
+  )
+
+  return { refreshTokenStored: Boolean(refreshToken) }
+}
+
+async function persistPendingSelection(params: {
+  uid: string
+  storeId: string
+  accounts: PendingMerchantAccount[]
+  tokenPayload: Record<string, unknown>
+}): Promise<string> {
+  const pendingId = randomBytes(20).toString('hex')
+  await db.collection('googleMerchantPendingSelections').doc(pendingId).set({
+    uid: params.uid,
+    storeId: params.storeId,
+    accounts: params.accounts,
+    tokenPayload: params.tokenPayload,
+    createdAt: FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + 10 * 60 * 1000),
+  })
+  return pendingId
+}
+
+async function resolveGoogleMerchantAuth(storeId: string): Promise<{ accessToken: string }> {
+  const settingsRef = db.collection('storeSettings').doc(storeId)
+  const settingsSnap = await settingsRef.get()
+  const settingsData = asRecord(settingsSnap.data())
+  const googleShopping = asRecord(settingsData.googleShopping)
+  const connection = asRecord(googleShopping.connection)
+  const catalogSync = asRecord(googleShopping.catalogSync)
+
+  const merchantId = normalizeString(connection.merchantId)
+  if (connection.connected !== true || !merchantId) {
+    throw new Error('merchant-not-connected')
+  }
+
+  let accessToken = normalizeString(catalogSync.accessToken)
+  const refreshToken = normalizeString(catalogSync.refreshToken)
+  const tokenExpiryRaw = catalogSync.tokenExpiry
+
+  const expiryMillis = tokenExpiryMillis(tokenExpiryRaw)
+  const tokenExpiringSoon = expiryMillis > 0 && expiryMillis <= Date.now() + 30_000
+
+  if (!accessToken || tokenExpiringSoon) {
+    if (!refreshToken) {
+      throw new Error('missing-merchant-refresh-token')
+    }
+
+    const refreshed = await refreshGoogleMerchantAccessToken(refreshToken)
+    const refreshedAccessToken = normalizeString(refreshed.access_token)
+    if (!refreshedAccessToken) {
+      throw new Error('token-refresh-missing-access-token')
+    }
+
+    accessToken = refreshedAccessToken
+    const refreshedTokenType = normalizeString(refreshed.token_type)
+    const refreshedScope = normalizeString(refreshed.scope)
+    const refreshedTokenExpiry = parseTokenExpiry(refreshed)
+
+    await settingsRef.set(
+      {
+        googleShopping: {
+          catalogSync: {
+            accessToken: refreshedAccessToken,
+            tokenType: refreshedTokenType || 'Bearer',
+            tokenScope: refreshedScope,
+            tokenUpdatedAt: FieldValue.serverTimestamp(),
+            ...(refreshedTokenExpiry ? { tokenExpiry: refreshedTokenExpiry } : {}),
+          },
+          status: {
+            updatedAt: FieldValue.serverTimestamp(),
+            refreshTokenMissing: false,
+          },
+        },
+      },
+      { merge: true },
+    )
+  }
+
+  return { accessToken }
+}
+
+function isLikelyGtin(value: string): boolean {
+  return /^\d{8}(\d{4})?(\d{1})?$/.test(value)
+}
+
+function resolveGoogleProductCategory(category: string | null): string {
+  if (!category) return '222'
+  const normalized = category.toLowerCase()
+  if (normalized.includes('shoe') || normalized.includes('cloth') || normalized.includes('fashion')) return '166'
+  if (normalized.includes('food') || normalized.includes('drink')) return '412'
+  if (normalized.includes('phone') || normalized.includes('electronics')) return '293'
+  return '222'
 }
 
 async function fetchIntegrationProducts(params: {
@@ -138,7 +525,7 @@ async function fetchIntegrationProducts(params: {
   if (!response.ok) throw new Error(normalizeString(payload.error) || `integration-fetch-failed:${response.status}`)
 
   const products = Array.isArray(payload.products) ? payload.products : []
-  return products.map(product => {
+  return products.map((product) => {
     const entry = asRecord(product)
     return {
       id: normalizeString(entry.id),
@@ -296,7 +683,7 @@ async function runSync(params: {
   }
 
   if (params.mode === 'full') {
-    const currentIds = new Set(products.map(product => product.id))
+    const currentIds = new Set(products.map((product) => product.id))
     const mappingSnap = await mapCollection.limit(1000).get()
     for (const mapped of mappingSnap.docs) {
       if (currentIds.has(mapped.id)) continue
@@ -324,11 +711,325 @@ async function runSync(params: {
   }
 }
 
-function setCors(res: functions.Response<any>) {
-  res.set('Access-Control-Allow-Origin', '*')
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-}
+export const googleMerchantOAuthStart = functions.https.onRequest(async (req, res) => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  try {
+    const user = await requireApiUser(req)
+    const body = asRecord(req.body)
+    const storeId = normalizeString(body.storeId)
+    if (!storeId) {
+      res.status(400).json({ error: 'missing-store-id' })
+      return
+    }
+
+    await requireStoreMembership(user.uid, storeId)
+
+    const { url, rawState } = buildOAuthStartUrl({ storeId, uid: user.uid })
+    await persistOAuthState({ uid: user.uid, storeId, rawState })
+
+    functions.logger.info('[googleMerchantOAuthStart] oauth start prepared', { uid: user.uid, storeId })
+    res.status(200).json({ url })
+  } catch (error) {
+    const message = normalizeError(error)
+    functions.logger.error('[googleMerchantOAuthStart] failed', { message })
+
+    if (message === 'missing-auth' || message === 'invalid-auth') {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+    if (message === 'store-access-denied') {
+      res.status(403).json({ error: 'forbidden' })
+      return
+    }
+
+    res.status(400).json({ error: message })
+  }
+})
+
+export const googleMerchantOAuthCallback = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  try {
+    getOAuthClientConfig()
+
+    const state = normalizeString(req.query.state)
+    const code = normalizeString(req.query.code)
+    const oauthError = normalizeString(req.query.error)
+
+    if (oauthError) {
+      const target = oauthCallbackDoneUrl({ ok: false, message: oauthError })
+      if (target) {
+        res.redirect(302, target)
+        return
+      }
+      res.status(400).json({ error: oauthError })
+      return
+    }
+
+    if (!state || !code) {
+      res.status(400).json({ error: 'missing-state-or-code' })
+      return
+    }
+
+    const statePayload = await consumeOAuthState(state)
+    const tokenPayload = await exchangeCodeForTokens(code)
+    const accessToken = normalizeString(tokenPayload.access_token)
+    if (!accessToken) throw new Error('missing-access-token')
+
+    const accounts = await listMerchantAccounts(accessToken)
+    functions.logger.info('[googleMerchantOAuthCallback] merchant accounts fetched', {
+      storeId: statePayload.storeId,
+      uid: statePayload.uid,
+      count: accounts.length,
+    })
+
+    if (accounts.length === 0) {
+      throw new Error('no-merchant-accounts-found')
+    }
+
+    if (accounts.length === 1) {
+      const result = await saveGoogleMerchantConnection({
+        storeId: statePayload.storeId,
+        uid: statePayload.uid,
+        merchantId: accounts[0].id,
+        tokenPayload,
+      })
+
+      functions.logger.info('[googleMerchantOAuthCallback] merchant auto-connected', {
+        storeId: statePayload.storeId,
+        merchantId: accounts[0].id,
+        refreshTokenStored: result.refreshTokenStored,
+      })
+
+      const target = oauthCallbackDoneUrl({
+        ok: true,
+        message: 'Google Merchant connected successfully.',
+        storeId: statePayload.storeId,
+        connectedMerchantId: accounts[0].id,
+        refreshTokenMissing: !result.refreshTokenStored,
+      })
+
+      if (target) {
+        res.redirect(302, target)
+        return
+      }
+
+      res.status(200).json({ ok: true, mode: 'auto-connected', storeId: statePayload.storeId, merchantId: accounts[0].id })
+      return
+    }
+
+    const pendingSelectionId = await persistPendingSelection({
+      uid: statePayload.uid,
+      storeId: statePayload.storeId,
+      accounts,
+      tokenPayload,
+    })
+
+    const target = oauthCallbackDoneUrl({
+      ok: true,
+      message: 'Multiple merchant accounts found. Choose one to finish setup.',
+      storeId: statePayload.storeId,
+      pendingSelectionId,
+      refreshTokenMissing: !normalizeString(tokenPayload.refresh_token),
+    })
+
+    if (target) {
+      res.redirect(302, target)
+      return
+    }
+
+    res.status(200).json({
+      ok: true,
+      mode: 'select-account',
+      storeId: statePayload.storeId,
+      pendingSelectionId,
+      accounts,
+    })
+  } catch (error) {
+    const message = normalizeError(error)
+    functions.logger.error('[googleMerchantOAuthCallback] failed', { message })
+
+    const target = oauthCallbackDoneUrl({ ok: false, message })
+    if (target) {
+      res.redirect(302, target)
+      return
+    }
+
+    res.status(400).json({ error: message })
+  }
+})
+
+export const googleMerchantPendingAccounts = functions.https.onRequest(async (req, res) => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  try {
+    const user = await requireApiUser(req)
+    const body = asRecord(req.body)
+    const pendingSelectionId = normalizeString(body.pendingSelectionId)
+    if (!pendingSelectionId) {
+      res.status(400).json({ error: 'missing-pending-selection-id' })
+      return
+    }
+
+    const pendingRef = db.collection('googleMerchantPendingSelections').doc(pendingSelectionId)
+    const pendingSnap = await pendingRef.get()
+    if (!pendingSnap.exists) {
+      res.status(404).json({ error: 'pending-selection-not-found' })
+      return
+    }
+
+    const pendingData = asRecord(pendingSnap.data())
+    if (normalizeString(pendingData.uid) !== user.uid) {
+      res.status(403).json({ error: 'forbidden' })
+      return
+    }
+
+    const expiresAt = pendingData.expiresAt as Timestamp | undefined
+    if (!expiresAt || expiresAt.toMillis() < Date.now()) {
+      await pendingRef.delete()
+      res.status(410).json({ error: 'pending-selection-expired' })
+      return
+    }
+
+    const accountsRaw = Array.isArray(pendingData.accounts) ? pendingData.accounts : []
+    const accounts = accountsRaw.map((entry) => {
+      const item = asRecord(entry)
+      return {
+        id: normalizeString(item.id),
+        displayName: normalizeString(item.displayName),
+        accountName: normalizeString(item.accountName),
+      }
+    }).filter((entry) => entry.id)
+
+    functions.logger.info('[googleMerchantPendingAccounts] loaded', { uid: user.uid, pendingSelectionId, count: accounts.length })
+
+    res.status(200).json({
+      pendingSelectionId,
+      storeId: normalizeString(pendingData.storeId),
+      accounts,
+      refreshTokenMissing: !normalizeString(asRecord(pendingData.tokenPayload).refresh_token),
+    })
+  } catch (error) {
+    const message = normalizeError(error)
+    functions.logger.error('[googleMerchantPendingAccounts] failed', { message })
+
+    if (message === 'missing-auth' || message === 'invalid-auth') {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+
+    res.status(400).json({ error: message })
+  }
+})
+
+export const googleMerchantSelectAccount = functions.https.onRequest(async (req, res) => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  try {
+    const user = await requireApiUser(req)
+    const body = asRecord(req.body)
+    const pendingSelectionId = normalizeString(body.pendingSelectionId)
+    const merchantId = normalizeString(body.merchantId)
+
+    if (!pendingSelectionId || !merchantId) {
+      res.status(400).json({ error: 'missing-selection-payload' })
+      return
+    }
+
+    const pendingRef = db.collection('googleMerchantPendingSelections').doc(pendingSelectionId)
+    const pendingSnap = await pendingRef.get()
+    if (!pendingSnap.exists) {
+      res.status(404).json({ error: 'pending-selection-not-found' })
+      return
+    }
+
+    const pendingData = asRecord(pendingSnap.data())
+    const storeId = normalizeString(pendingData.storeId)
+    const pendingUid = normalizeString(pendingData.uid)
+    if (pendingUid !== user.uid) {
+      res.status(403).json({ error: 'forbidden' })
+      return
+    }
+
+    const expiresAt = pendingData.expiresAt as Timestamp | undefined
+    if (!expiresAt || expiresAt.toMillis() < Date.now()) {
+      await pendingRef.delete()
+      res.status(410).json({ error: 'pending-selection-expired' })
+      return
+    }
+
+    await requireStoreMembership(user.uid, storeId)
+
+    const accountsRaw = Array.isArray(pendingData.accounts) ? pendingData.accounts : []
+    const matched = accountsRaw.some((entry) => normalizeString(asRecord(entry).id) === merchantId)
+    if (!matched) {
+      res.status(400).json({ error: 'invalid-merchant-selection' })
+      return
+    }
+
+    const tokenPayload = asRecord(pendingData.tokenPayload)
+    const result = await saveGoogleMerchantConnection({
+      storeId,
+      uid: user.uid,
+      merchantId,
+      tokenPayload,
+    })
+
+    await pendingRef.delete()
+
+    functions.logger.info('[googleMerchantSelectAccount] merchant selected and saved', {
+      uid: user.uid,
+      storeId,
+      merchantId,
+      refreshTokenStored: result.refreshTokenStored,
+    })
+
+    res.status(200).json({ ok: true, merchantId, refreshTokenMissing: !result.refreshTokenStored })
+  } catch (error) {
+    const message = normalizeError(error)
+    functions.logger.error('[googleMerchantSelectAccount] failed', { message })
+
+    if (message === 'missing-auth' || message === 'invalid-auth') {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+
+    if (message === 'store-access-denied') {
+      res.status(403).json({ error: 'forbidden' })
+      return
+    }
+
+    res.status(400).json({ error: message })
+  }
+})
 
 export const googleShoppingSync = functions.https.onRequest(async (req, res) => {
   setCors(res)
@@ -360,7 +1061,6 @@ export const googleShoppingSync = functions.https.onRequest(async (req, res) => 
     const catalogSync = asRecord(googleShopping.catalogSync)
 
     const merchantId = normalizeString(connection.merchantId)
-    const accessToken = normalizeString(catalogSync.accessToken)
     const integrationApiKey = normalizeString(catalogSync.integrationApiKey)
     const integrationBaseUrl = normalizeString(catalogSync.integrationBaseUrl)
 
@@ -368,14 +1068,12 @@ export const googleShoppingSync = functions.https.onRequest(async (req, res) => 
       res.status(400).json({ error: 'merchant-not-connected' })
       return
     }
-    if (!accessToken) {
-      res.status(400).json({ error: 'missing-merchant-access-token' })
-      return
-    }
     if (!integrationApiKey) {
       res.status(400).json({ error: 'missing-integration-api-key' })
       return
     }
+
+    const authContext = await resolveGoogleMerchantAuth(storeId)
 
     await settingsRef.set(
       {
@@ -391,7 +1089,14 @@ export const googleShoppingSync = functions.https.onRequest(async (req, res) => 
       { merge: true },
     )
 
-    const summary = await runSync({ storeId, mode, merchantId, accessToken, integrationApiKey, integrationBaseUrl })
+    const summary = await runSync({
+      storeId,
+      mode,
+      merchantId,
+      accessToken: authContext.accessToken,
+      integrationApiKey,
+      integrationBaseUrl,
+    })
 
     const statusMessage =
       summary.errors.length > 0 ? `Sync completed with ${summary.errors.length} issue(s).` : 'Sync completed successfully.'
@@ -400,7 +1105,7 @@ export const googleShoppingSync = functions.https.onRequest(async (req, res) => 
     if (summary.errors.length > 0) {
       const tasksRef = settingsRef.collection('googleShoppingFixTasks')
       await Promise.all(
-        summary.errors.slice(0, 100).map(error =>
+        summary.errors.slice(0, 100).map((error) =>
           tasksRef.doc(error.productId).set(
             {
               productId: error.productId,
@@ -416,7 +1121,8 @@ export const googleShoppingSync = functions.https.onRequest(async (req, res) => 
 
     res.status(200).json({ ok: true, summary })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'sync-failed'
+    const message = normalizeError(error)
+    functions.logger.error('[googleShoppingSync] failed', { message })
     res.status(500).json({ error: message })
   }
 })
@@ -435,20 +1141,20 @@ export const googleShoppingSyncScheduled = functions.pubsub.schedule('every 30 m
     const catalogSync = asRecord(googleShopping.catalogSync)
 
     const merchantId = normalizeString(connection.merchantId)
-    const accessToken = normalizeString(catalogSync.accessToken)
     const integrationApiKey = normalizeString(catalogSync.integrationApiKey)
     const integrationBaseUrl = normalizeString(catalogSync.integrationBaseUrl)
 
-    if (connection.connected !== true || !merchantId || !accessToken || !integrationApiKey) {
+    if (connection.connected !== true || !merchantId || !integrationApiKey) {
       continue
     }
 
     try {
+      const authContext = await resolveGoogleMerchantAuth(storeId)
       const summary = await runSync({
         storeId,
         mode: 'incremental',
         merchantId,
-        accessToken,
+        accessToken: authContext.accessToken,
         integrationApiKey,
         integrationBaseUrl,
       })
