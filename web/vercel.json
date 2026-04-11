@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/google-business/locations",
+      "destination": "https://us-central1-sedifex-web.cloudfunctions.net/googleBusinessLocations"
+    },
+    {
       "source": "/((?!api/|assets/|.*\\..*).*)",
       "destination": "/index.html"
     }
