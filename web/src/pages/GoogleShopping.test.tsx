@@ -113,6 +113,42 @@ describe('GoogleShopping', () => {
     expect(startOAuth).toHaveBeenCalledTimes(1)
   })
 
+  it('restarts merchant OAuth when no pending account list is available', async () => {
+    const startOAuth = vi.fn()
+    mockUseGoogleIntegrationStatus.mockReturnValue({
+      isLoading: false,
+      isStartingOAuth: false,
+      hasGoogleConnection: true,
+      hasRequiredScope: true,
+      stateTitle: '2) Choose merchant account',
+      merchant: {
+        ...baseMerchant,
+        state: 'merchant_account_not_selected',
+        googleConnected: true,
+        hasMerchantScope: true,
+      },
+      error: null,
+      startOAuth,
+    })
+
+    mockOnSnapshot.mockImplementation((_docRef, callback) => {
+      callback({ data: () => ({ googleShopping: { connection: { connected: false } } }) })
+      return vi.fn()
+    })
+
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <GoogleShopping />
+      </MemoryRouter>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: /choose merchant account/i }))
+
+    expect(startOAuth).toHaveBeenCalledTimes(1)
+  })
+
+
   it('runs a full catalog sync from the sync step', async () => {
     mockUseGoogleIntegrationStatus.mockReturnValue({
       isLoading: false,

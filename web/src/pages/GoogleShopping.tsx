@@ -50,7 +50,6 @@ const STEP_LABELS: Record<WizardStep, string> = {
 
 export default function GoogleShopping() {
   const { storeId } = useActiveStore()
-  console.log("STORE ID:", storeId)
   const [step, setStep] = useState<WizardStep>('connect')
   const [integrationApiKey, setIntegrationApiKey] = useState('')
   const [integrationBaseUrl, setIntegrationBaseUrl] = useState(
@@ -301,17 +300,14 @@ export default function GoogleShopping() {
       }
     }
     if (merchant.state === 'merchant_account_not_selected') {
+      const hasPendingSelection = Boolean(pendingSelectionId) || pendingAccounts.length > 0
       return {
         title: 'Choose your Merchant Center account',
-        helper: 'Step 2: choose the Merchant Center account that Sedifex should sync to.',
-        // Always present a consistent call‑to‑action label. Even when there is only
-        // one pending account, the user should be able to explicitly confirm
-        // selection in the account step rather than being sent through OAuth again.
+        helper: hasPendingSelection
+          ? 'Step 2: choose the Merchant Center account that Sedifex should sync to.'
+          : 'We need to reload your Merchant accounts before you can choose one.',
         cta: 'Choose Merchant account',
-        // Instead of re‑initiating the OAuth flow when there is a single pending
-        // account, always take the user to the account selection step. The UI
-        // will display the available account(s) and allow confirmation.
-        onClick: () => setStep('account'),
+        onClick: hasPendingSelection ? () => setStep('account') : connectGoogleMerchant,
       }
     }
     if (merchant.state === 'refresh_token_missing') {
@@ -338,7 +334,7 @@ export default function GoogleShopping() {
       cta: 'Sync products',
       onClick: () => setStep('sync'),
     }
-  }, [merchant.state, pendingAccounts.length])
+  }, [merchant.state, pendingSelectionId, pendingAccounts.length, connectGoogleMerchant])
 
   const currentSummary = summary
   const hasPersistedStatus = Boolean(persistedStatus?.lastRunAt)
