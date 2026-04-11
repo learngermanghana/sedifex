@@ -77,8 +77,11 @@ vi.mock('../../controllers/dataDeletion', () => ({
 }))
 
 const deleteUserMock = vi.fn()
+const verifyBeforeUpdateEmailMock = vi.fn()
 vi.mock('firebase/auth', () => ({
   deleteUser: (...args: Parameters<typeof deleteUserMock>) => deleteUserMock(...args),
+  verifyBeforeUpdateEmail: (...args: Parameters<typeof verifyBeforeUpdateEmailMock>) =>
+    verifyBeforeUpdateEmailMock(...args),
 }))
 
 const httpsCallableMock = vi.fn()
@@ -140,6 +143,7 @@ describe('AccountOverview', () => {
     serverTimestampMock?.mockReset()
     deleteWorkspaceDataMock.mockReset()
     deleteUserMock.mockReset()
+    verifyBeforeUpdateEmailMock.mockReset()
     httpsCallableMock.mockReset()
 
     mockUseActiveStore.mockReturnValue({ storeId: 'store-123', isLoading: false, error: null })
@@ -201,6 +205,7 @@ describe('AccountOverview', () => {
       ],
     })
     httpsCallableMock.mockReturnValue(async () => ({ data: { keys: [] } }))
+    verifyBeforeUpdateEmailMock.mockResolvedValue(undefined)
   })
 
   it('shows an edit control for owners when roster data is available', async () => {
@@ -324,6 +329,10 @@ describe('AccountOverview', () => {
     })
     expect(payload.updatedAt?.toDate).toBeInstanceOf(Function)
     expect(options).toEqual({ merge: true })
+    expect(verifyBeforeUpdateEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'owner@example.com' }),
+      'hello@sedifex.com',
+    )
     expect(mockPublish).toHaveBeenCalledWith({
       message: 'Workspace details updated.',
       tone: 'success',

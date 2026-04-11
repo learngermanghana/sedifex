@@ -21,7 +21,7 @@ import {
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import { deleteUser } from 'firebase/auth'
+import { deleteUser, verifyBeforeUpdateEmail } from 'firebase/auth'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships, type Membership } from '../hooks/useMemberships'
@@ -747,13 +747,15 @@ export default function AccountOverview({
       setIsSavingProfile(true)
       const updatedAt = Timestamp.now()
       const ref = doc(db, 'stores', storeId)
+      const normalizedDraftEmail = normalizeInput(profileDraft.email)?.toLowerCase() ?? null
+      const normalizedCurrentUserEmail = user?.email?.trim().toLowerCase() ?? null
 
       const payload = {
         displayName: normalizeInput(profileDraft.displayName),
         name: normalizeInput(profileDraft.displayName),
-        email: normalizeInput(profileDraft.email),
+        email: normalizedDraftEmail,
         // ✅ keep ownerEmail in sync so billing can always use it
-        ownerEmail: normalizeInput(profileDraft.email),
+        ownerEmail: normalizedDraftEmail,
         phone: normalizeInput(normalizeGhanaPhoneE164(profileDraft.phone)),
         whatsappNumber: normalizeInput(normalizeGhanaPhoneDigits(profileDraft.phone)),
         addressLine1: normalizeInput(profileDraft.addressLine1),
@@ -768,6 +770,28 @@ export default function AccountOverview({
       }
 
       await setDoc(ref, payload, { merge: true })
+
+      if (
+        user &&
+        normalizedDraftEmail &&
+        normalizedDraftEmail !== normalizedCurrentUserEmail
+      ) {
+        try {
+          await verifyBeforeUpdateEmail(user, normalizedDraftEmail)
+          publish({
+            message:
+              'Verification sent to your new email. Confirm it before your next sign in with the new address.',
+            tone: 'info',
+          })
+        } catch (authError) {
+          console.error('[account] Failed to start auth email update', authError)
+          publish({
+            message:
+              'Workspace email updated, but login email could not be changed now. Please re-login and try again.',
+            tone: 'warning',
+          })
+        }
+      }
 
       setProfile(current =>
         current
