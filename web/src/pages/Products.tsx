@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   addDoc,
   collection,
@@ -351,6 +351,7 @@ export default function Products() {
   const { preferences } = useStorePreferences(activeStoreId)
   const { billing } = useStoreBilling()
   const { publish } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [products, setProducts] = useState<Product[]>([])
   const [sales, setSales] = useState<SaleRecord[]>([])
@@ -960,6 +961,30 @@ export default function Products() {
     setEditImageFileInput(null)
     setEditImageUploadError(null)
   }
+
+
+  useEffect(() => {
+    const searchQuery = searchParams.get('search')
+    if (searchQuery && searchText !== searchQuery) {
+      setActiveTab('search')
+      setSearchText(searchQuery)
+    }
+  }, [searchParams, searchText])
+
+  useEffect(() => {
+    const editProductId = searchParams.get('edit')
+    if (!editProductId || !canManageProducts || products.length === 0) return
+
+    const target = products.find((product) => product.id === editProductId)
+    if (!target) return
+
+    startEditing(target)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('edit')
+      return next
+    })
+  }, [canManageProducts, products, searchParams, setSearchParams])
 
   function toggleExpandedProduct(productId: string) {
     setExpandedProductIds(prev => {

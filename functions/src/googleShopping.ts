@@ -727,7 +727,25 @@ async function deleteMerchantProduct(params: { merchantId: string; accessToken: 
 }
 
 async function persistSyncStatus(storeId: string, summary: SyncSummary, state: 'success' | 'error', message: string) {
-  await db.collection('storeSettings').doc(storeId).set(
+  const settingsRef = db.collection('storeSettings').doc(storeId)
+  const snapshot = await settingsRef.get()
+  const settingsData = asRecord(snapshot.data())
+  const googleShopping = asRecord(settingsData.googleShopping)
+  const existingHistory = Array.isArray(googleShopping.syncHistory) ? googleShopping.syncHistory : []
+
+  const nextEntry = {
+    runAt: new Date().toISOString(),
+    mode: summary.mode,
+    state,
+    createdOrUpdated: summary.createdOrUpdated,
+    removed: summary.removed,
+    disapproved: summary.disapproved,
+    errorCount: summary.errors.length,
+  }
+
+  const nextHistory = [nextEntry, ...existingHistory].slice(0, 10)
+
+  await settingsRef.set(
     {
       googleShopping: {
         status: {
@@ -741,6 +759,7 @@ async function persistSyncStatus(storeId: string, summary: SyncSummary, state: '
           outOfStockMismatchCount: 0,
           message,
         },
+        syncHistory: nextHistory,
       },
     },
     { merge: true },

@@ -54,10 +54,22 @@
   background: #f9fafb;
 }
 
-.google-connect-card.is-active .google-connect-card__status {
-  border-color: #111827;
-  color: #111827;
-  background: #f3f4f6;
+.google-connect-card__status--connected {
+  border-color: #86efac;
+  color: #166534;
+  background: #f0fdf4;
+}
+
+.google-connect-card__status--needs-permission {
+  border-color: #fde68a;
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.google-connect-card__status--action-required {
+  border-color: #fecaca;
+  color: #991b1b;
+  background: #fef2f2;
 }
 
 .google-connect-card p {

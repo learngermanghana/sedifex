@@ -1,0 +1,31 @@
+.google-business-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.google-business-page__header p {
+  color: #4b5563;
+}
+
+.google-business-page__eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #0369a1;
+}
+
+.google-business-page__back-link {
+  width: fit-content;
+  color: #0f766e;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.google-business-page__back-link:hover {
+  text-decoration: underline;
+}

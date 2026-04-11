@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { doc, onSnapshot } from 'firebase/firestore'
 
 import {
@@ -20,6 +21,24 @@ type WizardStep = 'connect' | 'map' | 'fix' | 'status'
 type GoogleShoppingConnection = {
   connected: boolean
   merchantId: string
+}
+
+type GoogleShoppingStatusSnapshot = {
+  state: 'idle' | 'running' | 'success' | 'error'
+  message: string
+  lastRunAt: string
+  lastSuccessfulAt: string
+  errorCount: number
+}
+
+type GoogleShoppingHistoryEntry = {
+  runAt: string
+  mode: 'full' | 'incremental'
+  state: 'success' | 'error'
+  createdOrUpdated: number
+  removed: number
+  disapproved: number
+  errorCount: number
 }
 
 const STEP_LABELS: Record<WizardStep, string> = {
@@ -45,13 +64,14 @@ export default function GoogleShopping() {
   const [pendingAccounts, setPendingAccounts] = useState<GoogleMerchantAccount[]>([])
   const [selectedMerchantId, setSelectedMerchantId] = useState('')
   const [connection, setConnection] = useState<GoogleShoppingConnection>({ connected: false, merchantId: '' })
+  const [persistedStatus, setPersistedStatus] = useState<GoogleShoppingStatusSnapshot | null>(null)
+  const [syncHistory, setSyncHistory] = useState<GoogleShoppingHistoryEntry[]>([])
   const {
     isLoading: oauthStatusLoading,
     isStartingOAuth,
     hasGoogleConnection,
     hasRequiredScope,
     isConnected,
-    buttonLabel,
     stateTitle,
     error: oauthError,
     startOAuth,
@@ -105,11 +125,45 @@ export default function GoogleShopping() {
       const googleShopping = (data?.googleShopping ?? {}) as Record<string, any>
       const connectionRecord = (googleShopping.connection ?? {}) as Record<string, any>
       const catalogSync = (googleShopping.catalogSync ?? {}) as Record<string, any>
+      const statusSnapshot = (googleShopping.status ?? {}) as Record<string, any>
+      const history = Array.isArray(googleShopping.syncHistory) ? googleShopping.syncHistory : []
 
       setConnection({
         connected: connectionRecord.connected === true,
         merchantId: typeof connectionRecord.merchantId === 'string' ? connectionRecord.merchantId : '',
       })
+
+      setPersistedStatus({
+        state:
+          statusSnapshot.state === 'running' ||
+          statusSnapshot.state === 'success' ||
+          statusSnapshot.state === 'error'
+            ? statusSnapshot.state
+            : 'idle',
+        message: typeof statusSnapshot.message === 'string' ? statusSnapshot.message : '',
+        lastRunAt: typeof statusSnapshot.lastRunAt?.toDate === 'function' ? statusSnapshot.lastRunAt.toDate().toISOString() : '',
+        lastSuccessfulAt:
+          typeof statusSnapshot.lastSuccessfulAt?.toDate === 'function'
+            ? statusSnapshot.lastSuccessfulAt.toDate().toISOString()
+            : '',
+        errorCount: typeof statusSnapshot.errorCount === 'number' ? statusSnapshot.errorCount : 0,
+      })
+
+      const mappedHistory = history
+        .map((entry) => {
+          const item = entry as Record<string, any>
+          return {
+            runAt: typeof item.runAt === 'string' ? item.runAt : '',
+            mode: item.mode === 'incremental' ? 'incremental' : 'full',
+            state: item.state === 'error' ? 'error' : 'success',
+            createdOrUpdated: typeof item.createdOrUpdated === 'number' ? item.createdOrUpdated : 0,
+            removed: typeof item.removed === 'number' ? item.removed : 0,
+            disapproved: typeof item.disapproved === 'number' ? item.disapproved : 0,
+            errorCount: typeof item.errorCount === 'number' ? item.errorCount : 0,
+          } as GoogleShoppingHistoryEntry
+        })
+        .filter((entry) => entry.runAt)
+      setSyncHistory(mappedHistory)
 
       setIntegrationApiKey(typeof catalogSync.integrationApiKey === 'string' ? catalogSync.integrationApiKey : '')
       setIntegrationBaseUrl(
@@ -235,6 +289,26 @@ export default function GoogleShopping() {
     }
   }
 
+
+  const merchantActionLabel = !hasGoogleConnection
+    ? 'Connect Google'
+    : !hasRequiredScope
+      ? 'Grant Google Merchant access'
+      : connection.connected
+        ? 'Connected'
+        : 'Connect Merchant account'
+
+  const merchantHealthLabel = !hasGoogleConnection
+    ? 'Needs permission'
+    : !hasRequiredScope
+      ? 'Needs permission'
+      : connection.connected
+        ? 'Connected'
+        : 'Action required'
+
+  const currentSummary = summary
+  const hasPersistedStatus = Boolean(persistedStatus?.lastRunAt)
+
   async function runSync(mode: 'full' | 'incremental') {
     if (!storeId) return
     setSaving(true)
@@ -259,11 +333,15 @@ export default function GoogleShopping() {
   return (
     <main className="google-shopping-page">
       <header className="google-shopping-page__header">
+        <p className="google-shopping-page__eyebrow">Google onboarding · Step 2 of 3</p>
         <h1>Google Shopping</h1>
         <p>
           Connect your Merchant account once, then Sedifex can sync your catalog automatically. No
           manual Merchant ID entry required.
         </p>
+        <Link className="google-shopping-page__back-link" to="/google-connect">
+          ← Back to Google Connect
+        </Link>
       </header>
 
       <nav className="google-shopping-page__steps" aria-label="Google Shopping setup steps">
@@ -297,7 +375,7 @@ export default function GoogleShopping() {
 
             {!isConnected || !connection.connected ? (
               <button type="button" disabled={isStartingOAuth || saving} onClick={connectGoogleMerchant}>
-                {isStartingOAuth ? 'Connecting…' : buttonLabel}
+                {isStartingOAuth ? 'Connecting…' : merchantActionLabel}
               </button>
             ) : null}
 
@@ -395,10 +473,16 @@ export default function GoogleShopping() {
         <section className="google-shopping-panel">
           <h2>Fix errors</h2>
           <p>Products with missing fields or Merchant disapprovals are listed after each sync.</p>
-          <ul>
+          <ul className="google-shopping-errors">
             {summary?.errors?.slice(0, 20).map((error) => (
-              <li key={`${error.productId}-${error.reason}`}>
-                <strong>{error.productId}</strong>: {error.reason}
+              <li key={`${error.productId}-${error.reason}`} className="google-shopping-errors__item">
+                <div>
+                  <strong>{error.productId}</strong>: {error.reason}
+                </div>
+                <div className="google-shopping-errors__actions">
+                  <Link to={`/products?search=${encodeURIComponent(error.productId)}`}>Open product</Link>
+                  <Link to={`/products?edit=${encodeURIComponent(error.productId)}`}>Edit missing fields</Link>
+                </div>
               </li>
             ))}
           </ul>
@@ -408,35 +492,57 @@ export default function GoogleShopping() {
       {step === 'status' && (
         <section className="google-shopping-panel">
           <h2>View sync status</h2>
-          {summary ? (
+          {currentSummary ? (
             <dl className="google-shopping-panel__status-grid">
               <div>
                 <dt>Total products</dt>
-                <dd>{summary.totalProducts}</dd>
+                <dd>{currentSummary.totalProducts}</dd>
               </div>
               <div>
                 <dt>Eligible</dt>
-                <dd>{summary.eligibleProducts}</dd>
+                <dd>{currentSummary.eligibleProducts}</dd>
               </div>
               <div>
                 <dt>Created/Updated</dt>
-                <dd>{summary.createdOrUpdated}</dd>
+                <dd>{currentSummary.createdOrUpdated}</dd>
               </div>
               <div>
                 <dt>Removed</dt>
-                <dd>{summary.removed}</dd>
+                <dd>{currentSummary.removed}</dd>
               </div>
               <div>
                 <dt>Disapproved</dt>
-                <dd>{summary.disapproved}</dd>
+                <dd>{currentSummary.disapproved}</dd>
               </div>
               <div>
                 <dt>Errors</dt>
-                <dd>{summary.errors.length}</dd>
+                <dd>{currentSummary.errors.length}</dd>
               </div>
             </dl>
           ) : (
-            <p>No sync has run yet.</p>
+            <div>
+              <p>No sync has run in this browser yet.</p>
+              {hasPersistedStatus ? (
+                <p className="google-shopping-panel__hint">
+                  Last sync: {new Date(persistedStatus!.lastRunAt).toLocaleString()} ({persistedStatus!.state}).
+                </p>
+              ) : (
+                <p className="google-shopping-panel__hint">No sync has run yet for this store.</p>
+              )}
+            </div>
+          )}
+
+          <h3>Sync history</h3>
+          {syncHistory.length > 0 ? (
+            <ul className="google-shopping-history">
+              {syncHistory.map((entry) => (
+                <li key={`${entry.runAt}-${entry.mode}`}>
+                  <strong>{new Date(entry.runAt).toLocaleString()}</strong> — {entry.mode} · {entry.state} · updated {entry.createdOrUpdated}, errors {entry.errorCount}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="google-shopping-panel__hint">History will appear here after your first sync.</p>
           )}
 
           <h3>Merchant checklist</h3>
@@ -449,6 +555,9 @@ export default function GoogleShopping() {
       )}
 
       {status && <p className="google-shopping-page__status">{status}</p>}
+      {!status && merchantHealthLabel === 'Action required' ? (
+        <p className="google-shopping-page__status">Action required: choose and connect a Merchant account for this store.</p>
+      ) : null}
     </main>
   )
 }

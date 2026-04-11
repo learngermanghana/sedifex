@@ -1,9 +1,10 @@
 import React from 'react'
+import { Link } from 'react-router-dom'
 
 import GoogleBusinessMediaUploader from '../components/GoogleBusinessMediaUploader'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useGoogleIntegrationStatus } from '../hooks/useGoogleIntegrationStatus'
-import './GoogleShopping.css'
+import './GoogleBusinessProfile.css'
 
 export default function GoogleBusinessProfile() {
   const { storeId } = useActiveStore()
@@ -20,16 +21,18 @@ export default function GoogleBusinessProfile() {
     storeId,
   })
 
-
-
   return (
-    <main className="google-shopping-page">
-      <header className="google-shopping-page__header">
+    <main className="google-business-page">
+      <header className="google-business-page__header">
+        <p className="google-business-page__eyebrow">Google onboarding · Step 3 of 3</p>
         <h1>Upload photos to your business on Google</h1>
         <p>
           Add photos to your Google business listing so customers can see them in Google Search and
           Google Maps.
         </p>
+        <Link className="google-business-page__back-link" to="/google-connect">
+          ← Back to Google Connect
+        </Link>
       </header>
 
       {!storeId ? (
