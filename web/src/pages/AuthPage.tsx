@@ -1369,6 +1369,31 @@ export default function AuthPage() {
             Prefer email? Reach us at info@sedifex.com.
           </p>
         </article>
+
+        <article className="info-card">
+          <h3>Policies &amp; legal</h3>
+          <p>
+            Review Sedifex policy pages before signup to understand billing, data
+            handling, and service terms.
+          </p>
+          <ul className="info-card__list">
+            <li>
+              <Link to="/privacy">Privacy Policy</Link>
+            </li>
+            <li>
+              <Link to="/refund">Subscription &amp; Refund Policy</Link>
+            </li>
+            <li>
+              <Link to="/terms">Terms of Service</Link>
+            </li>
+            <li>
+              <Link to="/cookies">Cookies Policy</Link>
+            </li>
+            <li>
+              <Link to="/return-policy">Return &amp; Exchange Policy</Link>
+            </li>
+          </ul>
+        </article>
       </section>
     </main>
   )
