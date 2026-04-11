@@ -166,3 +166,13 @@
   display: grid;
   gap: 0.4rem;
 }
+
+
+.google-shopping-page__step.is-next {
+  border-color: #f59e0b;
+  background: #fff7ed;
+}
+
+.google-shopping-panel__status-list p {
+  margin: 0;
+}

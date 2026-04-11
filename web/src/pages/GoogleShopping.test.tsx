@@ -41,6 +41,26 @@ vi.mock('firebase/firestore', () => ({
 
 vi.mock('../firebase', () => ({ db: {} }))
 
+const baseMerchant = {
+  state: 'google_not_connected',
+  googleConnected: false,
+  hasMerchantScope: false,
+  merchantAccountSelected: false,
+  merchantId: '',
+  refreshTokenPresent: false,
+  merchantConnected: false,
+  syncReady: false,
+  validationSummary: {
+    missingTitle: 0,
+    missingDescription: 0,
+    missingImage: 0,
+    missingPrice: 0,
+    missingBrand: 0,
+    missingGtinOrMpnOrSku: 0,
+    blockingCount: 0,
+  },
+}
+
 describe('GoogleShopping', () => {
   beforeEach(() => {
     mockUseActiveStore.mockReset()
@@ -71,8 +91,8 @@ describe('GoogleShopping', () => {
       isStartingOAuth: false,
       hasGoogleConnection: false,
       hasRequiredScope: false,
-      isConnected: false,
       stateTitle: '1) Connect Google',
+      merchant: baseMerchant,
       error: null,
       startOAuth,
     })
@@ -99,8 +119,8 @@ describe('GoogleShopping', () => {
       isStartingOAuth: false,
       hasGoogleConnection: true,
       hasRequiredScope: true,
-      isConnected: true,
       stateTitle: '3) Connected',
+      merchant: { ...baseMerchant, state: 'sync_ready', googleConnected: true, hasMerchantScope: true, merchantConnected: true, merchantAccountSelected: true, merchantId: 'mc-1', refreshTokenPresent: true, syncReady: true },
       error: null,
       startOAuth: vi.fn(),
     })
@@ -128,8 +148,7 @@ describe('GoogleShopping', () => {
       </MemoryRouter>,
     )
 
-    await user.click(await screen.findByRole('button', { name: /2. sync products/i }))
-    await user.click(screen.getByRole('button', { name: /run initial full catalog upload/i }))
+    await user.click(await screen.findByRole('button', { name: /sync products/i }))
 
     await waitFor(() => {
       expect(mockTriggerGoogleShoppingSync).toHaveBeenCalledWith({ storeId: 'store-1', mode: 'full' })

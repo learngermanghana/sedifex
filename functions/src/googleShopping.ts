@@ -726,6 +726,54 @@ async function deleteMerchantProduct(params: { merchantId: string; accessToken: 
   }
 }
 
+
+function buildValidationSummary(errors: Array<{ productId: string; reason: string }>) {
+  const summary = {
+    missingTitle: 0,
+    missingDescription: 0,
+    missingImage: 0,
+    missingPrice: 0,
+    missingBrand: 0,
+    missingGtinOrMpnOrSku: 0,
+    blockingCount: 0,
+  }
+
+  for (const error of errors) {
+    if (!error.reason.startsWith('missing:')) continue
+    const missing = error.reason.slice('missing:'.length).split(',').map((entry) => entry.trim())
+    let counted = false
+    for (const field of missing) {
+      if (field === 'title') {
+        summary.missingTitle += 1
+        counted = true
+      }
+      if (field === 'description') {
+        summary.missingDescription += 1
+        counted = true
+      }
+      if (field === 'image') {
+        summary.missingImage += 1
+        counted = true
+      }
+      if (field === 'price') {
+        summary.missingPrice += 1
+        counted = true
+      }
+      if (field === 'brand') {
+        summary.missingBrand += 1
+        counted = true
+      }
+      if (field === 'gtin_or_mpn') {
+        summary.missingGtinOrMpnOrSku += 1
+        counted = true
+      }
+    }
+    if (counted) summary.blockingCount += 1
+  }
+
+  return summary
+}
+
 async function persistSyncStatus(storeId: string, summary: SyncSummary, state: 'success' | 'error', message: string) {
   const settingsRef = db.collection('storeSettings').doc(storeId)
   const snapshot = await settingsRef.get()
@@ -757,6 +805,7 @@ async function persistSyncStatus(storeId: string, summary: SyncSummary, state: '
           errorCount: summary.errors.length,
           disapprovalCount: summary.disapproved,
           outOfStockMismatchCount: 0,
+          validationSummary: buildValidationSummary(summary.errors),
           message,
         },
         syncHistory: nextHistory,

@@ -16,7 +16,7 @@ import { useGoogleIntegrationStatus } from '../hooks/useGoogleIntegrationStatus'
 import { clearGoogleOAuthQueryState, parseGoogleOAuthQueryState } from '../utils/googleOAuthCallback'
 import './GoogleShopping.css'
 
-type WizardStep = 'connect' | 'map' | 'fix' | 'status'
+type WizardStep = 'connect' | 'account' | 'readiness' | 'sync'
 
 type GoogleShoppingConnection = {
   connected: boolean
@@ -42,10 +42,10 @@ type GoogleShoppingHistoryEntry = {
 }
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  connect: '1. Connect Google',
-  map: '2. Sync products',
-  fix: '3. Fix errors',
-  status: '4. View status',
+  connect: 'Step 1: Connect Google',
+  account: 'Step 2: Choose Merchant account',
+  readiness: 'Step 3: Check product readiness',
+  sync: 'Step 4: Sync to Google',
 }
 
 export default function GoogleShopping() {
@@ -71,22 +71,13 @@ export default function GoogleShopping() {
     isStartingOAuth,
     hasGoogleConnection,
     hasRequiredScope,
-    isConnected,
     stateTitle,
+    merchant,
     error: oauthError,
     startOAuth,
   } = useGoogleIntegrationStatus({ integration: 'merchant', storeId })
 
-  const checklist = useMemo(
-    () => [
-      'Business information complete in Merchant Center',
-      'Website claimed and verified in Merchant Center',
-      'Shipping settings configured',
-      'Tax settings configured for target markets',
-      'Google Merchant Center account is active and approved',
-    ],
-    [],
-  )
+  const hasBlockingValidation = merchant.validationSummary.blockingCount > 0
 
   useEffect(() => {
     const queryState = parseGoogleOAuthQueryState(window.location.search)
@@ -99,16 +90,15 @@ export default function GoogleShopping() {
     if (queryState.status === 'success' && includesMerchant) {
       if (queryState.pendingSelectionId) {
         setPendingSelectionId(queryState.pendingSelectionId)
-        setStatus('We found multiple Merchant accounts. Please choose the one you want to connect.')
+        setStatus('We found multiple Merchant accounts. Choose your Merchant Center account to continue.')
       } else if (queryState.merchantId) {
         const message = queryState.refreshTokenMissing
-          ? `Connected to Merchant ID ${queryState.merchantId}. Note: Google did not return a refresh token, so reconnect may be required later.`
-          : `Connected to Merchant ID ${queryState.merchantId}.`
+          ? `Merchant ID ${queryState.merchantId} selected. Reconnect Google to finish Merchant setup.`
+          : `Merchant ID ${queryState.merchantId} selected.`
         setStatus(message)
       } else {
         setStatus(queryState.message || 'Google Merchant connected successfully.')
       }
-      setStep('connect')
     }
 
     if (queryState.status) {
@@ -189,7 +179,7 @@ export default function GoogleShopping() {
         setPendingAccounts(payload.accounts)
         setSelectedMerchantId(payload.accounts[0]?.id || '')
         if (payload.refreshTokenMissing) {
-          setStatus('Google did not return a refresh token in this connection. You can still connect now.')
+          setStatus('Reconnect Google to finish Merchant setup.')
         }
       })
       .catch((error) => {
@@ -239,16 +229,6 @@ export default function GoogleShopping() {
     }
   }, [storeId])
 
-  async function copyApiKey() {
-    if (!integrationApiKey) return
-    try {
-      await navigator.clipboard.writeText(integrationApiKey)
-      setStatus('Store API key copied.')
-    } catch {
-      setStatus('Unable to copy Store API key from this browser. You can still select and copy it manually.')
-    }
-  }
-
   async function connectGoogleMerchant() {
     if (!storeId) {
       setStatus('Please select a store before connecting Google Merchant.')
@@ -275,8 +255,8 @@ export default function GoogleShopping() {
       })
 
       const message = payload.refreshTokenMissing
-        ? `Connected to Merchant ID ${payload.merchantId}. Note: Google did not return a refresh token, so reconnect may be required later.`
-        : `Connected to Merchant ID ${payload.merchantId}.`
+        ? `Merchant ID ${payload.merchantId} selected. Reconnect Google to finish Merchant setup.`
+        : `Merchant ID ${payload.merchantId} selected.`
       setStatus(message)
       setPendingSelectionId('')
       setPendingAccounts([])
@@ -289,22 +269,69 @@ export default function GoogleShopping() {
     }
   }
 
+  const nextIncompleteStep: WizardStep = useMemo(() => {
+    if (!hasGoogleConnection) return 'connect'
+    if (!hasRequiredScope || !merchant.hasMerchantScope) return 'connect'
+    if (!merchant.merchantAccountSelected) return 'account'
+    if (!merchant.refreshTokenPresent) return 'connect'
+    if (hasBlockingValidation) return 'readiness'
+    return 'sync'
+  }, [hasGoogleConnection, hasRequiredScope, merchant, hasBlockingValidation])
 
-  const merchantActionLabel = !hasGoogleConnection
-    ? 'Connect Google'
-    : !hasRequiredScope
-      ? 'Grant Google Merchant access'
-      : connection.connected
-        ? 'Connected'
-        : 'Connect Merchant account'
+  useEffect(() => {
+    setStep(nextIncompleteStep)
+  }, [nextIncompleteStep])
 
-  const merchantHealthLabel = !hasGoogleConnection
-    ? 'Needs permission'
-    : !hasRequiredScope
-      ? 'Needs permission'
-      : connection.connected
-        ? 'Connected'
-        : 'Action required'
+  const actionConfig = useMemo(() => {
+    if (merchant.state === 'google_not_connected') {
+      return {
+        title: 'Connect your Google account',
+        helper: 'Step 1: Connect Google so Sedifex can request Merchant permissions.',
+        cta: 'Connect Google',
+        onClick: connectGoogleMerchant,
+      }
+    }
+    if (merchant.state === 'merchant_scope_missing') {
+      return {
+        title: 'Grant Google Merchant access',
+        helper: 'Google is connected, but Merchant scope is missing. Grant Google Merchant access to continue.',
+        cta: 'Grant Google Merchant access',
+        onClick: connectGoogleMerchant,
+      }
+    }
+    if (merchant.state === 'merchant_account_not_selected') {
+      return {
+        title: 'Choose your Merchant Center account',
+        helper: 'Step 2: choose the Merchant Center account that Sedifex should sync to.',
+        cta: pendingAccounts.length > 1 ? 'Choose Merchant account' : 'Choose Merchant account',
+        onClick: pendingAccounts.length > 1 ? () => setStep('account') : connectGoogleMerchant,
+      }
+    }
+    if (merchant.state === 'refresh_token_missing') {
+      return {
+        title: 'Reconnect Google to finish Merchant setup',
+        helper:
+          'Google did not provide a long-term connection token, so Sedifex cannot keep your Merchant connection active.',
+        cta: 'Reconnect Google',
+        onClick: connectGoogleMerchant,
+      }
+    }
+    if (merchant.state === 'product_sync_blocked_validation') {
+      return {
+        title: 'Products need more details before they can sync',
+        helper: 'Fix product data issues first. This is not a Google connection problem.',
+        cta: 'Review product issues',
+        onClick: () => setStep('readiness'),
+      }
+    }
+
+    return {
+      title: 'Your Merchant connection is ready',
+      helper: 'Google OAuth, Merchant account selection, and long-term token are all in place.',
+      cta: 'Sync products',
+      onClick: () => setStep('sync'),
+    }
+  }, [merchant.state, pendingAccounts.length])
 
   const currentSummary = summary
   const hasPersistedStatus = Boolean(persistedStatus?.lastRunAt)
@@ -318,10 +345,10 @@ export default function GoogleShopping() {
       setSummary(nextSummary)
       setStatus(
         nextSummary.errors.length > 0
-          ? `Sync finished with ${nextSummary.errors.length} issue(s). Open “Fix errors” for product-level tasks.`
+          ? `Sync finished with ${nextSummary.errors.length} issue(s). Review product issues before the next sync.`
           : 'Sync completed successfully.',
       )
-      setStep(nextSummary.errors.length > 0 ? 'fix' : 'status')
+      setStep(nextSummary.errors.length > 0 ? 'readiness' : 'sync')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sync failed.'
       setStatus(message)
@@ -336,8 +363,8 @@ export default function GoogleShopping() {
         <p className="google-shopping-page__eyebrow">Google onboarding · Step 2 of 3</p>
         <h1>Google Shopping</h1>
         <p>
-          Connect your Merchant account once, then Sedifex can sync your catalog automatically. No
-          manual Merchant ID entry required.
+          This setup makes the connection state explicit so you always know what is connected, what is missing,
+          and what to do next.
         </p>
         <Link className="google-shopping-page__back-link" to="/google-connect">
           ← Back to Google Connect
@@ -349,7 +376,7 @@ export default function GoogleShopping() {
           <button
             key={stepKey}
             type="button"
-            className={`google-shopping-page__step ${step === stepKey ? 'is-active' : ''}`}
+            className={`google-shopping-page__step ${step === stepKey ? 'is-active' : ''} ${nextIncompleteStep === stepKey ? 'is-next' : ''}`}
             onClick={() => setStep(stepKey)}
           >
             {STEP_LABELS[stepKey]}
@@ -357,179 +384,111 @@ export default function GoogleShopping() {
         ))}
       </nav>
 
-      {step === 'connect' && (
-        <>
-          <section className="google-shopping-panel">
-            <h2>{stateTitle}</h2>
-            <p>
-              {!hasGoogleConnection
-                ? 'Connect your Google account to continue.'
-                : !hasRequiredScope
-                  ? 'Your Google account is connected. Grant Google Merchant access to continue.'
-                  : connection.connected
-                    ? 'Google Merchant is connected for this store.'
-                    : 'Google Merchant access is ready. Connect and choose your Merchant account.'}
-            </p>
+      <section className="google-shopping-panel">
+        <h2>{actionConfig.title}</h2>
+        <p>{actionConfig.helper}</p>
+        {oauthStatusLoading ? <p className="google-shopping-panel__hint">Checking Google connection…</p> : null}
+        <button type="button" disabled={isStartingOAuth || saving} onClick={actionConfig.onClick}>
+          {isStartingOAuth ? 'Connecting…' : actionConfig.cta}
+        </button>
+      </section>
 
-            {oauthStatusLoading ? <p className="google-shopping-panel__hint">Checking Google connection…</p> : null}
+      <section className="google-shopping-panel google-shopping-panel__status-list">
+        <h2>Merchant connection status</h2>
+        <p><strong>Google OAuth connected:</strong> {merchant.googleConnected ? 'Yes' : 'No'}</p>
+        <p><strong>Merchant scope granted:</strong> {merchant.hasMerchantScope ? 'Yes' : 'No'}</p>
+        <p><strong>Merchant account selected:</strong> {merchant.merchantAccountSelected ? 'Yes' : 'No'}</p>
+        <p><strong>Refresh token available:</strong> {merchant.refreshTokenPresent ? 'Yes' : 'No'}</p>
+        <p><strong>Backend Merchant connection:</strong> {merchant.merchantConnected ? 'Connected' : 'Action needed'}</p>
+        <p><strong>Product sync ready:</strong> {merchant.syncReady ? 'Ready' : 'Not ready yet'}</p>
+        {(merchant.merchantId || connection.merchantId) && (
+          <p>
+            <strong>Merchant ID:</strong> {merchant.merchantId || connection.merchantId}
+          </p>
+        )}
+      </section>
 
-            {!isConnected || !connection.connected ? (
-              <button type="button" disabled={isStartingOAuth || saving} onClick={connectGoogleMerchant}>
-                {isStartingOAuth ? 'Connecting…' : merchantActionLabel}
-              </button>
-            ) : null}
-
-            {connection.connected && (
-              <p className="google-shopping-panel__connected">Connected Merchant ID: <strong>{connection.merchantId}</strong></p>
-            )}
-
-            {pendingAccounts.length > 1 && (
-              <div className="google-shopping-panel__picker">
-                <h3>Choose your Merchant account</h3>
-                <label>
-                  Merchant account
-                  <select
-                    value={selectedMerchantId}
-                    onChange={(event) => setSelectedMerchantId(event.target.value)}
-                  >
-                    {pendingAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.displayName} ({account.id})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" disabled={saving} onClick={confirmMerchantSelection}>
-                  {saving ? 'Saving…' : 'Use this Merchant account'}
-                </button>
-              </div>
-            )}
-
-            <details className="google-shopping-panel__advanced">
-              <summary>Advanced settings</summary>
-              <p className="google-shopping-panel__hint">
-                These values are auto-managed by Sedifex and only needed for advanced troubleshooting.
-              </p>
-              <label>
-                Store API key
-                <input
-                  value={setupConfigLoading && !integrationApiKey ? 'Creating key…' : integrationApiKey}
-                  readOnly
-                />
-                <small className="google-shopping-panel__helper">
-                  Automatically created by Sedifex for Google sync.
-                </small>
-              </label>
-              <div className="google-shopping-panel__actions">
-                <button type="button" onClick={copyApiKey} disabled={!integrationApiKey}>
-                  Copy key
-                </button>
-              </div>
-              <label>
-                Integration feed base URL
-                <input value={integrationBaseUrl} readOnly />
-              </label>
-              <label className="google-shopping-panel__checkbox">
-                <input type="checkbox" checked={autoSyncEnabled} readOnly />
-                Scheduled incremental sync is enabled
-              </label>
-            </details>
-          </section>
-        </>
+      {step === 'account' && pendingAccounts.length > 1 && (
+        <section className="google-shopping-panel google-shopping-panel__picker">
+          <h2>Choose your Merchant Center account</h2>
+          <label>
+            Merchant account
+            <select value={selectedMerchantId} onChange={(event) => setSelectedMerchantId(event.target.value)}>
+              {pendingAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.displayName} ({account.id})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" disabled={saving} onClick={confirmMerchantSelection}>
+            {saving ? 'Saving…' : 'Use this Merchant account'}
+          </button>
+        </section>
       )}
 
-      {step === 'map' && (
+      {step === 'readiness' && (
         <section className="google-shopping-panel">
-          <h2>Sync products</h2>
+          <h2>Products that need attention before Google can accept them</h2>
           <ul>
-            <li>title ← name</li>
-            <li>description ← description</li>
-            <li>price ← price</li>
-            <li>availability ← stockCount</li>
-            <li>image_link ← imageUrl</li>
-            <li>brand ← manufacturerName</li>
-            <li>gtin/mpn ← barcode / sku</li>
-            <li>google_product_category ← category</li>
+            <li>Missing title: {merchant.validationSummary.missingTitle}</li>
+            <li>Missing description: {merchant.validationSummary.missingDescription}</li>
+            <li>Missing image: {merchant.validationSummary.missingImage}</li>
+            <li>Missing price: {merchant.validationSummary.missingPrice}</li>
+            <li>Missing brand: {merchant.validationSummary.missingBrand}</li>
+            <li>Missing GTIN/MPN or SKU: {merchant.validationSummary.missingGtinOrMpnOrSku}</li>
           </ul>
-          <p className="google-shopping-panel__hint">
-            Sedifex uses <code>integrationProducts</code> as the source feed for full and incremental sync.
-          </p>
+          {summary?.errors?.length ? (
+            <ul className="google-shopping-errors">
+              {summary.errors.slice(0, 20).map((error) => (
+                <li key={`${error.productId}-${error.reason}`} className="google-shopping-errors__item">
+                  <div>
+                    <strong>{error.productId}</strong>: {error.reason}
+                  </div>
+                  <div className="google-shopping-errors__actions">
+                    <Link to={`/products?search=${encodeURIComponent(error.productId)}`}>Open product</Link>
+                    <Link to={`/products?edit=${encodeURIComponent(error.productId)}`}>Edit missing fields</Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="google-shopping-panel__hint">
+              Run a sync to generate a fresh product issue list for this store.
+            </p>
+          )}
+        </section>
+      )}
+
+      {step === 'sync' && (
+        <section className="google-shopping-panel">
+          <h2>Sync to Google</h2>
           <div className="google-shopping-panel__actions">
-            <button type="button" disabled={saving || !connection.connected} onClick={() => runSync('full')}>
-              {saving ? 'Syncing…' : 'Run initial full catalog upload'}
+            <button type="button" disabled={saving || !merchant.syncReady} onClick={() => runSync('full')}>
+              {saving ? 'Syncing…' : 'Sync products'}
             </button>
-            <button
-              type="button"
-              disabled={saving || !connection.connected}
-              onClick={() => runSync('incremental')}
-            >
+            <button type="button" disabled={saving || !merchant.syncReady} onClick={() => runSync('incremental')}>
               {saving ? 'Syncing…' : 'Run incremental sync'}
             </button>
           </div>
-        </section>
-      )}
-
-      {step === 'fix' && (
-        <section className="google-shopping-panel">
-          <h2>Fix errors</h2>
-          <p>Products with missing fields or Merchant disapprovals are listed after each sync.</p>
-          <ul className="google-shopping-errors">
-            {summary?.errors?.slice(0, 20).map((error) => (
-              <li key={`${error.productId}-${error.reason}`} className="google-shopping-errors__item">
-                <div>
-                  <strong>{error.productId}</strong>: {error.reason}
-                </div>
-                <div className="google-shopping-errors__actions">
-                  <Link to={`/products?search=${encodeURIComponent(error.productId)}`}>Open product</Link>
-                  <Link to={`/products?edit=${encodeURIComponent(error.productId)}`}>Edit missing fields</Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {step === 'status' && (
-        <section className="google-shopping-panel">
-          <h2>View sync status</h2>
+          {!merchant.syncReady ? (
+            <p className="google-shopping-panel__hint">Complete earlier setup steps before syncing products.</p>
+          ) : null}
           {currentSummary ? (
             <dl className="google-shopping-panel__status-grid">
-              <div>
-                <dt>Total products</dt>
-                <dd>{currentSummary.totalProducts}</dd>
-              </div>
-              <div>
-                <dt>Eligible</dt>
-                <dd>{currentSummary.eligibleProducts}</dd>
-              </div>
-              <div>
-                <dt>Created/Updated</dt>
-                <dd>{currentSummary.createdOrUpdated}</dd>
-              </div>
-              <div>
-                <dt>Removed</dt>
-                <dd>{currentSummary.removed}</dd>
-              </div>
-              <div>
-                <dt>Disapproved</dt>
-                <dd>{currentSummary.disapproved}</dd>
-              </div>
-              <div>
-                <dt>Errors</dt>
-                <dd>{currentSummary.errors.length}</dd>
-              </div>
+              <div><dt>Total products</dt><dd>{currentSummary.totalProducts}</dd></div>
+              <div><dt>Eligible</dt><dd>{currentSummary.eligibleProducts}</dd></div>
+              <div><dt>Created/Updated</dt><dd>{currentSummary.createdOrUpdated}</dd></div>
+              <div><dt>Removed</dt><dd>{currentSummary.removed}</dd></div>
+              <div><dt>Disapproved</dt><dd>{currentSummary.disapproved}</dd></div>
+              <div><dt>Errors</dt><dd>{currentSummary.errors.length}</dd></div>
             </dl>
           ) : (
-            <div>
-              <p>No sync has run in this browser yet.</p>
-              {hasPersistedStatus ? (
-                <p className="google-shopping-panel__hint">
-                  Last sync: {new Date(persistedStatus!.lastRunAt).toLocaleString()} ({persistedStatus!.state}).
-                </p>
-              ) : (
-                <p className="google-shopping-panel__hint">No sync has run yet for this store.</p>
-              )}
-            </div>
+            <p className="google-shopping-panel__hint">
+              {hasPersistedStatus
+                ? `Last sync: ${new Date(persistedStatus!.lastRunAt).toLocaleString()} (${persistedStatus!.state}).`
+                : 'No sync has run yet for this store.'}
+            </p>
           )}
 
           <h3>Sync history</h3>
@@ -544,20 +503,32 @@ export default function GoogleShopping() {
           ) : (
             <p className="google-shopping-panel__hint">History will appear here after your first sync.</p>
           )}
-
-          <h3>Merchant checklist</h3>
-          <ul>
-            {checklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
         </section>
       )}
 
+      <details className="google-shopping-panel__advanced">
+        <summary>Advanced settings</summary>
+        <label>
+          Store API key
+          <input value={setupConfigLoading && !integrationApiKey ? 'Creating key…' : integrationApiKey} readOnly />
+        </label>
+        <label>
+          Integration feed base URL
+          <input value={integrationBaseUrl} readOnly />
+        </label>
+        <label className="google-shopping-panel__checkbox">
+          <input type="checkbox" checked={autoSyncEnabled} readOnly />
+          Scheduled incremental sync is enabled
+        </label>
+      </details>
+
       {status && <p className="google-shopping-page__status">{status}</p>}
-      {!status && merchantHealthLabel === 'Action required' ? (
-        <p className="google-shopping-page__status">Action required: choose and connect a Merchant account for this store.</p>
+      {!status && merchant.state === 'refresh_token_missing' ? (
+        <p className="google-shopping-page__status">
+          Reconnect Google to finish Merchant setup. Google did not provide a long-term connection token, so Sedifex cannot keep your Merchant connection active.
+        </p>
       ) : null}
+      <p className="google-shopping-panel__hint">{stateTitle}</p>
     </main>
   )
 }

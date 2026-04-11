@@ -4,6 +4,7 @@ import {
   fetchGoogleIntegrationOverview,
   startGoogleOAuth,
   type GoogleIntegrationKey,
+  type GoogleMerchantReadiness,
 } from '../api/googleIntegrations'
 
 const REQUIRED_SCOPE_BY_INTEGRATION: Record<GoogleIntegrationKey, string> = {
@@ -52,12 +53,50 @@ export function useGoogleIntegrationStatus(input: UseGoogleIntegrationStatusInpu
   const [isConnected, setIsConnected] = useState(false)
   const [grantedScopes, setGrantedScopes] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [merchant, setMerchant] = useState<GoogleMerchantReadiness>({
+    state: 'google_not_connected',
+    googleConnected: false,
+    hasMerchantScope: false,
+    merchantAccountSelected: false,
+    merchantId: '',
+    refreshTokenPresent: false,
+    merchantConnected: false,
+    syncReady: false,
+    validationSummary: {
+      missingTitle: 0,
+      missingDescription: 0,
+      missingImage: 0,
+      missingPrice: 0,
+      missingBrand: 0,
+      missingGtinOrMpnOrSku: 0,
+      blockingCount: 0,
+    },
+  })
 
   useEffect(() => {
     if (!storeId) {
       setHasGoogleConnection(false)
       setIsConnected(false)
       setGrantedScopes([])
+      setMerchant({
+        state: 'google_not_connected',
+        googleConnected: false,
+        hasMerchantScope: false,
+        merchantAccountSelected: false,
+        merchantId: '',
+        refreshTokenPresent: false,
+        merchantConnected: false,
+        syncReady: false,
+        validationSummary: {
+          missingTitle: 0,
+          missingDescription: 0,
+          missingImage: 0,
+          missingPrice: 0,
+          missingBrand: 0,
+          missingGtinOrMpnOrSku: 0,
+          blockingCount: 0,
+        },
+      })
       return
     }
 
@@ -71,6 +110,7 @@ export function useGoogleIntegrationStatus(input: UseGoogleIntegrationStatusInpu
         setHasGoogleConnection(overview.connected)
         setIsConnected(overview.integrations[integration].connected)
         setGrantedScopes(overview.grantedScopes)
+        setMerchant(overview.merchant)
       })
       .catch((nextError) => {
         if (!mounted) return
@@ -132,6 +172,7 @@ export function useGoogleIntegrationStatus(input: UseGoogleIntegrationStatusInpu
     buttonLabel,
     requiredScope,
     error,
+    merchant,
     startOAuth,
   }
 }
