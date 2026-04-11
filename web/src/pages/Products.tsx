@@ -47,6 +47,7 @@ type SaleRecord = {
 }
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
 const DEFAULT_PRODUCT_IMAGE_URL = 'https://storage.googleapis.com/sedifeximage/stores/Y5ivjrJUBtWl7KzoR0aVszFu1c93/logo.jpg?v=1775656136764'
+const MAX_DESCRIPTION_WORDS = 500
 
 /**
  * Helpers
@@ -81,6 +82,10 @@ function formatVat(taxRate?: number | null): string {
     return '—'
   }
   return `${(taxRate * 100).toFixed(0)}%`
+}
+
+function countWords(input: string): number {
+  return input.trim().split(/\s+/).filter(Boolean).length
 }
 
 function toDate(value: unknown): Date | null {
@@ -141,6 +146,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
   const imageUrls = normalizeImageUrls(data.imageUrls, imageUrl)
   const imageAlt = typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : null
+  const description = typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null
   const reorderPoint = sanitizeNumber(
     data.reorderPoint ?? data.reorderLevel ?? (data as any).reorderThreshold ?? null,
   )
@@ -149,6 +155,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     id,
     name: normalizedName || 'Untitled item',
     category: category || null,
+    description,
     sku: skuRaw.trim() || null,
     barcode: normalizedBarcode || null,
     price: sanitizeNumber(data.price) ?? null,
@@ -365,6 +372,7 @@ export default function Products() {
   const [sku, setSku] = useState('')
   const [categoryInput, setCategoryInput] = useState('')
   const [priceInput, setPriceInput] = useState('')
+  const [descriptionInput, setDescriptionInput] = useState('')
   const [taxRateInput, setTaxRateInput] = useState('')
   const [reorderPointInput, setReorderPointInput] = useState('')
   const [openingStockInput, setOpeningStockInput] = useState('')
@@ -393,6 +401,7 @@ export default function Products() {
   const [editSku, setEditSku] = useState('')
   const [editCategoryInput, setEditCategoryInput] = useState('')
   const [editPriceInput, setEditPriceInput] = useState('')
+  const [editDescriptionInput, setEditDescriptionInput] = useState('')
   const [editTaxRateInput, setEditTaxRateInput] = useState('')
   const [editReorderPointInput, setEditReorderPointInput] = useState('')
   const [editStockInput, setEditStockInput] = useState('') // 🔹 On hand (stock) editable
@@ -670,6 +679,8 @@ export default function Products() {
     const reorderPointNumber = reorderPointInput ? Number(reorderPointInput) : NaN
     const openingStockNumber = openingStockInput ? Number(openingStockInput) : NaN
     const taxRateNumber = parseTaxInput(taxRateInput)
+    const trimmedDescription = descriptionInput.trim()
+    const descriptionWordCount = countWords(trimmedDescription)
     const expiryDate = parseDateInput(expiryInput)
     const productionDate = parseDateInput(productionDateInput)
     const manufacturerName = manufacturerInput.trim()
@@ -686,6 +697,11 @@ export default function Products() {
     if (!isService && (Number.isNaN(priceNumber) || priceNumber < 0)) {
       setFormStatus('error')
       setFormError('Enter a valid selling price.')
+      return
+    }
+    if (descriptionWordCount > MAX_DESCRIPTION_WORDS) {
+      setFormStatus('error')
+      setFormError(`Description must be ${MAX_DESCRIPTION_WORDS} words or fewer.`)
       return
     }
 
@@ -763,6 +779,7 @@ export default function Products() {
         name: normalizedProductName,
         itemType,
         category: trimmedCategory || null,
+        description: trimmedDescription || null,
         price: finalPrice,
         // 🔹 Keep SKU as typed, but also store a normalized barcode field
         sku: isService ? null : trimmedSku || null,
@@ -797,6 +814,7 @@ export default function Products() {
       setSku('')
       setCategoryInput('')
       setPriceInput('')
+      setDescriptionInput('')
       setTaxRateInput('')
       setReorderPointInput('')
       setOpeningStockInput('')
@@ -926,6 +944,7 @@ export default function Products() {
         ? String(product.price)
         : '',
     )
+    setEditDescriptionInput(product.description ?? '')
     setEditTaxRateInput(
       typeof product.taxRate === 'number' && Number.isFinite(product.taxRate)
         ? String((product.taxRate * 100).toFixed(0)) // show as percent
@@ -1015,6 +1034,8 @@ export default function Products() {
       ? Number(editReorderPointInput)
       : NaN
     const taxRateNumber = parseTaxInput(editTaxRateInput)
+    const trimmedDescription = editDescriptionInput.trim()
+    const descriptionWordCount = countWords(trimmedDescription)
     const stockNumberRaw =
       editStockInput.trim() === '' ? null : Number(editStockInput.trim())
     const expiryDate = parseDateInput(editExpiryDateInput)
@@ -1033,6 +1054,11 @@ export default function Products() {
     if (!isStockTracked && (Number.isNaN(priceNumber) || priceNumber < 0)) {
       setFormStatus('error')
       setFormError('Enter a valid selling price.')
+      return
+    }
+    if (descriptionWordCount > MAX_DESCRIPTION_WORDS) {
+      setFormStatus('error')
+      setFormError(`Description must be ${MAX_DESCRIPTION_WORDS} words or fewer.`)
       return
     }
 
@@ -1079,6 +1105,7 @@ export default function Products() {
         name: normalizedProductName,
         itemType: editItemType,
         category: trimmedCategory || null,
+        description: trimmedDescription || null,
         sku: isStockTracked ? trimmedSku || null : null,
         barcode: isStockTracked ? normalizeBarcode(trimmedSku) || null : null,
         price: finalPrice,
@@ -1344,6 +1371,21 @@ export default function Products() {
             </div>
 
             <div className="field">
+              <label className="field__label" htmlFor="add-description">
+                Product description <span className="field__optional">(optional, up to 500 words)</span>
+              </label>
+              <textarea
+                id="add-description"
+                value={descriptionInput}
+                onChange={e => setDescriptionInput(e.target.value)}
+                rows={4}
+              />
+              <p className="field__hint">
+                {countWords(descriptionInput)} / {MAX_DESCRIPTION_WORDS} words
+              </p>
+            </div>
+
+            <div className="field">
               <label className="field__label" htmlFor="add-category">
                 Category <span className="field__optional">(optional)</span>
               </label>
@@ -1512,39 +1554,54 @@ export default function Products() {
                 <label className="field__label" htmlFor="add-image-url">
                   Image URL 1 <span className="field__optional">(optional)</span>
                 </label>
-                <input
-                  id="add-image-url"
-                  type="url"
-                  placeholder="https://example.com/product-image.jpg"
-                  value={imageUrlInput}
-                  onChange={e => setImageUrlInput(e.target.value)}
-                />
+                <div className="products-page__field-inline">
+                  <input
+                    id="add-image-url"
+                    type="url"
+                    placeholder="https://example.com/product-image.jpg"
+                    value={imageUrlInput}
+                    onChange={e => setImageUrlInput(e.target.value)}
+                  />
+                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput('')}>
+                    Clear
+                  </button>
+                </div>
               </div>
 
               <div className="field">
                 <label className="field__label" htmlFor="add-image-url-2">
                   Image URL 2 <span className="field__optional">(optional)</span>
                 </label>
-                <input
-                  id="add-image-url-2"
-                  type="url"
-                  placeholder="https://example.com/product-image-side.jpg"
-                  value={imageUrlInput2}
-                  onChange={e => setImageUrlInput2(e.target.value)}
-                />
+                <div className="products-page__field-inline">
+                  <input
+                    id="add-image-url-2"
+                    type="url"
+                    placeholder="https://example.com/product-image-side.jpg"
+                    value={imageUrlInput2}
+                    onChange={e => setImageUrlInput2(e.target.value)}
+                  />
+                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput2('')}>
+                    Clear
+                  </button>
+                </div>
               </div>
 
               <div className="field">
                 <label className="field__label" htmlFor="add-image-url-3">
                   Image URL 3 <span className="field__optional">(optional)</span>
                 </label>
-                <input
-                  id="add-image-url-3"
-                  type="url"
-                  placeholder="https://example.com/product-image-back.jpg"
-                  value={imageUrlInput3}
-                  onChange={e => setImageUrlInput3(e.target.value)}
-                />
+                <div className="products-page__field-inline">
+                  <input
+                    id="add-image-url-3"
+                    type="url"
+                    placeholder="https://example.com/product-image-back.jpg"
+                    value={imageUrlInput3}
+                    onChange={e => setImageUrlInput3(e.target.value)}
+                  />
+                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput3('')}>
+                    Clear
+                  </button>
+                </div>
                 <p className="field__hint">Add up to 3 photos for website galleries.</p>
               </div>
 
@@ -1555,7 +1612,6 @@ export default function Products() {
                 <input
                   id="add-image-alt"
                   type="text"
-                  placeholder="Accessible image description"
                   value={imageAltInput}
                   onChange={e => setImageAltInput(e.target.value)}
                 />
@@ -1818,18 +1874,39 @@ export default function Products() {
                               onChange={event => setEditImageUrlInput(event.target.value)}
                               placeholder="https://example.com/image.jpg"
                             />
+                            <button
+                              type="button"
+                              className="button button--ghost"
+                              onClick={() => setEditImageUrlInput('')}
+                            >
+                              Clear URL 1
+                            </button>
                             <input
                               type="url"
                               value={editImageUrlInput2}
                               onChange={event => setEditImageUrlInput2(event.target.value)}
                               placeholder="https://example.com/image-side.jpg"
                             />
+                            <button
+                              type="button"
+                              className="button button--ghost"
+                              onClick={() => setEditImageUrlInput2('')}
+                            >
+                              Clear URL 2
+                            </button>
                             <input
                               type="url"
                               value={editImageUrlInput3}
                               onChange={event => setEditImageUrlInput3(event.target.value)}
                               placeholder="https://example.com/image-back.jpg"
                             />
+                            <button
+                              type="button"
+                              className="button button--ghost"
+                              onClick={() => setEditImageUrlInput3('')}
+                            >
+                              Clear URL 3
+                            </button>
                           </>
                         ) : (
                           <p className="products-page__list-value">
@@ -1847,7 +1924,6 @@ export default function Products() {
                             type="text"
                             value={editImageAltInput}
                             onChange={event => setEditImageAltInput(event.target.value)}
-                            placeholder="Accessible image description"
                           />
                         ) : (
                           <p className="products-page__list-value">
@@ -1866,6 +1942,24 @@ export default function Products() {
                           />
                         ) : (
                           <p className="products-page__list-value">{product.category || '—'}</p>
+                        )}
+                      </div>
+
+                      <div className="products-page__list-field">
+                        <label className="field__label">Product description</label>
+                        {isEditing ? (
+                          <>
+                            <textarea
+                              value={editDescriptionInput}
+                              onChange={event => setEditDescriptionInput(event.target.value)}
+                              rows={4}
+                            />
+                            <p className="field__hint">
+                              {countWords(editDescriptionInput)} / {MAX_DESCRIPTION_WORDS} words
+                            </p>
+                          </>
+                        ) : (
+                          <p className="products-page__list-value">{product.description || '—'}</p>
                         )}
                       </div>
 
