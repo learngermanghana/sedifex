@@ -101,3 +101,23 @@ export async function pauseOrResumeCampaign(input: { storeId: string; resume: bo
 
   return parseApiResult<{ ok: boolean; status: string }>(response)
 }
+
+export async function importExistingCampaign(input: { storeId: string; campaignId: string }) {
+  const headers = await getAuthHeaders()
+  const response = await fetch('/api/google-ads/campaign', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      storeId: input.storeId,
+      action: 'import',
+      campaignId: input.campaignId,
+    }),
+  })
+
+  return parseApiResult<{
+    ok: boolean
+    status: string
+    importedCampaignId: string
+    importedCampaignName: string
+  }>(response)
+}
