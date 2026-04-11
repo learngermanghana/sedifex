@@ -214,8 +214,17 @@ export async function storeUnifiedGoogleTokens(params: {
 
   const accessToken = typeof params.tokenPayload.access_token === 'string' ? params.tokenPayload.access_token : ''
   const refreshToken = typeof params.tokenPayload.refresh_token === 'string' ? params.tokenPayload.refresh_token : ''
+  const existingRefreshTokens = [
+    existingGoogleOAuth.refreshToken,
+    existingGoogleBusiness.refreshToken,
+    existingGoogleAds.refreshToken,
+    existingGoogleMerchant.refreshToken,
+  ]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean)
+  const fallbackRefreshToken = existingRefreshTokens[0] || ''
   const sharedRefreshToken =
-    refreshToken || (typeof existingGoogleOAuth.refreshToken === 'string' ? existingGoogleOAuth.refreshToken : '')
+    refreshToken || (typeof existingGoogleOAuth.refreshToken === 'string' ? existingGoogleOAuth.refreshToken : '') || fallbackRefreshToken
   const tokenType = typeof params.tokenPayload.token_type === 'string' ? params.tokenPayload.token_type : 'Bearer'
   const scope = typeof params.tokenPayload.scope === 'string' ? params.tokenPayload.scope : ''
   if (!accessToken) throw new Error('missing-access-token')
@@ -235,7 +244,10 @@ export async function storeUnifiedGoogleTokens(params: {
 
   if (params.integrationHints.includes('business')) {
     const businessRefreshToken =
-      refreshToken || (typeof existingGoogleBusiness.refreshToken === 'string' ? existingGoogleBusiness.refreshToken : '')
+      refreshToken ||
+      (typeof existingGoogleBusiness.refreshToken === 'string' ? existingGoogleBusiness.refreshToken : '') ||
+      sharedRefreshToken ||
+      fallbackRefreshToken
     integrations.googleBusinessProfile = {
       accessToken,
       refreshToken: businessRefreshToken || FieldValue.delete(),
@@ -248,7 +260,10 @@ export async function storeUnifiedGoogleTokens(params: {
   }
   if (params.integrationHints.includes('ads')) {
     const adsRefreshToken =
-      refreshToken || (typeof existingGoogleAds.refreshToken === 'string' ? existingGoogleAds.refreshToken : '')
+      refreshToken ||
+      (typeof existingGoogleAds.refreshToken === 'string' ? existingGoogleAds.refreshToken : '') ||
+      sharedRefreshToken ||
+      fallbackRefreshToken
     integrations.googleAds = {
       accessToken,
       refreshToken: adsRefreshToken || FieldValue.delete(),
@@ -264,7 +279,10 @@ export async function storeUnifiedGoogleTokens(params: {
   }
   if (params.integrationHints.includes('merchant')) {
     const merchantRefreshToken =
-      refreshToken || (typeof existingGoogleMerchant.refreshToken === 'string' ? existingGoogleMerchant.refreshToken : '')
+      refreshToken ||
+      (typeof existingGoogleMerchant.refreshToken === 'string' ? existingGoogleMerchant.refreshToken : '') ||
+      sharedRefreshToken ||
+      fallbackRefreshToken
     integrations.googleMerchant = {
       accessToken,
       refreshToken: merchantRefreshToken || FieldValue.delete(),

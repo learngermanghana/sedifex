@@ -54,6 +54,43 @@ function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown-error'
 }
 
+function classifyGoogleBusinessApiError(payload: unknown, status: number): string {
+  const bodyRecord = asRecord(payload)
+  const directError = normalizeString(bodyRecord.error)
+  const directMessage = normalizeString(bodyRecord.error_description || bodyRecord.message)
+  const nestedError = asRecord(bodyRecord.error)
+  const nestedStatus = normalizeString(nestedError.status)
+  const nestedCode = normalizeString(nestedError.code)
+  const nestedMessage = normalizeString(nestedError.message)
+
+  const details = Array.isArray(nestedError.details) ? nestedError.details : []
+  const detailTexts = details
+    .map((detail) => {
+      const detailRecord = asRecord(detail)
+      return [
+        normalizeString(detailRecord.reason),
+        normalizeString(detailRecord.domain),
+        normalizeString(detailRecord.message),
+      ]
+        .filter(Boolean)
+        .join(':')
+    })
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  const joined = [directError, directMessage, nestedStatus, nestedCode, nestedMessage, detailTexts].join(' ').toLowerCase()
+  if (joined.includes('business.manage') || joined.includes('insufficient authentication scopes') || joined.includes('insufficientpermissions')) {
+    return 'google-business-missing-scope'
+  }
+  if (status === 403 && (joined.includes('permission_denied') || joined.includes('forbidden'))) {
+    return 'google-business-permission-denied'
+  }
+
+  const message = nestedMessage || directMessage || directError
+  return message ? `google-business-api-failed:${message}` : `google-business-api-failed:${status}`
+}
+
 function setCors(res: functions.Response<any>) {
   res.set('Access-Control-Allow-Origin', '*')
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -377,9 +414,7 @@ async function googleApiRequest<T>(params: {
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const bodyRecord = asRecord(payload)
-    const message = normalizeString(bodyRecord.error_description || bodyRecord.error || bodyRecord.message)
-    throw new Error(message ? `google-business-api-failed:${message}` : `google-business-api-failed:${response.status}`)
+    throw new Error(classifyGoogleBusinessApiError(payload, response.status))
   }
 
   return payload as T
@@ -593,7 +628,7 @@ export const googleBusinessLocations = functions.https.onRequest(async (req, res
       return
     }
     if (message === 'store-access-denied') {
-      res.status(403).json({ error: 'store-access-denied' })
+      res.status(400).json({ error: 'store-access-denied' })
       return
     }
     if (message === 'google-business-reconnect-required') {
@@ -697,7 +732,7 @@ export const googleBusinessUploadLocationMedia = functions.https.onRequest(async
       return
     }
     if (message === 'store-access-denied') {
-      res.status(403).json({ error: 'store-access-denied' })
+      res.status(400).json({ error: 'store-access-denied' })
       return
     }
     if (message === 'unsupported-mime-type') {
