@@ -4,6 +4,7 @@ import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import {
   beginGoogleAdsOAuth,
   createOrUpdateCampaign,
+  importExistingCampaign,
   pauseOrResumeCampaign,
   saveCampaignBrief,
 } from '../api/googleAdsAutomation'
@@ -173,6 +174,7 @@ export default function AdsCampaigns() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [importCampaignId, setImportCampaignId] = useState('')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -356,6 +358,34 @@ export default function AdsCampaigns() {
       setNotice(resume ? 'Campaign resumed.' : 'Campaign paused.')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to change campaign state.'
+      setNotice(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleImportCampaign() {
+    if (!storeId) return
+    if (!settings.connection.connected) {
+      setNotice('Connect Google Ads first.')
+      return
+    }
+    if (!importCampaignId.trim()) {
+      setNotice('Enter a Google Ads campaign ID to import.')
+      return
+    }
+
+    setSaving(true)
+    setNotice(null)
+    try {
+      const result = await importExistingCampaign({
+        storeId,
+        campaignId: importCampaignId,
+      })
+      setNotice(`Imported campaign ${result.importedCampaignName} (${result.importedCampaignId}).`)
+      setImportCampaignId('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to import campaign.'
       setNotice(message)
     } finally {
       setSaving(false)
@@ -647,9 +677,39 @@ export default function AdsCampaigns() {
         </div>
       </section>
 
+      <section className="ads-campaigns__section" aria-labelledby="campaign-import">
+        <div>
+          <h2 id="campaign-import">4) Import existing Google Ads campaign</h2>
+          <p>Already running ads manually? Paste a campaign ID and pull it into this workspace.</p>
+        </div>
+        <form
+          onSubmit={event => {
+            event.preventDefault()
+            void handleImportCampaign()
+          }}
+          className="ads-campaigns__form-grid"
+          noValidate
+        >
+          <label>
+            <span>Google Ads campaign ID</span>
+            <input
+              type="text"
+              value={importCampaignId}
+              onChange={event => setImportCampaignId(event.target.value)}
+              placeholder="1234567890"
+            />
+          </label>
+          <div className="ads-campaigns__actions">
+            <button type="submit" className="button button--primary" disabled={saving || !settings.connection.connected}>
+              Import campaign
+            </button>
+          </div>
+        </form>
+      </section>
+
       <section className="ads-campaigns__section" aria-labelledby="campaign-control">
         <div>
-          <h2 id="campaign-control">4) Launch + controls</h2>
+          <h2 id="campaign-control">5) Launch + controls</h2>
           <p>{campaignStateLabel}</p>
         </div>
 

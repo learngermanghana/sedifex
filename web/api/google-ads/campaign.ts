@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { db } from '../_firebase-admin.js'
 import {
   createGoogleAdsCampaign,
+  fetchGoogleAdsCampaignById,
   fetchGoogleAdsCampaignMetrics,
   getGoogleAdsAuthContext,
   parseCampaignBrief,
@@ -11,7 +12,7 @@ import {
 } from '../_google-ads.js'
 import { requireApiUser, requireStoreMembership } from '../_api-auth.js'
 
-type CampaignAction = 'create' | 'pause' | 'resume' | 'edit'
+type CampaignAction = 'create' | 'pause' | 'resume' | 'edit' | 'import'
 
 type CampaignCreateResponse = {
   ok: boolean
@@ -28,7 +29,7 @@ type CampaignCreateResponse = {
 }
 
 function parseAction(raw: unknown): CampaignAction {
-  if (raw === 'pause' || raw === 'resume' || raw === 'edit') return raw
+  if (raw === 'pause' || raw === 'resume' || raw === 'edit' || raw === 'import') return raw
   return 'create'
 }
 
@@ -100,6 +101,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const brief = parseCampaignBrief(req.body?.brief)
+    if (action === 'import') {
+      const requestedCampaignId = typeof req.body?.campaignId === 'string' ? req.body.campaignId : ''
+      const imported = await fetchGoogleAdsCampaignById({
+        customerId: auth.customerId,
+        managerId: auth.managerId,
+        accessToken: auth.accessToken,
+        campaignId: requestedCampaignId,
+      })
+      const metrics = await fetchGoogleAdsCampaignMetrics({
+        customerId: auth.customerId,
+        managerId: auth.managerId,
+        accessToken: auth.accessToken,
+        campaignId: imported.campaignId,
+      })
+
+      await settingsRef.set(
+        {
+          googleAdsAutomation: {
+            campaign: {
+              ...existingCampaign,
+              status: imported.status,
+              campaignId: imported.campaignId,
+              campaignName: imported.campaignName,
+              adGroupName: imported.adGroupName || existingCampaign.adGroupName || '',
+              customerId: auth.customerId,
+              loginCustomerId: auth.managerId || '',
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            metrics: {
+              spend: metrics.spend,
+              leads: metrics.leads,
+              cpa: metrics.cpa ?? brief.dailyBudget,
+              syncedAt: FieldValue.serverTimestamp(),
+            },
+          },
+        },
+        { merge: true },
+      )
+
+      return res.status(200).json({
+        ok: true,
+        status: imported.status,
+        importedCampaignId: imported.campaignId,
+        importedCampaignName: imported.campaignName,
+      })
+    }
+
     if (!brief.location || !brief.landingPageUrl || !brief.headline || !brief.description) {
       return res.status(400).json({ error: 'Complete all campaign brief fields before launch.' })
     }

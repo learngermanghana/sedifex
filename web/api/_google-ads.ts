@@ -743,6 +743,87 @@ export async function createGoogleAdsCampaign(params: {
   }
 }
 
+export async function fetchGoogleAdsCampaignById(params: {
+  customerId: string
+  managerId: string
+  accessToken: string
+  campaignId: string
+}): Promise<{
+  campaignId: string
+  campaignName: string
+  adGroupName: string
+  status: CampaignStatus
+}> {
+  const customerId = normalizeCustomerId(params.customerId)
+  const campaignId = params.campaignId.replace(/\D/g, '')
+  if (!campaignId) {
+    throw new Error('campaign-id-required')
+  }
+
+  const url = `${GOOGLE_ADS_API_BASE}/${GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`
+  const query = `
+    SELECT
+      campaign.id,
+      campaign.name,
+      campaign.status,
+      ad_group.name
+    FROM ad_group
+    WHERE campaign.id = ${campaignId}
+    LIMIT 50
+  `.replace(/\s+/g, ' ')
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: googleAdsHeaders({ accessToken: params.accessToken, managerId: params.managerId }),
+    body: JSON.stringify({ query }),
+  })
+
+  const payload = (await response.json()) as Array<Record<string, any>> | Record<string, unknown>
+  if (!response.ok) {
+    const message = Array.isArray(payload)
+      ? JSON.stringify(payload[0] || {})
+      : typeof (payload as Record<string, unknown>).message === 'string'
+        ? ((payload as Record<string, unknown>).message as string)
+        : response.status.toString()
+    throw new Error(`google-ads-campaign-lookup-failed:${message}`)
+  }
+
+  const batches = Array.isArray(payload) ? payload : []
+  const results: Array<Record<string, any>> = []
+  for (const batch of batches) {
+    if (!Array.isArray(batch.results)) continue
+    for (const result of batch.results) {
+      if (result && typeof result === 'object') results.push(result as Record<string, any>)
+    }
+  }
+
+  if (results.length === 0) {
+    throw new Error('campaign-not-found')
+  }
+
+  const campaign = (results[0].campaign ?? {}) as Record<string, unknown>
+  const adGroup = (results.find(row => row.adGroup || row.ad_group) ?? {}).adGroup ?? (results[0].ad_group ?? {})
+  const id = String(campaign.id ?? campaignId).replace(/\D/g, '')
+  const campaignName = typeof campaign.name === 'string' ? campaign.name : ''
+  const rawStatus = String(campaign.status ?? '').toUpperCase()
+  const status: CampaignStatus = rawStatus === 'PAUSED' ? 'paused' : 'live'
+  const adGroupName =
+    typeof adGroup === 'object' && adGroup && typeof (adGroup as Record<string, unknown>).name === 'string'
+      ? ((adGroup as Record<string, unknown>).name as string)
+      : ''
+
+  if (!id || !campaignName) {
+    throw new Error('campaign-not-found')
+  }
+
+  return {
+    campaignId: id,
+    campaignName,
+    adGroupName,
+    status,
+  }
+}
+
 function buildCampaignResource(customerId: string, campaignId: string): string {
   const normalizedCustomer = normalizeCustomerId(customerId)
   return campaignId.startsWith('customers/')
