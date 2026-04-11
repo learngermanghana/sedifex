@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -2044,6 +2044,25 @@ function toTrimmedStringArray(value) {
     }
     return [...unique];
 }
+function escapeXml(value) {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+function toGoogleMerchantAvailability(stockCount) {
+    return typeof stockCount === 'number' && Number.isFinite(stockCount) && stockCount > 0 ? 'in stock' : 'out of stock';
+}
+function toGoogleMerchantCondition(value) {
+    if (typeof value !== 'string')
+        return 'new';
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'used' || normalized === 'refurbished')
+        return normalized;
+    return 'new';
+}
 function extractProductImageSet(data) {
     const primaryImageUrl = toTrimmedStringOrNull(data.imageUrl);
     const imageUrls = toTrimmedStringArray(data.imageUrls);
@@ -2491,6 +2510,85 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
     })
         .filter(item => item !== null);
     res.status(200).json({ storeId, products });
+});
+exports.integrationGoogleMerchantFeed = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    const storeContext = await resolvePromoStoreForRead(req, res);
+    if (!storeContext) {
+        return;
+    }
+    const { storeId, data: storeData } = storeContext;
+    let productsSnapshot;
+    try {
+        productsSnapshot = await firestore_1.defaultDb
+            .collection('products')
+            .where('storeId', '==', storeId)
+            .orderBy('updatedAt', 'desc')
+            .limit(200)
+            .get();
+    }
+    catch (error) {
+        const code = error?.code;
+        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+        if (!isMissingIndex) {
+            throw error;
+        }
+        productsSnapshot = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+    }
+    const storeName = toTrimmedStringOrNull(storeData.displayName) ?? toTrimmedStringOrNull(storeData.name) ?? 'Sedifex Store';
+    const promoSlug = toTrimmedStringOrNull(storeData.promoSlug);
+    const storeUrl = toTrimmedStringOrNull(storeData.promoWebsiteUrl) ??
+        (promoSlug ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}` : 'https://www.sedifex.com');
+    const itemsXml = productsSnapshot.docs
+        .map(docSnap => {
+        const productData = docSnap.data();
+        const name = toTrimmedStringOrNull(productData.name);
+        if (!name)
+            return null;
+        const { imageUrl } = extractProductImageSet(productData);
+        const description = toTrimmedStringOrNull(productData.description) ?? name;
+        const category = toTrimmedStringOrNull(productData.category);
+        const productLink = `${storeUrl.replace(/\/$/, '')}?product=${encodeURIComponent(docSnap.id)}`;
+        const priceValue = typeof productData.price === 'number' && Number.isFinite(productData.price) && productData.price >= 0
+            ? productData.price
+            : 0;
+        const content = [
+            '<item>',
+            `<g:id>${escapeXml(docSnap.id)}</g:id>`,
+            `<title>${escapeXml(name)}</title>`,
+            `<description>${escapeXml(description)}</description>`,
+            `<link>${escapeXml(productLink)}</link>`,
+            `<g:price>${escapeXml(priceValue.toFixed(2))} GHS</g:price>`,
+            `<g:availability>${escapeXml(toGoogleMerchantAvailability(productData.stockCount))}</g:availability>`,
+            `<g:condition>${escapeXml(toGoogleMerchantCondition(productData.condition))}</g:condition>`,
+            `<g:brand>${escapeXml(storeName)}</g:brand>`,
+        ];
+        if (imageUrl) {
+            content.push(`<g:image_link>${escapeXml(imageUrl)}</g:image_link>`);
+        }
+        if (category) {
+            content.push(`<g:product_type>${escapeXml(category)}</g:product_type>`);
+        }
+        content.push('</item>');
+        return content.join('');
+    })
+        .filter((item) => Boolean(item))
+        .join('');
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>${escapeXml(storeName)}</title>
+    <link>${escapeXml(storeUrl)}</link>
+    <description>${escapeXml(`${storeName} product feed for Google Merchant Center`)}</description>
+    ${itemsXml}
+  </channel>
+</rss>`;
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.status(200).send(xml);
 });
 exports.integrationCustomers = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);

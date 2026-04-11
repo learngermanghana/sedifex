@@ -2637,6 +2637,26 @@ function toTrimmedStringArray(value: unknown): string[] {
   return [...unique]
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function toGoogleMerchantAvailability(stockCount: unknown): 'in stock' | 'out of stock' {
+  return typeof stockCount === 'number' && Number.isFinite(stockCount) && stockCount > 0 ? 'in stock' : 'out of stock'
+}
+
+function toGoogleMerchantCondition(value: unknown): 'new' | 'used' | 'refurbished' {
+  if (typeof value !== 'string') return 'new'
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'used' || normalized === 'refurbished') return normalized
+  return 'new'
+}
+
 function extractProductImageSet(data: Record<string, unknown>): { imageUrl: string | null; imageUrls: string[]; imageAlt: string | null } {
   const primaryImageUrl = toTrimmedStringOrNull(data.imageUrl)
   const imageUrls = toTrimmedStringArray(data.imageUrls)
@@ -3143,6 +3163,97 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
     .filter(item => item !== null)
 
   res.status(200).json({ storeId, products })
+})
+
+export const integrationGoogleMerchantFeed = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  const storeContext = await resolvePromoStoreForRead(req, res)
+  if (!storeContext) {
+    return
+  }
+  const { storeId, data: storeData } = storeContext
+
+  let productsSnapshot: admin.firestore.QuerySnapshot
+  try {
+    productsSnapshot = await db
+      .collection('products')
+      .where('storeId', '==', storeId)
+      .orderBy('updatedAt', 'desc')
+      .limit(200)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    productsSnapshot = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+  }
+
+  const storeName =
+    toTrimmedStringOrNull(storeData.displayName) ?? toTrimmedStringOrNull(storeData.name) ?? 'Sedifex Store'
+  const promoSlug = toTrimmedStringOrNull(storeData.promoSlug)
+  const storeUrl =
+    toTrimmedStringOrNull(storeData.promoWebsiteUrl) ??
+    (promoSlug ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}` : 'https://www.sedifex.com')
+
+  const itemsXml = productsSnapshot.docs
+    .map(docSnap => {
+      const productData = docSnap.data() as Record<string, unknown>
+      const name = toTrimmedStringOrNull(productData.name)
+      if (!name) return null
+
+      const { imageUrl } = extractProductImageSet(productData)
+      const description = toTrimmedStringOrNull(productData.description) ?? name
+      const category = toTrimmedStringOrNull(productData.category)
+      const productLink = `${storeUrl.replace(/\/$/, '')}?product=${encodeURIComponent(docSnap.id)}`
+
+      const priceValue =
+        typeof productData.price === 'number' && Number.isFinite(productData.price) && productData.price >= 0
+          ? productData.price
+          : 0
+
+      const content: string[] = [
+        '<item>',
+        `<g:id>${escapeXml(docSnap.id)}</g:id>`,
+        `<title>${escapeXml(name)}</title>`,
+        `<description>${escapeXml(description)}</description>`,
+        `<link>${escapeXml(productLink)}</link>`,
+        `<g:price>${escapeXml(priceValue.toFixed(2))} GHS</g:price>`,
+        `<g:availability>${escapeXml(toGoogleMerchantAvailability(productData.stockCount))}</g:availability>`,
+        `<g:condition>${escapeXml(toGoogleMerchantCondition(productData.condition))}</g:condition>`,
+        `<g:brand>${escapeXml(storeName)}</g:brand>`,
+      ]
+
+      if (imageUrl) {
+        content.push(`<g:image_link>${escapeXml(imageUrl)}</g:image_link>`)
+      }
+      if (category) {
+        content.push(`<g:product_type>${escapeXml(category)}</g:product_type>`)
+      }
+      content.push('</item>')
+      return content.join('')
+    })
+    .filter((item): item is string => Boolean(item))
+    .join('')
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>${escapeXml(storeName)}</title>
+    <link>${escapeXml(storeUrl)}</link>
+    <description>${escapeXml(`${storeName} product feed for Google Merchant Center`)}</description>
+    ${itemsXml}
+  </channel>
+</rss>`
+
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+  res.status(200).send(xml)
 })
 
 export const integrationCustomers = functions.https.onRequest(async (req, res) => {

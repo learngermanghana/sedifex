@@ -12,7 +12,7 @@ export default function IntegrationQuickstartPage() {
         <ul>
           <li>Product fields: <code>id</code>, <code>storeId</code>, <code>name</code>, <code>category</code>, <code>description</code>, <code>price</code>, <code>stockCount</code>, and media metadata.</li>
           <li>Integration flow with API key auth via <code>GET /integrationProducts?storeId=&lt;storeId&gt;</code>.</li>
-          <li>Companion endpoints for promotions, promo galleries, customers, and top sellers: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code>, <code>GET /integrationGallery?storeId=&lt;storeId&gt;</code>, <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>, and <code>GET /integrationTopSelling?storeId=&lt;storeId&gt;&amp;days=30&amp;limit=10</code>.</li>
+          <li>Companion endpoints for promotions, promo galleries, customers, top sellers, and Google Merchant XML feed: <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code>, <code>GET /integrationGallery?storeId=&lt;storeId&gt;</code>, <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>, <code>GET /integrationTopSelling?storeId=&lt;storeId&gt;&amp;days=30&amp;limit=10</code>, and <code>GET /integrationGoogleMerchantFeed?slug=&lt;promoSlug&gt;</code>.</li>
           <li>Dedupe, fallback data, category grouping, and cache strategy recommendations.</li>
         </ul>
       </section>

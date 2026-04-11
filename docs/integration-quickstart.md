@@ -5,7 +5,7 @@ Use this guide to auto-load products from Sedifex into either:
 - a **WordPress** site, or
 - a **Next.js site hosted on Vercel**.
 
-This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, `integrationCustomers`, `integrationTopSelling`, and `integrationTikTokVideos`), plus the product shape documented in the root README.
+This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, `integrationCustomers`, `integrationTopSelling`, `integrationTikTokVideos`, and `integrationGoogleMerchantFeed`), plus the product shape documented in the root README.
 
 ## What you get
 
