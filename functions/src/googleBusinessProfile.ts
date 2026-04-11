@@ -14,6 +14,7 @@ type GoogleBusinessTokens = {
   tokenType: string
   scope: string
   expiresAt: Timestamp | null
+  refreshTokenSource: 'googleBusinessProfile' | 'googleOAuth'
 }
 
 type ParsedUploadFile = {
@@ -139,14 +140,36 @@ async function getGoogleBusinessTokensForUser(userId: string, storeId: string): 
   const settingsData = asRecord(settingsSnap.data())
   const integrations = asRecord(settingsData.integrations)
   const googleBusinessProfile = asRecord(integrations.googleBusinessProfile)
+  const googleOAuth = asRecord(integrations.googleOAuth)
+  const googleMerchant = asRecord(integrations.googleMerchant)
 
   const oauthUserId = normalizeString(googleBusinessProfile.oauthUserId)
   if (!oauthUserId || oauthUserId !== userId) {
     throw new Error('google-business-not-connected')
   }
 
-  const refreshToken = normalizeString(googleBusinessProfile.refreshToken)
-  const accessToken = normalizeString(googleBusinessProfile.accessToken)
+  const businessRefreshToken = normalizeString(googleBusinessProfile.refreshToken)
+  const oauthRefreshToken = normalizeString(googleOAuth.refreshToken)
+  const merchantRefreshToken = normalizeString(googleMerchant.refreshToken)
+
+  const refreshToken = businessRefreshToken || oauthRefreshToken
+  const refreshTokenSource: GoogleBusinessTokens['refreshTokenSource'] = businessRefreshToken ? 'googleBusinessProfile' : 'googleOAuth'
+
+  const businessAccessToken = normalizeString(googleBusinessProfile.accessToken)
+  const oauthAccessToken = normalizeString(googleOAuth.accessToken)
+  const accessToken = businessAccessToken || oauthAccessToken
+
+  functions.logger.info('[googleBusiness] token source inspection', {
+    storeId,
+    oauthUserId,
+    refreshTokenSource,
+    hasBusinessRefreshToken: Boolean(businessRefreshToken),
+    hasOAuthRefreshToken: Boolean(oauthRefreshToken),
+    hasMerchantRefreshToken: Boolean(merchantRefreshToken),
+    businessEqualsOAuth: Boolean(businessRefreshToken) && businessRefreshToken === oauthRefreshToken,
+    businessEqualsMerchant: Boolean(businessRefreshToken) && businessRefreshToken === merchantRefreshToken,
+    oauthEqualsMerchant: Boolean(oauthRefreshToken) && oauthRefreshToken === merchantRefreshToken,
+  })
 
   if (!refreshToken || !accessToken) {
     throw new Error('google-business-missing-tokens')
@@ -158,7 +181,48 @@ async function getGoogleBusinessTokensForUser(userId: string, storeId: string): 
     tokenType: normalizeString(googleBusinessProfile.tokenType) || 'Bearer',
     scope: normalizeString(googleBusinessProfile.scope),
     expiresAt: googleBusinessProfile.expiresAt instanceof Timestamp ? googleBusinessProfile.expiresAt : null,
+    refreshTokenSource,
   }
+}
+
+function getGoogleBusinessRefreshOAuthConfig(): { clientId: string; clientSecret: string; source: string } {
+  const sharedClientId = process.env.GOOGLE_CLIENT_ID?.trim() || process.env.GOOGLE_ADS_CLIENT_ID?.trim() || ''
+  const sharedClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || process.env.GOOGLE_ADS_CLIENT_SECRET?.trim() || ''
+  if (sharedClientId && sharedClientSecret) {
+    return { clientId: sharedClientId, clientSecret: sharedClientSecret, source: 'GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET' }
+  }
+
+  const businessClientId = process.env.GOOGLE_BUSINESS_CLIENT_ID?.trim() || ''
+  const businessClientSecret = process.env.GOOGLE_BUSINESS_CLIENT_SECRET?.trim() || ''
+  if (businessClientId && businessClientSecret) {
+    return {
+      clientId: businessClientId,
+      clientSecret: businessClientSecret,
+      source: 'GOOGLE_BUSINESS_CLIENT_ID/GOOGLE_BUSINESS_CLIENT_SECRET',
+    }
+  }
+
+  throw new Error('google-business-oauth-config-missing')
+}
+
+async function markGoogleBusinessDisconnected(params: { storeId: string; reason: string }) {
+  await db.collection('storeSettings').doc(params.storeId).set(
+    {
+      integrations: {
+        googleBusinessProfile: {
+          accessToken: FieldValue.delete(),
+          refreshToken: FieldValue.delete(),
+          expiresAt: FieldValue.delete(),
+          connectedAccountIds: FieldValue.delete(),
+          disconnected: true,
+          disconnectedReason: params.reason,
+          disconnectedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+      },
+    },
+    { merge: true },
+  )
 }
 
 async function refreshGoogleAccessTokenIfNeeded(params: {
@@ -170,9 +234,14 @@ async function refreshGoogleAccessTokenIfNeeded(params: {
     return params.tokens
   }
 
-  const clientId = process.env.GOOGLE_BUSINESS_CLIENT_ID?.trim() || ''
-  const clientSecret = process.env.GOOGLE_BUSINESS_CLIENT_SECRET?.trim() || ''
-  if (!clientId || !clientSecret) throw new Error('google-business-oauth-config-missing')
+  const { clientId, clientSecret, source } = getGoogleBusinessRefreshOAuthConfig()
+
+  functions.logger.info('[googleBusiness] attempting token refresh', {
+    storeId: params.storeId,
+    refreshTokenSource: params.tokens.refreshTokenSource,
+    oauthClientId: clientId,
+    oauthClientIdSource: source,
+  })
 
   const body = new URLSearchParams({
     client_id: clientId,
@@ -188,8 +257,24 @@ async function refreshGoogleAccessTokenIfNeeded(params: {
   })
 
   const payload = asRecord(await response.json().catch(() => ({})))
+  functions.logger.info('[googleBusiness] token refresh response', {
+    storeId: params.storeId,
+    status: response.status,
+    ok: response.ok,
+    responseBody: payload,
+  })
+
   if (!response.ok) {
-    throw new Error(`google-business-refresh-failed:${normalizeString(payload.error_description || payload.error) || response.status}`)
+    const refreshErrorCode = normalizeString(payload.error)
+    const refreshErrorDescription = normalizeString(payload.error_description)
+    const refreshFailureReason = refreshErrorDescription || refreshErrorCode || String(response.status)
+
+    if (refreshErrorCode === 'invalid_grant' || refreshErrorCode === 'unauthorized_client') {
+      await markGoogleBusinessDisconnected({ storeId: params.storeId, reason: refreshFailureReason })
+      throw new Error('google-business-reconnect-required')
+    }
+
+    throw new Error(`google-business-refresh-failed:${refreshFailureReason}`)
   }
 
   const refreshed: GoogleBusinessTokens = {
@@ -198,6 +283,7 @@ async function refreshGoogleAccessTokenIfNeeded(params: {
     tokenType: normalizeString(payload.token_type) || params.tokens.tokenType || 'Bearer',
     scope: normalizeString(payload.scope) || params.tokens.scope,
     expiresAt: parseTokenExpiry(payload),
+    refreshTokenSource: params.tokens.refreshTokenSource,
   }
 
   await db.collection('storeSettings').doc(params.storeId).set(
@@ -209,6 +295,9 @@ async function refreshGoogleAccessTokenIfNeeded(params: {
           tokenType: refreshed.tokenType,
           scope: refreshed.scope,
           expiresAt: refreshed.expiresAt,
+          disconnected: false,
+          disconnectedReason: FieldValue.delete(),
+          disconnectedAt: FieldValue.delete(),
           updatedAt: FieldValue.serverTimestamp(),
         },
       },
@@ -507,6 +596,10 @@ export const googleBusinessLocations = functions.https.onRequest(async (req, res
       res.status(403).json({ error: 'store-access-denied' })
       return
     }
+    if (message === 'google-business-reconnect-required') {
+      res.status(401).json({ error: 'Google Business connection expired or is invalid. Please reconnect Google.' })
+      return
+    }
 
     res.status(400).json({ error: message })
   }
@@ -613,6 +706,10 @@ export const googleBusinessUploadLocationMedia = functions.https.onRequest(async
     }
     if (message === 'file-too-large') {
       res.status(413).json({ error: 'file-too-large' })
+      return
+    }
+    if (message === 'google-business-reconnect-required') {
+      res.status(401).json({ error: 'Google Business connection expired or is invalid. Please reconnect Google.' })
       return
     }
 
