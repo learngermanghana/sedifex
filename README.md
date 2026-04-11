@@ -44,6 +44,7 @@ Set these in your Vercel project:
 - `ADMIN_SERVICE_ACCOUNT_JSON` (recommended) or `FIREBASE_SERVICE_ACCOUNT_BASE64` (already required by existing API routes)
 - `IMAGE_UPLOAD_BUCKET` (for example: `sedifex-prod.appspot.com`)
 - `VITE_UPLOAD_API_URL` (optional; leave unset in production to use the same-origin default `/api/uploads`)
+- `VITE_GOOGLE_TAG_ID` (optional; your GA4 Measurement ID, e.g. `G-XXXXXXXXXX`, to enable Google tag loading in `web/index.html`)
 
 > Note: Firebase Functions `.env*` files reserve the `FIREBASE_*` prefix. Use non-reserved names like `IMAGE_UPLOAD_BUCKET` and `ADMIN_SERVICE_ACCOUNT_JSON` for deploy-safe config.
 
