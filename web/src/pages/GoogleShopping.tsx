@@ -50,6 +50,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
 
 export default function GoogleShopping() {
   const { storeId } = useActiveStore()
+  console.log("STORE ID:", storeId)
   const [step, setStep] = useState<WizardStep>('connect')
   const [integrationApiKey, setIntegrationApiKey] = useState('')
   const [integrationBaseUrl, setIntegrationBaseUrl] = useState(

@@ -8,6 +8,7 @@ import './GoogleBusinessProfile.css'
 
 export default function GoogleBusinessProfile() {
   const { storeId } = useActiveStore()
+  console.log("STORE ID:", storeId)
   const {
     isLoading,
     isStartingOAuth,
