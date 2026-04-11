@@ -46,6 +46,7 @@ export default function App() {
     '/terms',
     '/cookies',
     '/refund',
+    '/return-policy',
   ]
 
   const isPublicRoute = publicPaths.some(path => location.pathname.startsWith(path))

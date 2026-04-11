@@ -38,6 +38,7 @@ import PrivacyPage from './pages/legal/PrivacyPage'
 import CookiesPage from './pages/legal/CookiesPage'
 import RefundPage from './pages/legal/RefundPage'
 import TermsPage from './pages/legal/TermsPage'
+import ReturnPolicyPage from './pages/legal/ReturnPolicyPage'
 import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
 import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
 
@@ -111,6 +112,7 @@ const router = createBrowserRouter([
       { path: 'cookies', element: <CookiesPage /> },
       { path: 'refund', element: <RefundPage /> },
       { path: 'terms', element: <TermsPage /> },
+      { path: 'return-policy', element: <ReturnPolicyPage /> },
     ],
   },
 ])
