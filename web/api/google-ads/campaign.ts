@@ -122,6 +122,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             campaign: {
               ...existingCampaign,
               status: imported.status,
+              googleAdsStatus: imported.status,
+              source: 'imported',
               campaignId: imported.campaignId,
               campaignName: imported.campaignName,
               adGroupName: imported.adGroupName || existingCampaign.adGroupName || '',
@@ -145,6 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: imported.status,
         importedCampaignId: imported.campaignId,
         importedCampaignName: imported.campaignName,
+        customerId: auth.customerId,
       })
     }
 
@@ -237,6 +240,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           brief,
           campaign: {
             status: isCreate ? 'live' : existingCampaign.status || 'draft',
+            googleAdsStatus: isCreate ? 'live' : existingCampaign.googleAdsStatus || existingCampaign.status || 'draft',
+            source: isCreate ? 'sedifex' : existingCampaign.source || 'sedifex',
             campaignId,
             adGroupName,
             customerId: isCreate ? auth.customerId : existingCampaign.customerId || auth.customerId,
