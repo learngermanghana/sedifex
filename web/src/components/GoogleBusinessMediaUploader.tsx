@@ -187,6 +187,11 @@ export default function GoogleBusinessMediaUploader({ storeId, onReconnectGoogle
         return
       }
 
+      if (parsed.kind === 'not_authenticated') {
+        setUploadMessage('Your session expired. Sign out, sign in again, then reconnect Google Business Profile.')
+        return
+      }
+
       setUploadMessage(parsed.message || 'Photo upload failed. Please try again.')
     }
   }
@@ -199,6 +204,14 @@ export default function GoogleBusinessMediaUploader({ storeId, onReconnectGoogle
       <p className="google-shopping-page__status">
         This uploads a photo to your Google Business Profile. It does not create a text post or promotion.
       </p>
+      <div className="google-shopping-panel__actions">
+        <button type="button" disabled title="Google Post publishing is coming soon.">
+          Post to Google (Coming soon)
+        </button>
+        <small className="google-shopping-panel__hint">
+          Need a text post? Not available yet in Sedifex. Use your Google Business Profile dashboard for now.
+        </small>
+      </div>
 
       <label>
         <span>Business location</span>

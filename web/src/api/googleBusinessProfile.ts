@@ -59,7 +59,7 @@ function inferErrorKind(code: string, status: number): GoogleBusinessErrorKind {
     return 'missing_scope'
   }
 
-  if (code === 'not-authenticated' || status === 401) {
+  if (code === 'not-authenticated' || code === 'not_authenticated' || status === 401) {
     return 'not_authenticated'
   }
 
@@ -86,9 +86,13 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
     const rawError = typeof body.error === 'string' ? body.error : ''
     const normalizedCode = rawError.trim().toLowerCase()
     const kind = inferErrorKind(normalizedCode, response.status)
+    const isCodeLikeError =
+      normalizedCode.length > 0 &&
+      !normalizedCode.includes(' ') &&
+      normalizedCode === rawError.trim()
 
     throw new GoogleBusinessApiError({
-      message: rawError || defaultErrorMessage(kind),
+      message: !rawError || isCodeLikeError ? defaultErrorMessage(kind) : rawError,
       code: normalizedCode || 'request-failed',
       status: response.status,
       kind,
