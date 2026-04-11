@@ -16,6 +16,7 @@ import './AdsCampaigns.css'
 
 type CampaignGoal = 'leads' | 'sales' | 'traffic' | 'calls' | 'awareness'
 type CampaignStatus = 'draft' | 'live' | 'paused'
+type CampaignSource = 'imported' | 'sedifex'
 
 type GoogleAdsConnection = {
   connected: boolean
@@ -42,7 +43,11 @@ type CampaignBrief = {
 
 type CampaignSnapshot = {
   status: CampaignStatus
+  googleAdsStatus: CampaignStatus
+  source: CampaignSource
   campaignId: string
+  campaignName: string
+  customerId: string
   adGroupName: string
   updatedAt?: unknown
 }
@@ -82,7 +87,11 @@ const DEFAULT_SETTINGS: AdsAutomationSettings = {
   },
   campaign: {
     status: 'draft',
+    googleAdsStatus: 'draft',
+    source: 'sedifex',
     campaignId: '',
+    campaignName: '',
+    customerId: '',
     adGroupName: '',
   },
   metrics: {
@@ -111,6 +120,8 @@ function parseSettings(raw: Record<string, unknown> | undefined): AdsAutomationS
 
   const goal = typeof briefRaw.goal === 'string' ? briefRaw.goal : DEFAULT_SETTINGS.brief.goal
   const status = typeof campaignRaw.status === 'string' ? campaignRaw.status : DEFAULT_SETTINGS.campaign.status
+  const googleAdsStatus =
+    typeof campaignRaw.googleAdsStatus === 'string' ? campaignRaw.googleAdsStatus : status
   const accountEmail =
     typeof connectionRaw.accountEmail === 'string' ? connectionRaw.accountEmail : ''
   const customerId = typeof connectionRaw.customerId === 'string' ? connectionRaw.customerId : ''
@@ -144,7 +155,12 @@ function parseSettings(raw: Record<string, unknown> | undefined): AdsAutomationS
     },
     campaign: {
       status: status === 'live' || status === 'paused' || status === 'draft' ? status : 'draft',
+      googleAdsStatus:
+        googleAdsStatus === 'live' || googleAdsStatus === 'paused' || googleAdsStatus === 'draft' ? googleAdsStatus : 'draft',
+      source: campaignRaw.source === 'imported' ? 'imported' : 'sedifex',
       campaignId: typeof campaignRaw.campaignId === 'string' ? campaignRaw.campaignId : '',
+      campaignName: typeof campaignRaw.campaignName === 'string' ? campaignRaw.campaignName : '',
+      customerId: typeof campaignRaw.customerId === 'string' ? campaignRaw.customerId : '',
       adGroupName: typeof campaignRaw.adGroupName === 'string' ? campaignRaw.adGroupName : '',
       updatedAt: campaignRaw.updatedAt,
     },
@@ -175,6 +191,12 @@ export default function AdsCampaigns() {
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [importCampaignId, setImportCampaignId] = useState('')
+  const [importSuccess, setImportSuccess] = useState<{
+    campaignName: string
+    campaignId: string
+    status: CampaignStatus
+    customerId: string
+  } | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -224,10 +246,15 @@ export default function AdsCampaigns() {
     settings.brief.dailyBudget > 0
 
   const campaignStateLabel = useMemo(() => {
-    if (settings.campaign.status === 'live') return 'Live campaign is running.'
-    if (settings.campaign.status === 'paused') return 'Campaign paused.'
+    const primaryStatus = settings.campaign.source === 'imported' ? settings.campaign.googleAdsStatus : settings.campaign.status
+    if (primaryStatus === 'live') return 'Live campaign is running.'
+    if (primaryStatus === 'paused') return 'Campaign paused.'
     return 'Campaign draft is ready for launch.'
-  }, [settings.campaign.status])
+  }, [settings.campaign.googleAdsStatus, settings.campaign.source, settings.campaign.status])
+
+  const sourceBadgeLabel = settings.campaign.source === 'imported' ? 'Imported from Google Ads' : 'Created by Sedifex'
+  const sourceBadgeClass =
+    settings.campaign.source === 'imported' ? 'ads-campaigns__badge ads-campaigns__badge--imported' : 'ads-campaigns__badge ads-campaigns__badge--sedifex'
 
   const connectLabel = useMemo(() => {
     if (settings.connection.connected) return 'Connected'
@@ -327,6 +354,7 @@ export default function AdsCampaigns() {
         storeId,
         brief: settings.brief,
       })
+      setImportSuccess(null)
       if (!result.campaignCreatedInGoogleAds) {
         setNotice('Campaign was not confirmed in Google Ads. Check logs and retry.')
         return
@@ -370,8 +398,9 @@ export default function AdsCampaigns() {
       setNotice('Connect Google Ads first.')
       return
     }
-    if (!importCampaignId.trim()) {
-      setNotice('Enter a Google Ads campaign ID to import.')
+    const normalizedCampaignId = importCampaignId.replace(/\D/g, '')
+    if (!normalizedCampaignId) {
+      setNotice('Enter a valid Google Ads campaign ID. Use numbers only, for example 1234567890.')
       return
     }
 
@@ -380,13 +409,36 @@ export default function AdsCampaigns() {
     try {
       const result = await importExistingCampaign({
         storeId,
-        campaignId: importCampaignId,
+        campaignId: normalizedCampaignId,
       })
-      setNotice(`Imported campaign ${result.importedCampaignName} (${result.importedCampaignId}).`)
+      setImportSuccess({
+        campaignName: result.importedCampaignName,
+        campaignId: result.importedCampaignId,
+        status: result.status === 'paused' ? 'paused' : result.status === 'draft' ? 'draft' : 'live',
+        customerId: result.customerId || settings.connection.customerId,
+      })
+      setNotice(`Campaign imported: ${result.importedCampaignName}.`)
       setImportCampaignId('')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to import campaign.'
-      setNotice(message)
+      if (message === 'campaign-id-required') {
+        setNotice('Invalid campaign ID. Use the numeric Campaign ID from Google Ads (without spaces or dashes).')
+      } else if (message === 'campaign-not-found') {
+        setNotice('Campaign not found. Confirm the Campaign ID in Google Ads and try again.')
+      } else if (
+        message.includes('google-ads-campaign-lookup-failed:') &&
+        (message.toLowerCase().includes('permission') || message.toLowerCase().includes('not authorized'))
+      ) {
+        setNotice('This campaign is not accessible with the connected Google Ads account. Check account access or reconnect.')
+      } else if (
+        message.includes('google-ads-campaign-lookup-failed:') &&
+        (message.toLowerCase().includes('customer') || message.toLowerCase().includes('login-customer-id'))
+      ) {
+        setNotice('Account mismatch. The campaign belongs to a different Google Ads customer ID than the one connected to this workspace.')
+      } else {
+        setNotice(message)
+      }
+      setImportSuccess(null)
     } finally {
       setSaving(false)
     }
@@ -680,7 +732,10 @@ export default function AdsCampaigns() {
       <section className="ads-campaigns__section" aria-labelledby="campaign-import">
         <div>
           <h2 id="campaign-import">4) Import existing Google Ads campaign</h2>
-          <p>Already running ads manually? Paste a campaign ID and pull it into this workspace.</p>
+          <p>
+            Use this when your campaign is already running in Google Ads and you want Sedifex to manage it.
+            In Google Ads, open the campaign list and copy the Campaign ID from the “ID” column.
+          </p>
         </div>
         <form
           onSubmit={event => {
@@ -696,7 +751,7 @@ export default function AdsCampaigns() {
               type="text"
               value={importCampaignId}
               onChange={event => setImportCampaignId(event.target.value)}
-              placeholder="1234567890"
+              placeholder="Example: 1234567890"
             />
           </label>
           <div className="ads-campaigns__actions">
@@ -705,12 +760,43 @@ export default function AdsCampaigns() {
             </button>
           </div>
         </form>
+        {importSuccess ? (
+          <article className="ads-campaigns__import-success" aria-live="polite">
+            <h3>Campaign imported successfully</h3>
+            <dl>
+              <div>
+                <dt>Campaign name</dt>
+                <dd>{importSuccess.campaignName || '—'}</dd>
+              </div>
+              <div>
+                <dt>Google campaign ID</dt>
+                <dd>{importSuccess.campaignId}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{importSuccess.status.toUpperCase()}</dd>
+              </div>
+              <div>
+                <dt>Customer ID</dt>
+                <dd>{importSuccess.customerId || settings.connection.customerId || '—'}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>Imported from Google Ads</dd>
+              </div>
+            </dl>
+          </article>
+        ) : null}
+        <p className="ads-campaigns__muted-note">
+          TODO: Add “Sync campaigns from Google Ads” here to import and refresh multiple campaigns at once.
+        </p>
       </section>
 
       <section className="ads-campaigns__section" aria-labelledby="campaign-control">
         <div>
           <h2 id="campaign-control">5) Launch + controls</h2>
           <p>{campaignStateLabel}</p>
+          <span className={sourceBadgeClass}>{sourceBadgeLabel}</span>
         </div>
 
         <div className="ads-campaigns__actions ads-campaigns__actions--split">
@@ -748,7 +834,11 @@ export default function AdsCampaigns() {
           </article>
           <article>
             <h3>Status</h3>
-            <p>{settings.campaign.status.toUpperCase()}</p>
+            <p>{(settings.campaign.source === 'imported' ? settings.campaign.googleAdsStatus : settings.campaign.status).toUpperCase()}</p>
+          </article>
+          <article>
+            <h3>Campaign source</h3>
+            <p>{settings.campaign.source === 'imported' ? 'Google Ads import' : 'Sedifex'}</p>
           </article>
         </div>
       </section>

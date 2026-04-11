@@ -119,5 +119,6 @@ export async function importExistingCampaign(input: { storeId: string; campaignI
     status: string
     importedCampaignId: string
     importedCampaignName: string
+    customerId: string
   }>(response)
 }

@@ -45,6 +45,25 @@
   color: #475569;
 }
 
+.ads-campaigns__badge {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ads-campaigns__badge--imported {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.ads-campaigns__badge--sedifex {
+  background: #dcfce7;
+  color: #166534;
+}
+
 .ads-campaigns__form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -88,6 +107,43 @@
 
 .ads-campaigns__actions--split {
   justify-content: flex-start;
+}
+
+.ads-campaigns__import-success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.ads-campaigns__import-success h3 {
+  margin: 0 0 8px;
+  color: #14532d;
+}
+
+.ads-campaigns__import-success dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.ads-campaigns__import-success dt {
+  font-size: 12px;
+  color: #166534;
+}
+
+.ads-campaigns__import-success dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.ads-campaigns__muted-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .ads-campaigns__metrics-grid {
