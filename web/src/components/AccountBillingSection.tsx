@@ -27,7 +27,7 @@ const PLANS: PlanOption[] = [
   {
     id: 'scale_plus',
     label: 'Scale Plus',
-    monthlyAmountGhs: 2000,
+    monthlyAmountGhs: 2000 / 12,
     productLimit: 'Unlimited',
     dailySalesLimit: 'Unlimited',
   },

@@ -1504,8 +1504,8 @@ const PRICING_PLANS = [
   {
     name: 'Scale Plus',
     summary: 'Unlimited uploads and website creation for enterprise growth.',
-    amount: 'GHS 2000',
-    cadence: '/ month',
+    amount: 'GHS 166.67',
+    cadence: '/ month (billed yearly)',
     features: [
       'Unlimited active products',
       'Unlimited sales per day',
@@ -1516,6 +1516,7 @@ const PRICING_PLANS = [
       type: 'button' as const,
       label: 'Sign up',
     },
+    note: 'GHS 2000 / year billed upfront.',
   },
 ] as const
 

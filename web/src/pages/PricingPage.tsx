@@ -71,7 +71,7 @@ const PLANS = [
       'Unlimited uploads',
       'Website creation support',
       'Enterprise onboarding and account management',
-      'Price: GHS 2000',
+      'Price: GHS 2000/year (GHS 166.67/month billed yearly)',
     ],
     cta: 'Talk to Sales',
     to: 'mailto:info@sedifex.com',
