@@ -63,6 +63,14 @@ const GOOGLE_OAUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_MERCHANT_SCOPES = ['https://www.googleapis.com/auth/content', 'openid', 'email', 'profile']
 const DEFAULT_INTEGRATION_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
+const CATEGORY_BRAND_DEFAULTS: Array<{ match: RegExp; brand: string }> = [
+  { match: /(phone|tablet|laptop|computer|electronics|audio|headphones|camera|tv)/i, brand: 'Generic Electronics' },
+  { match: /(fashion|clothing|apparel|shoe|footwear|bag|jewelry|watch)/i, brand: 'Generic Fashion' },
+  { match: /(beauty|cosmetic|skincare|hair|makeup|fragrance)/i, brand: 'Generic Beauty' },
+  { match: /(grocery|food|beverage|drink|snack)/i, brand: 'Generic Grocery' },
+  { match: /(health|pharmacy|medical|supplement|wellness)/i, brand: 'Generic Health' },
+  { match: /(home|furniture|kitchen|decor|garden)/i, brand: 'Generic Home' },
+]
 
 function canonicalizeSedifexUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim()
@@ -87,6 +95,13 @@ function normalizeString(value: unknown): string {
 
 function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown-error'
+}
+
+function resolveCategoryBrandDefault(category: string | null): string {
+  const normalized = normalizeString(category)
+  if (!normalized) return ''
+  const match = CATEGORY_BRAND_DEFAULTS.find((entry) => entry.match.test(normalized))
+  return match ? match.brand : 'Generic'
 }
 
 function setCors(res: functions.Response<any>) {
@@ -676,13 +691,19 @@ async function fetchIntegrationProducts(params: {
   })
 }
 
-function validateAndTransform(product: IntegrationProduct):
+function validateAndTransform(
+  product: IntegrationProduct,
+  options: { storeBrandFallback: string },
+):
   | { valid: true; merchantProduct: MerchantProductInput }
   | { valid: false; reason: string } {
   const title = normalizeString(product.name)
   const description = normalizeString(product.description)
   const imageLink = normalizeString(product.imageUrl)
-  const brand = normalizeString(product.manufacturerName)
+  const brand =
+    normalizeString(product.manufacturerName) ||
+    normalizeString(options.storeBrandFallback) ||
+    resolveCategoryBrandDefault(product.category)
   const barcode = normalizeString(product.barcode)
   const sku = normalizeString(product.sku)
 
@@ -843,6 +864,10 @@ async function runSync(params: {
   integrationApiKey: string
   integrationBaseUrl?: string
 }): Promise<SyncSummary> {
+  const storeSnap = await db.collection('stores').doc(params.storeId).get()
+  const storeData = asRecord(storeSnap.data())
+  const storeBrandFallback = normalizeString(storeData.displayName) || normalizeString(storeData.name)
+
   const products = await fetchIntegrationProducts({
     storeId: params.storeId,
     integrationApiKey: params.integrationApiKey,
@@ -857,7 +882,7 @@ async function runSync(params: {
   let disapproved = 0
 
   for (const product of products) {
-    const transformed = validateAndTransform(product)
+    const transformed = validateAndTransform(product, { storeBrandFallback })
     if (!transformed.valid) {
       errors.push({ productId: product.id, reason: transformed.reason })
       continue
