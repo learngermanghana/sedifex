@@ -1455,7 +1455,7 @@ const PRICING_PLANS = [
     name: 'Starter',
     summary: 'Best first paid tier for new stores.',
     amount: 'GHS 20',
-    cadence: '/ month',
+    cadence: '/ month (billed yearly)',
     features: [
       'Up to 100 active products',
       'Up to 100 sales per day',
@@ -1466,12 +1466,13 @@ const PRICING_PLANS = [
       type: 'button' as const,
       label: 'Sign up',
     },
+    note: 'GHS 240 / year billed upfront.',
   },
   {
     name: 'Growth',
     summary: 'For stores with higher daily volume.',
     amount: 'GHS 50',
-    cadence: '/ month',
+    cadence: '/ month (billed yearly)',
     features: [
       'Up to 500 active products',
       'Up to 500 sales per day',
@@ -1482,13 +1483,14 @@ const PRICING_PLANS = [
       type: 'button' as const,
       label: 'Sign up',
     },
+    note: 'GHS 600 / year billed upfront.',
     isFeatured: true,
   },
   {
     name: 'Scale',
     summary: 'High limits for large operations.',
     amount: 'GHS 100',
-    cadence: '/ month',
+    cadence: '/ month (billed yearly)',
     features: [
       'Unlimited active products',
       'Unlimited sales per day',
@@ -1499,7 +1501,7 @@ const PRICING_PLANS = [
       type: 'button' as const,
       label: 'Sign up',
     },
-    note: 'Need more? Contact sales for custom limits.',
+    note: 'GHS 1200 / year billed upfront. Need more? Contact sales for custom limits.',
   },
   {
     name: 'Scale Plus',

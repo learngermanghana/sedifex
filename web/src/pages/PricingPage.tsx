@@ -26,6 +26,7 @@ const PLANS = [
     name: 'Starter',
     subtitle: 'For small businesses getting started',
     points: [
+      'Price: GHS 20/month (GHS 240/year billed upfront)',
       'Core inventory management',
       'Basic reporting',
       'Free public store page',
@@ -39,6 +40,7 @@ const PLANS = [
     name: 'Growth',
     subtitle: 'For businesses scaling communication and operations',
     points: [
+      'Price: GHS 50/month (GHS 600/year billed upfront)',
       'Everything in Starter',
       'Branded Bulk SMS features',
       'Google Ads automation',
@@ -53,6 +55,7 @@ const PLANS = [
     name: 'Scale',
     subtitle: 'For multi-branch and high-volume operations',
     points: [
+      'Price: GHS 100/month (GHS 1200/year billed upfront)',
       'Everything in Growth',
       'Multi-branch support',
       'Higher SMS and usage capacity',
