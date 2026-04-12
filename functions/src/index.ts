@@ -123,6 +123,12 @@ type StartTikTokConnectPayload = {
   storeId?: unknown
 }
 
+type GenerateAiAdvicePayload = {
+  question?: unknown
+  storeId?: unknown
+  jsonContext?: unknown
+}
+
 const VALID_ROLES = new Set(['owner', 'staff'])
 const TRIAL_DAYS = 14
 const GRACE_DAYS = 7
@@ -130,9 +136,44 @@ const MILLIS_PER_DAY = 1000 * 60 * 60 * 24
 const BULK_MESSAGE_LIMIT = 1000
 const BULK_MESSAGE_BATCH_LIMIT = 200
 const SMS_SEGMENT_SIZE = 160
+const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' })
+const OPENAI_MODEL = defineString('OPENAI_MODEL', { default: 'gpt-4o-mini' })
+const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
+
+let openAiConfigWarned = false
+
+function getOpenAiConfig() {
+  const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
+  const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini'
+
+  if (!apiKey && !openAiConfigWarned) {
+    functions.logger.warn(
+      'OPENAI_API_KEY is missing. Set it via Firebase params before calling generateAiAdvice.',
+    )
+    openAiConfigWarned = true
+  }
+
+  return { apiKey, model }
+}
+
+function normalizeAiAdvicePayload(raw: GenerateAiAdvicePayload | undefined) {
+  const question = typeof raw?.question === 'string' ? raw.question.trim() : ''
+  if (!question) throw new functions.https.HttpsError('invalid-argument', 'Question is required')
+  if (question.length > 2_000) {
+    throw new functions.https.HttpsError('invalid-argument', 'Question must be 2000 characters or less')
+  }
+
+  const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : ''
+  const jsonContext =
+    raw?.jsonContext && typeof raw.jsonContext === 'object'
+      ? (raw.jsonContext as Record<string, unknown>)
+      : {}
+
+  return { question, storeId, jsonContext }
+}
 
 async function verifyOwnerEmail(uid: string) {
   try {
@@ -1039,6 +1080,107 @@ export const resolveStoreAccess = functions.https.onCall(
       role,
       claims,
       billing: billingSummary,
+    }
+  },
+)
+
+/** ============================================================================
+ *  CALLABLE: generateAiAdvice
+ * ==========================================================================*/
+
+export const generateAiAdvice = functions.https.onCall(
+  async (rawData: unknown, context: functions.https.CallableContext) => {
+    assertAuthenticated(context)
+
+    const { apiKey, model } = getOpenAiConfig()
+    if (!apiKey) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'AI advisor is not configured yet. Missing OPENAI_API_KEY.',
+      )
+    }
+
+    const uid = context.auth!.uid
+    const { question, storeId: requestedStoreId, jsonContext } =
+      normalizeAiAdvicePayload((rawData ?? {}) as GenerateAiAdvicePayload)
+
+    const memberSnap = await db.collection('teamMembers').doc(uid).get()
+    const memberData = (memberSnap.data() ?? {}) as Record<string, unknown>
+    const memberStoreId =
+      typeof memberData.storeId === 'string' ? memberData.storeId.trim() : ''
+
+    const storeId = requestedStoreId || memberStoreId
+    if (!storeId) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'No workspace found for this account. Initialize your workspace first.',
+      )
+    }
+
+    if (requestedStoreId && memberStoreId && requestedStoreId !== memberStoreId) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You do not have access to the requested workspace.',
+      )
+    }
+
+    const contextJson = JSON.stringify(jsonContext, null, 2).slice(0, 6_000)
+    const systemPrompt =
+      'You are an operations advisor for retail and POS businesses. Give concise, practical recommendations the owner can execute this week. Use short bullet points and include risks when relevant.'
+    const userPrompt = [
+      `Workspace: ${storeId}`,
+      'Question:',
+      question,
+      '',
+      'Context JSON:',
+      contextJson,
+    ].join('\n')
+
+    const aiResponse = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        max_tokens: 500,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    })
+
+    const payload = (await aiResponse.json().catch(() => null)) as
+      | {
+          error?: { message?: string }
+          choices?: Array<{ message?: { content?: string } }>
+        }
+      | null
+
+    if (!aiResponse.ok) {
+      const apiMessage =
+        payload?.error?.message && payload.error.message.trim() !== ''
+          ? payload.error.message
+          : `OpenAI request failed with status ${aiResponse.status}`
+      functions.logger.error('[generateAiAdvice] OpenAI error', {
+        status: aiResponse.status,
+        apiMessage,
+      })
+      throw new functions.https.HttpsError('internal', 'Unable to generate AI advice right now.')
+    }
+
+    const advice = payload?.choices?.[0]?.message?.content?.trim() || ''
+    if (!advice) {
+      throw new functions.https.HttpsError('internal', 'AI returned an empty response.')
+    }
+
+    return {
+      advice,
+      storeId,
+      dataPreview: jsonContext,
     }
   },
 )

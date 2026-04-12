@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -63,9 +63,35 @@ const MILLIS_PER_DAY = 1000 * 60 * 60 * 24;
 const BULK_MESSAGE_LIMIT = 1000;
 const BULK_MESSAGE_BATCH_LIMIT = 200;
 const SMS_SEGMENT_SIZE = 160;
+const OPENAI_API_KEY = (0, params_1.defineString)('OPENAI_API_KEY', { default: '' });
+const OPENAI_MODEL = (0, params_1.defineString)('OPENAI_MODEL', { default: 'gpt-4o-mini' });
+const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
+let openAiConfigWarned = false;
+function getOpenAiConfig() {
+    const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || '';
+    const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
+    if (!apiKey && !openAiConfigWarned) {
+        functions.logger.warn('OPENAI_API_KEY is missing. Set it via Firebase params before calling generateAiAdvice.');
+        openAiConfigWarned = true;
+    }
+    return { apiKey, model };
+}
+function normalizeAiAdvicePayload(raw) {
+    const question = typeof raw?.question === 'string' ? raw.question.trim() : '';
+    if (!question)
+        throw new functions.https.HttpsError('invalid-argument', 'Question is required');
+    if (question.length > 2000) {
+        throw new functions.https.HttpsError('invalid-argument', 'Question must be 2000 characters or less');
+    }
+    const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : '';
+    const jsonContext = raw?.jsonContext && typeof raw.jsonContext === 'object'
+        ? raw.jsonContext
+        : {};
+    return { question, storeId, jsonContext };
+}
 async function verifyOwnerEmail(uid) {
     try {
         const user = await firestore_1.admin.auth().getUser(uid);
@@ -769,6 +795,74 @@ exports.resolveStoreAccess = functions.https.onCall(async (data, context) => {
         role,
         claims,
         billing: billingSummary,
+    };
+});
+/** ============================================================================
+ *  CALLABLE: generateAiAdvice
+ * ==========================================================================*/
+exports.generateAiAdvice = functions.https.onCall(async (rawData, context) => {
+    assertAuthenticated(context);
+    const { apiKey, model } = getOpenAiConfig();
+    if (!apiKey) {
+        throw new functions.https.HttpsError('failed-precondition', 'AI advisor is not configured yet. Missing OPENAI_API_KEY.');
+    }
+    const uid = context.auth.uid;
+    const { question, storeId: requestedStoreId, jsonContext } = normalizeAiAdvicePayload((rawData ?? {}));
+    const memberSnap = await firestore_1.defaultDb.collection('teamMembers').doc(uid).get();
+    const memberData = (memberSnap.data() ?? {});
+    const memberStoreId = typeof memberData.storeId === 'string' ? memberData.storeId.trim() : '';
+    const storeId = requestedStoreId || memberStoreId;
+    if (!storeId) {
+        throw new functions.https.HttpsError('failed-precondition', 'No workspace found for this account. Initialize your workspace first.');
+    }
+    if (requestedStoreId && memberStoreId && requestedStoreId !== memberStoreId) {
+        throw new functions.https.HttpsError('permission-denied', 'You do not have access to the requested workspace.');
+    }
+    const contextJson = JSON.stringify(jsonContext, null, 2).slice(0, 6000);
+    const systemPrompt = 'You are an operations advisor for retail and POS businesses. Give concise, practical recommendations the owner can execute this week. Use short bullet points and include risks when relevant.';
+    const userPrompt = [
+        `Workspace: ${storeId}`,
+        'Question:',
+        question,
+        '',
+        'Context JSON:',
+        contextJson,
+    ].join('\n');
+    const aiResponse = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model,
+            temperature: 0.3,
+            max_tokens: 500,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+        }),
+    });
+    const payload = (await aiResponse.json().catch(() => null));
+    if (!aiResponse.ok) {
+        const apiMessage = payload?.error?.message && payload.error.message.trim() !== ''
+            ? payload.error.message
+            : `OpenAI request failed with status ${aiResponse.status}`;
+        functions.logger.error('[generateAiAdvice] OpenAI error', {
+            status: aiResponse.status,
+            apiMessage,
+        });
+        throw new functions.https.HttpsError('internal', 'Unable to generate AI advice right now.');
+    }
+    const advice = payload?.choices?.[0]?.message?.content?.trim() || '';
+    if (!advice) {
+        throw new functions.https.HttpsError('internal', 'AI returned an empty response.');
+    }
+    return {
+        advice,
+        storeId,
+        dataPreview: jsonContext,
     };
 });
 /** ============================================================================
