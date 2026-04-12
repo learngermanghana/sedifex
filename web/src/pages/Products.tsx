@@ -498,6 +498,7 @@ export default function Products() {
   const [editName, setEditName] = useState('')
   const [editItemType, setEditItemType] = useState<ItemType>('product')
   const [editSku, setEditSku] = useState('')
+  const [editHasManualSkuOverride, setEditHasManualSkuOverride] = useState(false)
   const [editCategoryInput, setEditCategoryInput] = useState('')
   const [editPriceInput, setEditPriceInput] = useState('')
   const [editDescriptionInput, setEditDescriptionInput] = useState('')
@@ -1134,6 +1135,14 @@ export default function Products() {
     setSku(nextAutoSku)
   }, [hasManualSkuOverride, itemType, nextAutoSku])
 
+  useEffect(() => {
+    if (!editingId) return
+    if (editItemType !== 'product') return
+    if (editHasManualSkuOverride) return
+    if (editSku.trim()) return
+    setEditSku(nextAutoSku)
+  }, [editHasManualSkuOverride, editItemType, editSku, editingId, nextAutoSku])
+
   async function logInventoryActivity(summary: string, detail: string) {
     if (!activeStoreId) return
 
@@ -1163,6 +1172,7 @@ export default function Products() {
     setEditName(product.name)
     setEditItemType(product.itemType)
     setEditSku(product.sku ?? '')
+    setEditHasManualSkuOverride(false)
     setEditCategoryInput(product.category ?? '')
     setEditPriceInput(
       typeof product.price === 'number' && Number.isFinite(product.price)
@@ -1203,6 +1213,7 @@ export default function Products() {
 
   function cancelEditing() {
     setEditingId(null)
+    setEditHasManualSkuOverride(false)
     setEditImageFileInput(null)
     setEditImageUploadError(null)
   }
@@ -1355,6 +1366,7 @@ export default function Products() {
       })
 
       setEditingId(null)
+      setEditHasManualSkuOverride(false)
       setFormStatus('success')
       setFormError('Item updated successfully.')
 
@@ -1434,6 +1446,7 @@ export default function Products() {
       await deleteDoc(ref)
       if (editingId === product.id) {
         setEditingId(null)
+        setEditHasManualSkuOverride(false)
       }
 
       await logInventoryActivity(
@@ -2080,8 +2093,15 @@ export default function Products() {
                         <label className="field__label">Item type</label>
                         {isEditing ? (
                           <select
-                            value={editItemType}
-                            onChange={event => setEditItemType(event.target.value as ItemType)}
+                              value={editItemType}
+                              onChange={event => {
+                                const nextItemType = event.target.value as ItemType
+                                setEditItemType(nextItemType)
+                                if (nextItemType === 'service') {
+                                  setEditSku('')
+                                  setEditHasManualSkuOverride(false)
+                                }
+                              }}
                           >
                             <option value="product">Physical product</option>
                             <option value="service">Service</option>
@@ -2097,11 +2117,19 @@ export default function Products() {
                         <div className="products-page__list-field">
                           <label className="field__label">SKU / Barcode</label>
                           {isEditing ? (
-                            <input
-                              value={editSku}
-                              onChange={event => setEditSku(event.target.value)}
-                              placeholder="Scan or type"
-                            />
+                            <>
+                              <input
+                                value={editSku}
+                                onChange={event => {
+                                  setEditSku(event.target.value)
+                                  setEditHasManualSkuOverride(true)
+                                }}
+                                placeholder={`Auto-fills like ${barcodePrefix}0001 (you can edit it)`}
+                              />
+                              <p className="field__hint">
+                                If this item has no barcode yet, we auto-fill one for you.
+                              </p>
+                            </>
                           ) : (
                             <p className="products-page__list-value">{product.sku || '—'}</p>
                           )}
