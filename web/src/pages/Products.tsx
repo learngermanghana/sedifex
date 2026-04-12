@@ -62,6 +62,16 @@ const DESCRIPTION_TEMPLATE_OPTIONS: Array<{ value: DescriptionTemplate; label: s
   { value: 'fashion', label: 'Fashion' },
   { value: 'electronics', label: 'Electronics' },
 ]
+const SUGGESTED_PRODUCT_CATEGORIES = [
+  'Supplements',
+  'Skin care',
+  'Hair care',
+  'Food & beverages',
+  'Household',
+  'Baby care',
+  'Electronics',
+  'Fashion',
+] as const
 
 function buildDescriptionPrompt(input: {
   itemName: string
@@ -548,6 +558,7 @@ export default function Products() {
   const canManageProducts = activeMembership?.role === 'owner'
   const categoryOptions = useMemo(() => {
     const uniqueCategories = new Set<string>()
+    SUGGESTED_PRODUCT_CATEGORIES.forEach(category => uniqueCategories.add(category))
     products.forEach(product => {
       const category = product.category?.trim()
       if (category) {
@@ -1656,22 +1667,25 @@ export default function Products() {
               <label className="field__label" htmlFor="add-category">
                 Category <span className="field__optional">(optional)</span>
               </label>
-              <select
+              <input
                 id="add-category"
+                type="text"
                 value={categoryInput}
                 onChange={e => setCategoryInput(e.target.value)}
-              >
-                <option value="">Select a category</option>
+                list="category-options-add"
+                placeholder="Select or type a category"
+              />
+              <datalist id="category-options-add">
                 {categoryOptions.map(category => (
                   <option key={category} value={category}>
                     {category}
                   </option>
                 ))}
-              </select>
+              </datalist>
               <p className="field__hint">
                 {categoryOptions.length
-                  ? 'Pick from existing categories to avoid spelling mistakes.'
-                  : 'Add your first item, then categories will appear here.'}
+                  ? 'Pick from suggestions or type your own category.'
+                  : 'Type your first category to get started.'}
               </p>
             </div>
 
@@ -2228,19 +2242,24 @@ export default function Products() {
                       <div className="products-page__list-field">
                         <label className="field__label">Category</label>
                         {isEditing ? (
-                          <select
+                          <input
+                            type="text"
                             value={editCategoryInput}
                             onChange={event => setEditCategoryInput(event.target.value)}
-                          >
-                            <option value="">Select a category</option>
+                            list="category-options-edit"
+                            placeholder="Select or type a category"
+                          />
+                        ) : (
+                          <p className="products-page__list-value">{product.category || '—'}</p>
+                        )}
+                        {isEditing && (
+                          <datalist id="category-options-edit">
                             {categoryOptions.map(category => (
                               <option key={category} value={category}>
                                 {category}
                               </option>
                             ))}
-                          </select>
-                        ) : (
-                          <p className="products-page__list-value">{product.category || '—'}</p>
+                          </datalist>
                         )}
                       </div>
 
