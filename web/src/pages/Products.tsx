@@ -538,6 +538,16 @@ export default function Products() {
   )
 
   const canManageProducts = activeMembership?.role === 'owner'
+  const categoryOptions = useMemo(() => {
+    const uniqueCategories = new Set<string>()
+    products.forEach(product => {
+      const category = product.category?.trim()
+      if (category) {
+        uniqueCategories.add(category)
+      }
+    })
+    return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b))
+  }, [products])
 
   /**
    * Load products for the active store
@@ -1599,12 +1609,23 @@ export default function Products() {
               <label className="field__label" htmlFor="add-category">
                 Category <span className="field__optional">(optional)</span>
               </label>
-              <input
+              <select
                 id="add-category"
-                placeholder="e.g. Beverages, Skin Care, Electronics"
                 value={categoryInput}
                 onChange={e => setCategoryInput(e.target.value)}
-              />
+              >
+                <option value="">Select a category</option>
+                {categoryOptions.map(category => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+              <p className="field__hint">
+                {categoryOptions.length
+                  ? 'Pick from existing categories to avoid spelling mistakes.'
+                  : 'Add your first item, then categories will appear here.'}
+              </p>
             </div>
 
             <div className="field">
@@ -2145,11 +2166,17 @@ export default function Products() {
                       <div className="products-page__list-field">
                         <label className="field__label">Category</label>
                         {isEditing ? (
-                          <input
+                          <select
                             value={editCategoryInput}
                             onChange={event => setEditCategoryInput(event.target.value)}
-                            placeholder="e.g. Beverages"
-                          />
+                          >
+                            <option value="">Select a category</option>
+                            {categoryOptions.map(category => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <p className="products-page__list-value">{product.category || '—'}</p>
                         )}
