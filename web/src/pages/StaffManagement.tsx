@@ -436,9 +436,11 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
                 key={member.id}
                 data-testid={`staff-member-${member.id}`}
               >
-                <span role="cell" className="staff-table__email">{member.email ?? '—'}</span>
-                <span role="cell">{member.role === 'owner' ? 'Owner' : 'Staff'}</span>
-                <span role="cell">
+                <span role="cell" className="staff-table__email" data-label="Email">
+                  {member.email ?? '—'}
+                </span>
+                <span role="cell" data-label="Role">{member.role === 'owner' ? 'Owner' : 'Staff'}</span>
+                <span role="cell" data-label="Status">
                   {member.status ? (
                     <span className="staff-table__status" data-variant={member.status}>
                       {member.status}
@@ -447,7 +449,9 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
                     'Active'
                   )}
                 </span>
-                <span role="cell">{formatDate(member.updatedAt ?? member.createdAt)}</span>
+                <span role="cell" data-label="Updated">
+                  {formatDate(member.updatedAt ?? member.createdAt)}
+                </span>
                 <span role="cell" className="staff-table__actions" data-label="Actions">
                   <button
                     type="button"
@@ -515,11 +519,11 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
           ) : (
             audits.map(entry => (
               <div className="staff-table__row" role="row" key={entry.id}>
-                <span role="cell">{formatDate(entry.createdAt)}</span>
-                <span role="cell">{entry.action}</span>
-                <span role="cell">{entry.targetEmail}</span>
-                <span role="cell">{entry.actorEmail ?? '—'}</span>
-                <span role="cell">
+                <span role="cell" data-label="When">{formatDate(entry.createdAt)}</span>
+                <span role="cell" data-label="Action">{entry.action}</span>
+                <span role="cell" data-label="Target">{entry.targetEmail}</span>
+                <span role="cell" data-label="By">{entry.actorEmail ?? '—'}</span>
+                <span role="cell" data-label="Outcome">
                   <span
                     className="staff-table__status"
                     data-variant={entry.outcome === 'success' ? 'active' : 'inactive'}
