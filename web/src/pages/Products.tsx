@@ -24,9 +24,14 @@ import {
   loadCachedProducts,
   saveCachedProducts,
 } from '../utils/offlineCache'
-import { normalizeBarcode } from '../utils/barcode'
+import {
+  buildNextStoreBarcodeCode,
+  buildStoreBarcodePrefix,
+  normalizeBarcode,
+} from '../utils/barcode'
 import { useStorePreferences } from '../hooks/useStorePreferences'
 import { useStoreBilling } from '../hooks/useStoreBilling'
+import { useWorkspaceIdentity } from '../hooks/useWorkspaceIdentity'
 import type { ItemType, Product } from '../types/product'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import { requestAiAdvisor } from '../api/aiAdvisor'
@@ -447,6 +452,7 @@ export default function Products() {
   const user = useAuthUser()
   const { preferences } = useStorePreferences(activeStoreId)
   const { billing } = useStoreBilling()
+  const { name: workspaceName } = useWorkspaceIdentity()
   const { publish } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -460,6 +466,7 @@ export default function Products() {
   const [name, setName] = useState('')
   const [itemType, setItemType] = useState<ItemType>('product')
   const [sku, setSku] = useState('')
+  const [hasManualSkuOverride, setHasManualSkuOverride] = useState(false)
   const [categoryInput, setCategoryInput] = useState('')
   const [priceInput, setPriceInput] = useState('')
   const [descriptionInput, setDescriptionInput] = useState('')
@@ -548,6 +555,23 @@ export default function Products() {
     })
     return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b))
   }, [products])
+
+  const barcodePrefix = useMemo(
+    () => buildStoreBarcodePrefix({ workspaceName, storeId: activeStoreId }),
+    [activeStoreId, workspaceName],
+  )
+
+  const nextAutoSku = useMemo(
+    () =>
+      buildNextStoreBarcodeCode({
+        workspaceName,
+        storeId: activeStoreId,
+        existingCodes: products
+          .filter(product => product.itemType === 'product')
+          .map(product => product.barcode ?? product.sku),
+      }),
+    [activeStoreId, products, workspaceName],
+  )
 
   /**
    * Load products for the active store
@@ -1004,6 +1028,7 @@ export default function Products() {
       setName('')
       setItemType('product')
       setSku('')
+      setHasManualSkuOverride(false)
       setCategoryInput('')
       setPriceInput('')
       setDescriptionInput('')
@@ -1090,6 +1115,7 @@ export default function Products() {
     if (value === 'service') {
       // services should not have barcodes
       setSku('')
+      setHasManualSkuOverride(false)
       setExpiryInput('')
       setManufacturerInput('')
       setProductionDateInput('')
@@ -1101,6 +1127,12 @@ export default function Products() {
   const isService = itemType === 'service'
   const isStockTracked = itemType === 'product'
   const activityActor = user?.displayName || user?.email || 'Team member'
+
+  useEffect(() => {
+    if (itemType !== 'product') return
+    if (hasManualSkuOverride) return
+    setSku(nextAutoSku)
+  }, [hasManualSkuOverride, itemType, nextAutoSku])
 
   async function logInventoryActivity(summary: string, detail: string) {
     if (!activeStoreId) return
@@ -1534,14 +1566,16 @@ export default function Products() {
                 </label>
                 <input
                   id="add-sku"
-                  placeholder="Scan or type the barcode, or use an internal code"
+                  placeholder={`Auto-fills like ${barcodePrefix}0001 (you can edit it)`}
                   value={sku}
-                  onChange={e => setSku(e.target.value)}
+                  onChange={e => {
+                    setSku(e.target.value)
+                    setHasManualSkuOverride(true)
+                  }}
                 />
                 <p className="field__hint">
-                  If you scan barcodes, this should match the code on the product. We
-                  also store a normalized version (letters + digits) so camera scans work even if
-                  you add spaces or dashes.
+                  Barcode values auto-fill from your store prefix ({barcodePrefix}) plus sequential
+                  numbers (for example {barcodePrefix}0001). You can overwrite this any time.
                 </p>
               </div>
             )}
