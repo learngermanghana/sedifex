@@ -119,6 +119,65 @@ function countWords(input: string): number {
   return input.trim().split(/\s+/).filter(Boolean).length
 }
 
+function renderDescriptionInline(text: string, keyPrefix: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, index) => {
+    const key = `${keyPrefix}-part-${index}`
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={key}>{part.slice(2, -2)}</strong>
+    }
+    return <React.Fragment key={key}>{part}</React.Fragment>
+  })
+}
+
+function renderProductDescription(description: string): React.ReactNode {
+  const lines = description.split('\n')
+  const content: React.ReactNode[] = []
+  let pendingBullets: string[] = []
+  let blockIndex = 0
+
+  const flushBullets = () => {
+    if (!pendingBullets.length) return
+    const listKey = `description-list-${blockIndex}`
+    content.push(
+      <ul key={listKey} className="products-page__description-list">
+        {pendingBullets.map((item, itemIndex) => (
+          <li key={`${listKey}-item-${itemIndex}`}>
+            {renderDescriptionInline(item, `${listKey}-${itemIndex}`)}
+          </li>
+        ))}
+      </ul>,
+    )
+    pendingBullets = []
+    blockIndex += 1
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) {
+      flushBullets()
+      continue
+    }
+
+    if (line.startsWith('- ')) {
+      pendingBullets.push(line.slice(2).trim())
+      continue
+    }
+
+    flushBullets()
+    const paragraphKey = `description-paragraph-${blockIndex}`
+    content.push(
+      <p key={paragraphKey} className="products-page__description-paragraph">
+        {renderDescriptionInline(line, paragraphKey)}
+      </p>,
+    )
+    blockIndex += 1
+  }
+
+  flushBullets()
+  return content
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null
   try {
@@ -2134,7 +2193,11 @@ export default function Products() {
                             </p>
                           </>
                         ) : (
-                          <p className="products-page__list-value">{product.description || '—'}</p>
+                          <div className="products-page__list-value products-page__description-preview">
+                            {product.description
+                              ? renderProductDescription(product.description)
+                              : '—'}
+                          </div>
                         )}
                       </div>
 

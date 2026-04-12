@@ -225,6 +225,33 @@
   min-width: 180px;
 }
 
+.products-page__description-preview {
+  white-space: normal;
+}
+
+.products-page__description-paragraph {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+
+.products-page__description-preview .products-page__description-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.products-page__description-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.products-page__description-list li {
+  margin: 0 0 4px;
+  line-height: 1.45;
+}
+
+.products-page__description-preview .products-page__description-list:last-child {
+  margin-bottom: 0;
+}
+
 .products-page__receive-link {
   display: inline-flex;
   align-items: center;
