@@ -29,6 +29,7 @@ import { useStorePreferences } from '../hooks/useStorePreferences'
 import { useStoreBilling } from '../hooks/useStoreBilling'
 import type { ItemType, Product } from '../types/product'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
+import { requestAiAdvisor } from '../api/aiAdvisor'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
 
@@ -48,6 +49,36 @@ type SaleRecord = {
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
 const DEFAULT_PRODUCT_IMAGE_URL = 'https://storage.googleapis.com/sedifeximage/stores/Y5ivjrJUBtWl7KzoR0aVszFu1c93/logo.jpg?v=1775656136764'
 const MAX_DESCRIPTION_WORDS = 500
+type DescriptionTemplate = 'general' | 'skin-care' | 'food' | 'fashion' | 'electronics'
+const DESCRIPTION_TEMPLATE_OPTIONS: Array<{ value: DescriptionTemplate; label: string }> = [
+  { value: 'general', label: 'General product' },
+  { value: 'skin-care', label: 'Skin care' },
+  { value: 'food', label: 'Food & beverages' },
+  { value: 'fashion', label: 'Fashion' },
+  { value: 'electronics', label: 'Electronics' },
+]
+
+function buildDescriptionPrompt(input: {
+  itemName: string
+  itemType: ItemType
+  category: string
+  template: DescriptionTemplate
+}): string {
+  const templateLabel =
+    DESCRIPTION_TEMPLATE_OPTIONS.find(option => option.value === input.template)?.label ??
+    'General product'
+
+  return [
+    'Write one product description for a store listing.',
+    `Template: ${templateLabel}.`,
+    `Product name: ${input.itemName || 'Not provided'}.`,
+    `Item type: ${input.itemType}.`,
+    `Category: ${input.category || 'Not provided'}.`,
+    `Keep it concise, engaging, and under ${MAX_DESCRIPTION_WORDS} words.`,
+    'Include key benefits, best use case, and a short call-to-action.',
+    'Return plain text only.',
+  ].join(' ')
+}
 
 /**
  * Helpers
@@ -373,6 +404,8 @@ export default function Products() {
   const [categoryInput, setCategoryInput] = useState('')
   const [priceInput, setPriceInput] = useState('')
   const [descriptionInput, setDescriptionInput] = useState('')
+  const [descriptionTemplate, setDescriptionTemplate] = useState<DescriptionTemplate>('general')
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
   const [taxRateInput, setTaxRateInput] = useState('')
   const [reorderPointInput, setReorderPointInput] = useState('')
   const [openingStockInput, setOpeningStockInput] = useState('')
@@ -402,6 +435,9 @@ export default function Products() {
   const [editCategoryInput, setEditCategoryInput] = useState('')
   const [editPriceInput, setEditPriceInput] = useState('')
   const [editDescriptionInput, setEditDescriptionInput] = useState('')
+  const [editDescriptionTemplate, setEditDescriptionTemplate] =
+    useState<DescriptionTemplate>('general')
+  const [isGeneratingEditDescription, setIsGeneratingEditDescription] = useState(false)
   const [editTaxRateInput, setEditTaxRateInput] = useState('')
   const [editReorderPointInput, setEditReorderPointInput] = useState('')
   const [editStockInput, setEditStockInput] = useState('') // 🔹 On hand (stock) editable
@@ -656,6 +692,93 @@ export default function Products() {
   const hasReachedProductLimit =
     maxProductsAllowed !== null && products.length >= maxProductsAllowed
 
+  async function generateDescriptionWithAi(input: {
+    itemName: string
+    itemType: ItemType
+    category: string
+    template: DescriptionTemplate
+  }): Promise<string> {
+    const response = await requestAiAdvisor({
+      question: buildDescriptionPrompt(input),
+      storeId: activeStoreId ?? undefined,
+    })
+    return typeof response.advice === 'string' ? response.advice.trim() : ''
+  }
+
+  async function handleGenerateDescription() {
+    if (isGeneratingDescription) return
+
+    const normalizedProductName = normalizeProductName(name)
+    if (!normalizedProductName) {
+      setFormStatus('error')
+      setFormError('Add an item name first so AI can generate a better description.')
+      return
+    }
+
+    setFormStatus('idle')
+    setFormError(null)
+    setIsGeneratingDescription(true)
+    try {
+      const generated = await generateDescriptionWithAi({
+        itemName: normalizedProductName,
+        itemType,
+        category: categoryInput.trim(),
+        template: descriptionTemplate,
+      })
+      if (!generated) {
+        setFormStatus('error')
+        setFormError('AI could not generate a description right now. Please try again.')
+        return
+      }
+      setDescriptionInput(generated)
+      setFormStatus('success')
+      publish({ tone: 'success', message: 'AI drafted a description. Review and edit before saving.' })
+    } catch (error) {
+      console.error('[products] Failed to generate product description', error)
+      setFormStatus('error')
+      setFormError('Could not generate description with AI right now. Please try again.')
+    } finally {
+      setIsGeneratingDescription(false)
+    }
+  }
+
+  async function handleGenerateEditDescription(product: Product) {
+    if (isGeneratingEditDescription) return
+
+    const normalizedProductName = normalizeProductName(editName || product.name)
+    if (!normalizedProductName) {
+      setFormStatus('error')
+      setFormError('Add an item name first so AI can generate a better description.')
+      return
+    }
+
+    setFormStatus('idle')
+    setFormError(null)
+    setIsGeneratingEditDescription(true)
+    try {
+      const generated = await generateDescriptionWithAi({
+        itemName: normalizedProductName,
+        itemType: editItemType,
+        category: editCategoryInput.trim(),
+        template: editDescriptionTemplate,
+      })
+      if (!generated) {
+        setFormStatus('error')
+        setFormError('AI could not generate a description right now. Please try again.')
+        return
+      }
+      setEditDescriptionInput(generated)
+      setFormStatus('success')
+      publish({ tone: 'success', message: 'AI drafted a description. Review and save when ready.' })
+    } catch (error) {
+      console.error('[products] Failed to generate edit description', error)
+      setFormStatus('error')
+      setFormError('Could not generate description with AI right now. Please try again.')
+    } finally {
+      setIsGeneratingEditDescription(false)
+    }
+  }
+
   /**
    * Add item handler
    */
@@ -815,6 +938,7 @@ export default function Products() {
       setCategoryInput('')
       setPriceInput('')
       setDescriptionInput('')
+      setDescriptionTemplate('general')
       setTaxRateInput('')
       setReorderPointInput('')
       setOpeningStockInput('')
@@ -945,6 +1069,7 @@ export default function Products() {
         : '',
     )
     setEditDescriptionInput(product.description ?? '')
+    setEditDescriptionTemplate('general')
     setEditTaxRateInput(
       typeof product.taxRate === 'number' && Number.isFinite(product.taxRate)
         ? String((product.taxRate * 100).toFixed(0)) // show as percent
@@ -1374,6 +1499,29 @@ export default function Products() {
               <label className="field__label" htmlFor="add-description">
                 Product description <span className="field__optional">(optional, up to 500 words)</span>
               </label>
+              <div className="products-page__description-tools">
+                <select
+                  id="add-description-template"
+                  value={descriptionTemplate}
+                  onChange={event =>
+                    setDescriptionTemplate(event.target.value as DescriptionTemplate)
+                  }
+                >
+                  {DESCRIPTION_TEMPLATE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={handleGenerateDescription}
+                  disabled={isGeneratingDescription}
+                >
+                  {isGeneratingDescription ? 'Generating…' : 'Generate by A.I'}
+                </button>
+              </div>
               <textarea
                 id="add-description"
                 value={descriptionInput}
@@ -1382,6 +1530,9 @@ export default function Products() {
               />
               <p className="field__hint">
                 {countWords(descriptionInput)} / {MAX_DESCRIPTION_WORDS} words
+              </p>
+              <p className="field__hint">
+                Pick a template (skin care, food, and more) then tap Generate by A.I for a fast draft.
               </p>
             </div>
 
@@ -1949,6 +2100,30 @@ export default function Products() {
                         <label className="field__label">Product description</label>
                         {isEditing ? (
                           <>
+                            <div className="products-page__description-tools">
+                              <select
+                                value={editDescriptionTemplate}
+                                onChange={event =>
+                                  setEditDescriptionTemplate(
+                                    event.target.value as DescriptionTemplate,
+                                  )
+                                }
+                              >
+                                {DESCRIPTION_TEMPLATE_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="button button--ghost"
+                                onClick={() => handleGenerateEditDescription(product)}
+                                disabled={isGeneratingEditDescription}
+                              >
+                                {isGeneratingEditDescription ? 'Generating…' : 'Generate by A.I'}
+                              </button>
+                            </div>
                             <textarea
                               value={editDescriptionInput}
                               onChange={event => setEditDescriptionInput(event.target.value)}

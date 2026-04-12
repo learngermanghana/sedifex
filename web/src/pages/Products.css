@@ -214,6 +214,17 @@
   color: #b45309;
 }
 
+.products-page__description-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.products-page__description-tools select {
+  min-width: 180px;
+}
+
 .products-page__receive-link {
   display: inline-flex;
   align-items: center;
