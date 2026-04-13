@@ -3990,6 +3990,102 @@ function computeWebhookSignature(secret: string, payload: string) {
   return `sha256=${digest}`
 }
 
+type ProductEnrichment = {
+  category: string | null
+  manufacturerName: string | null
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
+}
+
+const PRODUCT_CATEGORY_RULES: Array<{ category: string; keywords: string[] }> = [
+  { category: 'Beverages', keywords: ['drink', 'juice', 'soda', 'water', 'coffee', 'tea'] },
+  { category: 'Snacks', keywords: ['chips', 'biscuit', 'cookie', 'cracker', 'chocolate'] },
+  { category: 'Dairy', keywords: ['milk', 'cheese', 'yoghurt', 'yogurt', 'butter'] },
+  { category: 'Bakery', keywords: ['bread', 'cake', 'muffin', 'croissant', 'donut'] },
+  { category: 'Personal Care', keywords: ['soap', 'shampoo', 'toothpaste', 'lotion'] },
+  { category: 'Cleaning', keywords: ['detergent', 'bleach', 'cleaner', 'disinfectant'] },
+]
+
+const MANUFACTURER_RULES: Array<{ manufacturerName: string; keywords: string[] }> = [
+  { manufacturerName: 'Coca-Cola', keywords: ['coca cola', 'coke'] },
+  { manufacturerName: 'PepsiCo', keywords: ['pepsi', '7up', 'mirinda'] },
+  { manufacturerName: 'Nestlé', keywords: ['nestle', 'milo', 'nescafe'] },
+  { manufacturerName: 'Unilever', keywords: ['lux', 'closeup', 'omo', 'sunlight'] },
+  { manufacturerName: 'PZ Cussons', keywords: ['morning fresh', 'cussons', 'imperial leather'] },
+]
+
+function normalizeRuleText(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function inferCategoryFromText(productText: string): string | null {
+  for (const rule of PRODUCT_CATEGORY_RULES) {
+    if (rule.keywords.some(keyword => productText.includes(keyword))) {
+      return rule.category
+    }
+  }
+  return null
+}
+
+function inferManufacturerFromText(productText: string): string | null {
+  for (const rule of MANUFACTURER_RULES) {
+    if (rule.keywords.some(keyword => productText.includes(keyword))) {
+      return rule.manufacturerName
+    }
+  }
+  return null
+}
+
+function buildProductEnrichment(data: Record<string, unknown>): ProductEnrichment | null {
+  const name = normalizeRuleText(data.name)
+  if (!name) return null
+
+  const description = normalizeRuleText(data.description)
+  const existingCategory = normalizeRuleText(data.category)
+  const existingManufacturer = normalizeRuleText(data.manufacturerName)
+  const merged = `${name} ${description}`.trim()
+
+  const inferredCategory = existingCategory ? null : inferCategoryFromText(merged)
+  const inferredManufacturer = existingManufacturer ? null : inferManufacturerFromText(merged)
+
+  if (!inferredCategory && !inferredManufacturer) return null
+
+  const matchCount = Number(Boolean(inferredCategory)) + Number(Boolean(inferredManufacturer))
+  return {
+    category: inferredCategory,
+    manufacturerName: inferredManufacturer,
+    confidence: matchCount === 2 ? 'high' : 'medium',
+    reason: 'rule-based keyword enrichment',
+  }
+}
+
+export const enrichProductDataAfterSave = functions.firestore
+  .document('products/{productId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return
+
+    const afterData = (change.after.data() ?? {}) as Record<string, unknown>
+    const enrichment = buildProductEnrichment(afterData)
+    if (!enrichment) return
+
+    const updates: Record<string, unknown> = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      enrichmentMeta: {
+        source: 'product-enrichment-agent',
+        lastRunAt: admin.firestore.FieldValue.serverTimestamp(),
+        confidence: enrichment.confidence,
+        reason: enrichment.reason,
+        eventId: context.eventId,
+      },
+    }
+
+    if (enrichment.category) updates.category = enrichment.category
+    if (enrichment.manufacturerName) updates.manufacturerName = enrichment.manufacturerName
+    if (!updates.category && !updates.manufacturerName) return
+
+    await change.after.ref.set(updates, { merge: true })
+  })
+
 export const emitProductWebhooks = functions.firestore
   .document('products/{productId}')
   .onWrite(async (change, context) => {

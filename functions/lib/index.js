@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -3206,6 +3206,87 @@ function computeWebhookSignature(secret, payload) {
     const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex');
     return `sha256=${digest}`;
 }
+const PRODUCT_CATEGORY_RULES = [
+    { category: 'Beverages', keywords: ['drink', 'juice', 'soda', 'water', 'coffee', 'tea'] },
+    { category: 'Snacks', keywords: ['chips', 'biscuit', 'cookie', 'cracker', 'chocolate'] },
+    { category: 'Dairy', keywords: ['milk', 'cheese', 'yoghurt', 'yogurt', 'butter'] },
+    { category: 'Bakery', keywords: ['bread', 'cake', 'muffin', 'croissant', 'donut'] },
+    { category: 'Personal Care', keywords: ['soap', 'shampoo', 'toothpaste', 'lotion'] },
+    { category: 'Cleaning', keywords: ['detergent', 'bleach', 'cleaner', 'disinfectant'] },
+];
+const MANUFACTURER_RULES = [
+    { manufacturerName: 'Coca-Cola', keywords: ['coca cola', 'coke'] },
+    { manufacturerName: 'PepsiCo', keywords: ['pepsi', '7up', 'mirinda'] },
+    { manufacturerName: 'Nestlé', keywords: ['nestle', 'milo', 'nescafe'] },
+    { manufacturerName: 'Unilever', keywords: ['lux', 'closeup', 'omo', 'sunlight'] },
+    { manufacturerName: 'PZ Cussons', keywords: ['morning fresh', 'cussons', 'imperial leather'] },
+];
+function normalizeRuleText(value) {
+    return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+function inferCategoryFromText(productText) {
+    for (const rule of PRODUCT_CATEGORY_RULES) {
+        if (rule.keywords.some(keyword => productText.includes(keyword))) {
+            return rule.category;
+        }
+    }
+    return null;
+}
+function inferManufacturerFromText(productText) {
+    for (const rule of MANUFACTURER_RULES) {
+        if (rule.keywords.some(keyword => productText.includes(keyword))) {
+            return rule.manufacturerName;
+        }
+    }
+    return null;
+}
+function buildProductEnrichment(data) {
+    const name = normalizeRuleText(data.name);
+    if (!name)
+        return null;
+    const description = normalizeRuleText(data.description);
+    const existingCategory = normalizeRuleText(data.category);
+    const existingManufacturer = normalizeRuleText(data.manufacturerName);
+    const merged = `${name} ${description}`.trim();
+    const inferredCategory = existingCategory ? null : inferCategoryFromText(merged);
+    const inferredManufacturer = existingManufacturer ? null : inferManufacturerFromText(merged);
+    if (!inferredCategory && !inferredManufacturer)
+        return null;
+    const matchCount = Number(Boolean(inferredCategory)) + Number(Boolean(inferredManufacturer));
+    return {
+        category: inferredCategory,
+        manufacturerName: inferredManufacturer,
+        confidence: matchCount === 2 ? 'high' : 'medium',
+        reason: 'rule-based keyword enrichment',
+    };
+}
+exports.enrichProductDataAfterSave = functions.firestore
+    .document('products/{productId}')
+    .onWrite(async (change, context) => {
+    if (!change.after.exists)
+        return;
+    const afterData = (change.after.data() ?? {});
+    const enrichment = buildProductEnrichment(afterData);
+    if (!enrichment)
+        return;
+    const updates = {
+        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        enrichmentMeta: {
+            source: 'product-enrichment-agent',
+            lastRunAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+            confidence: enrichment.confidence,
+            reason: enrichment.reason,
+            eventId: context.eventId,
+        },
+    };
+    if (enrichment.category)
+        updates.category = enrichment.category;
+    if (enrichment.manufacturerName)
+        updates.manufacturerName = enrichment.manufacturerName;
+    if (!updates.category && !updates.manufacturerName)
+        return;
+    await change.after.ref.set(updates, { merge: true });
+});
 exports.emitProductWebhooks = functions.firestore
     .document('products/{productId}')
     .onWrite(async (change, context) => {
