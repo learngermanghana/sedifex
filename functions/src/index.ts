@@ -142,11 +142,13 @@ const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
 const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
   default: '2026-04-13',
 })
+const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', { default: '' })
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
 
 let openAiConfigWarned = false
+let integrationApiKeyWarned = false
 
 function getOpenAiConfig() {
   const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
@@ -160,6 +162,21 @@ function getOpenAiConfig() {
   }
 
   return { apiKey, model }
+}
+
+function getIntegrationMasterApiKey(): string {
+  const apiKey =
+    SEDIFEX_INTEGRATION_API_KEY.value()?.trim() ||
+    process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() ||
+    ''
+
+  if (!apiKey && !integrationApiKeyWarned) {
+    functions.logger.warn(
+      'SEDIFEX_INTEGRATION_API_KEY is missing. Set it via Firebase params before calling integration HTTP endpoints.',
+    )
+    integrationApiKeyWarned = true
+  }
+  return apiKey
 }
 
 function normalizeAiAdvicePayload(raw: GenerateAiAdvicePayload | undefined) {
@@ -2553,7 +2570,7 @@ function setIntegrationResponseHeaders(res: functions.Response<any>) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Authorization,Content-Type,X-Sedifex-Contract-Version',
+    'Authorization,Content-Type,X-API-Key,X-Sedifex-Contract-Version',
   )
   res.setHeader('x-sedifex-contract-version', contractVersion)
   res.setHeader('x-sedifex-request-id', requestId)
@@ -2583,10 +2600,15 @@ function validateIntegrationContractVersionOrReply(
 }
 
 function getIntegrationAuthContext(req: functions.https.Request) {
-  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : ''
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+  const apiKeyHeader = req.headers['x-api-key']
+  const apiKey =
+    typeof apiKeyHeader === 'string'
+      ? apiKeyHeader.trim()
+      : Array.isArray(apiKeyHeader) && typeof apiKeyHeader[0] === 'string'
+        ? apiKeyHeader[0].trim()
+        : ''
   const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : ''
-  return { token, storeId }
+  return { apiKey, storeId }
 }
 
 function getPromoSlugFromRequest(req: functions.https.Request): string {
@@ -2857,10 +2879,14 @@ async function resolvePromoStoreForRead(
     return null
   }
 
-  const { token, storeId } = getIntegrationAuthContext(req)
-  if (token || storeId) {
+  const { apiKey, storeId } = getIntegrationAuthContext(req)
+  if (apiKey || storeId) {
     const authContext = await validateIntegrationTokenOrReply(req, res)
     if (!authContext) {
+      return null
+    }
+    if (!authContext.storeId) {
+      res.status(400).json({ error: 'missing-store-id' })
       return null
     }
     const storeSnap = await db.collection('stores').doc(authContext.storeId).get()
@@ -2977,19 +3003,35 @@ function normalizeTimestampIso(value: unknown): string | null {
 async function validateIntegrationTokenOrReply(
   req: functions.https.Request,
   res: functions.Response<any>,
-): Promise<{ storeId: string } | null> {
+  options?: { requireStoreId?: boolean },
+): Promise<{ storeId: string | null; isMasterKey: boolean } | null> {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method-not-allowed' })
     return null
   }
 
-  const { token, storeId } = getIntegrationAuthContext(req)
-  if (!token || !storeId) {
-    res.status(400).json({ error: 'missing-token-or-store' })
+  const requireStoreId = options?.requireStoreId !== false
+  const { apiKey, storeId } = getIntegrationAuthContext(req)
+  if (!apiKey) {
+    res.status(400).json({ error: 'missing-api-key' })
     return null
   }
 
-  const tokenHash = hashIntegrationSecret(token)
+  const expectedApiKey = getIntegrationMasterApiKey()
+  if (expectedApiKey && apiKey === expectedApiKey) {
+    if (requireStoreId && !storeId) {
+      res.status(400).json({ error: 'missing-store-id' })
+      return null
+    }
+    return { storeId: storeId || null, isMasterKey: true }
+  }
+
+  if (!storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return null
+  }
+
+  const tokenHash = hashIntegrationSecret(apiKey)
   const keySnapshot = await db
     .collection('integrationApiKeys')
     .where('storeId', '==', storeId)
@@ -2999,7 +3041,7 @@ async function validateIntegrationTokenOrReply(
     .get()
 
   if (keySnapshot.empty) {
-    res.status(401).json({ error: 'invalid-token' })
+    res.status(401).json({ error: 'invalid-api-key' })
     return null
   }
 
@@ -3012,7 +3054,7 @@ async function validateIntegrationTokenOrReply(
     { merge: true },
   )
 
-  return { storeId }
+  return { storeId, isMasterKey: false }
 }
 
 type MarketplaceSortMode = 'newest' | 'price' | 'featured' | 'store-diverse'
@@ -3212,15 +3254,17 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
   if (!validateIntegrationContractVersionOrReply(req, res)) {
     return
   }
-  const authContext = await validateIntegrationTokenOrReply(req, res)
+  const authContext = await validateIntegrationTokenOrReply(req, res, { requireStoreId: false })
   if (!authContext) {
     return
   }
-  const { storeId } = authContext
 
   const mapProductDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
     const data = docSnap.data() as Record<string, unknown>
     const normalizedName = normalizeProductName(data.name)
+    const storeId =
+      typeof data.storeId === 'string' && data.storeId.trim() ? data.storeId.trim() : null
+    if (!storeId) return null
     return {
       id: docSnap.id,
       storeId,
@@ -3241,17 +3285,27 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
             : 'product',
       ...extractProductImageSet(data),
       updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
-    }
+    } as const
   }
 
   let productsSnap: admin.firestore.QuerySnapshot
+  const scopeStoreId = authContext.storeId
+  const isAllStoresRead = authContext.isMasterKey && !scopeStoreId
   try {
-    productsSnap = await db
-      .collection('products')
-      .where('storeId', '==', storeId)
-      .orderBy('updatedAt', 'desc')
-      .limit(200)
-      .get()
+    if (isAllStoresRead) {
+      productsSnap = await db.collection('products').orderBy('updatedAt', 'desc').limit(2000).get()
+    } else {
+      if (!scopeStoreId) {
+        res.status(400).json({ error: 'missing-store-id' })
+        return
+      }
+      productsSnap = await db
+        .collection('products')
+        .where('storeId', '==', scopeStoreId)
+        .orderBy('updatedAt', 'desc')
+        .limit(200)
+        .get()
+    }
   } catch (error) {
     const code = (error as { code?: number | string } | null)?.code
     const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
@@ -3259,15 +3313,23 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
       throw error
     }
 
-    console.warn('[integrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
-      storeId,
-      code,
-    })
-    productsSnap = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+    if (isAllStoresRead) {
+      console.warn('[integrationProducts] Missing Firestore index for all-store ordered product query; falling back to unordered fetch', {
+        code,
+      })
+      productsSnap = await db.collection('products').limit(2000).get()
+    } else {
+      console.warn('[integrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+        storeId: scopeStoreId,
+        code,
+      })
+      productsSnap = await db.collection('products').where('storeId', '==', scopeStoreId).limit(200).get()
+    }
   }
 
   const products = productsSnap.docs
     .map(mapProductDoc)
+    .filter(item => item !== null)
     .sort((a, b) => {
       if (!a.updatedAt && !b.updatedAt) return 0
       if (!a.updatedAt) return 1
@@ -3275,7 +3337,11 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
       return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
     })
 
-  res.status(200).json({ storeId, products })
+  res.status(200).json({
+    storeId: scopeStoreId ?? null,
+    scope: isAllStoresRead ? 'all-stores' : 'store',
+    products,
+  })
 })
 
 export const v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
@@ -3283,15 +3349,17 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
   if (!validateIntegrationContractVersionOrReply(req, res)) {
     return
   }
-  const authContext = await validateIntegrationTokenOrReply(req, res)
+  const authContext = await validateIntegrationTokenOrReply(req, res, { requireStoreId: false })
   if (!authContext) {
     return
   }
-  const { storeId } = authContext
 
   const mapProductDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
     const data = docSnap.data() as Record<string, unknown>
     const normalizedName = normalizeProductName(data.name)
+    const storeId =
+      typeof data.storeId === 'string' && data.storeId.trim() ? data.storeId.trim() : null
+    if (!storeId) return null
     return {
       id: docSnap.id,
       storeId,
@@ -3313,17 +3381,27 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
       ...extractProductImageSet(data),
       updatedAt:
         data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
-    }
+    } as const
   }
 
   let productsSnap: admin.firestore.QuerySnapshot
+  const scopeStoreId = authContext.storeId
+  const isAllStoresRead = authContext.isMasterKey && !scopeStoreId
   try {
-    productsSnap = await db
-      .collection('products')
-      .where('storeId', '==', storeId)
-      .orderBy('updatedAt', 'desc')
-      .limit(200)
-      .get()
+    if (isAllStoresRead) {
+      productsSnap = await db.collection('products').orderBy('updatedAt', 'desc').limit(2000).get()
+    } else {
+      if (!scopeStoreId) {
+        res.status(400).json({ error: 'missing-store-id' })
+        return
+      }
+      productsSnap = await db
+        .collection('products')
+        .where('storeId', '==', scopeStoreId)
+        .orderBy('updatedAt', 'desc')
+        .limit(200)
+        .get()
+    }
   } catch (error) {
     const code = (error as { code?: number | string } | null)?.code
     const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
@@ -3331,15 +3409,23 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
       throw error
     }
 
-    console.warn('[v1IntegrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
-      storeId,
-      code,
-    })
-    productsSnap = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+    if (isAllStoresRead) {
+      console.warn('[v1IntegrationProducts] Missing Firestore index for all-store ordered product query; falling back to unordered fetch', {
+        code,
+      })
+      productsSnap = await db.collection('products').limit(2000).get()
+    } else {
+      console.warn('[v1IntegrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+        storeId: scopeStoreId,
+        code,
+      })
+      productsSnap = await db.collection('products').where('storeId', '==', scopeStoreId).limit(200).get()
+    }
   }
 
   const products = productsSnap.docs
     .map(mapProductDoc)
+    .filter(item => item !== null)
     .sort((a, b) => {
       if (!a.updatedAt && !b.updatedAt) return 0
       if (!a.updatedAt) return 1
@@ -3347,7 +3433,11 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
       return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
     })
 
-  res.status(200).json({ storeId, products })
+  res.status(200).json({
+    storeId: scopeStoreId ?? null,
+    scope: isAllStoresRead ? 'all-stores' : 'store',
+    products,
+  })
 })
 
 export const integrationPromo = functions.https.onRequest(async (req, res) => {
@@ -3502,6 +3592,10 @@ export const integrationTikTokVideos = functions.https.onRequest(async (req, res
     return
   }
   const { storeId } = authContext
+  if (!storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
 
   let videosSnapshot: admin.firestore.QuerySnapshot
   try {
@@ -3757,6 +3851,10 @@ export const integrationCustomers = functions.https.onRequest(async (req, res) =
     return
   }
   const { storeId } = authContext
+  if (!storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
 
   let customersSnap: admin.firestore.QuerySnapshot
   try {
@@ -3831,6 +3929,10 @@ export const integrationTopSelling = functions.https.onRequest(async (req, res) 
     return
   }
   const { storeId } = authContext
+  if (!storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
 
   const limitRaw = Number(req.query.limit ?? 10)
   const requestedLimit = Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 10

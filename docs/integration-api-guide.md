@@ -4,10 +4,12 @@ This guide explains how third-party clients (including Buy Sedifex) should authe
 
 ## 1) Authentication and API keys
 
-1. Create a per-store integration key from Sedifex account settings.
+1. Choose one auth mode:
+   - **Admin master key mode:** set Firebase Functions param `SEDIFEX_INTEGRATION_API_KEY` (can fetch all stores from integration products endpoints when `storeId` is omitted).
+   - **Store key mode:** create a store integration key from Sedifex Account settings (must include that `storeId`; access is store-scoped).
 2. Store keys server-side only (never in browser bundles).
 3. Call authenticated endpoints with:
-   - `Authorization: Bearer <integration_api_key>`
+   - `x-api-key: <master_or_store_integration_key>`
    - `X-Sedifex-Contract-Version: 2026-04-13`
 4. Rotate keys regularly (recommended quarterly or immediately on incident).
 
@@ -68,6 +70,11 @@ Query parameters:
 ```
 
 ### `GET /v1IntegrationProducts?storeId=<storeId>` (authenticated)
+
+- With a **store key**: `storeId` is required and only that store is returned.
+- With the **admin master key**:
+  - include `storeId` to get one store, or
+  - omit `storeId` to fetch products across all stores (`scope: "all-stores"` in response).
 
 ```json
 {

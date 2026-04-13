@@ -165,14 +165,18 @@ It defines a pull + webhook model, contract versioning, reliability, and rollout
 ## Prerequisites
 
 1. Sedifex Firebase project configured (Firestore + Functions).
-2. A workspace owner has created an integration API key for the target `storeId`.
+2. You have either:
+   - a configured master key (`SEDIFEX_INTEGRATION_API_KEY`), or
+   - an active store integration key from **Account overview → Integrations → Website integrations**.
 3. Your website runtime can make HTTPS requests.
 
 ## Integration flow
 
-1. Create an integration API key in **Account overview → Integrations → Website integrations**.
+1. Choose your key source:
+   - Admin master key: set `SEDIFEX_INTEGRATION_API_KEY` in Firebase params (can pull all stores on integration product endpoints).
+   - Store key: use the active store integration key created from account integrations (scoped to that store).
 2. Call `GET /v1IntegrationProducts?storeId=<storeId>` with:
-   - `Authorization: Bearer <integration_key>`
+   - `x-api-key: <master_or_store_integration_key>`
    - `X-Sedifex-Contract-Version: 2026-04-13`
    - Promo data: `GET /v1IntegrationPromo?storeId=<storeId>`
    - Promo gallery data: `GET /integrationGallery?storeId=<storeId>`
@@ -259,7 +263,7 @@ async function fetchSedifexProducts(): Promise<Product[]> {
       )}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.SEDIFEX_INTEGRATION_KEY}`,
+          'x-api-key': `${process.env.SEDIFEX_INTEGRATION_API_KEY ?? process.env.SEDIFEX_INTEGRATION_KEY}`,
           Accept: 'application/json',
         },
         // ISR cache strategy (choose based on your catalog behavior)
@@ -324,7 +328,7 @@ For promo + gallery integrations, use the same 30–120 second polling interval 
 Use this endpoint when you want to render "best sellers" on your public website:
 
 - `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
-- Requires `Authorization: Bearer <integration_key>`
+- Requires `x-api-key: <master_or_store_integration_key>`
 - Query params:
   - `days` (optional, default `30`, min `1`, max `365`)
   - `limit` (optional, default `10`, min `1`, max `50`)
@@ -371,7 +375,7 @@ Use the same dedupe key, fallback data pattern, and cache guidance from this qui
 ## Security checklist
 
 - Do not embed admin credentials in Website A.
-- Use per-integration keys and rotate/revoke on owner transitions.
+- Use one key per deployed website/backend service and rotate it on incident response windows.
 - Keep store membership (`teamMembers`) and `storeId` assignments accurate.
 - Keep Firestore rules aligned with tenant boundaries.
 
@@ -405,3 +409,4 @@ If you need this in another format (REST proxy endpoint, WordPress plugin, or se
 - `imageUrl` remains the primary/legacy photo field.
 - `imageUrls` can contain 1..n URLs when a merchant wants 2-3 product photos on downstream websites.
 - Consumers should prefer `imageUrls[0]` when present, then fall back to `imageUrl`.
+> For all-store admin pulls, call `v1IntegrationProducts` with the admin master key and omit `storeId`.

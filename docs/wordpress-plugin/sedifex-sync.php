@@ -96,7 +96,7 @@ function sedifex_sync_fetch_products($force = false) {
   $response = wp_remote_get($url, [
     'timeout' => 15,
     'headers' => [
-      'Authorization' => 'Bearer ' . ($settings['integration_key'] ?? ''),
+      'x-api-key' => ($settings['integration_key'] ?? ''),
       'Accept' => 'application/json',
     ],
   ]);
