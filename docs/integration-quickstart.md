@@ -172,6 +172,13 @@ It defines a pull + webhook model, contract versioning, reliability, and rollout
 
 ## Integration flow
 
+Base URL:
+
+- Use `https://us-central1-sedifex-web.cloudfunctions.net` as the production base URL.
+- In this repo, the canonical env name is `SEDIFEX_API_BASE_URL`.
+- If your other repo uses `SEDIFEX_INTEGRATION_API_BASE_URL`, set it to the same value (`https://us-central1-sedifex-web.cloudfunctions.net`).
+- Do not append a contract date/version segment to the base URL.
+
 1. Choose your key source:
    - Admin master key: set `SEDIFEX_INTEGRATION_API_KEY` in Firebase params (can pull all stores on integration product endpoints).
    - Store key: use the active store integration key created from account integrations (scoped to that store).
@@ -187,6 +194,19 @@ It defines a pull + webhook model, contract versioning, reliability, and rollout
 4. Return fallback data when external fetch fails.
 5. Render a grouped menu UI by category.
 6. Apply an appropriate cache strategy.
+
+### Common 404 fix (important)
+
+If your app logs a 404 such as:
+
+- `/2026-04-13/products`
+
+your URL builder is likely treating the contract version as a URL path segment. In Sedifex, `2026-04-13` is the **contract header value**, not an endpoint path. Use:
+
+- `GET /v1IntegrationProducts?storeId=<storeId>` (authenticated integration feed), or
+- `GET /v1/products` (public marketplace feed).
+
+Do **not** build routes like `/<contractVersion>/products`.
 
 ### Shared integration types
 
@@ -258,12 +278,13 @@ function dedupeProducts(products: Product[]): Product[] {
 async function fetchSedifexProducts(): Promise<Product[]> {
   try {
     const response = await fetch(
-      `${process.env.SEDIFEX_API_BASE_URL}/integrationProducts?storeId=${encodeURIComponent(
+      `${process.env.SEDIFEX_API_BASE_URL}/v1IntegrationProducts?storeId=${encodeURIComponent(
         process.env.SEDIFEX_STORE_ID ?? ''
       )}`,
       {
         headers: {
           'x-api-key': `${process.env.SEDIFEX_INTEGRATION_API_KEY ?? process.env.SEDIFEX_INTEGRATION_KEY}`,
+          'X-Sedifex-Contract-Version': process.env.SEDIFEX_CONTRACT_VERSION ?? '2026-04-13',
           Accept: 'application/json',
         },
         // ISR cache strategy (choose based on your catalog behavior)
