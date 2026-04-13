@@ -129,6 +129,13 @@ type GenerateAiAdvicePayload = {
   jsonContext?: unknown
 }
 
+type GenerateSocialPostPayload = {
+  storeId?: unknown
+  platform?: unknown
+  productId?: unknown
+  product?: unknown
+}
+
 const VALID_ROLES = new Set(['owner', 'staff'])
 const TRIAL_DAYS = 14
 const GRACE_DAYS = 7
@@ -193,6 +200,37 @@ function normalizeAiAdvicePayload(raw: GenerateAiAdvicePayload | undefined) {
       : {}
 
   return { question, storeId, jsonContext }
+}
+
+function normalizeSocialPostPayload(raw: GenerateSocialPostPayload | undefined) {
+  const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : ''
+  const platformRaw = typeof raw?.platform === 'string' ? raw.platform.trim().toLowerCase() : ''
+  const platform = platformRaw === 'tiktok' ? 'tiktok' : 'instagram'
+  const productId = typeof raw?.productId === 'string' ? raw.productId.trim() : ''
+
+  const productRaw =
+    raw?.product && typeof raw.product === 'object'
+      ? (raw.product as Record<string, unknown>)
+      : {}
+
+  const product = {
+    id: typeof productRaw.id === 'string' ? productRaw.id.trim() : '',
+    name: typeof productRaw.name === 'string' ? productRaw.name.trim() : '',
+    category: typeof productRaw.category === 'string' ? productRaw.category.trim() : '',
+    description: typeof productRaw.description === 'string' ? productRaw.description.trim() : '',
+    price: typeof productRaw.price === 'number' && Number.isFinite(productRaw.price) ? productRaw.price : null,
+    imageUrl: typeof productRaw.imageUrl === 'string' ? productRaw.imageUrl.trim() : '',
+    itemType:
+      productRaw.itemType === 'service' || productRaw.itemType === 'made_to_order'
+        ? (productRaw.itemType as 'service' | 'made_to_order')
+        : ('product' as const),
+  }
+
+  if (!productId && !product.id && !product.name) {
+    throw new functions.https.HttpsError('invalid-argument', 'Choose a product or service to generate a post')
+  }
+
+  return { storeId, platform, productId, product }
 }
 
 async function verifyOwnerEmail(uid: string) {
@@ -1201,6 +1239,208 @@ export const generateAiAdvice = functions.https.onCall(
       advice,
       storeId,
       dataPreview: jsonContext,
+    }
+  },
+)
+
+/** ============================================================================
+ *  CALLABLE: generateSocialPost
+ * ==========================================================================*/
+
+export const generateSocialPost = functions.https.onCall(
+  async (rawData: unknown, context: functions.https.CallableContext) => {
+    assertAuthenticated(context)
+
+    const { apiKey, model } = getOpenAiConfig()
+    if (!apiKey) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Social media generator is not configured yet. Missing OPENAI_API_KEY.',
+      )
+    }
+
+    const uid = context.auth!.uid
+    const { storeId: requestedStoreId, platform, productId, product } =
+      normalizeSocialPostPayload((rawData ?? {}) as GenerateSocialPostPayload)
+
+    const memberSnap = await db.collection('teamMembers').doc(uid).get()
+    const memberData = (memberSnap.data() ?? {}) as Record<string, unknown>
+    const memberStoreId = typeof memberData.storeId === 'string' ? memberData.storeId.trim() : ''
+
+    const storeId = requestedStoreId || memberStoreId
+    if (!storeId) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'No workspace found for this account. Initialize your workspace first.',
+      )
+    }
+
+    if (requestedStoreId && memberStoreId && requestedStoreId !== memberStoreId) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You do not have access to the requested workspace.',
+      )
+    }
+
+    let selectedProduct = product
+    const resolvedProductId = productId || product.id || ''
+
+    if (resolvedProductId) {
+      const productSnap = await db.collection('products').doc(resolvedProductId).get()
+      const productData = (productSnap.data() ?? {}) as Record<string, unknown>
+      const productStoreId = typeof productData.storeId === 'string' ? productData.storeId.trim() : ''
+
+      if (!productSnap.exists || productStoreId !== storeId) {
+        throw new functions.https.HttpsError('not-found', 'Product or service not found for your workspace.')
+      }
+
+      selectedProduct = {
+        id: resolvedProductId,
+        name: typeof productData.name === 'string' ? productData.name.trim() : '',
+        category: typeof productData.category === 'string' ? productData.category.trim() : '',
+        description: typeof productData.description === 'string' ? productData.description.trim() : '',
+        price: typeof productData.price === 'number' && Number.isFinite(productData.price) ? productData.price : null,
+        imageUrl: typeof productData.imageUrl === 'string' ? productData.imageUrl.trim() : '',
+        itemType:
+          productData.itemType === 'service' || productData.itemType === 'made_to_order'
+            ? (productData.itemType as 'service' | 'made_to_order')
+            : ('product' as const),
+      }
+    }
+
+    if (!selectedProduct.name) {
+      throw new functions.https.HttpsError('invalid-argument', 'Product name is required to generate content.')
+    }
+
+    const promptProduct = {
+      id: selectedProduct.id || null,
+      name: selectedProduct.name,
+      category: selectedProduct.category || null,
+      description: selectedProduct.description || null,
+      price: selectedProduct.price,
+      imageUrl: selectedProduct.imageUrl || null,
+      itemType: selectedProduct.itemType,
+    }
+
+    const systemPrompt =
+      'You are a social media strategist for retail and POS merchants. Return strict JSON only, no markdown. Keep copy concise, conversion-focused, and realistic.'
+    const userPrompt = [
+      `Workspace: ${storeId}`,
+      `Platform: ${platform}`,
+      'Return JSON schema:',
+      '{"platform":"instagram|tiktok","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
+      'Rules:',
+      '- caption max 220 chars for instagram, 150 chars for tiktok.',
+      '- hashtags: 5 to 10 relevant hashtags.',
+      '- include clear CTA.',
+      '- if price or measurable claim appears, add disclaimer; else null.',
+      '- designSpec must be practical for mobile-safe text placement.',
+      'Product JSON:',
+      JSON.stringify(promptProduct).slice(0, 3_000),
+    ].join('\n')
+
+    const aiResponse = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.4,
+        max_tokens: 700,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    })
+
+    const payload = (await aiResponse.json().catch(() => null)) as
+      | {
+          error?: { message?: string }
+          choices?: Array<{ message?: { content?: string } }>
+        }
+      | null
+
+    if (!aiResponse.ok) {
+      const apiMessage =
+        payload?.error?.message && payload.error.message.trim() !== ''
+          ? payload.error.message
+          : `OpenAI request failed with status ${aiResponse.status}`
+      functions.logger.error('[generateSocialPost] OpenAI error', {
+        status: aiResponse.status,
+        apiMessage,
+      })
+      throw new functions.https.HttpsError('internal', 'Unable to generate social post right now.')
+    }
+
+    const content = payload?.choices?.[0]?.message?.content?.trim() || ''
+    if (!content) {
+      throw new functions.https.HttpsError('internal', 'AI returned an empty response.')
+    }
+
+    let parsed: Record<string, unknown> | null = null
+    try {
+      parsed = JSON.parse(content) as Record<string, unknown>
+    } catch (_error) {
+      const start = content.indexOf('{')
+      const end = content.lastIndexOf('}')
+      if (start >= 0 && end > start) {
+        parsed = JSON.parse(content.slice(start, end + 1)) as Record<string, unknown>
+      }
+    }
+
+    if (!parsed) {
+      throw new functions.https.HttpsError('internal', 'AI returned invalid JSON for social post.')
+    }
+
+    const safePlatform = parsed.platform === 'tiktok' ? 'tiktok' : 'instagram'
+    const safeHashtags = Array.isArray(parsed.hashtags)
+      ? parsed.hashtags
+          .map(tag => (typeof tag === 'string' ? tag.trim() : ''))
+          .filter(Boolean)
+          .slice(0, 10)
+      : []
+
+    return {
+      storeId,
+      productId: resolvedProductId || null,
+      product: promptProduct,
+      post: {
+        platform: safePlatform,
+        caption: typeof parsed.caption === 'string' ? parsed.caption.trim() : '',
+        hashtags: safeHashtags,
+        imagePrompt: typeof parsed.imagePrompt === 'string' ? parsed.imagePrompt.trim() : '',
+        cta: typeof parsed.cta === 'string' ? parsed.cta.trim() : '',
+        designSpec: {
+          aspectRatio:
+            parsed.designSpec &&
+            typeof parsed.designSpec === 'object' &&
+            typeof (parsed.designSpec as Record<string, unknown>).aspectRatio === 'string'
+              ? ((parsed.designSpec as Record<string, unknown>).aspectRatio as string).trim()
+              : '',
+          safeTextZones:
+            parsed.designSpec &&
+            typeof parsed.designSpec === 'object' &&
+            Array.isArray((parsed.designSpec as Record<string, unknown>).safeTextZones)
+              ? ((parsed.designSpec as Record<string, unknown>).safeTextZones as unknown[])
+                  .map(item => (typeof item === 'string' ? item.trim() : ''))
+                  .filter(Boolean)
+                  .slice(0, 6)
+              : [],
+          visualStyle:
+            parsed.designSpec &&
+            typeof parsed.designSpec === 'object' &&
+            typeof (parsed.designSpec as Record<string, unknown>).visualStyle === 'string'
+              ? ((parsed.designSpec as Record<string, unknown>).visualStyle as string).trim()
+              : '',
+        },
+        disclaimer:
+          typeof parsed.disclaimer === 'string' && parsed.disclaimer.trim()
+            ? parsed.disclaimer.trim()
+            : null,
+      },
     }
   },
 )
