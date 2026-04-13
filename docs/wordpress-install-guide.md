@@ -6,7 +6,7 @@ Use this guide to connect a **WordPress** site to your Sedifex product catalog.
 
 ## What this setup does
 
-1. Uses a Sedifex integration API key.
+1. Uses one integration key (`SEDIFEX_INTEGRATION_API_KEY` or a store integration key).
 2. Calls the `integrationProducts` HTTP endpoint.
 3. Renders products in WordPress via shortcode.
 4. Applies dedupe + fallback + cache strategy so the UI stays stable.
@@ -14,7 +14,7 @@ Use this guide to connect a **WordPress** site to your Sedifex product catalog.
 ## Prerequisites
 
 - A WordPress site where you can install plugins.
-- A Sedifex integration API key for the target store.
+- A Sedifex integration key (master key or an active store integration key).
 - Sedifex API base URL for your deployed Functions endpoint.
 
 ## Step 1: Install the plugin scaffold
@@ -28,7 +28,7 @@ Use this guide to connect a **WordPress** site to your Sedifex product catalog.
 
 Create a frontend script that:
 
-- Calls `integrationProducts?storeId=<storeId>` with `Authorization: Bearer <integration_key>`.
+- Calls `integrationProducts?storeId=<storeId>` with `x-api-key: <your_integration_key>`.
 - Deduplicates by composite key: `id|storeId|name|price`.
 - Falls back to static products when fetch fails.
 - Groups products by category and renders menu sections, including optional product descriptions.
@@ -38,7 +38,7 @@ Reference implementation: `docs/integration-quickstart.md`.
 
 If you also want to auto-show TikTok videos for the same store, call:
 
-- `integrationTikTokVideos?storeId=<storeId>` with `Authorization: Bearer <integration_key>`
+- `integrationTikTokVideos?storeId=<storeId>` with `x-api-key: <your_integration_key>`
 
 Then render each returned `embedUrl` (or fallback to `permalink`) inside your website section for social proof.
 
@@ -58,7 +58,7 @@ Store these values in WordPress config or plugin settings:
 
 - `SEDIFEX_API_BASE_URL`
 - `SEDIFEX_STORE_ID`
-- `SEDIFEX_INTEGRATION_KEY`
+- `SEDIFEX_INTEGRATION_API_KEY` (or your store integration key variable)
 
 ## Step 5: Validate sync
 

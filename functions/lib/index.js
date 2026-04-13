@@ -69,10 +69,12 @@ const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
 const INTEGRATION_CONTRACT_VERSION = (0, params_1.defineString)('INTEGRATION_CONTRACT_VERSION', {
     default: '2026-04-13',
 });
+const SEDIFEX_INTEGRATION_API_KEY = (0, params_1.defineString)('SEDIFEX_INTEGRATION_API_KEY', { default: '' });
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
 let openAiConfigWarned = false;
+let integrationApiKeyWarned = false;
 function getOpenAiConfig() {
     const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || '';
     const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
@@ -81,6 +83,16 @@ function getOpenAiConfig() {
         openAiConfigWarned = true;
     }
     return { apiKey, model };
+}
+function getIntegrationMasterApiKey() {
+    const apiKey = SEDIFEX_INTEGRATION_API_KEY.value()?.trim() ||
+        process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() ||
+        '';
+    if (!apiKey && !integrationApiKeyWarned) {
+        functions.logger.warn('SEDIFEX_INTEGRATION_API_KEY is missing. Set it via Firebase params before calling integration HTTP endpoints.');
+        integrationApiKeyWarned = true;
+    }
+    return apiKey;
 }
 function normalizeAiAdvicePayload(raw) {
     const question = typeof raw?.question === 'string' ? raw.question.trim() : '';
@@ -1928,7 +1940,7 @@ function setIntegrationResponseHeaders(res) {
     const requestId = crypto.randomUUID();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,X-Sedifex-Contract-Version');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,X-API-Key,X-Sedifex-Contract-Version');
     res.setHeader('x-sedifex-contract-version', contractVersion);
     res.setHeader('x-sedifex-request-id', requestId);
     if (configuredApiBaseUrl) {
@@ -1952,10 +1964,14 @@ function validateIntegrationContractVersionOrReply(req, res) {
     return false;
 }
 function getIntegrationAuthContext(req) {
-    const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const apiKeyHeader = req.headers['x-api-key'];
+    const apiKey = typeof apiKeyHeader === 'string'
+        ? apiKeyHeader.trim()
+        : Array.isArray(apiKeyHeader) && typeof apiKeyHeader[0] === 'string'
+            ? apiKeyHeader[0].trim()
+            : '';
     const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : '';
-    return { token, storeId };
+    return { apiKey, storeId };
 }
 function getPromoSlugFromRequest(req) {
     return (0, publicSlug_1.normalizePublicSlugValue)(typeof req.query.slug === 'string' ? req.query.slug : '');
@@ -2201,8 +2217,8 @@ async function resolvePromoStoreForRead(req, res) {
         res.status(405).json({ error: 'method-not-allowed' });
         return null;
     }
-    const { token, storeId } = getIntegrationAuthContext(req);
-    if (token || storeId) {
+    const { apiKey, storeId } = getIntegrationAuthContext(req);
+    if (apiKey || storeId) {
         const authContext = await validateIntegrationTokenOrReply(req, res);
         if (!authContext) {
             return null;
@@ -2307,28 +2323,16 @@ async function validateIntegrationTokenOrReply(req, res) {
         res.status(405).json({ error: 'method-not-allowed' });
         return null;
     }
-    const { token, storeId } = getIntegrationAuthContext(req);
-    if (!token || !storeId) {
-        res.status(400).json({ error: 'missing-token-or-store' });
+    const { apiKey, storeId } = getIntegrationAuthContext(req);
+    if (!apiKey || !storeId) {
+        res.status(400).json({ error: 'missing-api-key-or-store' });
         return null;
     }
-    const tokenHash = hashIntegrationSecret(token);
-    const keySnapshot = await firestore_1.defaultDb
-        .collection('integrationApiKeys')
-        .where('storeId', '==', storeId)
-        .where('status', '==', 'active')
-        .where('keyHash', '==', tokenHash)
-        .limit(1)
-        .get();
-    if (keySnapshot.empty) {
-        res.status(401).json({ error: 'invalid-token' });
+    const expectedApiKey = getIntegrationMasterApiKey();
+    if (!expectedApiKey || apiKey !== expectedApiKey) {
+        res.status(401).json({ error: 'invalid-api-key' });
         return null;
     }
-    const keyDoc = keySnapshot.docs[0];
-    await keyDoc.ref.set({
-        lastUsedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
     return { storeId };
 }
 function toFiniteNumberOrNull(value) {
