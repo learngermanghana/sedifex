@@ -2065,6 +2065,30 @@ function toTrimmedStringOrNull(value) {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
 }
+function pickStoreCity(storeData) {
+    return toTrimmedStringOrNull(storeData.city) ?? toTrimmedStringOrNull(storeData.town);
+}
+async function fetchStoreMetaByStoreId(storeIds) {
+    const normalizedStoreIds = Array.from(new Set(storeIds
+        .map(storeId => (typeof storeId === 'string' ? storeId.trim() : ''))
+        .filter(Boolean)));
+    const storeMeta = new Map();
+    if (normalizedStoreIds.length === 0) {
+        return storeMeta;
+    }
+    const storeRefs = normalizedStoreIds.map(storeId => firestore_1.defaultDb.collection('stores').doc(storeId));
+    const storeSnapshots = await firestore_1.defaultDb.getAll(...storeRefs);
+    for (const storeSnapshot of storeSnapshots) {
+        if (!storeSnapshot.exists)
+            continue;
+        const data = (storeSnapshot.data() ?? {});
+        storeMeta.set(storeSnapshot.id, {
+            storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name),
+            storeCity: pickStoreCity(data),
+        });
+    }
+    return storeMeta;
+}
 function extractYoutubeVideoId(value) {
     if (!value)
         return null;
@@ -2223,6 +2247,10 @@ async function resolvePromoStoreForRead(req, res) {
         if (!authContext) {
             return null;
         }
+        if (!authContext.storeId) {
+            res.status(400).json({ error: 'missing-store-id' });
+            return null;
+        }
         const storeSnap = await firestore_1.defaultDb.collection('stores').doc(authContext.storeId).get();
         if (!storeSnap.exists) {
             res.status(404).json({ error: 'store-not-found' });
@@ -2318,22 +2346,47 @@ function normalizeTimestampIso(value) {
     }
     return null;
 }
-async function validateIntegrationTokenOrReply(req, res) {
+async function validateIntegrationTokenOrReply(req, res, options) {
     if (req.method !== 'GET') {
         res.status(405).json({ error: 'method-not-allowed' });
         return null;
     }
+    const requireStoreId = options?.requireStoreId !== false;
     const { apiKey, storeId } = getIntegrationAuthContext(req);
-    if (!apiKey || !storeId) {
-        res.status(400).json({ error: 'missing-api-key-or-store' });
+    if (!apiKey) {
+        res.status(400).json({ error: 'missing-api-key' });
         return null;
     }
     const expectedApiKey = getIntegrationMasterApiKey();
-    if (!expectedApiKey || apiKey !== expectedApiKey) {
+    if (expectedApiKey && apiKey === expectedApiKey) {
+        if (requireStoreId && !storeId) {
+            res.status(400).json({ error: 'missing-store-id' });
+            return null;
+        }
+        return { storeId: storeId || null, isMasterKey: true };
+    }
+    if (!storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return null;
+    }
+    const tokenHash = hashIntegrationSecret(apiKey);
+    const keySnapshot = await firestore_1.defaultDb
+        .collection('integrationApiKeys')
+        .where('storeId', '==', storeId)
+        .where('status', '==', 'active')
+        .where('keyHash', '==', tokenHash)
+        .limit(1)
+        .get();
+    if (keySnapshot.empty) {
         res.status(401).json({ error: 'invalid-api-key' });
         return null;
     }
-    return { storeId };
+    const keyDoc = keySnapshot.docs[0];
+    await keyDoc.ref.set({
+        lastUsedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { storeId, isMasterKey: false };
 }
 function toFiniteNumberOrNull(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -2510,17 +2563,21 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
     if (!validateIntegrationContractVersionOrReply(req, res)) {
         return;
     }
-    const authContext = await validateIntegrationTokenOrReply(req, res);
+    const authContext = await validateIntegrationTokenOrReply(req, res, { requireStoreId: false });
     if (!authContext) {
         return;
     }
-    const { storeId } = authContext;
     const mapProductDoc = (docSnap) => {
         const data = docSnap.data();
         const normalizedName = normalizeProductName(data.name);
+        const storeId = typeof data.storeId === 'string' && data.storeId.trim() ? data.storeId.trim() : null;
+        if (!storeId)
+            return null;
         return {
             id: docSnap.id,
             storeId,
+            storeName: null,
+            storeCity: null,
             name: normalizedName || 'Untitled item',
             category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
             description: typeof data.description === 'string' && data.description.trim()
@@ -2538,13 +2595,24 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
         };
     };
     let productsSnap;
+    const scopeStoreId = authContext.storeId;
+    const isAllStoresRead = authContext.isMasterKey && !scopeStoreId;
     try {
-        productsSnap = await firestore_1.defaultDb
-            .collection('products')
-            .where('storeId', '==', storeId)
-            .orderBy('updatedAt', 'desc')
-            .limit(200)
-            .get();
+        if (isAllStoresRead) {
+            productsSnap = await firestore_1.defaultDb.collection('products').orderBy('updatedAt', 'desc').limit(2000).get();
+        }
+        else {
+            if (!scopeStoreId) {
+                res.status(400).json({ error: 'missing-store-id' });
+                return;
+            }
+            productsSnap = await firestore_1.defaultDb
+                .collection('products')
+                .where('storeId', '==', scopeStoreId)
+                .orderBy('updatedAt', 'desc')
+                .limit(200)
+                .get();
+        }
     }
     catch (error) {
         const code = error?.code;
@@ -2552,14 +2620,23 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
         if (!isMissingIndex) {
             throw error;
         }
-        console.warn('[integrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
-            storeId,
-            code,
-        });
-        productsSnap = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+        if (isAllStoresRead) {
+            console.warn('[integrationProducts] Missing Firestore index for all-store ordered product query; falling back to unordered fetch', {
+                code,
+            });
+            productsSnap = await firestore_1.defaultDb.collection('products').limit(2000).get();
+        }
+        else {
+            console.warn('[integrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+                storeId: scopeStoreId,
+                code,
+            });
+            productsSnap = await firestore_1.defaultDb.collection('products').where('storeId', '==', scopeStoreId).limit(200).get();
+        }
     }
     const products = productsSnap.docs
         .map(mapProductDoc)
+        .filter(item => item !== null)
         .sort((a, b) => {
         if (!a.updatedAt && !b.updatedAt)
             return 0;
@@ -2569,24 +2646,41 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
             return -1;
         return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
     });
-    res.status(200).json({ storeId, products });
+    const storeMetaByStoreId = await fetchStoreMetaByStoreId(products.map(product => product.storeId));
+    const enrichedProducts = products.map(product => {
+        const storeMeta = storeMetaByStoreId.get(product.storeId);
+        return {
+            ...product,
+            storeName: storeMeta?.storeName ?? null,
+            storeCity: storeMeta?.storeCity ?? null,
+        };
+    });
+    res.status(200).json({
+        storeId: scopeStoreId ?? null,
+        scope: isAllStoresRead ? 'all-stores' : 'store',
+        products: enrichedProducts,
+    });
 });
 exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
     if (!validateIntegrationContractVersionOrReply(req, res)) {
         return;
     }
-    const authContext = await validateIntegrationTokenOrReply(req, res);
+    const authContext = await validateIntegrationTokenOrReply(req, res, { requireStoreId: false });
     if (!authContext) {
         return;
     }
-    const { storeId } = authContext;
     const mapProductDoc = (docSnap) => {
         const data = docSnap.data();
         const normalizedName = normalizeProductName(data.name);
+        const storeId = typeof data.storeId === 'string' && data.storeId.trim() ? data.storeId.trim() : null;
+        if (!storeId)
+            return null;
         return {
             id: docSnap.id,
             storeId,
+            storeName: null,
+            storeCity: null,
             name: normalizedName || 'Untitled item',
             category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
             description: typeof data.description === 'string' && data.description.trim()
@@ -2604,13 +2698,24 @@ exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
         };
     };
     let productsSnap;
+    const scopeStoreId = authContext.storeId;
+    const isAllStoresRead = authContext.isMasterKey && !scopeStoreId;
     try {
-        productsSnap = await firestore_1.defaultDb
-            .collection('products')
-            .where('storeId', '==', storeId)
-            .orderBy('updatedAt', 'desc')
-            .limit(200)
-            .get();
+        if (isAllStoresRead) {
+            productsSnap = await firestore_1.defaultDb.collection('products').orderBy('updatedAt', 'desc').limit(2000).get();
+        }
+        else {
+            if (!scopeStoreId) {
+                res.status(400).json({ error: 'missing-store-id' });
+                return;
+            }
+            productsSnap = await firestore_1.defaultDb
+                .collection('products')
+                .where('storeId', '==', scopeStoreId)
+                .orderBy('updatedAt', 'desc')
+                .limit(200)
+                .get();
+        }
     }
     catch (error) {
         const code = error?.code;
@@ -2618,14 +2723,23 @@ exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
         if (!isMissingIndex) {
             throw error;
         }
-        console.warn('[v1IntegrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
-            storeId,
-            code,
-        });
-        productsSnap = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+        if (isAllStoresRead) {
+            console.warn('[v1IntegrationProducts] Missing Firestore index for all-store ordered product query; falling back to unordered fetch', {
+                code,
+            });
+            productsSnap = await firestore_1.defaultDb.collection('products').limit(2000).get();
+        }
+        else {
+            console.warn('[v1IntegrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+                storeId: scopeStoreId,
+                code,
+            });
+            productsSnap = await firestore_1.defaultDb.collection('products').where('storeId', '==', scopeStoreId).limit(200).get();
+        }
     }
     const products = productsSnap.docs
         .map(mapProductDoc)
+        .filter(item => item !== null)
         .sort((a, b) => {
         if (!a.updatedAt && !b.updatedAt)
             return 0;
@@ -2635,7 +2749,20 @@ exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
             return -1;
         return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
     });
-    res.status(200).json({ storeId, products });
+    const storeMetaByStoreId = await fetchStoreMetaByStoreId(products.map(product => product.storeId));
+    const enrichedProducts = products.map(product => {
+        const storeMeta = storeMetaByStoreId.get(product.storeId);
+        return {
+            ...product,
+            storeName: storeMeta?.storeName ?? null,
+            storeCity: storeMeta?.storeCity ?? null,
+        };
+    });
+    res.status(200).json({
+        storeId: scopeStoreId ?? null,
+        scope: isAllStoresRead ? 'all-stores' : 'store',
+        products: enrichedProducts,
+    });
 });
 exports.integrationPromo = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
@@ -2786,6 +2913,10 @@ exports.integrationTikTokVideos = functions.https.onRequest(async (req, res) => 
         return;
     }
     const { storeId } = authContext;
+    if (!storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return;
+    }
     let videosSnapshot;
     try {
         videosSnapshot = await firestore_1.defaultDb
@@ -3011,6 +3142,10 @@ exports.integrationCustomers = functions.https.onRequest(async (req, res) => {
         return;
     }
     const { storeId } = authContext;
+    if (!storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return;
+    }
     let customersSnap;
     try {
         customersSnap = await firestore_1.defaultDb
@@ -3081,6 +3216,10 @@ exports.integrationTopSelling = functions.https.onRequest(async (req, res) => {
         return;
     }
     const { storeId } = authContext;
+    if (!storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return;
+    }
     const limitRaw = Number(req.query.limit ?? 10);
     const requestedLimit = Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 10;
     const limit = Math.min(Math.max(requestedLimit, 1), 50);

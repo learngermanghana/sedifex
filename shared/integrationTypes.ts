@@ -3,6 +3,8 @@ export type IntegrationContractVersion = '2026-04-13'
 export interface IntegrationProduct {
   id: string
   storeId: string
+  storeName: string | null
+  storeCity: string | null
   name: string
   category: string | null
   description: string | null

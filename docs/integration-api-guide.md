@@ -53,6 +53,8 @@ Query parameters:
     {
       "id": "product_1",
       "storeId": "store_123",
+      "storeName": "Sedifex Store",
+      "storeCity": "Accra",
       "name": "Item",
       "category": "Meals",
       "description": "Description",
@@ -68,6 +70,8 @@ Query parameters:
   ]
 }
 ```
+
+`storeName` and `storeCity` are included so marketplace consumers (e.g. Buy Sedifex) can render seller identity/location without making extra store lookup calls.
 
 ### `GET /v1IntegrationProducts?storeId=<storeId>` (authenticated)
 

@@ -2712,6 +2712,37 @@ function toTrimmedStringOrNull(value: unknown): string | null {
   return trimmed ? trimmed : null
 }
 
+function pickStoreCity(storeData: Record<string, unknown>): string | null {
+  return toTrimmedStringOrNull(storeData.city) ?? toTrimmedStringOrNull(storeData.town)
+}
+
+async function fetchStoreMetaByStoreId(storeIds: string[]): Promise<Map<string, { storeName: string | null; storeCity: string | null }>> {
+  const normalizedStoreIds = Array.from(
+    new Set(
+      storeIds
+        .map(storeId => (typeof storeId === 'string' ? storeId.trim() : ''))
+        .filter(Boolean),
+    ),
+  )
+  const storeMeta = new Map<string, { storeName: string | null; storeCity: string | null }>()
+  if (normalizedStoreIds.length === 0) {
+    return storeMeta
+  }
+
+  const storeRefs = normalizedStoreIds.map(storeId => db.collection('stores').doc(storeId))
+  const storeSnapshots = await db.getAll(...storeRefs)
+  for (const storeSnapshot of storeSnapshots) {
+    if (!storeSnapshot.exists) continue
+    const data = (storeSnapshot.data() ?? {}) as Record<string, unknown>
+    storeMeta.set(storeSnapshot.id, {
+      storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name),
+      storeCity: pickStoreCity(data),
+    })
+  }
+
+  return storeMeta
+}
+
 function extractYoutubeVideoId(value: string | null): string | null {
   if (!value) return null
   try {
@@ -3268,6 +3299,8 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
     return {
       id: docSnap.id,
       storeId,
+      storeName: null,
+      storeCity: null,
       name: normalizedName || 'Untitled item',
       category:
         typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
@@ -3337,10 +3370,20 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
       return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
     })
 
+  const storeMetaByStoreId = await fetchStoreMetaByStoreId(products.map(product => product.storeId))
+  const enrichedProducts = products.map(product => {
+    const storeMeta = storeMetaByStoreId.get(product.storeId)
+    return {
+      ...product,
+      storeName: storeMeta?.storeName ?? null,
+      storeCity: storeMeta?.storeCity ?? null,
+    }
+  })
+
   res.status(200).json({
     storeId: scopeStoreId ?? null,
     scope: isAllStoresRead ? 'all-stores' : 'store',
-    products,
+    products: enrichedProducts,
   })
 })
 
@@ -3363,6 +3406,8 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
     return {
       id: docSnap.id,
       storeId,
+      storeName: null,
+      storeCity: null,
       name: normalizedName || 'Untitled item',
       category:
         typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
@@ -3433,10 +3478,20 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
       return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
     })
 
+  const storeMetaByStoreId = await fetchStoreMetaByStoreId(products.map(product => product.storeId))
+  const enrichedProducts = products.map(product => {
+    const storeMeta = storeMetaByStoreId.get(product.storeId)
+    return {
+      ...product,
+      storeName: storeMeta?.storeName ?? null,
+      storeCity: storeMeta?.storeCity ?? null,
+    }
+  })
+
   res.status(200).json({
     storeId: scopeStoreId ?? null,
     scope: isAllStoresRead ? 'all-stores' : 'store',
-    products,
+    products: enrichedProducts,
   })
 })
 
