@@ -30,6 +30,43 @@ This guide explains how third-party clients (including Buy Sedifex) should authe
 
 ## 3) Endpoint response shapes
 
+### `GET /v1/products` (public marketplace feed)
+
+Query parameters:
+
+- `sort`: `store-diverse` | `newest` | `price` | `featured`
+  - `store-diverse` groups products by `storeId`, sorts within each store by `featuredRank desc`, then `updatedAt desc`, and interleaves stores round-robin before pagination.
+- `page`: 1-based page number (default `1`).
+- `pageSize` or `limit`: products per page (default `24`, max `60`).
+- `maxPerStore` (optional): cap how many products from the same store may appear on a single page.
+
+```json
+{
+  "sort": "store-diverse",
+  "page": 1,
+  "pageSize": 24,
+  "maxPerStore": 2,
+  "total": 324,
+  "products": [
+    {
+      "id": "product_1",
+      "storeId": "store_123",
+      "name": "Item",
+      "category": "Meals",
+      "description": "Description",
+      "price": 45,
+      "stockCount": 10,
+      "itemType": "product",
+      "imageUrl": "https://...",
+      "imageUrls": ["https://..."],
+      "imageAlt": "Item image",
+      "featuredRank": 12,
+      "updatedAt": "2026-04-13T00:00:00.000Z"
+    }
+  ]
+}
+```
+
 ### `GET /v1IntegrationProducts?storeId=<storeId>` (authenticated)
 
 ```json

@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -2331,6 +2331,176 @@ async function validateIntegrationTokenOrReply(req, res) {
     }, { merge: true });
     return { storeId };
 }
+function toFiniteNumberOrNull(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+function getSortMode(value) {
+    if (value === 'price' || value === 'featured' || value === 'store-diverse')
+        return value;
+    return 'newest';
+}
+function compareByFeaturedThenUpdated(a, b) {
+    if (a.featuredRank !== b.featuredRank)
+        return b.featuredRank - a.featuredRank;
+    if (!a.updatedAt && !b.updatedAt)
+        return 0;
+    if (!a.updatedAt)
+        return 1;
+    if (!b.updatedAt)
+        return -1;
+    return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+}
+function isMarketplaceVisibleProduct(data, name) {
+    if (!name)
+        return false;
+    if (data.deleted === true || data.isDeleted === true)
+        return false;
+    if (data.archived === true || data.isArchived === true)
+        return false;
+    if (data.hidden === true || data.isHidden === true)
+        return false;
+    if (data.visible === false || data.isVisible === false)
+        return false;
+    return true;
+}
+function interleaveStoreDiverse(products) {
+    const byStore = new Map();
+    for (const product of products) {
+        const rows = byStore.get(product.storeId) ?? [];
+        rows.push(product);
+        byStore.set(product.storeId, rows);
+    }
+    const stores = [...byStore.keys()].sort((a, b) => a.localeCompare(b));
+    for (const storeId of stores) {
+        const rows = byStore.get(storeId);
+        if (!rows)
+            continue;
+        rows.sort(compareByFeaturedThenUpdated);
+    }
+    const interleaved = [];
+    let keepGoing = true;
+    while (keepGoing) {
+        keepGoing = false;
+        for (const storeId of stores) {
+            const rows = byStore.get(storeId);
+            if (!rows || rows.length === 0)
+                continue;
+            const next = rows.shift();
+            if (!next)
+                continue;
+            interleaved.push(next);
+            keepGoing = true;
+        }
+    }
+    return interleaved;
+}
+function paginateProducts(products, page, pageSize, maxPerStore) {
+    if (!maxPerStore) {
+        const start = (page - 1) * pageSize;
+        return products.slice(start, start + pageSize);
+    }
+    const pages = [];
+    let currentPage = [];
+    let perStoreCounter = new Map();
+    for (const product of products) {
+        if (currentPage.length >= pageSize) {
+            pages.push(currentPage);
+            currentPage = [];
+            perStoreCounter = new Map();
+        }
+        const currentStoreCount = perStoreCounter.get(product.storeId) ?? 0;
+        if (currentStoreCount >= maxPerStore) {
+            continue;
+        }
+        currentPage.push(product);
+        perStoreCounter.set(product.storeId, currentStoreCount + 1);
+    }
+    if (currentPage.length)
+        pages.push(currentPage);
+    return pages[page - 1] ?? [];
+}
+exports.v1Products = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (req.method !== 'GET') {
+        res.status(405).json({ error: 'method-not-allowed' });
+        return;
+    }
+    const sort = getSortMode(req.query.sort);
+    const pageRaw = Number(req.query.page ?? 1);
+    const requestedPage = Number.isFinite(pageRaw) ? Math.floor(pageRaw) : 1;
+    const page = Math.max(1, requestedPage);
+    const pageSizeRaw = Number(req.query.pageSize ?? req.query.limit ?? 24);
+    const requestedPageSize = Number.isFinite(pageSizeRaw) ? Math.floor(pageSizeRaw) : 24;
+    const pageSize = Math.min(Math.max(requestedPageSize, 1), 60);
+    const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0);
+    const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0;
+    const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null;
+    let productsSnap;
+    try {
+        productsSnap = await firestore_1.defaultDb.collection('products').orderBy('updatedAt', 'desc').limit(2000).get();
+    }
+    catch (error) {
+        const code = error?.code;
+        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+        if (!isMissingIndex)
+            throw error;
+        productsSnap = await firestore_1.defaultDb.collection('products').limit(2000).get();
+    }
+    const visibleProducts = productsSnap.docs
+        .map(docSnap => {
+        const data = docSnap.data();
+        const storeId = typeof data.storeId === 'string' ? data.storeId.trim() : '';
+        const name = normalizeProductName(data.name);
+        if (!storeId || !isMarketplaceVisibleProduct(data, name))
+            return null;
+        return {
+            id: docSnap.id,
+            storeId,
+            name: name || 'Untitled item',
+            category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+            description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+            price: typeof data.price === 'number' ? data.price : null,
+            stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+            itemType: data.itemType === 'service'
+                ? 'service'
+                : data.itemType === 'made_to_order'
+                    ? 'made_to_order'
+                    : 'product',
+            ...extractProductImageSet(data),
+            featuredRank: toFiniteNumberOrNull(data.featuredRank) ?? 0,
+            updatedAt: normalizeTimestampIso(data.updatedAt),
+        };
+    })
+        .filter((item) => item !== null);
+    const sortedProducts = sort === 'store-diverse'
+        ? interleaveStoreDiverse(visibleProducts)
+        : [...visibleProducts].sort((a, b) => {
+            if (sort === 'featured')
+                return compareByFeaturedThenUpdated(a, b);
+            if (sort === 'price') {
+                const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
+                const bPrice = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
+                if (aPrice !== bPrice)
+                    return aPrice - bPrice;
+            }
+            if (!a.updatedAt && !b.updatedAt)
+                return 0;
+            if (!a.updatedAt)
+                return 1;
+            if (!b.updatedAt)
+                return -1;
+            return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+        });
+    const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore);
+    res.status(200).json({
+        sort,
+        page,
+        pageSize,
+        maxPerStore,
+        total: sortedProducts.length,
+        products,
+    });
+});
 exports.integrationProducts = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
     if (!validateIntegrationContractVersionOrReply(req, res)) {

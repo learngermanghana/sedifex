@@ -3015,6 +3015,198 @@ async function validateIntegrationTokenOrReply(
   return { storeId }
 }
 
+type MarketplaceSortMode = 'newest' | 'price' | 'featured' | 'store-diverse'
+
+type MarketplaceProductRow = {
+  id: string
+  storeId: string
+  name: string
+  category: string | null
+  description: string | null
+  price: number | null
+  stockCount: number | null
+  itemType: 'product' | 'service' | 'made_to_order'
+  imageUrl: string | null
+  imageUrls: string[]
+  imageAlt: string | null
+  featuredRank: number
+  updatedAt: string | null
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function getSortMode(value: unknown): MarketplaceSortMode {
+  if (value === 'price' || value === 'featured' || value === 'store-diverse') return value
+  return 'newest'
+}
+
+function compareByFeaturedThenUpdated(a: MarketplaceProductRow, b: MarketplaceProductRow): number {
+  if (a.featuredRank !== b.featuredRank) return b.featuredRank - a.featuredRank
+  if (!a.updatedAt && !b.updatedAt) return 0
+  if (!a.updatedAt) return 1
+  if (!b.updatedAt) return -1
+  return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+}
+
+function isMarketplaceVisibleProduct(data: Record<string, unknown>, name: string): boolean {
+  if (!name) return false
+  if (data.deleted === true || data.isDeleted === true) return false
+  if (data.archived === true || data.isArchived === true) return false
+  if (data.hidden === true || data.isHidden === true) return false
+  if (data.visible === false || data.isVisible === false) return false
+  return true
+}
+
+function interleaveStoreDiverse(products: MarketplaceProductRow[]): MarketplaceProductRow[] {
+  const byStore = new Map<string, MarketplaceProductRow[]>()
+  for (const product of products) {
+    const rows = byStore.get(product.storeId) ?? []
+    rows.push(product)
+    byStore.set(product.storeId, rows)
+  }
+  const stores = [...byStore.keys()].sort((a, b) => a.localeCompare(b))
+  for (const storeId of stores) {
+    const rows = byStore.get(storeId)
+    if (!rows) continue
+    rows.sort(compareByFeaturedThenUpdated)
+  }
+
+  const interleaved: MarketplaceProductRow[] = []
+  let keepGoing = true
+  while (keepGoing) {
+    keepGoing = false
+    for (const storeId of stores) {
+      const rows = byStore.get(storeId)
+      if (!rows || rows.length === 0) continue
+      const next = rows.shift()
+      if (!next) continue
+      interleaved.push(next)
+      keepGoing = true
+    }
+  }
+  return interleaved
+}
+
+function paginateProducts(
+  products: MarketplaceProductRow[],
+  page: number,
+  pageSize: number,
+  maxPerStore: number | null,
+): MarketplaceProductRow[] {
+  if (!maxPerStore) {
+    const start = (page - 1) * pageSize
+    return products.slice(start, start + pageSize)
+  }
+
+  const pages: MarketplaceProductRow[][] = []
+  let currentPage: MarketplaceProductRow[] = []
+  let perStoreCounter = new Map<string, number>()
+
+  for (const product of products) {
+    if (currentPage.length >= pageSize) {
+      pages.push(currentPage)
+      currentPage = []
+      perStoreCounter = new Map<string, number>()
+    }
+    const currentStoreCount = perStoreCounter.get(product.storeId) ?? 0
+    if (currentStoreCount >= maxPerStore) {
+      continue
+    }
+    currentPage.push(product)
+    perStoreCounter.set(product.storeId, currentStoreCount + 1)
+  }
+  if (currentPage.length) pages.push(currentPage)
+  return pages[page - 1] ?? []
+}
+
+export const v1Products = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  const sort = getSortMode(req.query.sort)
+  const pageRaw = Number(req.query.page ?? 1)
+  const requestedPage = Number.isFinite(pageRaw) ? Math.floor(pageRaw) : 1
+  const page = Math.max(1, requestedPage)
+  const pageSizeRaw = Number(req.query.pageSize ?? req.query.limit ?? 24)
+  const requestedPageSize = Number.isFinite(pageSizeRaw) ? Math.floor(pageSizeRaw) : 24
+  const pageSize = Math.min(Math.max(requestedPageSize, 1), 60)
+  const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0)
+  const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0
+  const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null
+
+  let productsSnap: admin.firestore.QuerySnapshot
+  try {
+    productsSnap = await db.collection('products').orderBy('updatedAt', 'desc').limit(2000).get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) throw error
+    productsSnap = await db.collection('products').limit(2000).get()
+  }
+
+  const visibleProducts = productsSnap.docs
+    .map(docSnap => {
+      const data = docSnap.data() as Record<string, unknown>
+      const storeId = typeof data.storeId === 'string' ? data.storeId.trim() : ''
+      const name = normalizeProductName(data.name)
+      if (!storeId || !isMarketplaceVisibleProduct(data, name)) return null
+
+      return {
+        id: docSnap.id,
+        storeId,
+        name: name || 'Untitled item',
+        category:
+          typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+        description:
+          typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+        price: typeof data.price === 'number' ? data.price : null,
+        stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+        itemType:
+          data.itemType === 'service'
+            ? 'service'
+            : data.itemType === 'made_to_order'
+              ? 'made_to_order'
+              : 'product',
+        ...extractProductImageSet(data),
+        featuredRank: toFiniteNumberOrNull(data.featuredRank) ?? 0,
+        updatedAt: normalizeTimestampIso(data.updatedAt),
+      } as MarketplaceProductRow
+    })
+    .filter((item): item is MarketplaceProductRow => item !== null)
+
+  const sortedProducts =
+    sort === 'store-diverse'
+      ? interleaveStoreDiverse(visibleProducts)
+      : [...visibleProducts].sort((a, b) => {
+          if (sort === 'featured') return compareByFeaturedThenUpdated(a, b)
+          if (sort === 'price') {
+            const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY
+            const bPrice = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY
+            if (aPrice !== bPrice) return aPrice - bPrice
+          }
+          if (!a.updatedAt && !b.updatedAt) return 0
+          if (!a.updatedAt) return 1
+          if (!b.updatedAt) return -1
+          return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+        })
+
+  const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore)
+
+  res.status(200).json({
+    sort,
+    page,
+    pageSize,
+    maxPerStore,
+    total: sortedProducts.length,
+    products,
+  })
+})
+
 export const integrationProducts = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) {
