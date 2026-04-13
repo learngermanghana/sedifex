@@ -139,6 +139,9 @@ const SMS_SEGMENT_SIZE = 160
 const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' })
 const OPENAI_MODEL = defineString('OPENAI_MODEL', { default: 'gpt-4o-mini' })
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
+const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
+  default: '2026-04-13',
+})
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
@@ -2544,12 +2547,39 @@ export const tiktokOAuthCallback = functions.https.onRequest(async (req, res) =>
 
 function setIntegrationResponseHeaders(res: functions.Response<any>) {
   const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim()
+  const contractVersion = INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13'
+  const requestId = crypto.randomUUID()
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type')
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Authorization,Content-Type,X-Sedifex-Contract-Version',
+  )
+  res.setHeader('x-sedifex-contract-version', contractVersion)
+  res.setHeader('x-sedifex-request-id', requestId)
   if (configuredApiBaseUrl) {
     res.setHeader('x-sedifex-api-base-url', configuredApiBaseUrl)
   }
+}
+
+function validateIntegrationContractVersionOrReply(
+  req: functions.https.Request,
+  res: functions.Response<any>,
+): boolean {
+  const requestedVersion = typeof req.headers['x-sedifex-contract-version'] === 'string'
+    ? req.headers['x-sedifex-contract-version'].trim()
+    : ''
+  if (!requestedVersion) return true
+
+  const currentVersion = INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13'
+  if (requestedVersion === currentVersion) return true
+
+  res.status(400).json({
+    error: 'contract-version-mismatch',
+    expectedVersion: currentVersion,
+    receivedVersion: requestedVersion,
+  })
+  return false
 }
 
 function getIntegrationAuthContext(req: functions.https.Request) {
@@ -2987,6 +3017,9 @@ async function validateIntegrationTokenOrReply(
 
 export const integrationProducts = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) {
+    return
+  }
   const authContext = await validateIntegrationTokenOrReply(req, res)
   if (!authContext) {
     return
@@ -3053,8 +3086,83 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
   res.status(200).json({ storeId, products })
 })
 
+export const v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) {
+    return
+  }
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  const { storeId } = authContext
+
+  const mapProductDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
+    const data = docSnap.data() as Record<string, unknown>
+    const normalizedName = normalizeProductName(data.name)
+    return {
+      id: docSnap.id,
+      storeId,
+      name: normalizedName || 'Untitled item',
+      category:
+        typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+      description:
+        typeof data.description === 'string' && data.description.trim()
+          ? data.description.trim()
+          : null,
+      price: typeof data.price === 'number' ? data.price : null,
+      stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+      itemType:
+        data.itemType === 'service'
+          ? 'service'
+          : data.itemType === 'made_to_order'
+            ? 'made_to_order'
+            : 'product',
+      ...extractProductImageSet(data),
+      updatedAt:
+        data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
+    }
+  }
+
+  let productsSnap: admin.firestore.QuerySnapshot
+  try {
+    productsSnap = await db
+      .collection('products')
+      .where('storeId', '==', storeId)
+      .orderBy('updatedAt', 'desc')
+      .limit(200)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+
+    console.warn('[v1IntegrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+      storeId,
+      code,
+    })
+    productsSnap = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+  }
+
+  const products = productsSnap.docs
+    .map(mapProductDoc)
+    .sort((a, b) => {
+      if (!a.updatedAt && !b.updatedAt) return 0
+      if (!a.updatedAt) return 1
+      if (!b.updatedAt) return -1
+      return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+    })
+
+  res.status(200).json({ storeId, products })
+})
+
 export const integrationPromo = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) {
+    return
+  }
   if (req.method === 'OPTIONS') {
     res.status(204).send('')
     return
@@ -3096,6 +3204,58 @@ export const integrationPromo = functions.https.onRequest(async (req, res) => {
       imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
       phone: toTrimmedStringOrNull(data.whatsappNumber) ?? toTrimmedStringOrNull(data.phone),
       storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
+      updatedAt: normalizeTimestampIso(data.updatedAt),
+    },
+  })
+})
+
+export const v1IntegrationPromo = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) {
+    return
+  }
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  const storeContext = await resolvePromoStoreForRead(req, res)
+  if (!storeContext) {
+    return
+  }
+  const { storeId, data } = storeContext
+  const youtubeUrl = toTrimmedStringOrNull(data.promoYoutubeUrl)
+  const youtubeChannelId = toYoutubeChannelIdOrNull(toTrimmedStringOrNull(data.promoYoutubeChannelId))
+  let youtubeVideos: YoutubeFeedVideo[] = []
+  if (youtubeChannelId) {
+    try {
+      youtubeVideos = await fetchYoutubeChannelVideos(youtubeChannelId, 5)
+    } catch (error) {
+      console.warn('[v1IntegrationPromo] Unable to fetch YouTube channel videos', {
+        storeId,
+        youtubeChannelId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  res.status(200).json({
+    storeId,
+    promo: {
+      enabled: data.promoEnabled === true,
+      slug: toTrimmedStringOrNull(data.promoSlug),
+      title: toTrimmedStringOrNull(data.promoTitle),
+      summary: toTrimmedStringOrNull(data.promoSummary),
+      startDate: toTrimmedStringOrNull(data.promoStartDate),
+      endDate: toTrimmedStringOrNull(data.promoEndDate),
+      websiteUrl: toTrimmedStringOrNull(data.promoWebsiteUrl),
+      youtubeUrl,
+      youtubeEmbedUrl: toYoutubeEmbedUrl(youtubeUrl),
+      youtubeChannelId,
+      youtubeVideos,
+      imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
+      imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
+      phone: toTrimmedStringOrNull(data.whatsappNumber) ?? toTrimmedStringOrNull(data.phone),
+      storeName:
+        toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
       updatedAt: normalizeTimestampIso(data.updatedAt),
     },
   })
