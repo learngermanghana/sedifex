@@ -57,7 +57,6 @@ type ProductStoreMeta = {
   storeName: string | null
   storePhone: string | null
   storeCity: string | null
-  storeEmail: string | null
   websiteLink: string | null
 }
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
@@ -478,7 +477,6 @@ export default function Products() {
     storeName: null,
     storePhone: null,
     storeCity: null,
-    storeEmail: null,
     websiteLink: null,
   })
 
@@ -684,7 +682,6 @@ export default function Products() {
         storeName: null,
         storePhone: null,
         storeCity: null,
-        storeEmail: null,
         websiteLink: null,
       })
       return
@@ -715,12 +712,6 @@ export default function Products() {
             typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null,
           storeCity:
             typeof data.city === 'string' && data.city.trim() ? data.city.trim() : null,
-          storeEmail:
-            typeof data.ownerEmail === 'string' && data.ownerEmail.trim()
-              ? data.ownerEmail.trim()
-              : typeof data.email === 'string' && data.email.trim()
-                ? data.email.trim()
-                : null,
           websiteLink: promoSlug
             ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}`
             : null,
@@ -1082,7 +1073,6 @@ export default function Products() {
         storeName: productStoreMeta.storeName,
         storePhone: productStoreMeta.storePhone,
         storeCity: productStoreMeta.storeCity,
-        storeEmail: productStoreMeta.storeEmail,
         websiteLink: productStoreMeta.websiteLink,
         name: normalizedProductName,
         itemType,

@@ -28,7 +28,7 @@ import PricingPage from './pages/PricingPage'
 import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
 import PublicPageSettings from './pages/PublicPageSettings'
-import GoogleMerchantFeedPage from './pages/GoogleMerchantFeedPage'
+import SocialMediaPage from './pages/SocialMediaPage'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -88,7 +88,8 @@ const router = createBrowserRouter([
           { path: 'account', element: <AccountOverview /> },
           { path: 'account/overview', element: <AccountOverview /> },
           { path: 'public-page', element: <PublicPageSettings /> },
-          { path: 'merchant-feed', element: <GoogleMerchantFeedPage /> },
+          { path: 'social-media', element: <SocialMediaPage /> },
+          { path: 'merchant-feed', element: <Navigate to="/social-media" replace /> },
           { path: 'support', element: <Support /> },
         ],
       },
