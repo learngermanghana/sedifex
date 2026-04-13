@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationPromo = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -66,6 +66,9 @@ const SMS_SEGMENT_SIZE = 160;
 const OPENAI_API_KEY = (0, params_1.defineString)('OPENAI_API_KEY', { default: '' });
 const OPENAI_MODEL = (0, params_1.defineString)('OPENAI_MODEL', { default: 'gpt-4o-mini' });
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
+const INTEGRATION_CONTRACT_VERSION = (0, params_1.defineString)('INTEGRATION_CONTRACT_VERSION', {
+    default: '2026-04-13',
+});
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
@@ -1921,12 +1924,32 @@ exports.tiktokOAuthCallback = functions.https.onRequest(async (req, res) => {
 });
 function setIntegrationResponseHeaders(res) {
     const configuredApiBaseUrl = SEDIFEX_API_BASE_URL.value().trim();
+    const contractVersion = INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13';
+    const requestId = crypto.randomUUID();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,X-Sedifex-Contract-Version');
+    res.setHeader('x-sedifex-contract-version', contractVersion);
+    res.setHeader('x-sedifex-request-id', requestId);
     if (configuredApiBaseUrl) {
         res.setHeader('x-sedifex-api-base-url', configuredApiBaseUrl);
     }
+}
+function validateIntegrationContractVersionOrReply(req, res) {
+    const requestedVersion = typeof req.headers['x-sedifex-contract-version'] === 'string'
+        ? req.headers['x-sedifex-contract-version'].trim()
+        : '';
+    if (!requestedVersion)
+        return true;
+    const currentVersion = INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13';
+    if (requestedVersion === currentVersion)
+        return true;
+    res.status(400).json({
+        error: 'contract-version-mismatch',
+        expectedVersion: currentVersion,
+        receivedVersion: requestedVersion,
+    });
+    return false;
 }
 function getIntegrationAuthContext(req) {
     const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
@@ -2310,6 +2333,9 @@ async function validateIntegrationTokenOrReply(req, res) {
 }
 exports.integrationProducts = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res)) {
+        return;
+    }
     const authContext = await validateIntegrationTokenOrReply(req, res);
     if (!authContext) {
         return;
@@ -2371,8 +2397,77 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
     });
     res.status(200).json({ storeId, products });
 });
+exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res)) {
+        return;
+    }
+    const authContext = await validateIntegrationTokenOrReply(req, res);
+    if (!authContext) {
+        return;
+    }
+    const { storeId } = authContext;
+    const mapProductDoc = (docSnap) => {
+        const data = docSnap.data();
+        const normalizedName = normalizeProductName(data.name);
+        return {
+            id: docSnap.id,
+            storeId,
+            name: normalizedName || 'Untitled item',
+            category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+            description: typeof data.description === 'string' && data.description.trim()
+                ? data.description.trim()
+                : null,
+            price: typeof data.price === 'number' ? data.price : null,
+            stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+            itemType: data.itemType === 'service'
+                ? 'service'
+                : data.itemType === 'made_to_order'
+                    ? 'made_to_order'
+                    : 'product',
+            ...extractProductImageSet(data),
+            updatedAt: data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt.toDate().toISOString() : null,
+        };
+    };
+    let productsSnap;
+    try {
+        productsSnap = await firestore_1.defaultDb
+            .collection('products')
+            .where('storeId', '==', storeId)
+            .orderBy('updatedAt', 'desc')
+            .limit(200)
+            .get();
+    }
+    catch (error) {
+        const code = error?.code;
+        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+        if (!isMissingIndex) {
+            throw error;
+        }
+        console.warn('[v1IntegrationProducts] Missing Firestore index for ordered product query; falling back to unordered fetch', {
+            storeId,
+            code,
+        });
+        productsSnap = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+    }
+    const products = productsSnap.docs
+        .map(mapProductDoc)
+        .sort((a, b) => {
+        if (!a.updatedAt && !b.updatedAt)
+            return 0;
+        if (!a.updatedAt)
+            return 1;
+        if (!b.updatedAt)
+            return -1;
+        return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+    });
+    res.status(200).json({ storeId, products });
+});
 exports.integrationPromo = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res)) {
+        return;
+    }
     if (req.method === 'OPTIONS') {
         res.status(204).send('');
         return;
@@ -2391,6 +2486,57 @@ exports.integrationPromo = functions.https.onRequest(async (req, res) => {
         }
         catch (error) {
             console.warn('[integrationPromo] Unable to fetch YouTube channel videos', {
+                storeId,
+                youtubeChannelId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+    res.status(200).json({
+        storeId,
+        promo: {
+            enabled: data.promoEnabled === true,
+            slug: toTrimmedStringOrNull(data.promoSlug),
+            title: toTrimmedStringOrNull(data.promoTitle),
+            summary: toTrimmedStringOrNull(data.promoSummary),
+            startDate: toTrimmedStringOrNull(data.promoStartDate),
+            endDate: toTrimmedStringOrNull(data.promoEndDate),
+            websiteUrl: toTrimmedStringOrNull(data.promoWebsiteUrl),
+            youtubeUrl,
+            youtubeEmbedUrl: toYoutubeEmbedUrl(youtubeUrl),
+            youtubeChannelId,
+            youtubeVideos,
+            imageUrl: toTrimmedStringOrNull(data.promoImageUrl),
+            imageAlt: toTrimmedStringOrNull(data.promoImageAlt),
+            phone: toTrimmedStringOrNull(data.whatsappNumber) ?? toTrimmedStringOrNull(data.phone),
+            storeName: toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
+            updatedAt: normalizeTimestampIso(data.updatedAt),
+        },
+    });
+});
+exports.v1IntegrationPromo = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res)) {
+        return;
+    }
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    const storeContext = await resolvePromoStoreForRead(req, res);
+    if (!storeContext) {
+        return;
+    }
+    const { storeId, data } = storeContext;
+    const youtubeUrl = toTrimmedStringOrNull(data.promoYoutubeUrl);
+    const youtubeChannelId = toYoutubeChannelIdOrNull(toTrimmedStringOrNull(data.promoYoutubeChannelId));
+    let youtubeVideos = [];
+    if (youtubeChannelId) {
+        try {
+            youtubeVideos = await fetchYoutubeChannelVideos(youtubeChannelId, 5);
+        }
+        catch (error) {
+            console.warn('[v1IntegrationPromo] Unable to fetch YouTube channel videos', {
                 storeId,
                 youtubeChannelId,
                 error: error instanceof Error ? error.message : String(error),

@@ -5,7 +5,7 @@ Use this guide to auto-load products from Sedifex into either:
 - a **WordPress** site, or
 - a **Next.js site hosted on Vercel**.
 
-This quickstart follows the current Sedifex downstream contract based on the `integrationProducts` HTTP endpoint and related integration endpoints (`integrationPromo`, `integrationGallery`, `integrationCustomers`, `integrationTopSelling`, `integrationTikTokVideos`, and `integrationGoogleMerchantFeed`), plus the product shape documented in the root README.
+This quickstart follows the current **versioned** Sedifex downstream contract based on `/v1IntegrationProducts` and related integration endpoints (`/v1IntegrationPromo`, `/integrationGallery`, `/integrationCustomers`, `/integrationTopSelling`, `/integrationTikTokVideos`, and `/integrationGoogleMerchantFeed`), plus the product shape documented in the root README.
 
 ## What you get
 
@@ -171,8 +171,10 @@ It defines a pull + webhook model, contract versioning, reliability, and rollout
 ## Integration flow
 
 1. Create an integration API key in **Account overview → Integrations → Website integrations**.
-2. Call `GET /integrationProducts?storeId=<storeId>` with `Authorization: Bearer <integration_key>`.
-   - Promo data: `GET /integrationPromo?storeId=<storeId>`
+2. Call `GET /v1IntegrationProducts?storeId=<storeId>` with:
+   - `Authorization: Bearer <integration_key>`
+   - `X-Sedifex-Contract-Version: 2026-04-13`
+   - Promo data: `GET /v1IntegrationPromo?storeId=<storeId>`
    - Promo gallery data: `GET /integrationGallery?storeId=<storeId>`
    - Customer data: `GET /integrationCustomers?storeId=<storeId>`
    - Top-selling products: `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
@@ -181,6 +183,17 @@ It defines a pull + webhook model, contract versioning, reliability, and rollout
 4. Return fallback data when external fetch fails.
 5. Render a grouped menu UI by category.
 6. Apply an appropriate cache strategy.
+
+### Shared integration types
+
+Import shared interfaces from `shared/integrationTypes.ts` in both Sedifex and Buy Sedifex projects to avoid field drift:
+
+- `IntegrationProduct`
+- `IntegrationPromo`
+- `IntegrationProductsResponse`
+- `IntegrationPromoResponse`
+
+If you publish these to npm, keep the package version aligned with the contract header date (`X-Sedifex-Contract-Version`).
 
 ---
 
