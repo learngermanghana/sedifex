@@ -5,6 +5,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
@@ -37,6 +38,7 @@ import { ProductImageUploadError, uploadProductImage } from '../api/productImage
 import { requestAiAdvisor } from '../api/aiAdvisor'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
+import { buildPromoSlug } from '../utils/promoSlug'
 
 type CachedProduct = Omit<Product, 'id'>
 type AbcBucket = 'A' | 'B' | 'C'
@@ -50,6 +52,12 @@ type SaleRecord = {
     type?: string | null
     isService?: boolean
   }>
+}
+type ProductStoreMeta = {
+  storeName: string | null
+  storePhone: string | null
+  storeCity: string | null
+  websiteLink: string | null
 }
 const EXACT_UPLOAD_LIMIT_HINT = 'Maximum upload size is 5 MB (5,242,880 bytes).'
 const DEFAULT_PRODUCT_IMAGE_URL = 'https://storage.googleapis.com/sedifeximage/stores/Y5ivjrJUBtWl7KzoR0aVszFu1c93/logo.jpg?v=1775656136764'
@@ -465,6 +473,12 @@ export default function Products() {
   const { name: workspaceName } = useWorkspaceIdentity()
   const { publish } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [productStoreMeta, setProductStoreMeta] = useState<ProductStoreMeta>({
+    storeName: null,
+    storePhone: null,
+    storeCity: null,
+    websiteLink: null,
+  })
 
   const [products, setProducts] = useState<Product[]>([])
   const [sales, setSales] = useState<SaleRecord[]>([])
@@ -657,6 +671,58 @@ export default function Products() {
     return () => {
       cancelled = true
       unsubscribe()
+    }
+  }, [activeStoreId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!activeStoreId) {
+      setProductStoreMeta({
+        storeName: null,
+        storePhone: null,
+        storeCity: null,
+        websiteLink: null,
+      })
+      return
+    }
+
+    ;(async () => {
+      try {
+        const snapshot = await getDoc(doc(db, 'stores', activeStoreId))
+        const data = snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : null
+        if (!data || cancelled) return
+
+        const storeName =
+          typeof data.displayName === 'string' && data.displayName.trim()
+            ? data.displayName.trim()
+            : typeof data.name === 'string' && data.name.trim()
+              ? data.name.trim()
+              : null
+        const promoSlug = buildPromoSlug(
+          typeof data.promoSlug === 'string' ? data.promoSlug : null,
+          storeName,
+          typeof data.name === 'string' ? data.name : null,
+          activeStoreId,
+        )
+
+        setProductStoreMeta({
+          storeName,
+          storePhone:
+            typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null,
+          storeCity:
+            typeof data.city === 'string' && data.city.trim() ? data.city.trim() : null,
+          websiteLink: promoSlug
+            ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}`
+            : null,
+        })
+      } catch (error) {
+        console.warn('[products] Failed to load store metadata for product defaults', error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
     }
   }, [activeStoreId])
 
@@ -1004,6 +1070,10 @@ export default function Products() {
 
       await setDoc(productRef, {
         storeId: activeStoreId,
+        storeName: productStoreMeta.storeName,
+        storePhone: productStoreMeta.storePhone,
+        storeCity: productStoreMeta.storeCity,
+        websiteLink: productStoreMeta.websiteLink,
         name: normalizedProductName,
         itemType,
         category: trimmedCategory || null,
