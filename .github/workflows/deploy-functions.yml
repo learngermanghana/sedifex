@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: functions/package-lock.json
 
@@ -47,6 +47,9 @@ jobs:
           cat <<'EOF' > functions/.env.sedifex-web
           ${{ secrets.FUNCTIONS_ENV_SEDIFEX_WEB }}
           EOF
+
+      - name: Delete removed legacy functions
+        run: firebase functions:delete exportDailyStoreReports --region us-central1 --project sedifex-web --force || true
 
       - name: Deploy Firebase Functions
         run: firebase deploy --only functions --project sedifex-web --force
