@@ -305,6 +305,15 @@ export default function SocialMediaPage() {
         storeId,
         platform,
         productId: selectedProduct.id,
+        product: {
+          id: selectedProduct.id,
+          name: selectedProduct.name,
+          category: selectedProduct.category,
+          description: selectedProduct.description,
+          price: selectedProduct.price,
+          imageUrl: selectedProduct.imageUrl,
+          itemType: selectedProduct.itemType,
+        },
       })
       const styledPost = applyPresets(response.post)
       const styledResponse: GenerateSocialPostResponse = {
