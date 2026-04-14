@@ -1080,10 +1080,3 @@ export const googleAdsMetricsSync = functions.https.onRequest(async (req, res) =
     res.status(code).json({ error: message })
   }
 })
-
-export const googleAdsMetricsSyncScheduled = functions.pubsub
-  .schedule('every 30 minutes')
-  .onRun(async () => {
-    await runMetricsSyncJob()
-    return null
-  })

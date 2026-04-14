@@ -12,7 +12,6 @@ export {
   googleAdsOAuthCallback,
   googleAdsCampaign,
   googleAdsMetricsSync,
-  googleAdsMetricsSyncScheduled,
 } from './googleAds'
 export * from './googleShopping'
 export {
