@@ -31,6 +31,8 @@ type SocialHistoryEntry = {
   post: GenerateSocialPostResponse['post']
 }
 
+type ShareChannel = 'native' | 'facebook' | 'x' | 'linkedin' | 'whatsapp' | 'telegram'
+
 type ParsedMarketingDescription = {
   intro: string
   keyBenefits: string[]
@@ -147,6 +149,28 @@ function mapProduct(id: string, raw: Record<string, unknown>): ProductOption {
     price: typeof raw.price === 'number' && Number.isFinite(raw.price) ? raw.price : null,
     imageUrl: typeof raw.imageUrl === 'string' && raw.imageUrl.trim() ? raw.imageUrl.trim() : null,
     itemType: raw.itemType === 'service' || raw.itemType === 'made_to_order' ? raw.itemType : 'product',
+  }
+}
+
+function buildShareDraft(post: GenerateSocialPostResponse['post'], imageUrl?: string | null) {
+  const hashtagsText = post.hashtags.join(' ')
+  const message = [post.caption, post.cta, hashtagsText, imageUrl ? `Photo: ${imageUrl}` : ''].filter(Boolean).join('\n\n')
+  return {
+    hashtagsText,
+    message,
+  }
+}
+
+async function buildShareFileFromImageUrl(imageUrl: string): Promise<File | null> {
+  try {
+    const response = await fetch(imageUrl, { mode: 'cors' })
+    if (!response.ok) return null
+    const blob = await response.blob()
+    const contentType = blob.type || 'image/jpeg'
+    const extension = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+    return new File([blob], `social-post-image.${extension}`, { type: contentType })
+  } catch (_error) {
+    return null
   }
 }
 
@@ -401,6 +425,53 @@ export default function SocialMediaPage() {
     URL.revokeObjectURL(url)
   }
 
+  async function handleShare(channel: ShareChannel) {
+    if (!result) return
+
+    const imageUrl = result.product.imageUrl || null
+    const draft = buildShareDraft(result.post, imageUrl)
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://sedifex.com'
+    const encodedMessage = encodeURIComponent(draft.message)
+    const encodedUrl = encodeURIComponent(shareUrl)
+    const encodedHashtags = encodeURIComponent(draft.hashtagsText.replace(/#/g, '').replace(/\s+/g, ','))
+
+    if (channel === 'native') {
+      const navAny = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
+      if (typeof navAny.share === 'function') {
+        try {
+          const imageFile = imageUrl ? await buildShareFileFromImageUrl(imageUrl) : null
+          const filePayload =
+            imageFile && typeof navigator.canShare === 'function' && navigator.canShare({ files: [imageFile] })
+              ? { files: [imageFile] as File[] }
+              : {}
+
+          await navAny.share({
+            title: `Social post draft for ${result.product.name}`,
+            text: draft.message,
+            url: shareUrl,
+            ...filePayload,
+          })
+          publish({ tone: 'success', message: imageFile ? 'Share sheet opened with photo.' : 'Share sheet opened.' })
+          return
+        } catch (_error) {
+          // user cancelled or browser blocked share
+        }
+      }
+      publish({ tone: 'error', message: 'Direct share is not available here. Use one of the platform buttons below.' })
+      return
+    }
+
+    const urls: Record<Exclude<ShareChannel, 'native'>, string> = {
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedMessage}`,
+      x: `https://twitter.com/intent/tweet?text=${encodedMessage}&url=${encodedUrl}&hashtags=${encodedHashtags}`,
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
+      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${draft.message}\n\n${shareUrl}`)}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(imageUrl || shareUrl)}&text=${encodedMessage}`,
+    }
+
+    window.open(urls[channel], '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <PageSection title="Social media" subtitle="Generate Instagram or TikTok-ready captions, hashtags, creative direction, and CTA from your existing product catalog.">
       <div
@@ -531,6 +602,20 @@ export default function SocialMediaPage() {
               <button type="button" className="button secondary" onClick={() => void handleCopy('hashtags')}>Copy hashtags</button>
               <button type="button" className="button secondary" onClick={() => void handleCopy('full')}>Copy full draft</button>
               <button type="button" className="button secondary" onClick={handleDownload}>Download .txt</button>
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <strong>Share to social</strong>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button type="button" className="button secondary" onClick={() => void handleShare('native')}>Share…</button>
+                <button type="button" className="button secondary" onClick={() => void handleShare('facebook')}>Facebook</button>
+                <button type="button" className="button secondary" onClick={() => void handleShare('x')}>X</button>
+                <button type="button" className="button secondary" onClick={() => void handleShare('linkedin')}>LinkedIn</button>
+                <button type="button" className="button secondary" onClick={() => void handleShare('whatsapp')}>WhatsApp</button>
+                <button type="button" className="button secondary" onClick={() => void handleShare('telegram')}>Telegram</button>
+              </div>
+              <p style={{ margin: 0, fontSize: 12, opacity: 0.75 }}>
+                Opens each platform’s share composer with your generated caption, CTA, and hashtags.
+              </p>
             </div>
           </div>
         ) : null}
