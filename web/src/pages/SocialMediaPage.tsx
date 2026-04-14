@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FirebaseError } from 'firebase/app'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import PageSection from '../layout/PageSection'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -18,7 +18,7 @@ type ProductOption = {
   itemType: Product['itemType']
 }
 
-type RegenerateTarget = 'all' | 'caption' | 'hashtags' | 'cta'
+type RegenerateTarget = 'all' | 'caption' | 'hashtags'
 type CopyTarget = 'caption' | 'hashtags' | 'full'
 type ContentTone = 'standard' | 'playful' | 'professional'
 type ContentLength = 'short' | 'medium' | 'long'
@@ -36,6 +36,12 @@ type ParsedMarketingDescription = {
   keyBenefits: string[]
   bestUseCase: string | null
   closing: string | null
+}
+
+type StoreContactDetails = {
+  phone: string | null
+  email: string | null
+  website: string | null
 }
 
 function cleanRichText(value: string): string {
@@ -164,7 +170,11 @@ export default function SocialMediaPage() {
   const [productLoadError, setProductLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<SocialHistoryEntry[]>([])
   const [productSearchTerm, setProductSearchTerm] = useState('')
-  const contactCta = 'Call now with your phone number, email, and website (if available).'
+  const [storeContact, setStoreContact] = useState<StoreContactDetails>({
+    phone: null,
+    email: null,
+    website: null,
+  })
 
   useEffect(() => {
     if (!storeId) {
@@ -214,6 +224,58 @@ export default function SocialMediaPage() {
       setHistory([])
     }
   }, [storeId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadStoreContactDetails() {
+      if (!storeId) {
+        setStoreContact({ phone: null, email: null, website: null })
+        return
+      }
+
+      try {
+        const snapshot = await getDoc(doc(db, 'stores', storeId))
+        if (!snapshot.exists() || cancelled) return
+        const data = snapshot.data()
+        const phone = typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null
+        const email =
+          typeof data.email === 'string' && data.email.trim()
+            ? data.email.trim()
+            : typeof data.ownerEmail === 'string' && data.ownerEmail.trim()
+              ? data.ownerEmail.trim()
+              : null
+        const websiteCandidates = [
+          typeof data.website === 'string' ? data.website.trim() : '',
+          typeof data.websiteUrl === 'string' ? data.websiteUrl.trim() : '',
+          typeof data.websiteLink === 'string' ? data.websiteLink.trim() : '',
+        ].filter(Boolean)
+        const website = websiteCandidates[0] || null
+        if (!cancelled) {
+          setStoreContact({ phone, email, website })
+        }
+      } catch (error) {
+        console.warn('[social-media] Failed to load store contact details', error)
+      }
+    }
+
+    void loadStoreContactDetails()
+    return () => {
+      cancelled = true
+    }
+  }, [storeId])
+
+  const contactCta = useMemo(() => {
+    const contactLines = [
+      storeContact.phone ? `Call now: ${storeContact.phone}` : null,
+      storeContact.email ? `Email: ${storeContact.email}` : null,
+      storeContact.website ? `Visit: ${storeContact.website}` : null,
+    ].filter(Boolean)
+    if (!contactLines.length) {
+      return 'Message us now to place your order and get full details.'
+    }
+    return contactLines.join(' • ')
+  }, [storeContact.email, storeContact.phone, storeContact.website])
 
   const selectedProduct = useMemo(
     () => products.find(product => product.id === selectedId) ?? null,
@@ -333,7 +395,6 @@ export default function SocialMediaPage() {
                 ...result.post,
                 ...(target === 'caption' ? { caption: styledResponse.post.caption } : {}),
                 ...(target === 'hashtags' ? { hashtags: styledResponse.post.hashtags } : {}),
-                ...(target === 'cta' ? { cta: styledResponse.post.cta } : {}),
               },
             }
 
@@ -374,21 +435,43 @@ export default function SocialMediaPage() {
     }
   }
 
-  function handleImageDownload() {
+  async function handleImageDownload() {
     const imageUrl = result?.product.imageUrl
     if (!imageUrl) {
       publish({ tone: 'error', message: 'No image available to download for this item yet.' })
       return
     }
 
+    const suggestedName = `social-image-${new Date().toISOString().slice(0, 10)}.jpg`
+
+    try {
+      const response = await fetch(imageUrl, { mode: 'cors' })
+      if (!response.ok) {
+        throw new Error(`Image download failed with status ${response.status}`)
+      }
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = suggestedName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(blobUrl)
+      publish({ tone: 'success', message: 'Image downloaded. Upload it in your social app next.' })
+      return
+    } catch (error) {
+      console.warn('[social-media] Blob image download failed, falling back to new tab', error)
+    }
+
     const link = document.createElement('a')
     link.href = imageUrl
     link.target = '_blank'
     link.rel = 'noopener noreferrer'
-    link.download = `social-image-${new Date().toISOString().slice(0, 10)}.jpg`
     document.body.appendChild(link)
     link.click()
     link.remove()
+    publish({ tone: 'success', message: 'Opened image in a new tab. Long-press or right-click to save it.' })
   }
 
   function handleDownload() {
@@ -397,6 +480,12 @@ export default function SocialMediaPage() {
       `Platform: ${result.post.platform}`,
       `Product: ${result.product.name}`,
       '',
+      'Manual upload steps:',
+      '1. Download image.',
+      `2. Upload image in the ${result.post.platform === 'instagram' ? 'Instagram' : 'TikTok'} app.`,
+      '3. Paste caption + hashtags.',
+      '',
+      'Draft content:',
       `Caption: ${result.post.caption}`,
       `CTA: ${contactCta}`,
       `Hashtags: ${result.post.hashtags.join(' ')}`,
@@ -527,13 +616,13 @@ export default function SocialMediaPage() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button type="button" className="button secondary" onClick={() => void handleGenerate('caption')} disabled={loading}>Regenerate caption</button>
               <button type="button" className="button secondary" onClick={() => void handleGenerate('hashtags')} disabled={loading}>Regenerate hashtags</button>
-              <button type="button" className="button secondary" onClick={() => void handleGenerate('cta')} disabled={loading}>Regenerate CTA</button>
             </div>
             <p style={{ margin: 0 }}><strong>Caption:</strong> {result.post.caption}</p>
             <p style={{ margin: 0 }}><strong>CTA:</strong> {contactCta}</p>
             <p style={{ margin: 0 }}><strong>Hashtags:</strong> {result.post.hashtags.join(' ')}</p>
             {result.post.disclaimer ? <p style={{ margin: 0 }}><strong>Disclaimer:</strong> {result.post.disclaimer}</p> : null}
             <p style={{ margin: 0 }}><strong>Selected image:</strong> {result.product.imageUrl ? 'Ready to download and upload manually.' : 'No image URL on this item yet.'}</p>
+            <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>Step 1: Download image. Step 2: Upload on Instagram/TikTok app. Step 3: Paste caption + hashtags.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button type="button" className="button secondary" onClick={() => void handleCopy('caption')}>Copy caption</button>
               <button type="button" className="button secondary" onClick={() => void handleCopy('hashtags')}>Copy hashtags</button>
