@@ -35,6 +35,7 @@ function getCallableErrorMessage(error: unknown): string | null {
   if (!(error instanceof FirebaseError)) return null
 
   const callableError = error as FirebaseError & {
+    code?: string
     customData?: {
       body?: {
         error?: {
@@ -42,6 +43,20 @@ function getCallableErrorMessage(error: unknown): string | null {
         }
       }
     }
+  }
+
+  const errorCode = typeof callableError.code === 'string' ? callableError.code.trim() : ''
+  if (errorCode === 'functions/unavailable') {
+    return 'AI backend is unreachable right now. Confirm Firebase Functions is deployed and the project config points to the right environment.'
+  }
+  if (errorCode === 'functions/not-found') {
+    return 'AI endpoint is missing. Deploy the latest Firebase Functions so generateSocialPost is available.'
+  }
+  if (errorCode === 'functions/internal') {
+    return 'The AI service is online but failed to generate content. Please retry in a moment.'
+  }
+  if (errorCode === 'functions/failed-precondition') {
+    return 'AI generator is not fully configured yet. Verify OPENAI_API_KEY is set for Firebase Functions.'
   }
 
   const bodyMessage = callableError.customData?.body?.error?.message
@@ -249,8 +264,16 @@ export default function SocialMediaPage() {
     } catch (error) {
       console.error('[social-media] Failed to generate social post', error)
       const serverMessage = getCallableErrorMessage(error)
-      publish({ tone: 'error', message: serverMessage || 'Could not generate social draft right now. Please try again.' })
-      setInlineError(serverMessage || 'Generation failed. Check your network and try again.')
+      publish({
+        tone: 'error',
+        message:
+          serverMessage ||
+          'Could not generate social draft right now. Please check backend deployment/configuration and try again.',
+      })
+      setInlineError(
+        serverMessage ||
+          'Generation failed. Confirm the AI backend (Firebase Functions) is deployed and reachable, then retry.',
+      )
     } finally {
       setLoading(false)
     }
