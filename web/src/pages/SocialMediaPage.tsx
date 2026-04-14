@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import PageSection from '../layout/PageSection'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -55,6 +55,7 @@ export default function SocialMediaPage() {
   const [inlineError, setInlineError] = useState<string | null>(null)
   const [productLoadError, setProductLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<SocialHistoryEntry[]>([])
+  const [productSearchTerm, setProductSearchTerm] = useState('')
 
   useEffect(() => {
     if (!storeId) {
@@ -64,12 +65,7 @@ export default function SocialMediaPage() {
       return
     }
 
-    const productsQuery = query(
-      collection(db, 'products'),
-      where('storeId', '==', storeId),
-      orderBy('updatedAt', 'desc'),
-      orderBy('createdAt', 'desc'),
-    )
+    const productsQuery = query(collection(db, 'products'), where('storeId', '==', storeId))
 
     const unsubscribe = onSnapshot(
       productsQuery,
@@ -78,6 +74,7 @@ export default function SocialMediaPage() {
         const sorted = rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
         setProducts(sorted)
         setSelectedId(current => (current && sorted.some(item => item.id === current) ? current : sorted[0]?.id ?? ''))
+        setProductSearchTerm(current => current.trim())
         setProductLoadError(null)
       },
       error => {
@@ -113,6 +110,29 @@ export default function SocialMediaPage() {
     () => products.find(product => product.id === selectedId) ?? null,
     [products, selectedId],
   )
+
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = productSearchTerm.trim().toLowerCase()
+    if (!normalizedSearch) return products
+    return products.filter(product => {
+      const name = product.name.toLowerCase()
+      const category = product.category?.toLowerCase() ?? ''
+      const description = product.description?.toLowerCase() ?? ''
+      return (
+        name.includes(normalizedSearch) ||
+        category.includes(normalizedSearch) ||
+        description.includes(normalizedSearch)
+      )
+    })
+  }, [productSearchTerm, products])
+
+  useEffect(() => {
+    if (!filteredProducts.length) {
+      setSelectedId('')
+      return
+    }
+    setSelectedId(current => (current && filteredProducts.some(product => product.id === current) ? current : filteredProducts[0].id))
+  }, [filteredProducts])
 
   const selectedPreview = useMemo(() => {
     if (!selectedProduct) return null
@@ -272,16 +292,27 @@ export default function SocialMediaPage() {
         </label>
 
         <label style={{ display: 'grid', gap: 6 }}>
+          <span id="social-product-search-label">Search products or services</span>
+          <input
+            aria-labelledby="social-product-search-label"
+            type="search"
+            value={productSearchTerm}
+            onChange={event => setProductSearchTerm(event.target.value)}
+            placeholder="Type product, service, or category"
+          />
+        </label>
+
+        <label style={{ display: 'grid', gap: 6 }}>
           <span id="social-product-label">Product or service</span>
-          <select aria-labelledby="social-product-label" value={selectedId} onChange={event => setSelectedId(event.target.value)} disabled={!products.length}>
-            {products.length ? (
-              products.map(product => (
+          <select aria-labelledby="social-product-label" value={selectedId} onChange={event => setSelectedId(event.target.value)} disabled={!filteredProducts.length}>
+            {filteredProducts.length ? (
+              filteredProducts.map(product => (
                 <option key={product.id} value={product.id}>
                   {product.name} {product.itemType === 'service' ? '(service)' : ''}
                 </option>
               ))
             ) : (
-              <option value="">No products found</option>
+              <option value="">{products.length ? 'No matching products or services' : 'No products found'}</option>
             )}
           </select>
         </label>
