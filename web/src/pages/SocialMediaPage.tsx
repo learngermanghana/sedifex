@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FirebaseError } from 'firebase/app'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import PageSection from '../layout/PageSection'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -18,7 +18,7 @@ type ProductOption = {
   itemType: Product['itemType']
 }
 
-type RegenerateTarget = 'all' | 'caption' | 'hashtags' | 'cta'
+type RegenerateTarget = 'all' | 'caption' | 'hashtags'
 type CopyTarget = 'caption' | 'hashtags' | 'full'
 type ContentTone = 'standard' | 'playful' | 'professional'
 type ContentLength = 'short' | 'medium' | 'long'
@@ -38,6 +38,12 @@ type ParsedMarketingDescription = {
   keyBenefits: string[]
   bestUseCase: string | null
   closing: string | null
+}
+
+type StoreContactProfile = {
+  phone: string | null
+  email: string | null
+  website: string | null
 }
 
 function cleanRichText(value: string): string {
@@ -161,6 +167,18 @@ function buildShareDraft(post: GenerateSocialPostResponse['post'], imageUrl?: st
   }
 }
 
+function toNullableTrimmedString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function buildContactCta(contact: StoreContactProfile): string {
+  const parts: string[] = []
+  if (contact.phone) parts.push(`Call now: ${contact.phone}`)
+  if (contact.email) parts.push(`Email: ${contact.email}`)
+  if (contact.website) parts.push(`Visit: ${contact.website}`)
+  return parts.join(' • ')
+}
+
 async function buildShareFileFromImageUrl(imageUrl: string): Promise<File | null> {
   try {
     const response = await fetch(imageUrl, { mode: 'cors' })
@@ -188,6 +206,11 @@ export default function SocialMediaPage() {
   const [productLoadError, setProductLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<SocialHistoryEntry[]>([])
   const [productSearchTerm, setProductSearchTerm] = useState('')
+  const [storeContact, setStoreContact] = useState<StoreContactProfile>({
+    phone: null,
+    email: null,
+    website: null,
+  })
 
   useEffect(() => {
     if (!storeId) {
@@ -238,6 +261,34 @@ export default function SocialMediaPage() {
     }
   }, [storeId])
 
+  useEffect(() => {
+    if (!storeId) {
+      setStoreContact({ phone: null, email: null, website: null })
+      return
+    }
+
+    const storeRef = doc(db, 'stores', storeId)
+    const unsubscribe = onSnapshot(
+      storeRef,
+      snapshot => {
+        const raw = (snapshot.data() ?? {}) as Record<string, unknown>
+        setStoreContact({
+          phone: toNullableTrimmedString(raw.phone),
+          email: toNullableTrimmedString(raw.email) ?? toNullableTrimmedString(raw.ownerEmail),
+          website:
+            toNullableTrimmedString(raw.promoWebsiteUrl) ??
+            toNullableTrimmedString(raw.websiteUrl) ??
+            toNullableTrimmedString(raw.website),
+        })
+      },
+      () => {
+        setStoreContact({ phone: null, email: null, website: null })
+      },
+    )
+
+    return () => unsubscribe()
+  }, [storeId])
+
   const selectedProduct = useMemo(
     () => products.find(product => product.id === selectedId) ?? null,
     [products, selectedId],
@@ -257,6 +308,8 @@ export default function SocialMediaPage() {
       )
     })
   }, [productSearchTerm, products])
+
+  const contactCta = useMemo(() => buildContactCta(storeContact), [storeContact])
 
   useEffect(() => {
     if (!filteredProducts.length) {
@@ -356,7 +409,6 @@ export default function SocialMediaPage() {
                 ...result.post,
                 ...(target === 'caption' ? { caption: styledResponse.post.caption } : {}),
                 ...(target === 'hashtags' ? { hashtags: styledResponse.post.hashtags } : {}),
-                ...(target === 'cta' ? { cta: styledResponse.post.cta } : {}),
               },
             }
 
@@ -383,11 +435,12 @@ export default function SocialMediaPage() {
 
   async function handleCopy(target: CopyTarget) {
     if (!result) return
+    const effectiveCta = contactCta || result.post.cta
     const fullText = [
       `Caption: ${result.post.caption}`,
-      `CTA: ${result.post.cta}`,
+      `CTA: ${effectiveCta}`,
       `Hashtags: ${result.post.hashtags.join(' ')}`,
-      `Image prompt: ${result.post.imagePrompt}`,
+      result.post.imagePrompt ? `Image prompt: ${result.post.imagePrompt}` : '',
     ].join('\n')
     const text = target === 'caption' ? result.post.caption : target === 'hashtags' ? result.post.hashtags.join(' ') : fullText
     try {
@@ -400,17 +453,26 @@ export default function SocialMediaPage() {
 
   function handleDownload() {
     if (!result) return
+    const effectiveCta = contactCta || result.post.cta
     const body = [
       `Platform: ${result.post.platform}`,
       `Product: ${result.product.name}`,
       '',
+      'Post draft',
       `Caption: ${result.post.caption}`,
-      `CTA: ${result.post.cta}`,
+      `CTA: ${effectiveCta}`,
       `Hashtags: ${result.post.hashtags.join(' ')}`,
-      `Image prompt: ${result.post.imagePrompt}`,
-      `Design spec: ${result.post.designSpec.aspectRatio} · ${result.post.designSpec.visualStyle}`,
-      `Safe text zones: ${result.post.designSpec.safeTextZones.join(' | ')}`,
+      '',
+      'Creative notes',
+      result.post.imagePrompt ? `Image prompt: ${result.post.imagePrompt}` : '',
+      result.post.designSpec ? `Design spec: ${result.post.designSpec.aspectRatio} · ${result.post.designSpec.visualStyle}` : '',
+      result.post.designSpec?.safeTextZones?.length ? `Safe text zones: ${result.post.designSpec.safeTextZones.join(' | ')}` : '',
       result.post.disclaimer ? `Disclaimer: ${result.post.disclaimer}` : '',
+      '',
+      'Manual upload steps',
+      '1) Download image',
+      `2) Upload on ${result.post.platform === 'instagram' ? 'Instagram' : 'TikTok'} app`,
+      '3) Paste caption + hashtags',
     ]
       .filter(Boolean)
       .join('\n')
@@ -425,11 +487,38 @@ export default function SocialMediaPage() {
     URL.revokeObjectURL(url)
   }
 
+  async function handleImageDownload() {
+    const imageUrl = result?.product.imageUrl
+    if (!imageUrl) return
+
+    try {
+      const response = await fetch(imageUrl, { mode: 'cors' })
+      if (!response.ok) throw new Error('Image fetch failed')
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const extension = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg'
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = `social-post-image-${new Date().toISOString().slice(0, 10)}.${extension}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+      publish({ tone: 'success', message: 'Image download started.' })
+    } catch (_error) {
+      window.open(imageUrl, '_blank', 'noopener,noreferrer')
+      publish({
+        tone: 'error',
+        message: 'Image download fallback opened in a new tab. Long-press or right-click to save.',
+      })
+    }
+  }
+
   async function handleShare(channel: ShareChannel) {
     if (!result) return
 
     const imageUrl = result.product.imageUrl || null
-    const draft = buildShareDraft(result.post, imageUrl)
+    const draft = buildShareDraft({ ...result.post, cta: contactCta || result.post.cta }, imageUrl)
     const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://sedifex.com'
     const encodedMessage = encodeURIComponent(draft.message)
     const encodedUrl = encodeURIComponent(shareUrl)
@@ -583,20 +672,37 @@ export default function SocialMediaPage() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button type="button" className="button secondary" onClick={() => void handleGenerate('caption')} disabled={loading}>Regenerate caption</button>
               <button type="button" className="button secondary" onClick={() => void handleGenerate('hashtags')} disabled={loading}>Regenerate hashtags</button>
-              <button type="button" className="button secondary" onClick={() => void handleGenerate('cta')} disabled={loading}>Regenerate CTA</button>
             </div>
             <p style={{ margin: 0 }}><strong>Caption:</strong> {result.post.caption}</p>
-            <p style={{ margin: 0 }}><strong>CTA:</strong> {result.post.cta}</p>
+            <p style={{ margin: 0 }}><strong>CTA:</strong> {contactCta || result.post.cta}</p>
             <p style={{ margin: 0 }}><strong>Hashtags:</strong> {result.post.hashtags.join(' ')}</p>
-            <p style={{ margin: 0 }}><strong>Image prompt:</strong> {result.post.imagePrompt}</p>
-            <p style={{ margin: 0 }}><strong>Design spec:</strong> {result.post.designSpec.aspectRatio} · {result.post.designSpec.visualStyle}</p>
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {result.post.designSpec.safeTextZones.map(zone => (
-                <li key={zone}>{zone}</li>
-              ))}
-            </ul>
+            {result.post.imagePrompt ? <p style={{ margin: 0 }}><strong>Image prompt:</strong> {result.post.imagePrompt}</p> : null}
+            {result.post.designSpec ? <p style={{ margin: 0 }}><strong>Design spec:</strong> {result.post.designSpec.aspectRatio} · {result.post.designSpec.visualStyle}</p> : null}
+            {result.post.designSpec?.safeTextZones?.length ? (
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                {result.post.designSpec.safeTextZones.map(zone => (
+                  <li key={zone}>{zone}</li>
+                ))}
+              </ul>
+            ) : null}
             {result.post.disclaimer ? <p style={{ margin: 0 }}><strong>Disclaimer:</strong> {result.post.disclaimer}</p> : null}
             <p style={{ margin: 0 }}><strong>Selected image:</strong> {result.product.imageUrl || 'No image URL on this item yet.'}</p>
+            <div style={{ display: 'grid', gap: 4 }}>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => void handleImageDownload()}
+                disabled={!result.product.imageUrl}
+              >
+                Download image
+              </button>
+              <p style={{ margin: 0, fontSize: 12, opacity: 0.75 }}>
+                Ready to download and upload manually.
+              </p>
+              <p style={{ margin: 0, fontSize: 12, opacity: 0.75 }}>
+                Step 1: Download image. Step 2: Upload on Instagram/TikTok app. Step 3: Paste caption + hashtags.
+              </p>
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button type="button" className="button secondary" onClick={() => void handleCopy('caption')}>Copy caption</button>
               <button type="button" className="button secondary" onClick={() => void handleCopy('hashtags')}>Copy hashtags</button>
