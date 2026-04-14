@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FirebaseError } from 'firebase/app'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import PageSection from '../layout/PageSection'
@@ -28,6 +29,32 @@ type SocialHistoryEntry = {
   productId: string | null
   productName: string
   post: GenerateSocialPostResponse['post']
+}
+
+function getCallableErrorMessage(error: unknown): string | null {
+  if (!(error instanceof FirebaseError)) return null
+
+  const callableError = error as FirebaseError & {
+    customData?: {
+      body?: {
+        error?: {
+          message?: unknown
+        }
+      }
+    }
+  }
+
+  const bodyMessage = callableError.customData?.body?.error?.message
+  if (typeof bodyMessage === 'string' && bodyMessage.trim()) {
+    return bodyMessage.trim()
+  }
+
+  const rawMessage = typeof error.message === 'string' ? error.message : ''
+  const normalized = rawMessage.replace(/^Firebase:\s*/i, '').trim()
+  if (!normalized) return null
+
+  const colonIndex = normalized.indexOf(':')
+  return colonIndex >= 0 ? normalized.slice(colonIndex + 1).trim() : normalized
 }
 
 function mapProduct(id: string, raw: Record<string, unknown>): ProductOption {
@@ -221,8 +248,9 @@ export default function SocialMediaPage() {
       publish({ tone: 'success', message: 'Social post draft generated. Review before publishing.' })
     } catch (error) {
       console.error('[social-media] Failed to generate social post', error)
-      publish({ tone: 'error', message: 'Could not generate social draft right now. Please try again.' })
-      setInlineError('Generation failed. Check your network and try again.')
+      const serverMessage = getCallableErrorMessage(error)
+      publish({ tone: 'error', message: serverMessage || 'Could not generate social draft right now. Please try again.' })
+      setInlineError(serverMessage || 'Generation failed. Check your network and try again.')
     } finally {
       setLoading(false)
     }
