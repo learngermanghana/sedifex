@@ -31,6 +31,72 @@ type SocialHistoryEntry = {
   post: GenerateSocialPostResponse['post']
 }
 
+type ParsedMarketingDescription = {
+  intro: string
+  keyBenefits: string[]
+  bestUseCase: string | null
+  closing: string | null
+}
+
+function cleanRichText(value: string): string {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function parseMarketingDescription(value: string | null): ParsedMarketingDescription | null {
+  if (!value) return null
+
+  const normalized = value.replace(/\r\n/g, '\n').trim()
+  if (!normalized) return null
+
+  const chunks = normalized
+    .split(/\n+/)
+    .map(line => cleanRichText(line))
+    .filter(Boolean)
+
+  if (!chunks.length) return null
+
+  const keyBenefitsIndex = chunks.findIndex(line => /^key benefits:?$/i.test(line))
+  const bestUseCaseIndex = chunks.findIndex(line => /^best use case:?$/i.test(line))
+
+  const introEnd = keyBenefitsIndex >= 0 ? keyBenefitsIndex : bestUseCaseIndex >= 0 ? bestUseCaseIndex : chunks.length
+  const intro = chunks
+    .slice(0, introEnd)
+    .filter(line => !/^(product name|category|item type):/i.test(line))
+    .join(' ')
+
+  const keyBenefitsStart = keyBenefitsIndex >= 0 ? keyBenefitsIndex + 1 : -1
+  const keyBenefitsEnd = bestUseCaseIndex >= 0 ? bestUseCaseIndex : chunks.length
+  const keyBenefits =
+    keyBenefitsStart >= 0
+      ? chunks
+          .slice(keyBenefitsStart, keyBenefitsEnd)
+          .map(line => line.replace(/^[-•]\s*/, '').replace(/^[^:]+:\s*/, match => match))
+          .filter(Boolean)
+      : []
+
+  const bestUseCase =
+    bestUseCaseIndex >= 0
+      ? chunks
+          .slice(bestUseCaseIndex + 1)
+          .find(line => !/^[-•]\s*$/.test(line) && !/^don.t wait/i.test(line) && !/^order now/i.test(line)) ?? null
+      : null
+
+  const closing =
+    chunks.find(line => /^don.t wait/i.test(line) || /^order now/i.test(line) || /start your journey/i.test(line)) ?? null
+
+  if (!intro && !keyBenefits.length && !bestUseCase && !closing) return null
+
+  return {
+    intro,
+    keyBenefits,
+    bestUseCase,
+    closing,
+  }
+}
+
 function getCallableErrorMessage(error: unknown): string | null {
   if (!(error instanceof FirebaseError)) return null
 
@@ -178,10 +244,13 @@ export default function SocialMediaPage() {
 
   const selectedPreview = useMemo(() => {
     if (!selectedProduct) return null
+    const parsedDescription = parseMarketingDescription(selectedProduct.description)
+
     return {
       category: selectedProduct.category || 'Uncategorized',
       price: typeof selectedProduct.price === 'number' ? `GHS ${selectedProduct.price.toFixed(2)}` : 'Price not set',
       description: selectedProduct.description || 'No description',
+      parsedDescription,
       imageUrl: selectedProduct.imageUrl,
     }
   }, [selectedProduct])
@@ -392,7 +461,29 @@ export default function SocialMediaPage() {
           <div style={{ display: 'grid', gap: 6, border: '1px solid var(--line, #ddd)', borderRadius: 10, padding: 10 }}>
             <strong style={{ margin: 0 }}>{selectedProduct?.name}</strong>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>{selectedPreview.category} · {selectedPreview.price}</p>
-            <p style={{ margin: 0, fontSize: 14 }}>{selectedPreview.description}</p>
+            {selectedPreview.parsedDescription ? (
+              <div style={{ display: 'grid', gap: 8, fontSize: 14 }}>
+                {selectedPreview.parsedDescription.intro ? <p style={{ margin: 0 }}>{selectedPreview.parsedDescription.intro}</p> : null}
+                {selectedPreview.parsedDescription.keyBenefits.length ? (
+                  <div style={{ display: 'grid', gap: 4 }}>
+                    <strong style={{ margin: 0 }}>Key benefits</strong>
+                    <ul style={{ margin: 0, paddingLeft: 20 }}>
+                      {selectedPreview.parsedDescription.keyBenefits.map(benefit => (
+                        <li key={benefit}>{benefit}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {selectedPreview.parsedDescription.bestUseCase ? (
+                  <p style={{ margin: 0 }}>
+                    <strong>Best use case:</strong> {selectedPreview.parsedDescription.bestUseCase}
+                  </p>
+                ) : null}
+                {selectedPreview.parsedDescription.closing ? <p style={{ margin: 0 }}>{selectedPreview.parsedDescription.closing}</p> : null}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: 14 }}>{selectedPreview.description}</p>
+            )}
             {selectedPreview.imageUrl ? (
               <img src={selectedPreview.imageUrl} alt={`${selectedProduct?.name} preview`} style={{ maxWidth: 220, borderRadius: 8 }} />
             ) : (
