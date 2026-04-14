@@ -18,12 +18,16 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install root dependencies if needed
+        run: npm install
+        continue-on-error: true
+
+      - name: Install functions dependencies
         run: npm ci
         working-directory: functions
 
@@ -36,5 +40,5 @@ jobs:
       - name: Set Google credentials
         run: echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json" >> $GITHUB_ENV
 
-      - name: Deploy Firebase Functions
+      - name: Deploy functions
         run: firebase deploy --only functions --project sedifex-web
