@@ -51,5 +51,15 @@ jobs:
       - name: Delete removed legacy functions
         run: firebase functions:delete exportDailyStoreReports --region us-central1 --project sedifex-web --force || true
 
+      - name: Build and list functions to deploy
+        run: |
+          npm --prefix functions run build
+          FUNCTIONS_LIST=$(node -e "const fn = require('./functions/lib/index.js'); process.stdout.write(Object.keys(fn).join(','));")
+          if [ -z "$FUNCTIONS_LIST" ]; then
+            echo "No exported functions found in functions/lib/index.js"
+            exit 1
+          fi
+          echo "FUNCTIONS_ONLY=$(printf '%s' "$FUNCTIONS_LIST" | sed 's/[^,]*/functions:&/g')" >> "$GITHUB_ENV"
+
       - name: Deploy Firebase Functions
-        run: firebase deploy --only functions --project sedifex-web --force
+        run: firebase deploy --only "$FUNCTIONS_ONLY" --project sedifex-web --force
