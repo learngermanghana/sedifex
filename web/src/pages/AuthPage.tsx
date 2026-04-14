@@ -1219,44 +1219,91 @@ export default function AuthPage() {
       <section className="app__promo-strategy" aria-label="Sedifex promo strategy">
         <header className="app__promo-strategy-header">
           <span className="app__pill">Sedifex Promo Strategy</span>
-          <h2>One product post. Every channel updated at the same time.</h2>
+          <h2>Post once in Sedifex. Publish everywhere instantly.</h2>
           <p>
-            Add your products once in Sedifex, sell with POS, and publish the same offer
-            across Sedifex Market, Google Merchant, your website, and social media.
+            Keep POS, inventory, and messaging fully synced while the same campaign goes live
+            across Sedifex Market, Google Merchant, your website, and social channels.
           </p>
+          <p className="app__proof">Trusted by growing stores to coordinate daily multichannel promos.</p>
         </header>
 
-        <div className="promo-map" role="img" aria-label="Sedifex post distribution map">
-          <div className="promo-map__source">Sedifex Inventory + POS</div>
-          <div className="promo-map__target">Sedifex Market</div>
-          <div className="promo-map__target">Google Merchant</div>
-          <div className="promo-map__target">Website</div>
-          <div className="promo-map__target">Social Channels</div>
+        <div className="promo-map" role="img" aria-label="Sedifex hub and spoke publishing map">
+          <div className="promo-map__source">Sedifex</div>
+          <div className="promo-map__spokes" aria-hidden="true">
+            <span className="promo-map__connector" />
+            <span className="promo-map__connector" />
+            <span className="promo-map__connector" />
+            <span className="promo-map__connector" />
+          </div>
+          <div className="promo-map__targets">
+            <div className="promo-map__target">Sedifex Market</div>
+            <div className="promo-map__target">Google Merchant</div>
+            <div className="promo-map__target">Website</div>
+            <div className="promo-map__target">Social</div>
+          </div>
+        </div>
+
+        <div className="app__promo-flow" aria-label="Example promo workflow">
+          <h3>Example promo flow</h3>
+          <ol>
+            <li>Add Product</li>
+            <li>AI generates caption</li>
+            <li>Publish to channels</li>
+            <li>Send branded SMS</li>
+          </ol>
         </div>
 
         <div className="app__promo-pillars">
           <h3>Promo pillars</h3>
-          <ul>
-            <li>
-              <strong>One-post distribution:</strong> one update in Sedifex pushes your
-              product story to every channel.
-            </li>
-            <li>
-              <strong>POS + inventory sync:</strong> sales, prices, and stock stay aligned
-              while campaigns are live.
-            </li>
-            <li>
-              <strong>AI content engine:</strong> generate branded social captions directly
-              from your own inventory data.
-            </li>
-            <li>
-              <strong>Branded SMS outreach:</strong> send company-branded bulk SMS offers to
-              your customer lists in minutes.
-            </li>
-          </ul>
-          <a className="app__partners-link" href="mailto:info@sedifex.com">
-            Book a Sedifex promo demo: info@sedifex.com
+          <div className="app__promo-pillars-grid">
+            <article className="app__promo-card">
+              <span aria-hidden="true">📣</span>
+              <h4>One-post distribution</h4>
+              <p>One update in Sedifex pushes your product story to every channel.</p>
+            </article>
+            <article className="app__promo-card">
+              <span aria-hidden="true">📦</span>
+              <h4>POS + inventory sync</h4>
+              <p>Sales, prices, and stock stay aligned while campaigns are live.</p>
+            </article>
+            <article className="app__promo-card">
+              <span aria-hidden="true">✨</span>
+              <h4>AI social generator</h4>
+              <p>Generate branded social captions directly from your inventory data.</p>
+            </article>
+            <article className="app__promo-card">
+              <span aria-hidden="true">💬</span>
+              <h4>Branded SMS campaigns</h4>
+              <p>Send company-branded bulk SMS offers to your customer list in minutes.</p>
+            </article>
+          </div>
+          <a className="app__promo-cta" href="mailto:info@sedifex.com?subject=Book%20Promo%20Demo">
+            Book Promo Demo
           </a>
+          <a className="app__partners-link" href="mailto:info@sedifex.com">
+            Or email info@sedifex.com
+          </a>
+        </div>
+      </section>
+
+      <section className="app__capabilities-compact" aria-label="Sedifex platform capabilities">
+        <header>
+          <h3>Explore the AI workspace</h3>
+          <p>Core tools your team can launch in one place.</p>
+        </header>
+        <div className="app__capabilities-grid">
+          <article>
+            <h4>Inventory + POS</h4>
+            <p>Track stock movement, sales, and low-stock actions live.</p>
+          </article>
+          <article>
+            <h4>Marketing automation</h4>
+            <p>Create channel-ready content and schedule branded customer outreach.</p>
+          </article>
+          <article>
+            <h4>Commerce visibility</h4>
+            <p>Publish products to Sedifex Market, Google Merchant, website, and social.</p>
+          </article>
         </div>
       </section>
 
