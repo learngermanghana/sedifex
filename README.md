@@ -103,6 +103,7 @@ Set these in your Vercel project:
 - Run `node functions/scripts/migrateProductImageFields.js` from the repo root (with Firebase admin credentials available) to backfill old records:
   - set `imageUrl = null` when missing
   - set `imageAlt = product.name` when `imageUrl` exists and `imageAlt` is missing
+- Run `npm --prefix functions run backfill-public-products -- [storeId]` to copy `products` documents into `publicProducts` for public-catalog reads (optional `storeId` limits the backfill scope).
 
 ## Quick start (local dev)
 1) Install Node 20+.
