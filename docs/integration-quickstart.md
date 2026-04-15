@@ -179,21 +179,44 @@ Base URL:
 - If your other repo uses `SEDIFEX_INTEGRATION_API_BASE_URL`, set it to the same value (`https://us-central1-sedifex-web.cloudfunctions.net`).
 - Do not append a contract date/version segment to the base URL.
 
-1. Choose your key source:
-   - Admin master key: set `SEDIFEX_INTEGRATION_API_KEY` in Firebase params (can pull all stores on integration product endpoints).
-   - Store key: use the active store integration key created from account integrations (scoped to that store).
-2. Call `GET /v1IntegrationProducts?storeId=<storeId>` with:
-   - `x-api-key: <master_or_store_integration_key>`
-   - `X-Sedifex-Contract-Version: 2026-04-13`
-   - Promo data: `GET /v1IntegrationPromo?storeId=<storeId>`
-   - Promo gallery data: `GET /integrationGallery?storeId=<storeId>`
-   - Customer data: `GET /integrationCustomers?storeId=<storeId>`
-   - Top-selling products: `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
-   - TikTok feed: `GET /integrationTikTokVideos?storeId=<storeId>`
-3. Deduplicate products (important when combining multiple sources).
-4. Return fallback data when external fetch fails.
-5. Render a grouped menu UI by category.
-6. Apply an appropriate cache strategy.
+### Steps used in the integration flow
+
+1. **Load required Sedifex environment config**
+   - `SEDIFEX_API_BASE_URL`
+   - `SEDIFEX_STORE_ID`
+   - `SEDIFEX_INTEGRATION_API_KEY` (or legacy `SEDIFEX_INTEGRATION_KEY`)
+   - `SEDIFEX_CONTRACT_VERSION` (defaults to `2026-04-13`)
+2. **Build authenticated GET requests**
+   - `x-api-key`
+   - `X-Sedifex-Contract-Version`
+   - `Accept: application/json`
+   - Use Next.js revalidation: `next: { revalidate: 60 }`
+3. **Fetch products, promo, and gallery in parallel**
+   - In `getHomePageData()`, request all three endpoints with `Promise.all(...)`:
+     - `GET /v1IntegrationProducts?storeId=<storeId>`
+     - `GET /v1IntegrationPromo?storeId=<storeId>`
+     - `GET /integrationGallery?storeId=<storeId>`
+   - (This endpoint set is also listed in the root README and this quickstart.)
+4. **Normalize and clean each payload**
+   - **Products:** normalize image fields, dedupe products, and filter to service-type products when available.
+   - **Promo:** search nested payloads and map flexible key variants (`promoTitle`, `promo_title`, etc.) into a unified promo object.
+   - **Gallery:** normalize image/alt fields, keep published items only, and sort by `sortOrder`.
+5. **Apply resilience fallback logic**
+   - If config is missing, fetch fails, or data is incomplete, fall back to local curated data:
+     - `fallbackProducts`
+     - `fallbackPromo`
+     - `fallbackGallery`
+6. **Expose merged data to pages/components**
+   - `getHomePageData()` powers:
+     - Home page (`products + promo + gallery`)
+     - Gallery page (`gallery`)
+     - Services page (`products`)
+
+### Additional available integration endpoints
+
+- `GET /integrationCustomers?storeId=<storeId>`
+- `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
+- `GET /integrationTikTokVideos?storeId=<storeId>`
 
 ### Common 404 fix (important)
 
