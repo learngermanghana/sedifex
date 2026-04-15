@@ -106,15 +106,14 @@ describe('SocialMediaPage manual flow', () => {
     })
   })
 
-  it('renders CTA from store contact details in the draft area', async () => {
+  it('renders phone contact details in the draft area without CTA label text', async () => {
     const user = userEvent.setup()
     render(<SocialMediaPage />)
 
     await user.click(screen.getByRole('button', { name: /generate social post/i }))
 
-    expect(await screen.findByText(/CTA:/i)).toHaveTextContent(
-      'CTA: Call now: +233201234567 • Email: hello@example.com • Visit: https://example.com',
-    )
+    expect(await screen.findByText('Call now: +233201234567 • Email: hello@example.com • Visit: https://example.com')).toBeInTheDocument()
+    expect(screen.queryByText(/^CTA:/i)).not.toBeInTheDocument()
   })
 
   it('does not render image prompt or design spec fields in manual flow output', async () => {
@@ -123,9 +122,26 @@ describe('SocialMediaPage manual flow', () => {
 
     await user.click(screen.getByRole('button', { name: /generate social post/i }))
 
-    await screen.findByText(/Caption:/i)
+    await screen.findByText('Try our Zobo Mix today')
     expect(screen.queryByText(/image prompt/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/design spec/i)).not.toBeInTheDocument()
+  })
+
+  it('falls back to phoneNumber field when phone is missing in store profile', async () => {
+    const user = userEvent.setup()
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({
+        phone: '',
+        phoneNumber: '+15551234567',
+        email: 'hello@example.com',
+      }),
+    })
+
+    render(<SocialMediaPage />)
+    await user.click(screen.getByRole('button', { name: /generate social post/i }))
+
+    expect(await screen.findByText('Call now: +15551234567 • Email: hello@example.com')).toBeInTheDocument()
   })
 
   it('disables download image button when image URL is missing', async () => {
@@ -168,10 +184,10 @@ describe('SocialMediaPage manual flow', () => {
 
     await user.click(screen.getByRole('button', { name: /generate social post/i }))
 
-    expect(await screen.findByText(/Caption:/i)).toHaveTextContent(
-      'Caption: Transform your skincare routine with our Anti Pimples Face Soap Big!',
-    )
-    expect(screen.getByText(/Hashtags:/i)).toHaveTextContent('Hashtags: #AntiPimples #ClearSkin')
+    expect(await screen.findByText('Transform your skincare routine with our Anti Pimples Face Soap Big!')).toBeInTheDocument()
+    expect(screen.getByText('#AntiPimples #ClearSkin')).toBeInTheDocument()
+    expect(screen.queryByText(/^Caption:/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Hashtags:/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /download image/i })).toBeEnabled()
   })
 })

@@ -44,6 +44,13 @@ type StoreContactDetails = {
   website: string | null
 }
 
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
 function cleanRichText(value: string): string {
   return value
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -263,17 +270,25 @@ export default function SocialMediaPage() {
         const snapshot = await getDoc(doc(db, 'stores', storeId))
         if (!snapshot.exists() || cancelled) return
         const data = snapshot.data()
-        const phone = typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null
-        const email =
-          typeof data.email === 'string' && data.email.trim()
-            ? data.email.trim()
-            : typeof data.ownerEmail === 'string' && data.ownerEmail.trim()
-              ? data.ownerEmail.trim()
-              : null
+        const contactInfo =
+          typeof data.contactInfo === 'object' && data.contactInfo
+            ? (data.contactInfo as Record<string, unknown>)
+            : null
+        const phone = firstNonEmptyString(
+          data.phone,
+          data.phoneNumber,
+          data.mobile,
+          data.whatsappNumber,
+          contactInfo?.phone,
+          contactInfo?.phoneNumber,
+          contactInfo?.mobile,
+        )
+        const email = firstNonEmptyString(data.email, data.ownerEmail, contactInfo?.email)
         const websiteCandidates = [
           typeof data.website === 'string' ? data.website.trim() : '',
           typeof data.websiteUrl === 'string' ? data.websiteUrl.trim() : '',
           typeof data.websiteLink === 'string' ? data.websiteLink.trim() : '',
+          typeof contactInfo?.website === 'string' ? contactInfo.website.trim() : '',
         ].filter(Boolean)
         const website = websiteCandidates[0] || null
         if (!cancelled) {
@@ -447,11 +462,7 @@ export default function SocialMediaPage() {
 
   async function handleCopy(target: CopyTarget) {
     if (!result) return
-    const fullText = [
-      `Caption: ${result.post.caption}`,
-      `CTA: ${contactCta}`,
-      `Hashtags: ${result.post.hashtags.join(' ')}`,
-    ].join('\n')
+    const fullText = [result.post.caption, contactCta, result.post.hashtags.join(' ')].filter(Boolean).join('\n\n')
     const text = target === 'caption' ? result.post.caption : target === 'hashtags' ? result.post.hashtags.join(' ') : fullText
     try {
       await navigator.clipboard.writeText(text)
@@ -512,9 +523,9 @@ export default function SocialMediaPage() {
       '3. Paste caption + hashtags.',
       '',
       'Draft content:',
-      `Caption: ${result.post.caption}`,
-      `CTA: ${contactCta}`,
-      `Hashtags: ${result.post.hashtags.join(' ')}`,
+      result.post.caption,
+      contactCta,
+      result.post.hashtags.join(' '),
       result.post.disclaimer ? `Disclaimer: ${result.post.disclaimer}` : '',
     ]
       .filter(Boolean)
@@ -643,9 +654,9 @@ export default function SocialMediaPage() {
               <button type="button" className="button secondary" onClick={() => void handleGenerate('caption')} disabled={loading}>Regenerate caption</button>
               <button type="button" className="button secondary" onClick={() => void handleGenerate('hashtags')} disabled={loading}>Regenerate hashtags</button>
             </div>
-            <p style={{ margin: 0 }}><strong>Caption:</strong> {result.post.caption}</p>
-            <p style={{ margin: 0 }}><strong>CTA:</strong> {contactCta}</p>
-            <p style={{ margin: 0 }}><strong>Hashtags:</strong> {result.post.hashtags.join(' ')}</p>
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{result.post.caption}</p>
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{contactCta}</p>
+            <p style={{ margin: 0, color: 'var(--muted, #555)' }}>{result.post.hashtags.join(' ')}</p>
             {result.post.disclaimer ? <p style={{ margin: 0 }}><strong>Disclaimer:</strong> {result.post.disclaimer}</p> : null}
             <p style={{ margin: 0 }}><strong>Selected image:</strong> {result.product.imageUrl ? 'Ready to download and upload manually.' : 'No image URL on this item yet.'}</p>
             {result.product.imageUrl ? (
