@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSyncScheduled = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -51,7 +51,6 @@ Object.defineProperty(exports, "googleAdsOAuthStart", { enumerable: true, get: f
 Object.defineProperty(exports, "googleAdsOAuthCallback", { enumerable: true, get: function () { return googleAds_1.googleAdsOAuthCallback; } });
 Object.defineProperty(exports, "googleAdsCampaign", { enumerable: true, get: function () { return googleAds_1.googleAdsCampaign; } });
 Object.defineProperty(exports, "googleAdsMetricsSync", { enumerable: true, get: function () { return googleAds_1.googleAdsMetricsSync; } });
-Object.defineProperty(exports, "googleAdsMetricsSyncScheduled", { enumerable: true, get: function () { return googleAds_1.googleAdsMetricsSyncScheduled; } });
 __exportStar(require("./googleShopping"), exports);
 var googleBusinessProfile_1 = require("./googleBusinessProfile");
 Object.defineProperty(exports, "googleBusinessLocations", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessLocations; } });
@@ -106,6 +105,30 @@ function normalizeAiAdvicePayload(raw) {
         ? raw.jsonContext
         : {};
     return { question, storeId, jsonContext };
+}
+function normalizeSocialPostPayload(raw) {
+    const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : '';
+    const platformRaw = typeof raw?.platform === 'string' ? raw.platform.trim().toLowerCase() : '';
+    const platform = platformRaw === 'tiktok' ? 'tiktok' : 'instagram';
+    const productId = typeof raw?.productId === 'string' ? raw.productId.trim() : '';
+    const productRaw = raw?.product && typeof raw.product === 'object'
+        ? raw.product
+        : {};
+    const product = {
+        id: typeof productRaw.id === 'string' ? productRaw.id.trim() : '',
+        name: typeof productRaw.name === 'string' ? productRaw.name.trim() : '',
+        category: typeof productRaw.category === 'string' ? productRaw.category.trim() : '',
+        description: typeof productRaw.description === 'string' ? productRaw.description.trim() : '',
+        price: typeof productRaw.price === 'number' && Number.isFinite(productRaw.price) ? productRaw.price : null,
+        imageUrl: typeof productRaw.imageUrl === 'string' ? productRaw.imageUrl.trim() : '',
+        itemType: productRaw.itemType === 'service' || productRaw.itemType === 'made_to_order'
+            ? productRaw.itemType
+            : 'product',
+    };
+    if (!productId && !product.id && !product.name) {
+        throw new functions.https.HttpsError('invalid-argument', 'Choose a product or service to generate a post');
+    }
+    return { storeId, platform, productId, product };
 }
 async function verifyOwnerEmail(uid) {
     try {
@@ -878,6 +901,163 @@ exports.generateAiAdvice = functions.https.onCall(async (rawData, context) => {
         advice,
         storeId,
         dataPreview: jsonContext,
+    };
+});
+/** ============================================================================
+ *  CALLABLE: generateSocialPost
+ * ==========================================================================*/
+exports.generateSocialPost = functions.https.onCall(async (rawData, context) => {
+    assertAuthenticated(context);
+    const { apiKey, model } = getOpenAiConfig();
+    if (!apiKey) {
+        throw new functions.https.HttpsError('failed-precondition', 'Social media generator is not configured yet. Missing OPENAI_API_KEY.');
+    }
+    const uid = context.auth.uid;
+    const { storeId: requestedStoreId, platform, productId, product } = normalizeSocialPostPayload((rawData ?? {}));
+    const memberSnap = await firestore_1.defaultDb.collection('teamMembers').doc(uid).get();
+    const memberData = (memberSnap.data() ?? {});
+    const memberStoreId = typeof memberData.storeId === 'string' ? memberData.storeId.trim() : '';
+    const storeId = requestedStoreId || memberStoreId;
+    if (!storeId) {
+        throw new functions.https.HttpsError('failed-precondition', 'No workspace found for this account. Initialize your workspace first.');
+    }
+    if (requestedStoreId && memberStoreId && requestedStoreId !== memberStoreId) {
+        throw new functions.https.HttpsError('permission-denied', 'You do not have access to the requested workspace.');
+    }
+    let selectedProduct = product;
+    const resolvedProductId = productId || product.id || '';
+    if (resolvedProductId) {
+        const productSnap = await firestore_1.defaultDb.collection('products').doc(resolvedProductId).get();
+        const productData = (productSnap.data() ?? {});
+        const productStoreId = typeof productData.storeId === 'string' ? productData.storeId.trim() : '';
+        if (!productSnap.exists || productStoreId !== storeId) {
+            throw new functions.https.HttpsError('not-found', 'Product or service not found for your workspace.');
+        }
+        selectedProduct = {
+            id: resolvedProductId,
+            name: typeof productData.name === 'string' ? productData.name.trim() : '',
+            category: typeof productData.category === 'string' ? productData.category.trim() : '',
+            description: typeof productData.description === 'string' ? productData.description.trim() : '',
+            price: typeof productData.price === 'number' && Number.isFinite(productData.price) ? productData.price : null,
+            imageUrl: typeof productData.imageUrl === 'string' ? productData.imageUrl.trim() : '',
+            itemType: productData.itemType === 'service' || productData.itemType === 'made_to_order'
+                ? productData.itemType
+                : 'product',
+        };
+    }
+    if (!selectedProduct.name) {
+        throw new functions.https.HttpsError('invalid-argument', 'Product name is required to generate content.');
+    }
+    const promptProduct = {
+        id: selectedProduct.id || null,
+        name: selectedProduct.name,
+        category: selectedProduct.category || null,
+        description: selectedProduct.description || null,
+        price: selectedProduct.price,
+        imageUrl: selectedProduct.imageUrl || null,
+        itemType: selectedProduct.itemType,
+    };
+    const systemPrompt = 'You are a social media strategist for retail and POS merchants. Return strict JSON only, no markdown. Keep copy concise, conversion-focused, and realistic.';
+    const userPrompt = [
+        `Workspace: ${storeId}`,
+        `Platform: ${platform}`,
+        'Return JSON schema:',
+        '{"platform":"instagram|tiktok","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
+        'Rules:',
+        '- caption max 220 chars for instagram, 150 chars for tiktok.',
+        '- hashtags: 5 to 10 relevant hashtags.',
+        '- include clear CTA.',
+        '- if price or measurable claim appears, add disclaimer; else null.',
+        '- designSpec must be practical for mobile-safe text placement.',
+        'Product JSON:',
+        JSON.stringify(promptProduct).slice(0, 3000),
+    ].join('\n');
+    const aiResponse = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model,
+            temperature: 0.4,
+            max_tokens: 700,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+        }),
+    });
+    const payload = (await aiResponse.json().catch(() => null));
+    if (!aiResponse.ok) {
+        const apiMessage = payload?.error?.message && payload.error.message.trim() !== ''
+            ? payload.error.message
+            : `OpenAI request failed with status ${aiResponse.status}`;
+        functions.logger.error('[generateSocialPost] OpenAI error', {
+            status: aiResponse.status,
+            apiMessage,
+        });
+        throw new functions.https.HttpsError('internal', 'Unable to generate social post right now.');
+    }
+    const content = payload?.choices?.[0]?.message?.content?.trim() || '';
+    if (!content) {
+        throw new functions.https.HttpsError('internal', 'AI returned an empty response.');
+    }
+    let parsed = null;
+    try {
+        parsed = JSON.parse(content);
+    }
+    catch (_error) {
+        const start = content.indexOf('{');
+        const end = content.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            parsed = JSON.parse(content.slice(start, end + 1));
+        }
+    }
+    if (!parsed) {
+        throw new functions.https.HttpsError('internal', 'AI returned invalid JSON for social post.');
+    }
+    const safePlatform = parsed.platform === 'tiktok' ? 'tiktok' : 'instagram';
+    const safeHashtags = Array.isArray(parsed.hashtags)
+        ? parsed.hashtags
+            .map(tag => (typeof tag === 'string' ? tag.trim() : ''))
+            .filter(Boolean)
+            .slice(0, 10)
+        : [];
+    return {
+        storeId,
+        productId: resolvedProductId || null,
+        product: promptProduct,
+        post: {
+            platform: safePlatform,
+            caption: typeof parsed.caption === 'string' ? parsed.caption.trim() : '',
+            hashtags: safeHashtags,
+            imagePrompt: typeof parsed.imagePrompt === 'string' ? parsed.imagePrompt.trim() : '',
+            cta: typeof parsed.cta === 'string' ? parsed.cta.trim() : '',
+            designSpec: {
+                aspectRatio: parsed.designSpec &&
+                    typeof parsed.designSpec === 'object' &&
+                    typeof parsed.designSpec.aspectRatio === 'string'
+                    ? parsed.designSpec.aspectRatio.trim()
+                    : '',
+                safeTextZones: parsed.designSpec &&
+                    typeof parsed.designSpec === 'object' &&
+                    Array.isArray(parsed.designSpec.safeTextZones)
+                    ? parsed.designSpec.safeTextZones
+                        .map(item => (typeof item === 'string' ? item.trim() : ''))
+                        .filter(Boolean)
+                        .slice(0, 6)
+                    : [],
+                visualStyle: parsed.designSpec &&
+                    typeof parsed.designSpec === 'object' &&
+                    typeof parsed.designSpec.visualStyle === 'string'
+                    ? parsed.designSpec.visualStyle.trim()
+                    : '',
+            },
+            disclaimer: typeof parsed.disclaimer === 'string' && parsed.disclaimer.trim()
+                ? parsed.disclaimer.trim()
+                : null,
+        },
     };
 });
 /** ============================================================================
@@ -2067,6 +2247,28 @@ function toTrimmedStringOrNull(value) {
 }
 function pickStoreCity(storeData) {
     return toTrimmedStringOrNull(storeData.city) ?? toTrimmedStringOrNull(storeData.town);
+}
+function buildStorePublicMeta(storeData) {
+    const promoSlug = toTrimmedStringOrNull(storeData.promoSlug);
+    return {
+        storeName: toTrimmedStringOrNull(storeData.displayName) ?? toTrimmedStringOrNull(storeData.name),
+        storeCity: pickStoreCity(storeData),
+        storePhone: toTrimmedStringOrNull(storeData.phone) ??
+            toTrimmedStringOrNull(storeData.phoneNumber) ??
+            toTrimmedStringOrNull(storeData.contactPhone),
+        websiteLink: toTrimmedStringOrNull(storeData.websiteLink) ??
+            toTrimmedStringOrNull(storeData.promoWebsiteUrl) ??
+            (promoSlug ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}` : null),
+    };
+}
+async function resolveStorePublicMetaByStoreId(storeId) {
+    const normalizedStoreId = typeof storeId === 'string' ? storeId.trim() : '';
+    if (!normalizedStoreId)
+        return null;
+    const storeSnap = await firestore_1.defaultDb.collection('stores').doc(normalizedStoreId).get();
+    if (!storeSnap.exists)
+        return null;
+    return buildStorePublicMeta((storeSnap.data() ?? {}));
 }
 async function fetchStoreMetaByStoreId(storeIds) {
     const normalizedStoreIds = Array.from(new Set(storeIds
@@ -3403,6 +3605,91 @@ function buildProductEnrichment(data) {
         reason: 'rule-based keyword enrichment',
     };
 }
+function isFirestoreTimestampLike(value) {
+    return (value instanceof firestore_1.admin.firestore.Timestamp ||
+        (typeof value === 'object' &&
+            value !== null &&
+            'toDate' in value &&
+            typeof value.toDate === 'function'));
+}
+function resolvePublicProductPublishedAt(source, existing) {
+    const candidates = [
+        source.publishedAt,
+        existing?.publishedAt,
+        source.createdAt,
+        source.updatedAt,
+        existing?.createdAt,
+        existing?.updatedAt,
+    ];
+    for (const candidate of candidates) {
+        if (isFirestoreTimestampLike(candidate) || typeof candidate === 'string') {
+            return candidate;
+        }
+    }
+    return firestore_1.admin.firestore.FieldValue.serverTimestamp();
+}
+function toPublicProductPayload(productId, source, existing, storeMeta) {
+    const storeId = typeof source.storeId === 'string' ? source.storeId.trim() : '';
+    const name = normalizeProductName(source.name);
+    if (!storeId || !name) {
+        return null;
+    }
+    return {
+        sourceProductId: productId,
+        storeId,
+        storeName: toTrimmedStringOrNull(source.storeName) ?? storeMeta?.storeName ?? null,
+        storeCity: toTrimmedStringOrNull(source.storeCity) ?? storeMeta?.storeCity ?? null,
+        storePhone: toTrimmedStringOrNull(source.storePhone) ?? storeMeta?.storePhone ?? null,
+        websiteLink: toTrimmedStringOrNull(source.websiteLink) ?? storeMeta?.websiteLink ?? null,
+        name,
+        description: typeof source.description === 'string' && source.description.trim() ? source.description.trim() : null,
+        category: typeof source.category === 'string' && source.category.trim() ? source.category.trim() : null,
+        sku: toTrimmedStringOrNull(source.sku),
+        barcode: toTrimmedStringOrNull(source.barcode),
+        manufacturerName: toTrimmedStringOrNull(source.manufacturerName),
+        price: typeof source.price === 'number' ? source.price : null,
+        stockCount: typeof source.stockCount === 'number' ? source.stockCount : null,
+        reorderPoint: typeof source.reorderPoint === 'number' ? source.reorderPoint : null,
+        taxRate: typeof source.taxRate === 'number' ? source.taxRate : null,
+        productionDate: isFirestoreTimestampLike(source.productionDate) || typeof source.productionDate === 'string' ? source.productionDate : null,
+        expiryDate: isFirestoreTimestampLike(source.expiryDate) || typeof source.expiryDate === 'string' ? source.expiryDate : null,
+        batchNumber: toTrimmedStringOrNull(source.batchNumber),
+        showOnReceipt: source.showOnReceipt === true,
+        itemType: source.itemType === 'service'
+            ? 'service'
+            : source.itemType === 'made_to_order'
+                ? 'made_to_order'
+                : 'product',
+        isPublished: source.isPublished !== false,
+        ...extractProductImageSet(source),
+        publishedAt: resolvePublicProductPublishedAt(source, existing),
+        createdAt: source.createdAt ?? existing?.createdAt ?? firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        sourceUpdatedAt: source.updatedAt ?? null,
+        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+    };
+}
+exports.syncPublicProducts = functions.firestore
+    .document('products/{productId}')
+    .onWrite(async (change, context) => {
+    const productId = context.params.productId;
+    const publicProductRef = firestore_1.defaultDb.collection('publicProducts').doc(productId);
+    if (!change.after.exists) {
+        await publicProductRef.delete().catch(() => undefined);
+        return;
+    }
+    const sourceData = (change.after.data() ?? {});
+    const existingPublicProductSnap = await publicProductRef.get();
+    const existingData = existingPublicProductSnap.exists
+        ? existingPublicProductSnap.data()
+        : null;
+    const storeMeta = await resolveStorePublicMetaByStoreId(typeof sourceData.storeId === 'string' ? sourceData.storeId : '');
+    const payload = toPublicProductPayload(productId, sourceData, existingData, storeMeta);
+    if (!payload) {
+        await publicProductRef.delete().catch(() => undefined);
+        return;
+    }
+    await publicProductRef.set(payload, { merge: true });
+});
 exports.enrichProductDataAfterSave = functions.firestore
     .document('products/{productId}')
     .onWrite(async (change, context) => {

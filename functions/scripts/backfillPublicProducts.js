@@ -27,6 +27,33 @@ function toTrimmedStringArray(value) {
   return [...unique]
 }
 
+function isFirestoreTimestampLike(value) {
+  return (
+    value instanceof admin.firestore.Timestamp ||
+    (value && typeof value === 'object' && typeof value.toDate === 'function')
+  )
+}
+
+function pickStoreCity(storeData) {
+  return toTrimmedStringOrNull(storeData.city) || toTrimmedStringOrNull(storeData.town)
+}
+
+function buildStorePublicMeta(storeData) {
+  const promoSlug = toTrimmedStringOrNull(storeData.promoSlug)
+  return {
+    storeName: toTrimmedStringOrNull(storeData.displayName) || toTrimmedStringOrNull(storeData.name),
+    storeCity: pickStoreCity(storeData),
+    storePhone:
+      toTrimmedStringOrNull(storeData.phone) ||
+      toTrimmedStringOrNull(storeData.phoneNumber) ||
+      toTrimmedStringOrNull(storeData.contactPhone),
+    websiteLink:
+      toTrimmedStringOrNull(storeData.websiteLink) ||
+      toTrimmedStringOrNull(storeData.promoWebsiteUrl) ||
+      (promoSlug ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}` : null),
+  }
+}
+
 function extractProductImageSet(data) {
   const primaryImageUrl = toTrimmedStringOrNull(data.imageUrl)
   const imageUrls = toTrimmedStringArray(data.imageUrls)
@@ -46,10 +73,11 @@ function extractProductImageSet(data) {
   }
 }
 
-function toPublicProduct(productDoc) {
+function toPublicProduct(productDoc, storeMetaByStoreId) {
   const data = productDoc.data() || {}
   const storeId = toTrimmedStringOrNull(data.storeId)
   const name = toTrimmedStringOrNull(data.name)
+  const storeMeta = storeMetaByStoreId.get(storeId) || null
 
   if (!storeId || !name) {
     return null
@@ -58,11 +86,24 @@ function toPublicProduct(productDoc) {
   return {
     sourceProductId: productDoc.id,
     storeId,
+    storeName: toTrimmedStringOrNull(data.storeName) || storeMeta?.storeName || null,
+    storeCity: toTrimmedStringOrNull(data.storeCity) || storeMeta?.storeCity || null,
+    storePhone: toTrimmedStringOrNull(data.storePhone) || storeMeta?.storePhone || null,
+    websiteLink: toTrimmedStringOrNull(data.websiteLink) || storeMeta?.websiteLink || null,
     name,
     description: toTrimmedStringOrNull(data.description),
     category: toTrimmedStringOrNull(data.category),
+    sku: toTrimmedStringOrNull(data.sku),
+    barcode: toTrimmedStringOrNull(data.barcode),
+    manufacturerName: toTrimmedStringOrNull(data.manufacturerName),
     price: typeof data.price === 'number' ? data.price : null,
     stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+    reorderPoint: typeof data.reorderPoint === 'number' ? data.reorderPoint : null,
+    taxRate: typeof data.taxRate === 'number' ? data.taxRate : null,
+    productionDate: isFirestoreTimestampLike(data.productionDate) || typeof data.productionDate === 'string' ? data.productionDate : null,
+    expiryDate: isFirestoreTimestampLike(data.expiryDate) || typeof data.expiryDate === 'string' ? data.expiryDate : null,
+    batchNumber: toTrimmedStringOrNull(data.batchNumber),
+    showOnReceipt: data.showOnReceipt === true,
     itemType:
       data.itemType === 'service'
         ? 'service'
@@ -116,13 +157,26 @@ async function run() {
   const productsSnapshot = await query.get()
   console.log(`[backfillPublicProducts] scanning ${productsSnapshot.size} products`)
 
+  const storeIds = new Set()
+  for (const productDoc of productsSnapshot.docs) {
+    const storeId = toTrimmedStringOrNull(productDoc.get('storeId'))
+    if (storeId) storeIds.add(storeId)
+  }
+
+  const storeMetaByStoreId = new Map()
+  for (const storeId of storeIds) {
+    const storeSnap = await db.collection('stores').doc(storeId).get()
+    if (!storeSnap.exists) continue
+    storeMetaByStoreId.set(storeId, buildStorePublicMeta(storeSnap.data() || {}))
+  }
+
   let upserts = 0
   let skipped = 0
   let batch = db.batch()
   let writes = 0
 
   for (const productDoc of productsSnapshot.docs) {
-    const payload = toPublicProduct(productDoc)
+    const payload = toPublicProduct(productDoc, storeMetaByStoreId)
     if (!payload) {
       skipped += 1
       continue

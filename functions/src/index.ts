@@ -2955,6 +2955,37 @@ function pickStoreCity(storeData: Record<string, unknown>): string | null {
   return toTrimmedStringOrNull(storeData.city) ?? toTrimmedStringOrNull(storeData.town)
 }
 
+type StorePublicMeta = {
+  storeName: string | null
+  storeCity: string | null
+  storePhone: string | null
+  websiteLink: string | null
+}
+
+function buildStorePublicMeta(storeData: Record<string, unknown>): StorePublicMeta {
+  const promoSlug = toTrimmedStringOrNull(storeData.promoSlug)
+  return {
+    storeName: toTrimmedStringOrNull(storeData.displayName) ?? toTrimmedStringOrNull(storeData.name),
+    storeCity: pickStoreCity(storeData),
+    storePhone:
+      toTrimmedStringOrNull(storeData.phone) ??
+      toTrimmedStringOrNull(storeData.phoneNumber) ??
+      toTrimmedStringOrNull(storeData.contactPhone),
+    websiteLink:
+      toTrimmedStringOrNull(storeData.websiteLink) ??
+      toTrimmedStringOrNull(storeData.promoWebsiteUrl) ??
+      (promoSlug ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}` : null),
+  }
+}
+
+async function resolveStorePublicMetaByStoreId(storeId: string): Promise<StorePublicMeta | null> {
+  const normalizedStoreId = typeof storeId === 'string' ? storeId.trim() : ''
+  if (!normalizedStoreId) return null
+  const storeSnap = await db.collection('stores').doc(normalizedStoreId).get()
+  if (!storeSnap.exists) return null
+  return buildStorePublicMeta((storeSnap.data() ?? {}) as Record<string, unknown>)
+}
+
 async function fetchStoreMetaByStoreId(storeIds: string[]): Promise<Map<string, { storeName: string | null; storeCity: string | null }>> {
   const normalizedStoreIds = Array.from(
     new Set(
@@ -4489,6 +4520,7 @@ function toPublicProductPayload(
   productId: string,
   source: Record<string, unknown>,
   existing: Record<string, unknown> | null,
+  storeMeta: StorePublicMeta | null,
 ) {
   const storeId = typeof source.storeId === 'string' ? source.storeId.trim() : ''
   const name = normalizeProductName(source.name)
@@ -4499,11 +4531,24 @@ function toPublicProductPayload(
   return {
     sourceProductId: productId,
     storeId,
+    storeName: toTrimmedStringOrNull(source.storeName) ?? storeMeta?.storeName ?? null,
+    storeCity: toTrimmedStringOrNull(source.storeCity) ?? storeMeta?.storeCity ?? null,
+    storePhone: toTrimmedStringOrNull(source.storePhone) ?? storeMeta?.storePhone ?? null,
+    websiteLink: toTrimmedStringOrNull(source.websiteLink) ?? storeMeta?.websiteLink ?? null,
     name,
     description: typeof source.description === 'string' && source.description.trim() ? source.description.trim() : null,
     category: typeof source.category === 'string' && source.category.trim() ? source.category.trim() : null,
+    sku: toTrimmedStringOrNull(source.sku),
+    barcode: toTrimmedStringOrNull(source.barcode),
+    manufacturerName: toTrimmedStringOrNull(source.manufacturerName),
     price: typeof source.price === 'number' ? source.price : null,
     stockCount: typeof source.stockCount === 'number' ? source.stockCount : null,
+    reorderPoint: typeof source.reorderPoint === 'number' ? source.reorderPoint : null,
+    taxRate: typeof source.taxRate === 'number' ? source.taxRate : null,
+    productionDate: isFirestoreTimestampLike(source.productionDate) || typeof source.productionDate === 'string' ? source.productionDate : null,
+    expiryDate: isFirestoreTimestampLike(source.expiryDate) || typeof source.expiryDate === 'string' ? source.expiryDate : null,
+    batchNumber: toTrimmedStringOrNull(source.batchNumber),
+    showOnReceipt: source.showOnReceipt === true,
     itemType:
       source.itemType === 'service'
         ? 'service'
@@ -4536,7 +4581,10 @@ export const syncPublicProducts = functions.firestore
       ? (existingPublicProductSnap.data() as Record<string, unknown>)
       : null
 
-    const payload = toPublicProductPayload(productId, sourceData, existingData)
+    const storeMeta = await resolveStorePublicMetaByStoreId(
+      typeof sourceData.storeId === 'string' ? sourceData.storeId : '',
+    )
+    const payload = toPublicProductPayload(productId, sourceData, existingData, storeMeta)
     if (!payload) {
       await publicProductRef.delete().catch(() => undefined)
       return
