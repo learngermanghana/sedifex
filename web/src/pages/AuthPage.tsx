@@ -1085,6 +1085,50 @@ export default function AuthPage() {
         </aside>
       </div>
 
+      <section className="app__promo-strategy" aria-label="Sedifex promo strategy">
+        <header className="app__promo-strategy-header">
+          <span className="app__pill">Sedifex Promo Strategy</span>
+          <h2>One product post. Every channel updated at the same time.</h2>
+          <p>
+            Add your products once in Sedifex, sell with POS, and publish the same offer
+            across Sedifex Market, Google Merchant, your website, and social media.
+          </p>
+        </header>
+
+        <div className="promo-map" role="img" aria-label="Sedifex post distribution map">
+          <div className="promo-map__source">Sedifex Inventory + POS</div>
+          <div className="promo-map__target">Sedifex Market</div>
+          <div className="promo-map__target">Google Merchant</div>
+          <div className="promo-map__target">Website</div>
+          <div className="promo-map__target">Social Channels</div>
+        </div>
+
+        <div className="app__promo-pillars">
+          <h3>Promo pillars</h3>
+          <ul>
+            <li>
+              <strong>One-post distribution:</strong> one update in Sedifex pushes your
+              product story to every channel.
+            </li>
+            <li>
+              <strong>POS + inventory sync:</strong> sales, prices, and stock stay aligned
+              while campaigns are live.
+            </li>
+            <li>
+              <strong>AI content engine:</strong> generate branded social captions directly
+              from your own inventory data.
+            </li>
+            <li>
+              <strong>Branded SMS outreach:</strong> send company-branded bulk SMS offers to
+              your customer lists in minutes.
+            </li>
+          </ul>
+          <a className="app__partners-link" href="mailto:info@sedifex.com">
+            Book a Sedifex promo demo: info@sedifex.com
+          </a>
+        </div>
+      </section>
+
       <section className="app__pricing" aria-label="Sedifex pricing plans">
         <header className="app__pricing-header">
           <span className="app__pill">Pricing</span>
@@ -1214,50 +1258,6 @@ export default function AuthPage() {
             </a>
           </>
         )}
-      </section>
-
-      <section className="app__promo-strategy" aria-label="Sedifex promo strategy">
-        <header className="app__promo-strategy-header">
-          <span className="app__pill">Sedifex Promo Strategy</span>
-          <h2>One product post. Every channel updated at the same time.</h2>
-          <p>
-            Add your products once in Sedifex, sell with POS, and publish the same offer
-            across Sedifex Market, Google Merchant, your website, and social media.
-          </p>
-        </header>
-
-        <div className="promo-map" role="img" aria-label="Sedifex post distribution map">
-          <div className="promo-map__source">Sedifex Inventory + POS</div>
-          <div className="promo-map__target">Sedifex Market</div>
-          <div className="promo-map__target">Google Merchant</div>
-          <div className="promo-map__target">Website</div>
-          <div className="promo-map__target">Social Channels</div>
-        </div>
-
-        <div className="app__promo-pillars">
-          <h3>Promo pillars</h3>
-          <ul>
-            <li>
-              <strong>One-post distribution:</strong> one update in Sedifex pushes your
-              product story to every channel.
-            </li>
-            <li>
-              <strong>POS + inventory sync:</strong> sales, prices, and stock stay aligned
-              while campaigns are live.
-            </li>
-            <li>
-              <strong>AI content engine:</strong> generate branded social captions directly
-              from your own inventory data.
-            </li>
-            <li>
-              <strong>Branded SMS outreach:</strong> send company-branded bulk SMS offers to
-              your customer lists in minutes.
-            </li>
-          </ul>
-          <a className="app__partners-link" href="mailto:info@sedifex.com">
-            Book a Sedifex promo demo: info@sedifex.com
-          </a>
-        </div>
       </section>
 
       <section className="app__info-grid" aria-label="Sedifex company information">
