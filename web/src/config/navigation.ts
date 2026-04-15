@@ -14,10 +14,10 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/sell', label: 'Sell', roles: ['owner', 'staff'] },
   { to: '/close-day', label: 'Close day', parentTo: '/sell', roles: ['owner', 'staff'] },
   { to: '/customers', label: 'Customers', roles: ['owner', 'staff'] },
-  { to: '/data-transfer', label: 'Data', roles: ['owner'] },
+  { to: '/social-media', label: 'Social media', roles: ['owner'] },
   { to: '/bulk-messaging', label: 'SMS', roles: ['owner'] },
   { to: '/finance', label: 'Invoice', parentTo: '/sell', roles: ['owner'] },
-  { to: '/account', label: 'Account', roles: ['owner'] },
+  { to: '/data-transfer', label: 'Data', roles: ['owner'] },
   { to: '/public-page', label: 'Public page', roles: ['owner'] },
-  { to: '/social-media', label: 'Social media', roles: ['owner'] },
+  { to: '/account', label: 'Account', roles: ['owner'] },
 ]
