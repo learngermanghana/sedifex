@@ -4455,6 +4455,96 @@ function buildProductEnrichment(data: Record<string, unknown>): ProductEnrichmen
   }
 }
 
+function isFirestoreTimestampLike(value: unknown): boolean {
+  return (
+    value instanceof admin.firestore.Timestamp ||
+    (typeof value === 'object' &&
+      value !== null &&
+      'toDate' in value &&
+      typeof (value as { toDate?: unknown }).toDate === 'function')
+  )
+}
+
+function resolvePublicProductPublishedAt(
+  source: Record<string, unknown>,
+  existing: Record<string, unknown> | null,
+): admin.firestore.FieldValue | unknown {
+  const candidates = [
+    source.publishedAt,
+    existing?.publishedAt,
+    source.createdAt,
+    source.updatedAt,
+    existing?.createdAt,
+    existing?.updatedAt,
+  ]
+  for (const candidate of candidates) {
+    if (isFirestoreTimestampLike(candidate) || typeof candidate === 'string') {
+      return candidate
+    }
+  }
+  return admin.firestore.FieldValue.serverTimestamp()
+}
+
+function toPublicProductPayload(
+  productId: string,
+  source: Record<string, unknown>,
+  existing: Record<string, unknown> | null,
+) {
+  const storeId = typeof source.storeId === 'string' ? source.storeId.trim() : ''
+  const name = normalizeProductName(source.name)
+  if (!storeId || !name) {
+    return null
+  }
+
+  return {
+    sourceProductId: productId,
+    storeId,
+    name,
+    description: typeof source.description === 'string' && source.description.trim() ? source.description.trim() : null,
+    category: typeof source.category === 'string' && source.category.trim() ? source.category.trim() : null,
+    price: typeof source.price === 'number' ? source.price : null,
+    stockCount: typeof source.stockCount === 'number' ? source.stockCount : null,
+    itemType:
+      source.itemType === 'service'
+        ? 'service'
+        : source.itemType === 'made_to_order'
+          ? 'made_to_order'
+          : 'product',
+    isPublished: source.isPublished !== false,
+    ...extractProductImageSet(source),
+    publishedAt: resolvePublicProductPublishedAt(source, existing),
+    createdAt: source.createdAt ?? existing?.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
+    sourceUpdatedAt: source.updatedAt ?? null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }
+}
+
+export const syncPublicProducts = functions.firestore
+  .document('products/{productId}')
+  .onWrite(async (change, context) => {
+    const productId = context.params.productId
+    const publicProductRef = db.collection('publicProducts').doc(productId)
+
+    if (!change.after.exists) {
+      await publicProductRef.delete().catch(() => undefined)
+      return
+    }
+
+    const sourceData = (change.after.data() ?? {}) as Record<string, unknown>
+    const existingPublicProductSnap = await publicProductRef.get()
+    const existingData = existingPublicProductSnap.exists
+      ? (existingPublicProductSnap.data() as Record<string, unknown>)
+      : null
+
+    const payload = toPublicProductPayload(productId, sourceData, existingData)
+    if (!payload) {
+      await publicProductRef.delete().catch(() => undefined)
+      return
+    }
+
+    await publicProductRef.set(payload, { merge: true })
+  })
+
 export const enrichProductDataAfterSave = functions.firestore
   .document('products/{productId}')
   .onWrite(async (change, context) => {

@@ -71,10 +71,35 @@ function toPublicProduct(productDoc) {
           : 'product',
     isPublished: data.isPublished !== false,
     ...extractProductImageSet(data),
+    publishedAt: data.publishedAt ?? data.createdAt ?? data.updatedAt ?? admin.firestore.FieldValue.serverTimestamp(),
     createdAt: data.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
     sourceUpdatedAt: data.updatedAt ?? null,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }
+}
+
+function hasPublishedAt(value) {
+  return (
+    value instanceof admin.firestore.Timestamp ||
+    typeof value === 'string' ||
+    (value && typeof value === 'object' && typeof value.toDate === 'function')
+  )
+}
+
+function resolvePublishedAtValue(data) {
+  if (hasPublishedAt(data.publishedAt)) {
+    return data.publishedAt
+  }
+  if (hasPublishedAt(data.createdAt)) {
+    return data.createdAt
+  }
+  if (hasPublishedAt(data.sourceUpdatedAt)) {
+    return data.sourceUpdatedAt
+  }
+  if (hasPublishedAt(data.updatedAt)) {
+    return data.updatedAt
+  }
+  return admin.firestore.FieldValue.serverTimestamp()
 }
 
 async function run() {
@@ -122,6 +147,47 @@ async function run() {
   console.log(
     `[backfillPublicProducts] done. upserts=${upserts}, skipped=${skipped}, total=${productsSnapshot.size}`,
   )
+
+  let publicProductsQuery = db.collection('publicProducts')
+  if (targetStoreId) {
+    publicProductsQuery = publicProductsQuery.where('storeId', '==', targetStoreId)
+  }
+  const publicProductsSnapshot = await publicProductsQuery.get()
+  console.log(`[backfillPublicProducts] scanning ${publicProductsSnapshot.size} publicProducts docs for publishedAt`)
+
+  let publishedAtBackfills = 0
+  batch = db.batch()
+  writes = 0
+
+  for (const publicProductDoc of publicProductsSnapshot.docs) {
+    const data = publicProductDoc.data() || {}
+    if (hasPublishedAt(data.publishedAt)) {
+      continue
+    }
+
+    batch.set(
+      publicProductDoc.ref,
+      {
+        publishedAt: resolvePublishedAtValue(data),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    publishedAtBackfills += 1
+    writes += 1
+
+    if (writes >= 450) {
+      await batch.commit()
+      batch = db.batch()
+      writes = 0
+    }
+  }
+
+  if (writes > 0) {
+    await batch.commit()
+  }
+
+  console.log(`[backfillPublicProducts] publishedAt backfill complete. updated=${publishedAtBackfills}`)
 }
 
 run().catch(error => {
