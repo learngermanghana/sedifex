@@ -1,213 +1,262 @@
-# How to Use Sedifex (Current UI Guide)
+# How to Use Sedifex (Current Navigation Guide)
 
-Sedifex is a POS and inventory platform for retail operations. This tutorial reflects the **current app wording and tabs**, including the move from **Product** to **Item** and the updated **Sell** workflow with sub-tabs.
+Sedifex is a POS and inventory platform for retail operations. This tutorial has been updated to match the **latest navigation layout**, including newer pages like **Dashboard**, **Bookings**, **Social media**, and **Data**, plus the **Sell** child pages (**Close day** and **Invoice**).
 
 ## Who this guide is for
 
-- **Owners/Admins** setting up and managing the business.
-- **Cashiers/Sales staff** handling day-to-day checkout.
-- **Operations users** managing stock, customers, and invoicing.
+- **Owners/Admins** setting up and running the workspace.
+- **Cashiers/Sales staff** handling checkout and customer-facing sales.
+- **Operations teams** managing inventory, finance, bookings, and communication.
 
 ---
 
-## 1) Sign in and access your workspace
+## 1) Sign in and confirm workspace access
 
 1. Open your Sedifex app URL (for example, `https://app.sedifex.com`).
 2. Sign in with your approved account.
-3. Confirm your account has the right workspace/store access.
+3. Confirm your workspace/store is selected at the top of the app.
+4. If you manage multiple stores, switch stores from the workspace selector.
 
-If login works but you cannot see data, your team access record is usually missing or mapped to the wrong store.
+If login succeeds but data is missing, check that your membership is linked to the correct store.
 
 ---
 
-## 2) Understand the main tabs/pages
+## 2) Understand the current navigation
 
-Depending on role, your navigation includes key areas like:
+### Owner navigation
 
-- **Items** (formerly Products)
-- **Sell** (with sub-tabs)
-- **SMS**
+- **Dashboard**
+- **Items**
+- **Sell**
+  - **Close day**
+  - **Invoice**
 - **Customers**
-- **Invoice**
-- **Public Page**
+- **Bookings**
+- **Social media**
+- **SMS**
+- **Data**
+- **Public page**
 - **Account**
 
-This guide walks through each one in the typical business flow.
+### Staff navigation
+
+- **Sell**
+  - **Close day**
+- **Customers**
+- **Bookings**
+
+> Note: Navigation is role-based, so staff members see fewer sections than owners.
 
 ---
 
-## 3) Items tab (formerly Product)
+## 3) Dashboard
 
-Use **Items** to manage what you sell.
+Use **Dashboard** to get a fast operational view:
 
-### Add or update an item
+- Today’s activity and quick summaries.
+- Shortcuts to key actions.
+- Current workspace context.
 
-For each item, maintain:
-
-- Item name
-- Price
-- Stock quantity
-- Category (optional)
-- Description (optional)
-- Image (optional)
-
-### Import items in bulk (CSV)
-
-Use CSV import when onboarding many items:
-
-- Required columns: `name`, `price`
-- Optional columns: `image_url`, `image_alt`
-
-Tip: Keep naming consistent (e.g., “Coke 50cl” vs “Coca-Cola 50cl”) to improve search and reporting.
+Start each shift here to quickly spot priorities.
 
 ---
 
-## 4) Sell tab + sub-tabs
+## 4) Items (formerly Product)
 
-The **Sell** area is now structured with sub-tabs to speed up checkout operations.
+Use **Items** to manage inventory and pricing.
 
-### Common Sell flow
+### Common tasks
+
+- Add a new item.
+- Update item name, price, stock, image, and category.
+- Keep descriptions clear for receipts and internal search.
+
+### Bulk import (CSV)
+
+Use CSV import when onboarding many products at once.
+
+- Typical required fields: `name`, `price`
+- Typical optional fields: `image_url`, `image_alt`
+
+Tip: Keep naming consistent (for example, one standard for size/unit naming).
+
+---
+
+## 5) Sell + child pages
+
+### Sell
+
+The main **Sell** page is where checkout happens.
+
+Typical flow:
 
 1. Search/select items.
 2. Add to cart.
-3. Adjust quantity if needed.
+3. Adjust quantity.
 4. Confirm totals.
-5. Select payment method.
-6. Complete sale.
+5. Choose payment method.
+6. Complete sale and share receipt.
 
-### Why sub-tabs matter
+### Close day (under Sell)
 
-Sell sub-tabs help separate fast tasks (for example: carting, recent sales, or related checkout utilities depending on role/config). Train staff to stay in the appropriate sub-tab during peak hours for faster transactions.
+Use **Close day** to reconcile and finalize the day:
 
----
+- Confirm totals.
+- Compare expected vs recorded sales.
+- Log end-of-day checks.
 
-## 5) Customer tab
+### Invoice (under Sell, owner role)
 
-Use **Customers** to manage buyer records and relationship history.
+Use **Invoice** for formal billing:
 
-Typical actions:
-
-- Add a new customer profile.
-- Attach sales to existing customers.
-- Track repeat purchases or outstanding balances (if enabled).
-
-Clean customer data improves follow-up messaging, invoicing, and receipt sharing.
-
----
-
-## 6) Invoice tab/page
-
-Use **Invoice** to issue and track formal billing documents.
-
-Recommended process:
-
-1. Create invoice for a customer.
-2. Add line items and quantities.
-3. Confirm pricing, discounts, and totals.
-4. Save/share invoice.
+1. Select customer.
+2. Add line items.
+3. Confirm totals/discounts.
+4. Save and share invoice.
 5. Track payment status.
 
-Use invoices for B2B, deferred payment, or any transaction needing a formal document.
+---
+
+## 6) Customers
+
+Use **Customers** to manage buyer records and customer history.
+
+- Create or update customer profiles.
+- Attach customers to transactions.
+- Improve follow-up quality for receipts, reminders, and promos.
+
+Clean customer records reduce failed delivery and support issues.
 
 ---
 
-## 7) Customer receipt sharing
+## 7) Bookings
 
-After a sale, share receipts with customers from the checkout flow.
+Use **Bookings** to manage scheduled services/appointments.
+
+- Create and update bookings.
+- Track booking states (for example confirmed/cancelled based on your workflow).
+- Keep customer details accurate for reminders and updates.
+
+Bookings work best when staff consistently update statuses in real time.
+
+---
+
+## 8) Social media
+
+Use **Social media** to manage linked social content and visibility features.
+
+Depending on your configuration, this may include:
+
+- Connected social links.
+- Embedded media/content settings.
+- Visibility controls for public-facing channels.
+
+Keep links and brand content current to avoid outdated promotions.
+
+---
+
+## 9) SMS
+
+Use **SMS** for customer communication (promotions, reminders, updates).
 
 Best practices:
 
-- Verify item list and totals before sending.
-- Confirm customer contact details (phone/email) first.
-- Re-send receipt from history when requested.
-
-This improves trust and reduces disputes.
-
----
-
-## 8) SMS tab
-
-Use **SMS** for customer communication workflows (promotions, updates, reminders, or follow-ups based on your configuration).
-
-Operational tips:
-
-- Segment recipients (e.g., frequent buyers).
+- Segment customers before sending.
 - Keep messages short and clear.
-- Avoid duplicate messaging during busy campaigns.
-- Review delivery outcomes where available.
+- Avoid duplicate campaigns.
+- Review delivery outcomes when available.
 
 ---
 
-## 9) Public Page tab/page
+## 10) Data
 
-Use **Public Page** to manage your customer-facing storefront/profile presence.
+Use **Data** for transfer/export workflows.
 
-Depending on setup, this can include:
+Typical uses:
 
-- Business profile details
-- Displayed catalog/items
-- Contact and order visibility settings
+- Export records for reporting.
+- Move/import data between systems.
+- Keep backups for operational continuity.
 
-Keep public information accurate so customers see correct items, pricing context, and contact channels.
+Set a weekly cadence for exports if your business needs external reporting.
 
 ---
 
-## 10) Account page
+## 11) Public page
 
-Use **Account** for business/profile settings and operational controls.
+Use **Public page** to manage your customer-facing Sedifex storefront/profile.
+
+Common updates:
+
+- Store profile details.
+- Product/catalog visibility.
+- Contact channels and promo information.
+
+Keep this page updated so online visitors see accurate business information.
+
+---
+
+## 12) Account
+
+Use **Account** for workspace-level controls.
 
 Typical tasks:
 
-- Update account/business details.
-- Manage subscription/billing information.
-- Review role/access settings (owner/admin scope).
-- Adjust preferences relevant to your workspace.
+- Billing/subscription management.
+- Integration and API settings.
+- Security/access settings.
+- Profile and workspace configuration.
 
-Owners should review this page weekly to keep settings current.
+Owners should review this page regularly (at least weekly).
 
 ---
 
-## 11) Daily operating checklist (recommended)
+## 13) Daily operating checklist
 
 ### Start of day
 
 - Confirm internet/device readiness.
-- Check low-stock items.
-- Confirm cashier accounts are active.
+- Open **Dashboard** and review priorities.
+- Check low-stock items in **Items**.
+- Confirm cashier/staff access.
 
-### During business hours
+### During operations
 
-- Process sales from **Sell** sub-tabs.
-- Keep item stock updates current.
-- Attach customers to relevant transactions.
-- Share receipts immediately after checkout.
+- Process transactions in **Sell**.
+- Keep stock updates current in **Items**.
+- Attach customer details where relevant.
+- Manage active appointments in **Bookings**.
 
 ### End of day
 
-- Reconcile sales totals.
-- Review invoices created/paid/pending.
-- Check SMS or customer follow-up tasks.
-- Verify key account/public page updates if any.
+- Run **Close day** reconciliation.
+- Review unpaid/pending **Invoice** records.
+- Complete SMS follow-ups if needed.
+- Verify key updates on **Public page**.
 
 ---
 
-## 12) Quick troubleshooting
+## 14) Quick troubleshooting
 
 ### “I can’t find Product tab”
 
-The tab is now **Items**.
+It was renamed to **Items**.
 
-### “Checkout feels different”
+### “I can’t find invoice”
 
-Use the **Sell** section and train staff on its sub-tabs.
+**Invoice** is a child page under **Sell** (owner role).
+
+### “My nav looks different from this guide”
+
+Your role may be **staff**; staff navigation is intentionally limited.
 
 ### “Receipts are not reaching customers”
 
-Validate customer contact details and retry sharing from sales history.
+Validate contact details and resend from sales history.
 
-### “My storefront details are wrong”
+### “Public storefront details are wrong”
 
-Update them in **Public Page** and confirm changes are saved/published.
+Update them in **Public page** and confirm save/publish.
 
 ---
 
@@ -217,4 +266,3 @@ Update them in **Public Page** and confirm changes are saved/published.
 - Integration quickstart: `docs/integration-quickstart.md`
 - WordPress install guide: `docs/wordpress-install-guide.md`
 - Webhook signatures: `docs/webhooks-signature-verification.md`
-
