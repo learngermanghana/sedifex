@@ -164,6 +164,7 @@ const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION'
   default: '2026-04-13',
 })
 const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', { default: '' })
+const BOOKING_DEFAULT_SERVICE_ID = defineString('BOOKING_DEFAULT_SERVICE_ID', { default: '' })
 /** ============================================================================
  *  HELPERS
  * ==========================================================================*/
@@ -4387,6 +4388,38 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
   })
 })
 
+async function resolveIntegrationBookingServiceId(options: {
+  storeId: string
+  payload: Record<string, unknown>
+}) {
+  const { storeId, payload } = options
+  const explicitServiceId =
+    toTrimmedStringOrNull(payload.serviceId) ??
+    toTrimmedStringOrNull(payload.serviceID) ??
+    toTrimmedStringOrNull(payload.service_id)
+  if (explicitServiceId) return explicitServiceId
+
+  const slotId = toTrimmedStringOrNull(payload.slotId)
+  if (slotId) {
+    const slotSnapshot = await db
+      .collection('stores')
+      .doc(storeId)
+      .collection('serviceAvailability')
+      .doc(slotId)
+      .get()
+    if (slotSnapshot.exists) {
+      const slotData = (slotSnapshot.data() ?? {}) as Record<string, unknown>
+      const slotServiceId = toTrimmedStringOrNull(slotData.serviceId)
+      if (slotServiceId) return slotServiceId
+    }
+  }
+
+  const defaultServiceId = BOOKING_DEFAULT_SERVICE_ID.value()?.trim() || ''
+  if (defaultServiceId) return defaultServiceId
+
+  return null
+}
+
 export const v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) {
@@ -4463,9 +4496,15 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res) 
   }
 
   const payload = toPlainObject(req.body)
-  const serviceId = toTrimmedStringOrNull(payload.serviceId)
+  const serviceId = await resolveIntegrationBookingServiceId({
+    storeId: authContext.storeId,
+    payload,
+  })
   if (!serviceId) {
-    res.status(400).json({ error: 'missing-service-id' })
+    res.status(400).json({
+      error: 'service-not-resolved',
+      message: 'Service could not be resolved. Configure BOOKING_DEFAULT_SERVICE_ID or provide serviceId.',
+    })
     return
   }
 
