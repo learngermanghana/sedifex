@@ -118,6 +118,21 @@ type RevokeIntegrationApiKeyPayload = {
   keyId?: unknown
 }
 
+type ListWebhookEndpointsPayload = {
+  storeId?: unknown
+}
+
+type UpsertWebhookEndpointPayload = {
+  endpointId?: unknown
+  url?: unknown
+  secret?: unknown
+  events?: unknown
+}
+
+type RevokeWebhookEndpointPayload = {
+  endpointId?: unknown
+}
+
 type StartTikTokConnectPayload = {
   storeId?: unknown
 }
@@ -2255,6 +2270,70 @@ function normalizeOptionalStoreId(value: unknown) {
   return storeId || null
 }
 
+function normalizeWebhookEndpointId(endpointIdRaw: unknown) {
+  const endpointId = typeof endpointIdRaw === 'string' ? endpointIdRaw.trim() : ''
+  if (!endpointId) throw new functions.https.HttpsError('invalid-argument', 'endpointId is required.')
+  return endpointId
+}
+
+function normalizeWebhookUrl(urlRaw: unknown) {
+  const url = typeof urlRaw === 'string' ? urlRaw.trim() : ''
+  if (!url) throw new functions.https.HttpsError('invalid-argument', 'Endpoint URL is required.')
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new functions.https.HttpsError('invalid-argument', 'Endpoint URL must be a valid URL.')
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new functions.https.HttpsError('invalid-argument', 'Endpoint URL must use https://')
+  }
+  return parsed.toString()
+}
+
+function normalizeWebhookSecret(secretRaw: unknown) {
+  const secret = typeof secretRaw === 'string' ? secretRaw.trim() : ''
+  if (secret.length < 8) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Webhook secret must be at least 8 characters long.',
+    )
+  }
+  if (secret.length > 256) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Webhook secret must be 256 characters or less.',
+    )
+  }
+  return secret
+}
+
+const ALLOWED_WEBHOOK_EVENTS = new Set([
+  'booking.created',
+  'booking.updated',
+  'booking.cancelled',
+  'booking.confirmed',
+  'booking.approved',
+  'product.created',
+  'product.updated',
+  'product.deleted',
+])
+
+function normalizeWebhookEvents(eventsRaw: unknown) {
+  const source = Array.isArray(eventsRaw) ? eventsRaw : []
+  const normalized = Array.from(
+    new Set(
+      source
+        .map(value => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+        .filter(eventType => eventType && ALLOWED_WEBHOOK_EVENTS.has(eventType)),
+    ),
+  )
+  if (normalized.length === 0) {
+    return ['booking.created', 'booking.updated', 'booking.cancelled', 'booking.confirmed']
+  }
+  return normalized
+}
+
 function shortMask(value: string) {
   if (value.length <= 8) return '••••••••'
   return `${value.slice(0, 4)}••••${value.slice(-4)}`
@@ -2509,6 +2588,154 @@ export const rotateIntegrationApiKey = functions.https.onCall(
       },
       token,
     }
+  },
+)
+
+/** ============================================================================
+ *  CALLABLES: webhook endpoints (owner)
+ * ==========================================================================*/
+
+export const listWebhookEndpoints = functions.https.onCall(
+  async (_data: ListWebhookEndpointsPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+
+    let snapshot: admin.firestore.QuerySnapshot
+    try {
+      snapshot = await db
+        .collection('webhookEndpoints')
+        .where('storeId', '==', storeId)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get()
+    } catch (queryError) {
+      if (!isFirestoreMissingIndexError(queryError)) throw queryError
+      snapshot = await db.collection('webhookEndpoints').where('storeId', '==', storeId).limit(200).get()
+    }
+
+    const endpoints = snapshot.docs
+      .map(docSnap => {
+        const data = docSnap.data() as Record<string, unknown>
+        return {
+          id: docSnap.id,
+          url: typeof data.url === 'string' ? data.url : '',
+          status: data.status === 'revoked' ? 'revoked' : 'active',
+          events: Array.isArray(data.events)
+            ? data.events.filter(item => typeof item === 'string')
+            : [],
+          createdAt: data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt : null,
+          updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt : null,
+          revokedAt: data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt : null,
+          hasSecret: typeof data.secret === 'string' && data.secret.trim().length > 0,
+        }
+      })
+      .filter(endpoint => endpoint.id && endpoint.url)
+      .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))
+      .slice(0, 50)
+
+    return { storeId, endpoints }
+  },
+)
+
+export const upsertWebhookEndpoint = functions.https.onCall(
+  async (data: UpsertWebhookEndpointPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+
+    const url = normalizeWebhookUrl(data?.url)
+    const secret = normalizeWebhookSecret(data?.secret)
+    const events = normalizeWebhookEvents(data?.events)
+    const endpointId = normalizeOptionalStoreId(data?.endpointId)
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+
+    let endpointRef: admin.firestore.DocumentReference
+    if (endpointId) {
+      endpointRef = db.collection('webhookEndpoints').doc(endpointId)
+      const existing = await endpointRef.get()
+      if (!existing.exists) {
+        throw new functions.https.HttpsError('not-found', 'Webhook endpoint not found.')
+      }
+      const existingData = (existing.data() ?? {}) as Record<string, unknown>
+      if (existingData.storeId !== storeId) {
+        throw new functions.https.HttpsError('permission-denied', 'Endpoint does not belong to this store.')
+      }
+    } else {
+      endpointRef = db.collection('webhookEndpoints').doc()
+    }
+
+    const endpointPayload: Record<string, unknown> = {
+      storeId,
+      url,
+      secret,
+      events,
+      status: 'active',
+      updatedAt: timestamp,
+      revokedAt: null,
+    }
+    if (!endpointId) {
+      endpointPayload.createdAt = timestamp
+      endpointPayload.createdBy = uid
+    }
+    await endpointRef.set(endpointPayload, { merge: true })
+
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: endpointId ? 'webhook.updated' : 'webhook.created',
+      actorUid: uid,
+      targetId: endpointRef.id,
+      metadata: { url, events },
+      createdAt: timestamp,
+    })
+
+    return {
+      endpoint: {
+        id: endpointRef.id,
+        url,
+        events,
+        status: 'active',
+      },
+    }
+  },
+)
+
+export const revokeWebhookEndpoint = functions.https.onCall(
+  async (data: RevokeWebhookEndpointPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+    const endpointId = normalizeWebhookEndpointId(data?.endpointId)
+    const endpointRef = db.collection('webhookEndpoints').doc(endpointId)
+    const endpointSnapshot = await endpointRef.get()
+    if (!endpointSnapshot.exists) {
+      throw new functions.https.HttpsError('not-found', 'Webhook endpoint not found.')
+    }
+    const endpointData = (endpointSnapshot.data() ?? {}) as Record<string, unknown>
+    if (endpointData.storeId !== storeId) {
+      throw new functions.https.HttpsError('permission-denied', 'Endpoint does not belong to this store.')
+    }
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+    await endpointRef.set(
+      {
+        status: 'revoked',
+        revokedAt: timestamp,
+        updatedAt: timestamp,
+        revokedBy: uid,
+      },
+      { merge: true },
+    )
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: 'webhook.revoked',
+      actorUid: uid,
+      targetId: endpointId,
+      createdAt: timestamp,
+    })
+    return { ok: true, endpointId }
   },
 )
 
@@ -4911,6 +5138,14 @@ function computeWebhookSignature(secret: string, payload: string) {
   return `sha256=${digest}`
 }
 
+function shouldDeliverWebhookEvent(endpointEventsRaw: unknown, eventType: string) {
+  if (!Array.isArray(endpointEventsRaw) || endpointEventsRaw.length === 0) return true
+  const endpointEvents = endpointEventsRaw
+    .map(value => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+    .filter(Boolean)
+  return endpointEvents.includes(eventType.toLowerCase())
+}
+
 type ProductEnrichment = {
   category: string | null
   manufacturerName: string | null
@@ -5418,6 +5653,9 @@ export const emitProductWebhooks = functions.firestore
     const results = await Promise.all(
       endpointSnapshot.docs.map(async endpointDoc => {
         const endpoint = endpointDoc.data() as Record<string, unknown>
+        if (!shouldDeliverWebhookEvent(endpoint.events, eventType)) {
+          return { endpointId: endpointDoc.id, ok: true, statusCode: 204, error: 'event filtered' }
+        }
         const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
         const secret = typeof endpoint.secret === 'string' ? endpoint.secret : ''
         if (!url || !secret) {
@@ -5462,6 +5700,120 @@ export const emitProductWebhooks = functions.firestore
           endpointId: result.endpointId,
           eventType,
           productId,
+          eventId: `evt_${context.eventId}`,
+          ok: result.ok,
+          statusCode: result.statusCode,
+          error: result.error,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+      ),
+    )
+  })
+
+export const emitBookingWebhooks = functions.firestore
+  .document('stores/{storeId}/integrationBookings/{bookingId}')
+  .onWrite(async (change, context) => {
+    const beforeExists = change.before.exists
+    const afterExists = change.after.exists
+    if (!beforeExists && !afterExists) return
+
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : ''
+    if (!storeId) return
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : ''
+    if (!bookingId) return
+
+    const beforeData = (beforeExists ? change.before.data() : null) as Record<string, unknown> | null
+    const afterData = (afterExists ? change.after.data() : null) as Record<string, unknown> | null
+
+    const beforeStatus = toTrimmedStringOrNull(beforeData?.status)?.toLowerCase() ?? null
+    const afterStatus = toTrimmedStringOrNull(afterData?.status)?.toLowerCase() ?? null
+
+    let eventType = 'booking.updated'
+    if (!beforeExists && afterExists) {
+      eventType = 'booking.created'
+    } else if (beforeExists && !afterExists) {
+      eventType = 'booking.cancelled'
+    } else if (beforeStatus !== afterStatus) {
+      if (afterStatus === 'cancelled' || afterStatus === 'canceled') {
+        eventType = 'booking.cancelled'
+      } else if (afterStatus === 'approved') {
+        eventType = 'booking.approved'
+      } else if (afterStatus === 'confirmed') {
+        eventType = 'booking.confirmed'
+      }
+    }
+
+    const payloadObject = {
+      id: `evt_${context.eventId}`,
+      type: eventType,
+      occurredAt: new Date().toISOString(),
+      storeId,
+      data: {
+        bookingId,
+        before: beforeData,
+        after: afterData,
+      },
+    }
+    const payload = JSON.stringify(payloadObject)
+
+    const endpointSnapshot = await db
+      .collection('webhookEndpoints')
+      .where('storeId', '==', storeId)
+      .where('status', '==', 'active')
+      .get()
+
+    if (endpointSnapshot.empty) return
+
+    const results = await Promise.all(
+      endpointSnapshot.docs.map(async endpointDoc => {
+        const endpoint = endpointDoc.data() as Record<string, unknown>
+        if (!shouldDeliverWebhookEvent(endpoint.events, eventType)) {
+          return { endpointId: endpointDoc.id, ok: true, statusCode: 204, error: 'event filtered' }
+        }
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : ''
+        if (!url || !secret) {
+          return { endpointId: endpointDoc.id, ok: false, statusCode: null, error: 'missing config' }
+        }
+
+        const signature = computeWebhookSignature(secret, payload)
+
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-sedifex-signature': signature,
+              'x-sedifex-event': eventType,
+              'x-sedifex-event-id': `evt_${context.eventId}`,
+            },
+            body: payload,
+          })
+
+          return {
+            endpointId: endpointDoc.id,
+            ok: response.ok,
+            statusCode: response.status,
+            error: null,
+          }
+        } catch (error) {
+          return {
+            endpointId: endpointDoc.id,
+            ok: false,
+            statusCode: null,
+            error: error instanceof Error ? error.message : 'unknown error',
+          }
+        }
+      }),
+    )
+
+    await Promise.all(
+      results.map(result =>
+        db.collection('webhookDeliveries').add({
+          storeId,
+          endpointId: result.endpointId,
+          eventType,
+          bookingId,
           eventId: `evt_${context.eventId}`,
           ok: result.ok,
           statusCode: result.statusCode,
