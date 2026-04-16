@@ -2030,6 +2030,11 @@ export default function AccountOverview({
           <div className="account-overview__website-sync" role="status" aria-live="polite">
             <p className="account-overview__website-sync-title">Choose your integration tutorial.</p>
             <p className="account-overview__hint">
+              Booking ingestion mapping can be managed in
+              {' '}
+              <Link to="/settings/integrations/booking-mapping">Settings → Integrations → Booking Mapping</Link>.
+            </p>
+            <p className="account-overview__hint">
               Sedifex supports both WordPress and Next.js storefronts.
               {' '}
               <a href="/docs/integration-quickstart" target="_blank" rel="noreferrer">

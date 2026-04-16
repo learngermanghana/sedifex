@@ -30,6 +30,7 @@ import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
 import PublicPageSettings from './pages/PublicPageSettings'
 import SocialMediaPage from './pages/SocialMediaPage'
+import BookingMappingSettings from './pages/BookingMappingSettings'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -93,6 +94,7 @@ const router = createBrowserRouter([
           { path: 'social-media', element: <SocialMediaPage /> },
           { path: 'merchant-feed', element: <Navigate to="/social-media" replace /> },
           { path: 'support', element: <Support /> },
+          { path: 'settings/integrations/booking-mapping', element: <BookingMappingSettings /> },
         ],
       },
 
