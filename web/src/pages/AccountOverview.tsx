@@ -1651,6 +1651,32 @@ export default function AccountOverview({
     }
   }
 
+  async function handleDeleteMember(member: RosterMember) {
+    if (!storeId || !isOwner) return
+    if (member.role === 'owner') {
+      publish({ message: 'Owner access cannot be removed here.', tone: 'error' })
+      return
+    }
+
+    setPendingActionId(member.id)
+    try {
+      await deleteDoc(doc(db, 'teamMembers', member.id))
+      setRoster(current => current.filter(entry => entry.id !== member.id))
+      publish({
+        message: `Deleted ${member.email ?? 'team member'} from your workspace.`,
+        tone: 'success',
+      })
+    } catch (error) {
+      console.warn('[account] Failed to delete team member', error)
+      publish({
+        message: 'Unable to delete this team member. Please try again.',
+        tone: 'error',
+      })
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
   return (
     <div className="account-overview">
       <Heading>{isPromotionsView ? 'Public page' : 'Account overview'}</Heading>
@@ -3040,12 +3066,13 @@ export default function AccountOverview({
               <th scope="col">Status</th>
               <th scope="col">Invited by</th>
               <th scope="col">Updated</th>
+              {isOwner && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {roster.length === 0 && !rosterLoading ? (
               <tr className="account-overview__roster-empty">
-                <td colSpan={5}>No team members found.</td>
+                <td colSpan={isOwner ? 6 : 5}>No team members found.</td>
               </tr>
             ) : (
               roster.map(member => (
@@ -3067,6 +3094,22 @@ export default function AccountOverview({
                   </td>
                   <td>{formatValue(member.invitedBy)}</td>
                   <td>{formatTimestamp(member.updatedAt ?? member.createdAt)}</td>
+                  {isOwner && (
+                    <td>
+                      {member.role !== 'owner' ? (
+                        <button
+                          type="button"
+                          className="button button--ghost button--small"
+                          onClick={() => handleDeleteMember(member)}
+                          disabled={pendingActionId === member.id}
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <span className="account-overview__hint">—</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))
             )}

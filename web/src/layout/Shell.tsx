@@ -343,6 +343,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const workspaceStatus = billing?.planKey ?? 'Workspace ready'
   const workspaceLabel = workspaceName || workspaceStatus
+  const connectedMembershipRows = useMemo(
+    () => memberships.filter(membership => membership.uid === user?.uid),
+    [memberships, user?.uid],
+  )
   const selectableMemberships = useMemo(() => {
     const byStore = new Map<string, (typeof memberships)[number]>()
 
