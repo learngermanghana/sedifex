@@ -37,7 +37,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = void 0;
+exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -2916,6 +2916,166 @@ function toPlainObject(value) {
     }
     return value;
 }
+const BOOKING_ATTRIBUTE_MAX_KEYS = 40;
+const BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH = 500;
+const DEFAULT_BOOKING_ALIASES = {
+    customerName: ['name', 'fullName', 'customerName', 'clientName'],
+    customerPhone: ['phone', 'customerPhone', 'phoneNumber', 'mobile', 'whatsapp'],
+    customerEmail: ['email', 'customerEmail', 'emailAddress'],
+    serviceName: ['serviceName', 'productName', 'service_note_name', 'internalServiceName'],
+    bookingDate: ['date', 'bookingDate'],
+    bookingTime: ['time', 'bookingTime'],
+    preferredBranch: ['preferredBranch', 'branch', 'branchName'],
+    preferredContactMethod: ['preferredContactMethod', 'contactMethod'],
+    depositAmount: ['depositAmount', 'depositPaid', 'amountPaid'],
+    paymentMethod: ['paymentMethod'],
+};
+const DEFAULT_BOOKING_SHEET_HEADERS = {
+    customerName: 'Customer Name',
+    customerPhone: 'Customer Phone',
+    customerEmail: 'Customer Email',
+    serviceName: 'Service',
+    bookingDate: 'Booking Date',
+    bookingTime: 'Booking Time',
+    preferredBranch: 'Preferred Branch',
+    preferredContactMethod: 'Preferred Contact Method',
+    paymentMethod: 'Payment Method',
+    depositAmount: 'Deposit Amount',
+    status: 'Status',
+    quantity: 'Quantity',
+};
+function normalizeBookingAliasList(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value
+        .map(item => (typeof item === 'string' ? item.trim() : ''))
+        .filter(item => item.length > 0)
+        .slice(0, 40);
+}
+function normalizeBookingHeaderMap(value) {
+    const objectValue = toPlainObject(value);
+    const normalized = {};
+    for (const [key, header] of Object.entries(objectValue)) {
+        if (typeof header !== 'string')
+            continue;
+        const normalizedHeader = header.trim().slice(0, 120);
+        if (!normalizedHeader)
+            continue;
+        normalized[key.trim()] = normalizedHeader;
+    }
+    return normalized;
+}
+async function loadBookingIngestionConfig(storeId) {
+    const storeSnap = await firestore_1.defaultDb.collection('stores').doc(storeId).get();
+    const storeData = (storeSnap.data() ?? {});
+    const integrationConfig = toPlainObject(storeData.integrationBookingConfig);
+    const fieldAliases = toPlainObject(integrationConfig.fieldAliases);
+    const aliases = {
+        customerName: [...DEFAULT_BOOKING_ALIASES.customerName, ...normalizeBookingAliasList(fieldAliases.customerName)],
+        customerPhone: [...DEFAULT_BOOKING_ALIASES.customerPhone, ...normalizeBookingAliasList(fieldAliases.customerPhone)],
+        customerEmail: [...DEFAULT_BOOKING_ALIASES.customerEmail, ...normalizeBookingAliasList(fieldAliases.customerEmail)],
+        serviceName: [...DEFAULT_BOOKING_ALIASES.serviceName, ...normalizeBookingAliasList(fieldAliases.serviceName)],
+        bookingDate: [...DEFAULT_BOOKING_ALIASES.bookingDate, ...normalizeBookingAliasList(fieldAliases.bookingDate)],
+        bookingTime: [...DEFAULT_BOOKING_ALIASES.bookingTime, ...normalizeBookingAliasList(fieldAliases.bookingTime)],
+        preferredBranch: [...DEFAULT_BOOKING_ALIASES.preferredBranch, ...normalizeBookingAliasList(fieldAliases.preferredBranch)],
+        preferredContactMethod: [
+            ...DEFAULT_BOOKING_ALIASES.preferredContactMethod,
+            ...normalizeBookingAliasList(fieldAliases.preferredContactMethod),
+        ],
+        depositAmount: [...DEFAULT_BOOKING_ALIASES.depositAmount, ...normalizeBookingAliasList(fieldAliases.depositAmount)],
+        paymentMethod: [...DEFAULT_BOOKING_ALIASES.paymentMethod, ...normalizeBookingAliasList(fieldAliases.paymentMethod)],
+    };
+    return {
+        mappingVersion: toTrimmedStringOrNull(integrationConfig.mappingVersion) ?? 'v1',
+        aliases,
+        sheetHeaders: {
+            ...DEFAULT_BOOKING_SHEET_HEADERS,
+            ...normalizeBookingHeaderMap(integrationConfig.sheetHeaders),
+        },
+    };
+}
+function canonicalizeBookingKey(key) {
+    return key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+function buildBookingValueLookup(source) {
+    const lookup = new Map();
+    for (const [key, value] of Object.entries(source)) {
+        const normalized = canonicalizeBookingKey(key);
+        if (!normalized || lookup.has(normalized))
+            continue;
+        lookup.set(normalized, value);
+    }
+    return lookup;
+}
+function pickBookingValueFromAliases(options) {
+    for (const alias of options.aliases) {
+        const normalizedAlias = canonicalizeBookingKey(alias);
+        if (!normalizedAlias)
+            continue;
+        for (const lookup of options.lookups) {
+            if (lookup.has(normalizedAlias)) {
+                return lookup.get(normalizedAlias);
+            }
+        }
+    }
+    return null;
+}
+function sanitizeBookingAttributes(raw) {
+    const sanitized = {};
+    const truncatedKeys = [];
+    const droppedKeys = [];
+    const rawEntries = Object.entries(raw);
+    const keptEntries = rawEntries.slice(0, BOOKING_ATTRIBUTE_MAX_KEYS);
+    for (const [key, value] of keptEntries) {
+        const normalizedKey = key.trim().slice(0, 80);
+        if (!normalizedKey) {
+            droppedKeys.push(key);
+            continue;
+        }
+        if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+            sanitized[normalizedKey] = value;
+            continue;
+        }
+        if (typeof value === 'string') {
+            const nextValue = value.trim().slice(0, BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH);
+            if (nextValue.length < value.trim().length)
+                truncatedKeys.push(normalizedKey);
+            sanitized[normalizedKey] = nextValue;
+            continue;
+        }
+        if (Array.isArray(value)) {
+            if (value.length > 20)
+                truncatedKeys.push(normalizedKey);
+            sanitized[normalizedKey] = value.slice(0, 20);
+            continue;
+        }
+        if (value && typeof value === 'object') {
+            const stringified = JSON.stringify(value);
+            const nextValue = stringified.slice(0, BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH);
+            if (nextValue.length < stringified.length)
+                truncatedKeys.push(normalizedKey);
+            sanitized[normalizedKey] = nextValue;
+            continue;
+        }
+        const fallback = String(value);
+        const nextValue = fallback.slice(0, BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH);
+        if (nextValue.length < fallback.length)
+            truncatedKeys.push(normalizedKey);
+        sanitized[normalizedKey] = nextValue;
+    }
+    if (rawEntries.length > BOOKING_ATTRIBUTE_MAX_KEYS) {
+        droppedKeys.push(...rawEntries.slice(BOOKING_ATTRIBUTE_MAX_KEYS).map(([key]) => key));
+    }
+    return {
+        attributes: sanitized,
+        meta: {
+            totalReceived: rawEntries.length,
+            totalStored: Object.keys(sanitized).length,
+            truncatedKeys,
+            droppedKeys,
+        },
+    };
+}
 function mapAvailabilitySlotDoc(docSnap) {
     const data = docSnap.data();
     const storeId = toTrimmedStringOrNull(data.storeId);
@@ -2962,6 +3122,15 @@ function mapIntegrationBookingDoc(docSnap) {
         : 'confirmed';
     const customer = toPlainObject(data.customer);
     const quantityRaw = toFiniteNumber(data.quantity, 1);
+    const attributesMetaRaw = toPlainObject(data.attributesMeta);
+    const sheetSyncRaw = toPlainObject(data.sheetSync);
+    const sheetColumnsRaw = toPlainObject(sheetSyncRaw.columns);
+    const sheetColumns = {};
+    for (const [header, value] of Object.entries(sheetColumnsRaw)) {
+        if (value === null || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) {
+            sheetColumns[header] = value;
+        }
+    }
     return {
         id: docSnap.id,
         storeId,
@@ -2975,6 +3144,37 @@ function mapIntegrationBookingDoc(docSnap) {
         },
         quantity: Math.max(1, Math.floor(quantityRaw)),
         notes: toTrimmedStringOrNull(data.notes),
+        importantFields: {
+            serviceName: toTrimmedStringOrNull(data.serviceName),
+            bookingDate: toTrimmedStringOrNull(data.date),
+            bookingTime: toTrimmedStringOrNull(data.time),
+            preferredBranch: toTrimmedStringOrNull(data.preferredBranch),
+            preferredContactMethod: toTrimmedStringOrNull(data.preferredContactMethod),
+            paymentMethod: toTrimmedStringOrNull(data.paymentMethod),
+            depositAmount: typeof data.depositAmount === 'number' && Number.isFinite(data.depositAmount)
+                ? data.depositAmount
+                : toTrimmedStringOrNull(data.depositAmount),
+        },
+        sheetSync: {
+            mappingVersion: toTrimmedStringOrNull(sheetSyncRaw.mappingVersion) ?? 'v1',
+            columns: sheetColumns,
+        },
+        attributesMeta: {
+            totalReceived: Math.max(0, Math.floor(toFiniteNumber(attributesMetaRaw.totalReceived, 0))),
+            totalStored: Math.max(0, Math.floor(toFiniteNumber(attributesMetaRaw.totalStored, 0))),
+            truncatedKeys: Array.isArray(attributesMetaRaw.truncatedKeys)
+                ? attributesMetaRaw.truncatedKeys
+                    .map(key => (typeof key === 'string' ? key.trim() : ''))
+                    .filter(Boolean)
+                    .slice(0, 100)
+                : [],
+            droppedKeys: Array.isArray(attributesMetaRaw.droppedKeys)
+                ? attributesMetaRaw.droppedKeys
+                    .map(key => (typeof key === 'string' ? key.trim() : ''))
+                    .filter(Boolean)
+                    .slice(0, 100)
+                : [],
+        },
         attributes: toPlainObject(data.attributes),
         createdAt: normalizeTimestampIso(data.createdAt),
         updatedAt: normalizeTimestampIso(data.updatedAt),
@@ -3764,6 +3964,7 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         return;
     }
     const payload = toPlainObject(req.body);
+    const bookingConfig = await loadBookingIngestionConfig(authContext.storeId);
     const serviceId = await resolveIntegrationBookingServiceId({
         storeId: authContext.storeId,
         payload,
@@ -3778,7 +3979,12 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
     const slotId = toTrimmedStringOrNull(payload.slotId) ??
         toTrimmedStringOrNull(payload.slotID) ??
         toTrimmedStringOrNull(payload.slot_id);
-    const payloadAttributes = toPlainObject(payload.attributes);
+    const sanitizedAttributesResult = sanitizeBookingAttributes(toPlainObject(payload.attributes));
+    const payloadAttributes = sanitizedAttributesResult.attributes;
+    const payloadLookup = buildBookingValueLookup(payload);
+    const attributesLookup = buildBookingValueLookup(payloadAttributes);
+    const customer = toPlainObject(payload.customer);
+    const customerLookup = buildBookingValueLookup(customer);
     const pickBookingString = (...values) => {
         for (const value of values) {
             const normalized = toTrimmedStringOrNull(value);
@@ -3812,24 +4018,53 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         }
         return null;
     };
-    const bookingDate = pickBookingString(payload.date, payload.bookingDate, payloadAttributes.date, payloadAttributes.bookingDate);
-    const bookingTime = pickBookingString(payload.time, payload.bookingTime, payloadAttributes.time, payloadAttributes.bookingTime);
-    const preferredBranch = pickBookingString(payload.preferredBranch, payload.branch, payload.branchName, payloadAttributes.preferredBranch, payloadAttributes.branch, payloadAttributes.branchName);
+    const bookingDate = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.bookingDate,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.date, payload.bookingDate, payloadAttributes.date, payloadAttributes.bookingDate);
+    const bookingTime = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.bookingTime,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.time, payload.bookingTime, payloadAttributes.time, payloadAttributes.bookingTime);
+    const preferredBranch = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.preferredBranch,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.preferredBranch, payload.branch, payload.branchName, payloadAttributes.preferredBranch, payloadAttributes.branch, payloadAttributes.branchName);
     const sessionType = pickBookingString(payload.sessionType, payload.duration, payload.sessionDuration, payloadAttributes.sessionType, payloadAttributes.duration, payloadAttributes.sessionDuration);
     const therapistPreference = pickBookingString(payload.therapistPreference, payload.preferredTherapist, payloadAttributes.therapistPreference, payloadAttributes.preferredTherapist);
-    const preferredContactMethod = pickBookingString(payload.preferredContactMethod, payload.contactMethod, payloadAttributes.preferredContactMethod, payloadAttributes.contactMethod);
-    const depositAmount = pickBookingAmount(payload.depositAmount, payload.depositPaid, payload.amountPaid, payloadAttributes.depositAmount, payloadAttributes.depositPaid, payloadAttributes.amountPaid);
-    const paymentMethod = pickBookingString(payload.paymentMethod, payloadAttributes.paymentMethod);
+    const preferredContactMethod = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.preferredContactMethod,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.preferredContactMethod, payload.contactMethod, payloadAttributes.preferredContactMethod, payloadAttributes.contactMethod);
+    const depositAmount = pickBookingAmount(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.depositAmount,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.depositAmount, payload.depositPaid, payload.amountPaid, payloadAttributes.depositAmount, payloadAttributes.depositPaid, payloadAttributes.amountPaid);
+    const paymentMethod = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.paymentMethod,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.paymentMethod, payloadAttributes.paymentMethod);
     const paymentScreenshotUrl = pickBookingString(payload.paymentScreenshotUrl, payload.screenshotUrl, payloadAttributes.paymentScreenshotUrl, payloadAttributes.screenshotUrl);
     const paymentScreenshotReady = pickBookingBoolean(payload.paymentScreenshotReady, payloadAttributes.paymentScreenshotReady);
     const noRefundAccepted = pickBookingBoolean(payload.noRefundAccepted, payload.agreeNoRefundPolicy, payloadAttributes.noRefundAccepted, payloadAttributes.agreeNoRefundPolicy);
-    const serviceName = pickBookingString(payload.serviceName, payload.productName, payload.service_note_name, payload.internalServiceName, payloadAttributes.serviceName, payloadAttributes.productName, payloadAttributes.service_note_name, payloadAttributes.internalServiceName);
+    const serviceName = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.serviceName,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.serviceName, payload.productName, payload.service_note_name, payload.internalServiceName, payloadAttributes.serviceName, payloadAttributes.productName, payloadAttributes.service_note_name, payloadAttributes.internalServiceName);
     const quantityRaw = toFiniteNumber(payload.quantity, 1);
     const quantity = Math.max(1, Math.floor(quantityRaw));
-    const customer = toPlainObject(payload.customer);
-    const customerName = toTrimmedStringOrNull(customer.name);
-    const customerPhone = toTrimmedStringOrNull(customer.phone);
-    const customerEmail = toTrimmedStringOrNull(customer.email);
+    const customerName = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.customerName,
+        lookups: [customerLookup, payloadLookup, attributesLookup],
+    }));
+    const customerPhone = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.customerPhone,
+        lookups: [customerLookup, payloadLookup, attributesLookup],
+    }));
+    const customerEmail = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.customerEmail,
+        lookups: [customerLookup, payloadLookup, attributesLookup],
+    }));
     if (!customerName && !customerPhone && !customerEmail) {
         res.status(400).json({ error: 'missing-customer-identity' });
         return;
@@ -3840,6 +4075,37 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         .collection('integrationBookings')
         .doc();
     const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    const importantFields = {
+        serviceName,
+        bookingDate,
+        bookingTime,
+        preferredBranch,
+        preferredContactMethod,
+        paymentMethod,
+        depositAmount,
+    };
+    const sheetColumns = {};
+    const sheetValueByCanonicalKey = {
+        customerName,
+        customerPhone,
+        customerEmail,
+        serviceName,
+        bookingDate,
+        bookingTime,
+        preferredBranch,
+        preferredContactMethod,
+        paymentMethod,
+        depositAmount: typeof depositAmount === 'number' && Number.isFinite(depositAmount) ? depositAmount : depositAmount ?? null,
+        status: 'confirmed',
+        quantity,
+    };
+    for (const [canonicalKey, header] of Object.entries(bookingConfig.sheetHeaders)) {
+        if (!header)
+            continue;
+        if (!Object.prototype.hasOwnProperty.call(sheetValueByCanonicalKey, canonicalKey))
+            continue;
+        sheetColumns[header] = sheetValueByCanonicalKey[canonicalKey] ?? null;
+    }
     const bookingData = {
         storeId: authContext.storeId,
         serviceId,
@@ -3853,21 +4119,26 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         name: customerName,
         phone: customerPhone,
         email: customerEmail,
-        serviceName,
-        date: bookingDate,
-        time: bookingTime,
-        preferredBranch,
+        serviceName: importantFields.serviceName,
+        date: importantFields.bookingDate,
+        time: importantFields.bookingTime,
+        preferredBranch: importantFields.preferredBranch,
         sessionType,
         therapistPreference,
-        preferredContactMethod,
-        depositAmount,
-        paymentMethod,
+        preferredContactMethod: importantFields.preferredContactMethod,
+        depositAmount: importantFields.depositAmount,
+        paymentMethod: importantFields.paymentMethod,
         paymentScreenshotUrl,
         paymentScreenshotReady,
         noRefundAccepted,
         quantity,
         notes: toTrimmedStringOrNull(payload.notes),
         attributes: payloadAttributes,
+        attributesMeta: sanitizedAttributesResult.meta,
+        sheetSync: {
+            mappingVersion: bookingConfig.mappingVersion,
+            columns: sheetColumns,
+        },
         source: 'website',
         createdAt: now,
         updatedAt: now,
@@ -5999,3 +6270,9 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
         res.status(500).send('error');
     }
 });
+exports.__testing = {
+    canonicalizeBookingKey,
+    buildBookingValueLookup,
+    pickBookingValueFromAliases,
+    sanitizeBookingAttributes,
+};
