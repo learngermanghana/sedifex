@@ -343,22 +343,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const workspaceStatus = billing?.planKey ?? 'Workspace ready'
   const workspaceLabel = workspaceName || workspaceStatus
-  const connectedMembershipRows = useMemo(
-    () =>
-      memberships.filter(membership => {
-        const normalizedStoreId =
-          typeof membership.storeId === 'string' ? membership.storeId.trim() : ''
-        return Boolean(normalizedStoreId) && membership.uid === user?.uid
-      }),
-    [memberships, user?.uid],
-  )
   const selectableMemberships = useMemo(() => {
     const byStore = new Map<string, (typeof memberships)[number]>()
 
-    connectedMembershipRows.forEach(membership => {
+    memberships.forEach(membership => {
       const normalizedStoreId =
         typeof membership.storeId === 'string' ? membership.storeId.trim() : ''
-      if (!normalizedStoreId) return
+
+      // A workspace qualifies only when it has a valid storeId and belongs to
+      // the currently signed-in user identity.
+      if (!normalizedStoreId || membership.uid !== user?.uid) return
 
       const existing = byStore.get(normalizedStoreId)
       if (!existing) {
@@ -373,7 +367,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     })
 
     return Array.from(byStore.values())
-  }, [connectedMembershipRows])
+  }, [memberships, user?.uid])
 
   const navSection = (
     <div className="shell__nav-group">
@@ -470,10 +464,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       {selectableMemberships.length <= 1 && (
         <p className="shell__store-link-hint">
           To link more stores, ask each workspace owner to add{' '}
-          <strong>{userEmail}</strong> as staff or owner in Team Members. Each
-          row must use that store&apos;s own <code>storeId</code> (not{' '}
-          <code>{storeId ?? 'your current store id'}</code>) and this account&apos;s UID{' '}
-          <code>{user?.uid ?? 'unknown'}</code>.
+          <strong>{userEmail}</strong> as staff or owner in Team Members.
         </p>
       )}
 

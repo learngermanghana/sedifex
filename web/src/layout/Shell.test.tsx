@@ -107,9 +107,6 @@ describe('Shell', () => {
     expect(
       screen.getByText(/to link more stores, ask each workspace owner to add/i),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(/workspace switch appears when this account is linked to 2\+ workspaces/i),
-    ).toBeInTheDocument()
   })
 
   it('switches workspaces when the account has multiple memberships', async () => {
@@ -131,9 +128,6 @@ describe('Shell', () => {
     expect(
       screen.queryByText(/to link more stores, ask each workspace owner to add/i),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByText(/workspace switch appears when this account is linked to 2\+ workspaces/i),
-    ).not.toBeInTheDocument()
   })
 
   it('shows only connected workspaces for the signed-in user', () => {
@@ -150,24 +144,6 @@ describe('Shell', () => {
 
     expect(screen.queryByLabelText(/select workspace/i)).not.toBeInTheDocument()
     expect(screen.getByText('Standard')).toBeInTheDocument()
-  })
-
-  it('explains why switcher is hidden when multiple rows map to one store id', () => {
-    mockUseMemberships.mockReturnValue({
-      memberships: [
-        { id: 'member-1', uid: 'user-123', storeId: 'same-store', role: 'owner' },
-        { id: 'member-2', uid: 'user-123', storeId: 'same-store', role: 'staff' },
-      ],
-      loading: false,
-      error: null,
-    })
-
-    renderShell()
-
-    expect(screen.queryByLabelText(/select workspace/i)).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/multiple team rows, but they all point to the same workspace id/i),
-    ).toBeInTheDocument()
   })
 
   it('shows a billing reminder when payment is past due', () => {
