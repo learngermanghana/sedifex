@@ -20,8 +20,22 @@ import './Bookings.css'
 
 type BookingRecord = {
   id: string
+  bookingName: string | null
+  bookingPhone: string | null
+  bookingEmail: string | null
   serviceId: string
   serviceName: string
+  bookingDate: string | null
+  bookingTime: string | null
+  preferredBranch: string | null
+  sessionType: string | null
+  therapistPreference: string | null
+  preferredContactMethod: string | null
+  depositAmount: string | null
+  paymentMethod: string | null
+  paymentScreenshotUrl: string | null
+  paymentScreenshotReady: boolean | null
+  noRefundAccepted: boolean | null
   status: string
   quantity: number
   customerName: string | null
@@ -79,6 +93,36 @@ function dateToTimestamp(date: string, useDayEnd = false): Timestamp {
   return Timestamp.fromDate(parsedDate)
 }
 
+function pickString(data: Record<string, unknown>, keys: string[], fallback: string | null = null): string | null {
+  for (const key of keys) {
+    const value = data[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return fallback
+}
+
+function pickBoolean(data: Record<string, unknown>, keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = data[key]
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === 'true' || normalized === 'yes') return true
+      if (normalized === 'false' || normalized === 'no') return false
+    }
+  }
+  return null
+}
+
+function pickAmount(data: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = data[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value.toLocaleString()
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
 export default function Bookings() {
   const { storeId } = useActiveStore()
   const [loading, setLoading] = useState(true)
@@ -96,6 +140,7 @@ export default function Bookings() {
   const [hasNextPage, setHasNextPage] = useState(false)
   const [pageNumber, setPageNumber] = useState(1)
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null)
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
 
   const hydrateBooking = useCallback((docSnap: QueryDocumentSnapshot<DocumentData>, serviceMap: Map<string, string>) => {
     const data = docSnap.data() as Record<string, unknown>
@@ -108,11 +153,40 @@ export default function Bookings() {
         ? (data.createdAt as Timestamp).toDate()
         : null
     const serviceId = typeof data.serviceId === 'string' && data.serviceId.trim() ? data.serviceId.trim() : '—'
+    const bookingName = pickString(data, ['name', 'fullName', 'customerName'], typeof customer.name === 'string' ? customer.name : null)
+    const bookingPhone = pickString(data, ['phone', 'customerPhone'], typeof customer.phone === 'string' ? customer.phone : null)
+    const bookingEmail = pickString(data, ['email', 'customerEmail'], typeof customer.email === 'string' ? customer.email : null)
+    const preferredBranch = pickString(data, ['preferredBranch', 'branch', 'branchName'])
+    const sessionType = pickString(data, ['sessionType', 'duration', 'sessionDuration'])
+    const therapistPreference = pickString(data, ['therapistPreference', 'preferredTherapist'])
+    const preferredContactMethod = pickString(data, ['preferredContactMethod', 'contactMethod'])
+    const paymentMethod = pickString(data, ['paymentMethod'])
+    const paymentScreenshotUrl = pickString(data, ['paymentScreenshotUrl', 'screenshotUrl'])
+    const depositAmount = pickAmount(data, ['depositAmount', 'depositPaid', 'amountPaid'])
+    const bookingDate = pickString(data, ['date', 'bookingDate'])
+    const bookingTime = pickString(data, ['time', 'bookingTime'])
+    const internalServiceName = pickString(data, ['serviceName', 'serviceNoteName', 'internalServiceName'])
+    const paymentScreenshotReady = pickBoolean(data, ['paymentScreenshotReady'])
+    const noRefundAccepted = pickBoolean(data, ['noRefundAccepted', 'agreeNoRefundPolicy'])
 
     return {
       id: docSnap.id,
+      bookingName,
+      bookingPhone,
+      bookingEmail,
       serviceId,
-      serviceName: serviceMap.get(serviceId) ?? serviceId,
+      serviceName: internalServiceName ?? serviceMap.get(serviceId) ?? serviceId,
+      bookingDate,
+      bookingTime,
+      preferredBranch,
+      sessionType,
+      therapistPreference,
+      preferredContactMethod,
+      paymentMethod,
+      paymentScreenshotUrl,
+      depositAmount,
+      paymentScreenshotReady,
+      noRefundAccepted,
       status: normalizeStatus(data.status),
       quantity:
         typeof data.quantity === 'number' && Number.isFinite(data.quantity)
@@ -291,6 +365,10 @@ export default function Bookings() {
     () => bookings.filter(booking => booking.status === 'confirmed').length,
     [bookings],
   )
+  const selectedBooking = useMemo(
+    () => bookings.find(booking => booking.id === selectedBookingId) ?? null,
+    [bookings, selectedBookingId],
+  )
 
   return (
     <main className="page bookings-page">
@@ -379,7 +457,12 @@ export default function Bookings() {
                     </thead>
                     <tbody>
                       {filteredBookings.map(booking => (
-                        <tr key={booking.id}>
+                        <tr
+                          key={booking.id}
+                          className={selectedBookingId === booking.id ? 'bookings-page__row bookings-page__row--selected' : 'bookings-page__row'}
+                          onClick={() => setSelectedBookingId(current => (current === booking.id ? null : booking.id))}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <td>{formatDate(booking.createdAt)}</td>
                           <td>{booking.serviceName || booking.serviceId}</td>
                           <td>
@@ -417,6 +500,33 @@ export default function Bookings() {
                     </tbody>
                   </table>
                 </div>
+                <section className="bookings-page__details card stack gap-2">
+                  <h3>Booking details</h3>
+                  {selectedBooking ? (
+                    <dl className="bookings-page__details-grid">
+                      <div><dt>Name</dt><dd>{selectedBooking.bookingName ?? selectedBooking.customerName ?? '—'}</dd></div>
+                      <div><dt>Phone</dt><dd>{selectedBooking.bookingPhone ?? selectedBooking.customerPhone ?? '—'}</dd></div>
+                      <div><dt>Service ID</dt><dd>{selectedBooking.serviceId}</dd></div>
+                      <div><dt>Date</dt><dd>{selectedBooking.bookingDate ?? '—'}</dd></div>
+                      <div><dt>Service name</dt><dd>{selectedBooking.serviceName || '—'}</dd></div>
+                      <div><dt>Time</dt><dd>{selectedBooking.bookingTime ?? '—'}</dd></div>
+                      <div><dt>Preferred Branch</dt><dd>{selectedBooking.preferredBranch ?? '—'}</dd></div>
+                      <div><dt>Session Type / Duration</dt><dd>{selectedBooking.sessionType ?? '—'}</dd></div>
+                      <div><dt>Therapist Preference</dt><dd>{selectedBooking.therapistPreference ?? '—'}</dd></div>
+                      <div><dt>Preferred Contact Method</dt><dd>{selectedBooking.preferredContactMethod ?? '—'}</dd></div>
+                      <div><dt>Deposit Amount</dt><dd>{selectedBooking.depositAmount ?? '—'}</dd></div>
+                      <div><dt>Payment Method</dt><dd>{selectedBooking.paymentMethod ?? '—'}</dd></div>
+                      <div><dt>Email</dt><dd>{selectedBooking.bookingEmail ?? selectedBooking.customerEmail ?? '—'}</dd></div>
+                      <div><dt>Payment Screenshot URL</dt><dd>{selectedBooking.paymentScreenshotUrl ?? '—'}</dd></div>
+                      <div><dt>Notes / Special requests</dt><dd>{selectedBooking.notes ?? '—'}</dd></div>
+                      <div><dt>Payment screenshot ready</dt><dd>{selectedBooking.paymentScreenshotReady === null ? '—' : selectedBooking.paymentScreenshotReady ? 'Yes' : 'No'}</dd></div>
+                      <div><dt>No-refund policy accepted</dt><dd>{selectedBooking.noRefundAccepted === null ? '—' : selectedBooking.noRefundAccepted ? 'Yes' : 'No'}</dd></div>
+                    </dl>
+                  ) : (
+                    <p className="form__hint">Click a booking row to view full details.</p>
+                  )}
+                  <p className="form__hint">Note: Payments are non-refundable after confirmation.</p>
+                </section>
                 <div className="bookings-page__pagination">
                   <button className="btn btn-secondary" type="button" disabled={pageNumber <= 1} onClick={handlePreviousPage}>
                     Previous
