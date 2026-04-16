@@ -53,3 +53,66 @@ export interface IntegrationPromoResponse {
   storeId: string
   promo: IntegrationPromo
 }
+
+export interface IntegrationAvailabilitySlot {
+  id: string
+  storeId: string
+  serviceId: string
+  startAt: string
+  endAt: string
+  timezone: string | null
+  capacity: number | null
+  seatsBooked: number
+  seatsRemaining: number | null
+  status: 'open' | 'closed' | 'cancelled'
+  attributes: Record<string, unknown>
+  updatedAt: string | null
+}
+
+export interface IntegrationAvailabilityResponse {
+  storeId: string
+  serviceId: string | null
+  from: string | null
+  to: string | null
+  slots: IntegrationAvailabilitySlot[]
+}
+
+export interface IntegrationBooking {
+  id: string
+  storeId: string
+  serviceId: string
+  slotId: string | null
+  status: 'pending' | 'confirmed' | 'cancelled' | 'checked_in'
+  customer: {
+    name: string | null
+    phone: string | null
+    email: string | null
+  }
+  quantity: number
+  notes: string | null
+  attributes: Record<string, unknown>
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export interface IntegrationBookingsResponse {
+  storeId: string
+  bookings: IntegrationBooking[]
+}
+
+export interface CreateIntegrationBookingRequest {
+  serviceId: string
+  slotId?: string | null
+  customer: {
+    name?: string | null
+    phone?: string | null
+    email?: string | null
+  }
+  quantity?: number
+  notes?: string | null
+  attributes?: Record<string, unknown>
+}
+
+export interface CreateIntegrationBookingResponse {
+  booking: IntegrationBooking | null
+}

@@ -128,6 +128,55 @@ Query parameters:
 }
 ```
 
+### `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>` (authenticated)
+
+- Returns session/class slots for service-type offerings.
+- `serviceId`, `from`, and `to` are optional filters.
+- `attributes` is a flexible object for industry-specific fields (for example: school grade level or travel pickup point).
+
+```json
+{
+  "storeId": "store_123",
+  "serviceId": "service_abc",
+  "from": "2026-04-20T00:00:00.000Z",
+  "to": "2026-04-30T23:59:59.000Z",
+  "slots": [
+    {
+      "id": "slot_1",
+      "storeId": "store_123",
+      "serviceId": "service_abc",
+      "startAt": "2026-04-22T10:00:00.000Z",
+      "endAt": "2026-04-22T11:00:00.000Z",
+      "timezone": "Africa/Accra",
+      "capacity": 20,
+      "seatsBooked": 8,
+      "seatsRemaining": 12,
+      "status": "open",
+      "attributes": {
+        "level": "Beginner"
+      },
+      "updatedAt": "2026-04-13T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `GET /v1IntegrationBookings?storeId=<storeId>&status=<status>&serviceId=<serviceId>` (authenticated)
+
+- Lists website-originated bookings/registrations.
+- `status` and `serviceId` filters are optional.
+
+### `POST /v1IntegrationBookings?storeId=<storeId>` (authenticated)
+
+- Creates a booking/registration from a website form submission.
+- Request body supports:
+  - `serviceId` (required)
+  - `slotId` (optional; when supplied, capacity is validated)
+  - `customer` (`name` / `phone` / `email`, at least one required)
+  - `quantity` (optional, defaults to `1`)
+  - `notes` (optional)
+  - `attributes` (optional flexible object for vertical-specific fields)
+
 ## 4) Deduplication and caching
 
 - Deduplicate by product `id` (and optionally `updatedAt` when merging data sources).
