@@ -2806,7 +2806,7 @@ function setIntegrationResponseHeaders(res: functions.Response<any>) {
   const contractVersion = INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13'
   const requestId = crypto.randomUUID()
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Authorization,Content-Type,X-API-Key,X-Sedifex-Contract-Version',
@@ -3301,12 +3301,139 @@ function normalizeTimestampIso(value: unknown): string | null {
   return null
 }
 
+function toIsoStringOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const millis = Date.parse(trimmed)
+  if (Number.isNaN(millis)) return null
+  return new Date(millis).toISOString()
+}
+
+function toFiniteNumber(value: unknown, fallback: number = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function toPlainObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  return value as Record<string, unknown>
+}
+
+type IntegrationAvailabilitySlot = {
+  id: string
+  storeId: string
+  serviceId: string
+  startAt: string
+  endAt: string
+  timezone: string | null
+  capacity: number | null
+  seatsBooked: number
+  seatsRemaining: number | null
+  status: 'open' | 'closed' | 'cancelled'
+  attributes: Record<string, unknown>
+  updatedAt: string | null
+}
+
+function mapAvailabilitySlotDoc(
+  docSnap: admin.firestore.QueryDocumentSnapshot,
+): IntegrationAvailabilitySlot | null {
+  const data = docSnap.data() as Record<string, unknown>
+  const storeId = toTrimmedStringOrNull(data.storeId)
+  const serviceId = toTrimmedStringOrNull(data.serviceId)
+  const startAt = normalizeTimestampIso(data.startAt)
+  const endAt = normalizeTimestampIso(data.endAt)
+  if (!storeId || !serviceId || !startAt || !endAt) {
+    return null
+  }
+  const capacityRaw = toFiniteNumberOrNull(data.capacity)
+  const capacity = capacityRaw !== null && capacityRaw >= 0 ? Math.floor(capacityRaw) : null
+  const seatsBookedRaw = toFiniteNumber(data.seatsBooked, 0)
+  const seatsBooked = Math.max(0, Math.floor(seatsBookedRaw))
+  const seatsRemaining = capacity === null ? null : Math.max(0, capacity - seatsBooked)
+  const statusRaw = toTrimmedStringOrNull(data.status)?.toLowerCase()
+  const status =
+    statusRaw === 'closed' || statusRaw === 'cancelled'
+      ? (statusRaw as 'closed' | 'cancelled')
+      : 'open'
+  return {
+    id: docSnap.id,
+    storeId,
+    serviceId,
+    startAt,
+    endAt,
+    timezone: toTrimmedStringOrNull(data.timezone),
+    capacity,
+    seatsBooked,
+    seatsRemaining,
+    status,
+    attributes: toPlainObject(data.attributes),
+    updatedAt: normalizeTimestampIso(data.updatedAt),
+  }
+}
+
+type IntegrationBookingRecord = {
+  id: string
+  storeId: string
+  serviceId: string
+  slotId: string | null
+  status: 'pending' | 'confirmed' | 'cancelled' | 'checked_in'
+  customer: {
+    name: string | null
+    phone: string | null
+    email: string | null
+  }
+  quantity: number
+  notes: string | null
+  attributes: Record<string, unknown>
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+function mapIntegrationBookingDoc(
+  docSnap: admin.firestore.DocumentSnapshot,
+): IntegrationBookingRecord | null {
+  const data = (docSnap.data() ?? {}) as Record<string, unknown>
+  const storeId = toTrimmedStringOrNull(data.storeId)
+  const serviceId = toTrimmedStringOrNull(data.serviceId)
+  if (!storeId || !serviceId) {
+    return null
+  }
+  const statusRaw = toTrimmedStringOrNull(data.status)?.toLowerCase()
+  const status =
+    statusRaw === 'pending' || statusRaw === 'cancelled' || statusRaw === 'checked_in'
+      ? (statusRaw as 'pending' | 'cancelled' | 'checked_in')
+      : 'confirmed'
+
+  const customer = toPlainObject(data.customer)
+  const quantityRaw = toFiniteNumber(data.quantity, 1)
+  return {
+    id: docSnap.id,
+    storeId,
+    serviceId,
+    slotId: toTrimmedStringOrNull(data.slotId),
+    status,
+    customer: {
+      name: toTrimmedStringOrNull(customer.name),
+      phone: toTrimmedStringOrNull(customer.phone),
+      email: toTrimmedStringOrNull(customer.email),
+    },
+    quantity: Math.max(1, Math.floor(quantityRaw)),
+    notes: toTrimmedStringOrNull(data.notes),
+    attributes: toPlainObject(data.attributes),
+    createdAt: normalizeTimestampIso(data.createdAt),
+    updatedAt: normalizeTimestampIso(data.updatedAt),
+  }
+}
+
 async function validateIntegrationTokenOrReply(
   req: functions.https.Request,
   res: functions.Response<any>,
-  options?: { requireStoreId?: boolean },
+  options?: { requireStoreId?: boolean; allowedMethods?: string[] },
 ): Promise<{ storeId: string | null; isMasterKey: boolean } | null> {
-  if (req.method !== 'GET') {
+  const allowedMethods = options?.allowedMethods ?? ['GET']
+  if (!allowedMethods.includes(req.method ?? '')) {
     res.status(405).json({ error: 'method-not-allowed' })
     return null
   }
@@ -3865,6 +3992,266 @@ export const v1IntegrationPromo = functions.https.onRequest(async (req, res) => 
         toTrimmedStringOrNull(data.displayName) ?? toTrimmedStringOrNull(data.name) ?? 'Sedifex Store',
       updatedAt: normalizeTimestampIso(data.updatedAt),
     },
+  })
+})
+
+export const v1IntegrationAvailability = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) {
+    return
+  }
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  const authContext = await validateIntegrationTokenOrReply(req, res)
+  if (!authContext) {
+    return
+  }
+  if (!authContext.storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
+
+  const serviceIdFilter = toTrimmedStringOrNull(req.query.serviceId)
+  const fromFilter = toIsoStringOrNull(req.query.from)
+  const toFilter = toIsoStringOrNull(req.query.to)
+
+  let slotsSnapshot: admin.firestore.QuerySnapshot
+  try {
+    slotsSnapshot = await db
+      .collection('stores')
+      .doc(authContext.storeId)
+      .collection('serviceAvailability')
+      .orderBy('startAt', 'asc')
+      .limit(500)
+      .get()
+  } catch (error) {
+    const code = (error as { code?: number | string } | null)?.code
+    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+    if (!isMissingIndex) {
+      throw error
+    }
+    slotsSnapshot = await db
+      .collection('stores')
+      .doc(authContext.storeId)
+      .collection('serviceAvailability')
+      .limit(500)
+      .get()
+  }
+
+  const slots = slotsSnapshot.docs
+    .map(mapAvailabilitySlotDoc)
+    .filter((slot): slot is IntegrationAvailabilitySlot => slot !== null)
+    .filter(slot => {
+      if (serviceIdFilter && slot.serviceId !== serviceIdFilter) {
+        return false
+      }
+      if (fromFilter && slot.endAt < fromFilter) {
+        return false
+      }
+      if (toFilter && slot.startAt > toFilter) {
+        return false
+      }
+      return true
+    })
+    .sort((a, b) => (a.startAt > b.startAt ? 1 : a.startAt < b.startAt ? -1 : 0))
+
+  res.status(200).json({
+    storeId: authContext.storeId,
+    serviceId: serviceIdFilter,
+    from: fromFilter,
+    to: toFilter,
+    slots,
+  })
+})
+
+export const v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) {
+    return
+  }
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method === 'GET') {
+    const authContext = await validateIntegrationTokenOrReply(req, res)
+    if (!authContext) {
+      return
+    }
+    if (!authContext.storeId) {
+      res.status(400).json({ error: 'missing-store-id' })
+      return
+    }
+
+    const limitRaw = Number(req.query.limit ?? 50)
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 50, 1), 200)
+
+    let bookingsSnapshot: admin.firestore.QuerySnapshot
+    try {
+      bookingsSnapshot = await db
+        .collection('stores')
+        .doc(authContext.storeId)
+        .collection('integrationBookings')
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get()
+    } catch (error) {
+      const code = (error as { code?: number | string } | null)?.code
+      const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+      if (!isMissingIndex) {
+        throw error
+      }
+      bookingsSnapshot = await db
+        .collection('stores')
+        .doc(authContext.storeId)
+        .collection('integrationBookings')
+        .limit(limit)
+        .get()
+    }
+
+    const statusFilter = toTrimmedStringOrNull(req.query.status)?.toLowerCase() ?? null
+    const serviceIdFilter = toTrimmedStringOrNull(req.query.serviceId)
+    const bookings = bookingsSnapshot.docs
+      .map(mapIntegrationBookingDoc)
+      .filter((booking): booking is IntegrationBookingRecord => booking !== null)
+      .filter(booking => {
+        if (statusFilter && booking.status !== statusFilter) return false
+        if (serviceIdFilter && booking.serviceId !== serviceIdFilter) return false
+        return true
+      })
+
+    res.status(200).json({
+      storeId: authContext.storeId,
+      bookings,
+    })
+    return
+  }
+
+  const authContext = await validateIntegrationTokenOrReply(req, res, {
+    allowedMethods: ['POST'],
+  })
+  if (!authContext) {
+    return
+  }
+  if (!authContext.storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
+
+  const payload = toPlainObject(req.body)
+  const serviceId = toTrimmedStringOrNull(payload.serviceId)
+  if (!serviceId) {
+    res.status(400).json({ error: 'missing-service-id' })
+    return
+  }
+
+  const slotId = toTrimmedStringOrNull(payload.slotId)
+  const quantityRaw = toFiniteNumber(payload.quantity, 1)
+  const quantity = Math.max(1, Math.floor(quantityRaw))
+  const customer = toPlainObject(payload.customer)
+  const customerName = toTrimmedStringOrNull(customer.name)
+  const customerPhone = toTrimmedStringOrNull(customer.phone)
+  const customerEmail = toTrimmedStringOrNull(customer.email)
+  if (!customerName && !customerPhone && !customerEmail) {
+    res.status(400).json({ error: 'missing-customer-identity' })
+    return
+  }
+
+  const bookingRef = db
+    .collection('stores')
+    .doc(authContext.storeId)
+    .collection('integrationBookings')
+    .doc()
+  const now = admin.firestore.FieldValue.serverTimestamp()
+  const bookingData = {
+    storeId: authContext.storeId,
+    serviceId,
+    slotId: slotId ?? null,
+    status: 'confirmed',
+    customer: {
+      name: customerName,
+      phone: customerPhone,
+      email: customerEmail,
+    },
+    quantity,
+    notes: toTrimmedStringOrNull(payload.notes),
+    attributes: toPlainObject(payload.attributes),
+    source: 'website',
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  if (!slotId) {
+    await bookingRef.set(bookingData)
+    const bookingSnap = await bookingRef.get()
+    const booking = mapIntegrationBookingDoc(bookingSnap)
+    res.status(201).json({
+      booking,
+    })
+    return
+  }
+
+  const slotRef = db
+    .collection('stores')
+    .doc(authContext.storeId)
+    .collection('serviceAvailability')
+    .doc(slotId)
+
+  try {
+    await db.runTransaction(async transaction => {
+      const slotSnap = await transaction.get(slotRef)
+      if (!slotSnap.exists) {
+        throw new Error('slot-not-found')
+      }
+      const slotData = (slotSnap.data() ?? {}) as Record<string, unknown>
+      const slotServiceId = toTrimmedStringOrNull(slotData.serviceId)
+      if (!slotServiceId || slotServiceId !== serviceId) {
+        throw new Error('slot-service-mismatch')
+      }
+      const status = toTrimmedStringOrNull(slotData.status)?.toLowerCase()
+      if (status === 'closed' || status === 'cancelled') {
+        throw new Error('slot-unavailable')
+      }
+
+      const capacityRaw = toFiniteNumberOrNull(slotData.capacity)
+      const capacity = capacityRaw !== null && capacityRaw >= 0 ? Math.floor(capacityRaw) : null
+      const existingSeatsBooked = Math.max(0, Math.floor(toFiniteNumber(slotData.seatsBooked, 0)))
+      if (capacity !== null && existingSeatsBooked + quantity > capacity) {
+        throw new Error('slot-capacity-exceeded')
+      }
+
+      transaction.set(bookingRef, bookingData)
+      transaction.set(
+        slotRef,
+        {
+          seatsBooked: existingSeatsBooked + quantity,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (
+      message === 'slot-not-found' ||
+      message === 'slot-service-mismatch' ||
+      message === 'slot-unavailable' ||
+      message === 'slot-capacity-exceeded'
+    ) {
+      res.status(409).json({ error: message })
+      return
+    }
+    throw error
+  }
+
+  const bookingSnap = await bookingRef.get()
+  const booking = mapIntegrationBookingDoc(bookingSnap)
+  res.status(201).json({
+    booking,
   })
 })
 

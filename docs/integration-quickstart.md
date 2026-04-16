@@ -217,6 +217,15 @@ Base URL:
 - `GET /integrationCustomers?storeId=<storeId>`
 - `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
 - `GET /integrationTikTokVideos?storeId=<storeId>`
+- `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>`
+- `GET /v1IntegrationBookings?storeId=<storeId>`
+- `POST /v1IntegrationBookings?storeId=<storeId>`
+
+Booking/registration note:
+
+- Build booking forms on each website using store-defined fields.
+- Put vertical-specific data (e.g., school/travel extras) inside `attributes` in the booking payload.
+- Keep API keys server-side; submit booking requests from your website backend only.
 
 ### Common 404 fix (important)
 
