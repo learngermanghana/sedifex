@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
+  addDoc,
   collection,
   type DocumentData,
   getDocs,
@@ -7,6 +8,7 @@ import {
   orderBy,
   query,
   type QueryDocumentSnapshot,
+  serverTimestamp,
   where,
 } from 'firebase/firestore'
 import { useToast } from '../components/ToastProvider'
@@ -109,6 +111,11 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
   const [inviteRole, setInviteRole] = useState<Membership['role']>('staff')
   const [invitePassword, setInvitePassword] = useState('')
   const [inviting, setInviting] = useState(false)
+  const [assignmentUid, setAssignmentUid] = useState('')
+  const [assignmentEmail, setAssignmentEmail] = useState('')
+  const [assignmentStoreId, setAssignmentStoreId] = useState('')
+  const [assignmentRole, setAssignmentRole] = useState<Membership['role']>('staff')
+  const [assigning, setAssigning] = useState(false)
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -225,6 +232,51 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
       publish({ message, tone: 'error' })
     } finally {
       setInviting(false)
+    }
+  }
+
+  async function handleAssignmentSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!isOwner || assigning) {
+      return
+    }
+
+    const uid = assignmentUid.trim()
+    const email = assignmentEmail.trim().toLowerCase()
+    const targetStoreId = assignmentStoreId.trim()
+
+    if (!uid || !email || !targetStoreId) {
+      const message = 'UID, email, and branch store ID are required.'
+      setError(message)
+      publish({ message, tone: 'error' })
+      return
+    }
+
+    setAssigning(true)
+    setError(null)
+    try {
+      await addDoc(collection(db, 'teamMembers'), {
+        uid,
+        email,
+        storeId: targetStoreId,
+        role: assignmentRole,
+        status: 'active',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      publish({ message: 'Branch access saved.', tone: 'success' })
+      setAssignmentUid('')
+      setAssignmentEmail('')
+      setAssignmentStoreId('')
+      setAssignmentRole('staff')
+      setRefreshToken(token => token + 1)
+    } catch (err) {
+      console.warn('[staff] Failed to save branch access assignment', err)
+      const message = err instanceof Error ? err.message : 'Could not save branch access.'
+      setError(message)
+      publish({ message, tone: 'error' })
+    } finally {
+      setAssigning(false)
     }
   }
 
@@ -394,6 +446,76 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
             Only workspace owners can save staff members.
           </p>
         )}
+      </section>
+
+      <section className="card staff-card" aria-labelledby="branch-assignment">
+        <div className="staff-card__header">
+          <div>
+            <p className="staff-card__eyebrow">Multi-branch access</p>
+            <h2 id="branch-assignment">Assign existing user to a branch</h2>
+            <p className="staff-card__hint">
+              Creates a team member row in Firestore so one user can access multiple branch store IDs.
+            </p>
+          </div>
+        </div>
+
+        <form className="staff-card__form" onSubmit={handleAssignmentSave}>
+          <label>
+            <span>User UID</span>
+            <input
+              type="text"
+              required
+              value={assignmentUid}
+              onChange={event => setAssignmentUid(event.target.value)}
+              placeholder="Firebase Auth UID"
+              disabled={!isOwner || assigning}
+            />
+          </label>
+
+          <label>
+            <span>Email</span>
+            <input
+              type="email"
+              required
+              value={assignmentEmail}
+              onChange={event => setAssignmentEmail(event.target.value)}
+              placeholder="user@example.com"
+              disabled={!isOwner || assigning}
+            />
+          </label>
+
+          <label>
+            <span>Branch Store ID</span>
+            <input
+              type="text"
+              required
+              value={assignmentStoreId}
+              onChange={event => setAssignmentStoreId(event.target.value)}
+              placeholder="store-branch-001"
+              disabled={!isOwner || assigning}
+            />
+          </label>
+
+          <label>
+            <span>Role</span>
+            <select
+              value={assignmentRole}
+              onChange={event => setAssignmentRole(event.target.value as Membership['role'])}
+              disabled={!isOwner || assigning}
+            >
+              <option value="owner">Owner</option>
+              <option value="staff">Staff</option>
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            className="button button--primary"
+            disabled={!isOwner || assigning}
+          >
+            {assigning ? 'Saving…' : 'Save branch access'}
+          </button>
+        </form>
       </section>
 
       <section className="card staff-card" aria-labelledby="staff-list">
