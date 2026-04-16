@@ -170,12 +170,19 @@ Query parameters:
 
 - Creates a booking/registration from a website form submission.
 - Request body supports:
-  - `serviceId` (required)
+  - `serviceId` (recommended; if omitted, Sedifex tries to resolve from `slotId` or `BOOKING_DEFAULT_SERVICE_ID`)
   - `slotId` (optional; when supplied, capacity is validated)
   - `customer` (`name` / `phone` / `email`, at least one required)
   - `quantity` (optional, defaults to `1`)
   - `notes` (optional)
   - `attributes` (optional flexible object for vertical-specific fields)
+- Service resolution order:
+  1. Explicit `serviceId` from request payload
+  2. `serviceId` inferred from the selected `slotId`
+  3. Firebase param `BOOKING_DEFAULT_SERVICE_ID`
+- If service cannot be resolved, API returns:
+  - `400` with `error: "service-not-resolved"`
+  - message: `"Service could not be resolved. Configure BOOKING_DEFAULT_SERVICE_ID or provide serviceId."`
 - Customer auto-mapping:
   - When `customer.phone` or `customer.email` is provided, Sedifex automatically upserts the contact into the store `customers` collection.
   - Existing customer records are matched by `storeId + phone` first, then `storeId + email`.
