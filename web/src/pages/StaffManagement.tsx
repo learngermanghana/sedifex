@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
   collection,
+  deleteDoc,
   type DocumentData,
+  doc,
   getDocs,
   limit,
   orderBy,
@@ -15,6 +17,7 @@ import { useToast } from '../components/ToastProvider'
 import { manageStaffAccount, type StaffRole } from '../controllers/storeController'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useAuthUser } from '../hooks/useAuthUser'
 import { useMemberships, type Membership } from '../hooks/useMemberships'
 import './StaffManagement.css'
 
@@ -26,6 +29,7 @@ type StaffMember = {
   role: StaffRole
   invitedBy: string | null
   status: string | null
+  firstSignupEmail: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -56,6 +60,7 @@ function mapMember(docSnap: QueryDocumentSnapshot<DocumentData>): StaffMember {
     role,
     invitedBy: toNullableString(data.invitedBy),
     status: toNullableString(data.status),
+    firstSignupEmail: toNullableString(data.firstSignupEmail),
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : null,
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : null,
   }
@@ -89,6 +94,10 @@ function formatDate(value: Date | null) {
   }
 }
 
+function normalizeEmail(value: string | null | undefined) {
+  return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : null
+}
+
 type HeadingLevel = 'h1' | 'h2' | 'h3' | 'h4'
 
 type StaffManagementProps = {
@@ -97,6 +106,7 @@ type StaffManagementProps = {
 
 export default function StaffManagement({ headingLevel = 'h1' }: StaffManagementProps) {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
+  const user = useAuthUser()
   const { memberships } = useMemberships()
   const { publish } = useToast()
 
@@ -108,14 +118,10 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
   const [auditLoading, setAuditLoading] = useState(false)
 
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteStoreId, setInviteStoreId] = useState('')
   const [inviteRole, setInviteRole] = useState<Membership['role']>('staff')
   const [invitePassword, setInvitePassword] = useState('')
   const [inviting, setInviting] = useState(false)
-  const [assignmentUid, setAssignmentUid] = useState('')
-  const [assignmentEmail, setAssignmentEmail] = useState('')
-  const [assignmentStoreId, setAssignmentStoreId] = useState('')
-  const [assignmentRole, setAssignmentRole] = useState<Membership['role']>('staff')
-  const [assigning, setAssigning] = useState(false)
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -123,6 +129,41 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
   }, [memberships, storeId])
 
   const isOwner = activeMembership?.role === 'owner'
+  const masterOwnerEmail = useMemo(() => {
+    const ownerMembers = members.filter(member => member.role === 'owner')
+    if (ownerMembers.length === 0) return null
+
+    const explicitMasterEmail = ownerMembers
+      .map(member => normalizeEmail(member.firstSignupEmail))
+      .find(Boolean)
+    if (explicitMasterEmail) return explicitMasterEmail
+
+    const earliestOwner = ownerMembers.reduce<StaffMember | null>((currentEarliest, candidate) => {
+      if (!currentEarliest) return candidate
+      const currentTime = currentEarliest.createdAt?.getTime() ?? Number.POSITIVE_INFINITY
+      const candidateTime = candidate.createdAt?.getTime() ?? Number.POSITIVE_INFINITY
+      return candidateTime < currentTime ? candidate : currentEarliest
+    }, null)
+
+    return normalizeEmail(earliestOwner?.email)
+  }, [members])
+  const isMasterOwner =
+    isOwner && normalizeEmail(user?.email) !== null && normalizeEmail(user?.email) === masterOwnerEmail
+
+  function canDeleteMember(member: StaffMember) {
+    if (!isOwner) return false
+    const memberEmail = normalizeEmail(member.email)
+    if (member.role === 'owner') {
+      if (!isMasterOwner) return false
+      if (memberEmail && memberEmail === masterOwnerEmail) return false
+    }
+    return true
+  }
+
+  useEffect(() => {
+    if (!storeId) return
+    setInviteStoreId(storeId)
+  }, [storeId])
 
   useEffect(() => {
     if (!storeId) {
@@ -204,9 +245,16 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
     }
 
     const normalizedEmail = inviteEmail.trim().toLowerCase()
+    const targetStoreId = inviteStoreId.trim() || storeId
     if (!normalizedEmail) {
       setError('Enter an email to save a staff member.')
       publish({ message: 'Enter an email to save a staff member.', tone: 'error' })
+      return
+    }
+    if (!targetStoreId) {
+      const message = 'Enter a Store ID to save this team member.'
+      setError(message)
+      publish({ message, tone: 'error' })
       return
     }
 
@@ -214,13 +262,19 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
     setError(null)
     try {
       await manageStaffAccount({
-        storeId,
+        storeId: targetStoreId,
         email: normalizedEmail,
         role: inviteRole,
         action: 'invite',
         password: invitePassword.trim() || undefined,
       })
-      publish({ message: 'Staff member saved.', tone: 'success' })
+      publish({
+        message:
+          targetStoreId === storeId
+            ? 'Staff member saved.'
+            : `Access saved for Store ID ${targetStoreId}. Switch to that workspace to view the roster.`,
+        tone: 'success',
+      })
       setInviteEmail('')
       setInvitePassword('')
       setInviteRole('staff')
@@ -232,51 +286,6 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
       publish({ message, tone: 'error' })
     } finally {
       setInviting(false)
-    }
-  }
-
-  async function handleAssignmentSave(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!isOwner || assigning) {
-      return
-    }
-
-    const uid = assignmentUid.trim()
-    const email = assignmentEmail.trim().toLowerCase()
-    const targetStoreId = assignmentStoreId.trim()
-
-    if (!uid || !email || !targetStoreId) {
-      const message = 'UID, email, and branch store ID are required.'
-      setError(message)
-      publish({ message, tone: 'error' })
-      return
-    }
-
-    setAssigning(true)
-    setError(null)
-    try {
-      await addDoc(collection(db, 'teamMembers'), {
-        uid,
-        email,
-        storeId: targetStoreId,
-        role: assignmentRole,
-        status: 'active',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
-      publish({ message: 'Branch access saved.', tone: 'success' })
-      setAssignmentUid('')
-      setAssignmentEmail('')
-      setAssignmentStoreId('')
-      setAssignmentRole('staff')
-      setRefreshToken(token => token + 1)
-    } catch (err) {
-      console.warn('[staff] Failed to save branch access assignment', err)
-      const message = err instanceof Error ? err.message : 'Could not save branch access.'
-      setError(message)
-      publish({ message, tone: 'error' })
-    } finally {
-      setAssigning(false)
     }
   }
 
@@ -349,6 +358,76 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
     }
   }
 
+  async function handleReactivate(member: StaffMember) {
+    if (!member.email || !member.storeId) {
+      publish({ message: 'Missing email or Store ID for this member.', tone: 'error' })
+      return
+    }
+    if (!isOwner) {
+      publish({ message: 'Only owners can reactivate staff.', tone: 'error' })
+      return
+    }
+
+    try {
+      await manageStaffAccount({
+        storeId: member.storeId,
+        email: member.email,
+        role: member.role,
+        action: 'invite',
+      })
+      publish({ message: 'Staff member reactivated.', tone: 'success' })
+      setRefreshToken(token => token + 1)
+    } catch (err) {
+      console.warn('[staff] Failed to reactivate member', err)
+      const message = err instanceof Error ? err.message : 'Unable to reactivate this member.'
+      publish({ message, tone: 'error' })
+    }
+  }
+
+  async function handleDelete(member: StaffMember) {
+    if (!isOwner) {
+      publish({ message: 'Only owners can delete staff access.', tone: 'error' })
+      return
+    }
+    if (!canDeleteMember(member)) {
+      publish({
+        message:
+          member.role === 'owner'
+            ? 'Only the master owner can delete other owner memberships.'
+            : 'You cannot delete this member.',
+        tone: 'error',
+      })
+      return
+    }
+    const memberEmail = normalizeEmail(member.email)
+    if (memberEmail && memberEmail === normalizeEmail(user?.email)) {
+      publish({ message: 'You cannot delete your own membership from this screen.', tone: 'error' })
+      return
+    }
+
+    const confirmed = window.confirm(`Delete ${member.email ?? member.id} from this workspace?`)
+    if (!confirmed) return
+
+    try {
+      await deleteDoc(doc(db, 'teamMembers', member.id))
+      await addDoc(collection(db, 'staffAudit'), {
+        storeId: member.storeId ?? storeId,
+        action: 'deactivate',
+        outcome: 'success',
+        actorEmail: activeMembership?.email ?? null,
+        targetEmail: member.email ?? member.id,
+        createdAt: serverTimestamp(),
+        deleted: true,
+      })
+      publish({ message: 'Staff access deleted.', tone: 'success' })
+      setRefreshToken(token => token + 1)
+    } catch (err) {
+      console.warn('[staff] Failed to delete member', err)
+      const message = err instanceof Error ? err.message : 'Unable to delete this member.'
+      publish({ message, tone: 'error' })
+    }
+  }
+
   if (storeError) {
     return <div role="alert">{storeError}</div>
   }
@@ -408,6 +487,19 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
           </label>
 
           <label>
+            <span>Store ID</span>
+            <input
+              type="text"
+              required
+              value={inviteStoreId}
+              onChange={event => setInviteStoreId(event.target.value)}
+              placeholder="store-branch-001"
+              autoComplete="off"
+              disabled={!isOwner || inviting}
+            />
+          </label>
+
+          <label>
             <span>Role</span>
             <select
               value={inviteRole}
@@ -446,76 +538,6 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
             Only workspace owners can save staff members.
           </p>
         )}
-      </section>
-
-      <section className="card staff-card" aria-labelledby="branch-assignment">
-        <div className="staff-card__header">
-          <div>
-            <p className="staff-card__eyebrow">Multi-branch access</p>
-            <h2 id="branch-assignment">Assign existing user to a branch</h2>
-            <p className="staff-card__hint">
-              Creates a team member row in Firestore so one user can access multiple branch store IDs.
-            </p>
-          </div>
-        </div>
-
-        <form className="staff-card__form" onSubmit={handleAssignmentSave}>
-          <label>
-            <span>User UID</span>
-            <input
-              type="text"
-              required
-              value={assignmentUid}
-              onChange={event => setAssignmentUid(event.target.value)}
-              placeholder="Firebase Auth UID"
-              disabled={!isOwner || assigning}
-            />
-          </label>
-
-          <label>
-            <span>Email</span>
-            <input
-              type="email"
-              required
-              value={assignmentEmail}
-              onChange={event => setAssignmentEmail(event.target.value)}
-              placeholder="user@example.com"
-              disabled={!isOwner || assigning}
-            />
-          </label>
-
-          <label>
-            <span>Branch Store ID</span>
-            <input
-              type="text"
-              required
-              value={assignmentStoreId}
-              onChange={event => setAssignmentStoreId(event.target.value)}
-              placeholder="store-branch-001"
-              disabled={!isOwner || assigning}
-            />
-          </label>
-
-          <label>
-            <span>Role</span>
-            <select
-              value={assignmentRole}
-              onChange={event => setAssignmentRole(event.target.value as Membership['role'])}
-              disabled={!isOwner || assigning}
-            >
-              <option value="owner">Owner</option>
-              <option value="staff">Staff</option>
-            </select>
-          </label>
-
-          <button
-            type="submit"
-            className="button button--primary"
-            disabled={!isOwner || assigning}
-          >
-            {assigning ? 'Saving…' : 'Save branch access'}
-          </button>
-        </form>
       </section>
 
       <section className="card staff-card" aria-labelledby="staff-list">
@@ -589,7 +611,23 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
                     onClick={() => handleDeactivate(member)}
                     disabled={!isOwner}
                   >
-                    Deactivate staff
+                    Deactivate
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--ghost button--small"
+                    onClick={() => handleReactivate(member)}
+                    disabled={!isOwner || member.status === 'active'}
+                  >
+                    Reactivate
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--danger button--small"
+                    onClick={() => handleDelete(member)}
+                    disabled={!canDeleteMember(member)}
+                  >
+                    Delete
                   </button>
                 </span>
               </div>
