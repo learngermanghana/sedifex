@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMemberships } from './useMemberships'
 import { useAuthUser } from './useAuthUser'
-import { persistActiveStoreIdForUser, readActiveStoreId } from '../utils/activeStoreStorage'
+import {
+  ACTIVE_STORE_UPDATED_EVENT,
+  persistActiveStoreIdForUser,
+  readActiveStoreId,
+} from '../utils/activeStoreStorage'
 
 interface ActiveStoreState {
   storeId: string | null
@@ -27,6 +31,46 @@ export function useActiveStore(): ActiveStoreState {
 
   useEffect(() => {
     setSelectedStoreId(readActiveStoreId(user?.uid))
+  }, [user?.uid])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user?.uid) {
+      return
+    }
+
+    const syncFromStorage = () => {
+      const persistedStoreId = readActiveStoreId(user.uid)
+      setSelectedStoreId(previous => (previous === persistedStoreId ? previous : persistedStoreId))
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea !== window.localStorage) {
+        return
+      }
+
+      if (event.key && !event.key.endsWith(user.uid)) {
+        return
+      }
+
+      syncFromStorage()
+    }
+
+    const handleActiveStoreUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ uid?: string; storeId?: string }>).detail
+      if (detail?.uid !== user.uid) {
+        return
+      }
+
+      syncFromStorage()
+    }
+
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener(ACTIVE_STORE_UPDATED_EVENT, handleActiveStoreUpdated)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener(ACTIVE_STORE_UPDATED_EVENT, handleActiveStoreUpdated)
+    }
   }, [user?.uid])
 
   useEffect(() => {

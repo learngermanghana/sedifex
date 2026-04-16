@@ -188,4 +188,32 @@ describe('useActiveStore', () => {
 
     expect(window.localStorage.getItem(storageKey)).toBe('store-b')
   })
+
+  it('syncs store selection across multiple hook instances', async () => {
+    mockUseMemberships.mockImplementation(storeId =>
+      storeId === undefined
+        ? { memberships: [], loading: true, error: null }
+        : {
+            memberships: [createMembership('store-a'), createMembership('store-b')],
+            loading: false,
+            error: null,
+          },
+    )
+
+    const first = renderHook(() => useActiveStore())
+    const second = renderHook(() => useActiveStore())
+
+    await waitFor(() => {
+      expect(first.result.current.isLoading).toBe(false)
+      expect(second.result.current.isLoading).toBe(false)
+    })
+
+    act(() => {
+      first.result.current.setActiveStoreId('store-b')
+    })
+
+    await waitFor(() => {
+      expect(second.result.current.storeId).toBe('store-b')
+    })
+  })
 })

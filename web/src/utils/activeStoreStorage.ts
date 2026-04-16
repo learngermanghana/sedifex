@@ -1,5 +1,11 @@
 const ACTIVE_STORE_STORAGE_PREFIX = 'activeStoreId:'
 const LEGACY_ACTIVE_STORE_STORAGE_KEY = 'activeStoreId'
+export const ACTIVE_STORE_UPDATED_EVENT = 'sedifex:active-store-updated'
+
+type ActiveStoreUpdatedDetail = {
+  uid: string
+  storeId: string
+}
 
 function hasWindow(): boolean {
   return typeof window !== 'undefined'
@@ -23,6 +29,18 @@ function normalizeStoreId(storeId: string | null | undefined): string | null {
 
 export function getActiveStoreStorageKey(uid: string): string {
   return `${ACTIVE_STORE_STORAGE_PREFIX}${uid}`
+}
+
+function dispatchActiveStoreUpdated(detail: ActiveStoreUpdatedDetail) {
+  if (!hasWindow()) {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<ActiveStoreUpdatedDetail>(ACTIVE_STORE_UPDATED_EVENT, {
+      detail,
+    }),
+  )
 }
 
 export function readActiveStoreId(uid: string | null | undefined): string | null {
@@ -49,6 +67,7 @@ export function persistActiveStoreIdForUser(uid: string | null | undefined, stor
   try {
     window.localStorage.setItem(getActiveStoreStorageKey(normalizedUid), normalizedStoreId)
     window.localStorage.removeItem(LEGACY_ACTIVE_STORE_STORAGE_KEY)
+    dispatchActiveStoreUpdated({ uid: normalizedUid, storeId: normalizedStoreId })
   } catch {
     /* noop */
   }
