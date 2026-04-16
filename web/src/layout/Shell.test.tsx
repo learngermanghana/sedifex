@@ -12,6 +12,7 @@ const mockUseStoreBilling = vi.fn()
 const mockUseActiveStore = vi.fn()
 const mockUseWorkspaceIdentity = vi.fn()
 const mockUseMemberships = vi.fn()
+const mockSetActiveStoreId = vi.fn()
 
 vi.mock('../hooks/useAuthUser', () => ({
   useAuthUser: () => mockUseAuthUser(),
@@ -67,9 +68,15 @@ describe('Shell', () => {
     mockUseActiveStore.mockReset()
     mockUseWorkspaceIdentity.mockReset()
     mockUseMemberships.mockReset()
+    mockSetActiveStoreId.mockReset()
 
     mockUseAuthUser.mockReturnValue({ uid: 'user-123', email: 'owner@example.com' })
-    mockUseActiveStore.mockReturnValue({ storeId: 'store-123', isLoading: false, error: null })
+    mockUseActiveStore.mockReturnValue({
+      storeId: 'store-123',
+      isLoading: false,
+      error: null,
+      setActiveStoreId: mockSetActiveStoreId,
+    })
     mockUseWorkspaceIdentity.mockReturnValue({ name: 'Demo Store', loading: false })
     mockUseMemberships.mockReturnValue({ memberships: [], loading: false, error: null })
     mockUseConnectivityStatus.mockReturnValue({
@@ -97,6 +104,70 @@ describe('Shell', () => {
     renderShell()
 
     expect(screen.getByText('Standard')).toBeInTheDocument()
+    expect(
+      screen.getByText(/to link more stores, ask each workspace owner to add/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/workspace switch appears when this account is linked to 2\+ workspaces/i),
+    ).toBeInTheDocument()
+  })
+
+  it('switches workspaces when the account has multiple memberships', async () => {
+    mockUseMemberships.mockReturnValue({
+      memberships: [
+        { id: 'member-1', uid: 'user-123', storeId: 'store-123', role: 'owner' },
+        { id: 'member-2', uid: 'user-123', storeId: 'store-456', role: 'staff' },
+      ],
+      loading: false,
+      error: null,
+    })
+
+    renderShell()
+    const user = userEvent.setup()
+
+    await user.selectOptions(screen.getByLabelText(/select workspace/i), 'store-456')
+
+    expect(mockSetActiveStoreId).toHaveBeenCalledWith('store-456')
+    expect(
+      screen.queryByText(/to link more stores, ask each workspace owner to add/i),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/workspace switch appears when this account is linked to 2\+ workspaces/i),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows only connected workspaces for the signed-in user', () => {
+    mockUseMemberships.mockReturnValue({
+      memberships: [
+        { id: 'member-1', uid: 'user-123', storeId: 'store-123', role: 'staff' },
+        { id: 'member-2', uid: 'other-user', storeId: 'store-456', role: 'owner' },
+      ],
+      loading: false,
+      error: null,
+    })
+
+    renderShell()
+
+    expect(screen.queryByLabelText(/select workspace/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Standard')).toBeInTheDocument()
+  })
+
+  it('explains why switcher is hidden when multiple rows map to one store id', () => {
+    mockUseMemberships.mockReturnValue({
+      memberships: [
+        { id: 'member-1', uid: 'user-123', storeId: 'same-store', role: 'owner' },
+        { id: 'member-2', uid: 'user-123', storeId: 'same-store', role: 'staff' },
+      ],
+      loading: false,
+      error: null,
+    })
+
+    renderShell()
+
+    expect(screen.queryByLabelText(/select workspace/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/multiple team rows, but they all point to the same workspace id/i),
+    ).toBeInTheDocument()
   })
 
   it('shows a billing reminder when payment is past due', () => {

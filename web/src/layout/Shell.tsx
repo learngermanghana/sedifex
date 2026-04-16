@@ -78,7 +78,7 @@ function buildBannerMessage(queueStatus: ReturnType<typeof useConnectivityStatus
 }
 
 export default function Shell({ children }: { children: React.ReactNode }) {
-  const { storeId } = useActiveStore()
+  const { storeId, setActiveStoreId } = useActiveStore()
   const { memberships, loading: membershipsLoading } = useMemberships()
   const user = useAuthUser()
   const { isPwaApp } = usePwaContext()
@@ -343,6 +343,37 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const workspaceStatus = billing?.planKey ?? 'Workspace ready'
   const workspaceLabel = workspaceName || workspaceStatus
+  const connectedMembershipRows = useMemo(
+    () =>
+      memberships.filter(membership => {
+        const normalizedStoreId =
+          typeof membership.storeId === 'string' ? membership.storeId.trim() : ''
+        return Boolean(normalizedStoreId) && membership.uid === user?.uid
+      }),
+    [memberships, user?.uid],
+  )
+  const selectableMemberships = useMemo(() => {
+    const byStore = new Map<string, (typeof memberships)[number]>()
+
+    connectedMembershipRows.forEach(membership => {
+      const normalizedStoreId =
+        typeof membership.storeId === 'string' ? membership.storeId.trim() : ''
+      if (!normalizedStoreId) return
+
+      const existing = byStore.get(normalizedStoreId)
+      if (!existing) {
+        byStore.set(normalizedStoreId, membership)
+        return
+      }
+
+      // If duplicate rows exist for the same store, prefer owner visibility.
+      if (existing.role !== 'owner' && membership.role === 'owner') {
+        byStore.set(normalizedStoreId, membership)
+      }
+    })
+
+    return Array.from(byStore.values())
+  }, [connectedMembershipRows])
 
   const navSection = (
     <div className="shell__nav-group">
@@ -358,6 +389,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             : workspaceLabel}
         </span>
       </div>
+      {selectableMemberships.length <= 1 && (
+        <p className="shell__workspace-switch-hint">
+          {connectedMembershipRows.length > 1
+            ? 'We found multiple team rows, but they all point to the same workspace ID. Add this account to a different store ID to enable switching.'
+            : 'Workspace switch appears when this account is linked to 2+ workspaces.'}
+        </p>
+      )}
 
       <nav
         className="shell__nav"
@@ -403,13 +441,38 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         aria-live="polite"
       >
         <span className="shell__store-label">Workspace</span>
-        <span
-          className="shell__store-select"
-          data-readonly
-        >
-          {workspaceStatus}
-        </span>
+        {selectableMemberships.length > 1 ? (
+          <select
+            className="shell__store-select"
+            value={storeId ?? ''}
+            onChange={event => setActiveStoreId(event.target.value)}
+            aria-label="Select workspace"
+          >
+            {selectableMemberships.map(membership => (
+              <option
+                key={membership.id}
+                value={membership.storeId ?? ''}
+              >
+                {membership.storeId}
+                {membership.role === 'owner' ? ' (Owner)' : ''}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span
+            className="shell__store-select"
+            data-readonly
+          >
+            {workspaceStatus}
+          </span>
+        )}
       </div>
+      {selectableMemberships.length <= 1 && (
+        <p className="shell__store-link-hint">
+          To link more stores, ask each workspace owner to add{' '}
+          <strong>{userEmail}</strong> as staff or owner in Team Members.
+        </p>
+      )}
 
       {banner && (
         <div
