@@ -383,6 +383,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             : workspaceLabel}
         </span>
       </div>
+      {selectableMemberships.length <= 1 && (
+        <p className="shell__workspace-switch-hint">
+          {connectedMembershipRows.length > 1
+            ? 'We found multiple team rows, but they all point to the same workspace ID. Add this account to a different store ID to enable switching.'
+            : 'Workspace switch appears when this account is linked to 2+ workspaces.'}
+        </p>
+      )}
 
       <nav
         className="shell__nav"
