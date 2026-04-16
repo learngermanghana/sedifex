@@ -207,6 +207,9 @@ body.shell--menu-open {
   position: sticky;
   top: 92px;
   align-self: start;
+  max-height: calc(100dvh - 108px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
