@@ -113,6 +113,17 @@ type IntegrationApiKey = {
   lastUsedAt: Timestamp | null
 }
 
+type WebhookEndpoint = {
+  id: string
+  url: string
+  status: 'active' | 'revoked'
+  events: string[]
+  createdAt: Timestamp | null
+  updatedAt: Timestamp | null
+  revokedAt: Timestamp | null
+  hasSecret: boolean
+}
+
 type PromoGalleryDraftItem = {
   id: string
   url: string
@@ -422,6 +433,12 @@ export default function AccountOverview({
   const [isCreatingIntegrationKey, setIsCreatingIntegrationKey] = useState(false)
   const [latestIntegrationToken, setLatestIntegrationToken] = useState<string | null>(null)
   const [actioningKeyId, setActioningKeyId] = useState<string | null>(null)
+  const [webhookEndpoints, setWebhookEndpoints] = useState<WebhookEndpoint[]>([])
+  const [webhookEndpointsLoading, setWebhookEndpointsLoading] = useState(false)
+  const [webhookEndpointUrl, setWebhookEndpointUrl] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [isSavingWebhookEndpoint, setIsSavingWebhookEndpoint] = useState(false)
+  const [actioningWebhookEndpointId, setActioningWebhookEndpointId] = useState<string | null>(null)
   const isPromotionsView = viewMode === 'promotions'
 
   const activeMembership = useMemo(() => {
@@ -694,12 +711,58 @@ export default function AccountOverview({
     }
   }
 
+  async function refreshWebhookEndpoints() {
+    if (!isOwner) {
+      setWebhookEndpoints([])
+      return
+    }
+
+    try {
+      setWebhookEndpointsLoading(true)
+      const callable = httpsCallable(functions, 'listWebhookEndpoints')
+      const response = await callable({})
+      const payload = (response.data ?? {}) as {
+        endpoints?: Array<Record<string, unknown>>
+      }
+      const endpoints = Array.isArray(payload.endpoints)
+        ? payload.endpoints.map(item => ({
+            id: typeof item.id === 'string' ? item.id : '',
+            url: typeof item.url === 'string' ? item.url : '',
+            status: item.status === 'revoked' ? 'revoked' : 'active',
+            events: Array.isArray(item.events)
+              ? item.events.filter(eventType => typeof eventType === 'string')
+              : [],
+            createdAt: isTimestamp(item.createdAt) ? item.createdAt : null,
+            updatedAt: isTimestamp(item.updatedAt) ? item.updatedAt : null,
+            revokedAt: isTimestamp(item.revokedAt) ? item.revokedAt : null,
+            hasSecret: item.hasSecret === true,
+          }))
+        : []
+      setWebhookEndpoints(endpoints.filter(endpoint => endpoint.id && endpoint.url))
+    } catch (error) {
+      console.error('[account] Failed to load webhook endpoints', error)
+      publish({ message: 'Unable to load webhook endpoints.', tone: 'error' })
+      setWebhookEndpoints([])
+    } finally {
+      setWebhookEndpointsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!storeId || !isOwner) {
       setIntegrationApiKeys([])
       return
     }
     void refreshIntegrationApiKeys()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId, isOwner])
+
+  useEffect(() => {
+    if (!storeId || !isOwner) {
+      setWebhookEndpoints([])
+      return
+    }
+    void refreshWebhookEndpoints()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, isOwner])
 
@@ -1380,6 +1443,50 @@ export default function AccountOverview({
     }
   }
 
+  async function handleSaveWebhookEndpoint() {
+    if (!webhookEndpointUrl.trim()) {
+      publish({ message: 'Enter a webhook endpoint URL first.', tone: 'error' })
+      return
+    }
+    if (!webhookSecret.trim()) {
+      publish({ message: 'Enter a webhook secret first.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsSavingWebhookEndpoint(true)
+      const callable = httpsCallable(functions, 'upsertWebhookEndpoint')
+      await callable({
+        url: webhookEndpointUrl.trim(),
+        secret: webhookSecret.trim(),
+        events: ['booking.created', 'booking.updated', 'booking.cancelled', 'booking.confirmed', 'booking.approved'],
+      })
+      publish({ message: 'Webhook endpoint saved.', tone: 'success' })
+      setWebhookSecret('')
+      await refreshWebhookEndpoints()
+    } catch (error) {
+      console.error('[account] Failed to save webhook endpoint', error)
+      publish({ message: 'Unable to save webhook endpoint.', tone: 'error' })
+    } finally {
+      setIsSavingWebhookEndpoint(false)
+    }
+  }
+
+  async function handleRevokeWebhookEndpoint(endpointId: string) {
+    try {
+      setActioningWebhookEndpointId(endpointId)
+      const callable = httpsCallable(functions, 'revokeWebhookEndpoint')
+      await callable({ endpointId })
+      publish({ message: 'Webhook endpoint revoked.', tone: 'success' })
+      await refreshWebhookEndpoints()
+    } catch (error) {
+      console.error('[account] Failed to revoke webhook endpoint', error)
+      publish({ message: 'Unable to revoke webhook endpoint.', tone: 'error' })
+    } finally {
+      setActioningWebhookEndpointId(null)
+    }
+  }
+
   async function handleConnectTikTok() {
     if (!storeId) {
       publish({ message: 'No store selected for TikTok connection.', tone: 'error' })
@@ -2019,6 +2126,77 @@ export default function AccountOverview({
                             className="button button--secondary"
                             onClick={() => handleRevokeIntegrationApiKey(key.id)}
                             disabled={actioningKeyId === key.id || key.status === 'revoked'}
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {isOwner && (
+              <div className="account-overview__website-sync-keys">
+                <p className="account-overview__hint">Sedifex booking webhooks</p>
+                <p className="account-overview__hint">
+                  Add your Google Apps Script <code>/exec</code> URL and a secret.
+                  Sedifex will sign booking webhook events with this secret.
+                </p>
+                <div className="account-overview__website-sync-test">
+                  <label>
+                    <span>Webhook endpoint URL</span>
+                    <input
+                      type="url"
+                      value={webhookEndpointUrl}
+                      onChange={event => setWebhookEndpointUrl(event.target.value)}
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                    />
+                  </label>
+                  <label>
+                    <span>Webhook secret</span>
+                    <input
+                      type="password"
+                      value={webhookSecret}
+                      onChange={event => setWebhookSecret(event.target.value)}
+                      placeholder="Set the same secret in your Apps Script"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={handleSaveWebhookEndpoint}
+                    disabled={isSavingWebhookEndpoint}
+                  >
+                    {isSavingWebhookEndpoint ? 'Saving…' : 'Save webhook endpoint'}
+                  </button>
+                </div>
+                {webhookEndpointsLoading ? (
+                  <p className="account-overview__hint">Loading webhook endpoints…</p>
+                ) : webhookEndpoints.length === 0 ? (
+                  <p className="account-overview__hint">No webhook endpoints yet.</p>
+                ) : (
+                  <ul className="account-overview__integration-key-list">
+                    {webhookEndpoints.map(endpoint => (
+                      <li key={endpoint.id} className="account-overview__integration-key-item">
+                        <div>
+                          <strong>{endpoint.url}</strong>
+                          <p className="account-overview__hint">
+                            {endpoint.status}
+                            {' · '}
+                            Events: {endpoint.events.length ? endpoint.events.join(', ') : 'all'}
+                            {' · '}
+                            Secret: {endpoint.hasSecret ? 'configured' : 'missing'}
+                          </p>
+                        </div>
+                        <div className="account-overview__website-sync-actions">
+                          <button
+                            type="button"
+                            className="button button--secondary"
+                            onClick={() => handleRevokeWebhookEndpoint(endpoint.id)}
+                            disabled={
+                              actioningWebhookEndpointId === endpoint.id || endpoint.status === 'revoked'
+                            }
                           >
                             Revoke
                           </button>
