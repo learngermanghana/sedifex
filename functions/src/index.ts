@@ -4420,7 +4420,25 @@ async function resolveIntegrationBookingServiceId(options: {
   const defaultServiceId = BOOKING_DEFAULT_SERVICE_ID.value()?.trim() || ''
   if (defaultServiceId) return defaultServiceId
 
-  return null
+  const serviceNameFallback =
+    toTrimmedStringOrNull(payload.productName) ??
+    toTrimmedStringOrNull(payload.product_name) ??
+    toTrimmedStringOrNull(payload.serviceName) ??
+    toTrimmedStringOrNull(payload.service_name) ??
+    toTrimmedStringOrNull(payload.name) ??
+    toTrimmedStringOrNull(payload.title)
+  if (serviceNameFallback) {
+    const normalized = serviceNameFallback
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60)
+    if (normalized) {
+      return `name:${normalized}`
+    }
+  }
+
+  return 'unspecified-service'
 }
 
 export const v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
@@ -4506,7 +4524,8 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res) 
   if (!serviceId) {
     res.status(400).json({
       error: 'service-not-resolved',
-      message: 'Service could not be resolved. Configure BOOKING_DEFAULT_SERVICE_ID or provide serviceId.',
+      message:
+        'Service could not be resolved. Configure BOOKING_DEFAULT_SERVICE_ID, provide serviceId, or include product/service name.',
     })
     return
   }
