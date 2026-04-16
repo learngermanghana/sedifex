@@ -467,8 +467,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       </div>
       {selectableMemberships.length <= 1 && (
         <p className="shell__store-link-hint">
-          To link more stores, ask each workspace owner to add{' '}
-          <strong>{userEmail}</strong> as staff or owner in Team Members.
+          To link more stores, create a Master Invite Link in Staff Management and ask the other workspace owner to accept it.
         </p>
       )}
 

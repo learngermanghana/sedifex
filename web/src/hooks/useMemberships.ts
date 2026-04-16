@@ -51,6 +51,46 @@ function mapMembershipSnapshot(snapshot: QueryDocumentSnapshot<DocumentData>): M
   }
 }
 
+async function loadLinkedChildMemberships(baseMemberships: Membership[], uid: string): Promise<Membership[]> {
+  const ownerStoreIds = baseMemberships
+    .filter(membership => membership.uid === uid && membership.role === 'owner' && membership.storeId)
+    .map(membership => membership.storeId as string)
+
+  if (ownerStoreIds.length === 0) return []
+
+  const childRows: Membership[] = []
+  for (const parentStoreId of ownerStoreIds) {
+    const storesRef = collection(db, 'stores')
+    const linkedQuery = query(storesRef, where('parentStoreId', '==', parentStoreId))
+    const linkedSnapshot = await getDocs(linkedQuery)
+
+    linkedSnapshot.docs.forEach(storeDoc => {
+      const storeData = storeDoc.data() || {}
+      const childStoreId =
+        typeof storeData.storeId === 'string' && storeData.storeId.trim()
+          ? storeData.storeId.trim()
+          : storeDoc.id
+
+      if (!childStoreId || childStoreId === parentStoreId) return
+
+      childRows.push({
+        id: `linked:${parentStoreId}:${childStoreId}`,
+        uid,
+        role: 'owner',
+        storeId: childStoreId,
+        email: null,
+        phone: null,
+        invitedBy: parentStoreId,
+        firstSignupEmail: null,
+        createdAt: null,
+        updatedAt: null,
+      })
+    })
+  }
+
+  return childRows
+}
+
 export function useMemberships(_activeStoreId?: string | null) {
   const user = useAuthUser()
   const [loading, setLoading] = useState(true)
@@ -84,7 +124,14 @@ export function useMemberships(_activeStoreId?: string | null) {
         if (cancelled) return
 
         const rows = snapshot.docs.map(mapMembershipSnapshot)
-        setMemberships(rows)
+        const linkedRows = await loadLinkedChildMemberships(rows, user.uid)
+        const merged = [...rows]
+        linkedRows.forEach(linked => {
+          if (!merged.some(row => row.storeId === linked.storeId)) {
+            merged.push(linked)
+          }
+        })
+        setMemberships(merged)
         setError(null)
       } catch (e) {
         if (!cancelled) {

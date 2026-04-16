@@ -14,7 +14,12 @@ import {
   where,
 } from 'firebase/firestore'
 import { useToast } from '../components/ToastProvider'
-import { manageStaffAccount, type StaffRole } from '../controllers/storeController'
+import {
+  acceptStoreMasterInvite,
+  createStoreMasterInviteLink,
+  manageStaffAccount,
+  type StaffRole,
+} from '../controllers/storeController'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useAuthUser } from '../hooks/useAuthUser'
@@ -118,10 +123,17 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
   const [auditLoading, setAuditLoading] = useState(false)
 
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteStoreId, setInviteStoreId] = useState('')
   const [inviteRole, setInviteRole] = useState<Membership['role']>('staff')
   const [invitePassword, setInvitePassword] = useState('')
   const [inviting, setInviting] = useState(false)
+  const [linkRole, setLinkRole] = useState<StaffRole>('staff')
+  const [linkCreating, setLinkCreating] = useState(false)
+  const [generatedInviteUrl, setGeneratedInviteUrl] = useState('')
+  const [generatedInviteToken, setGeneratedInviteToken] = useState('')
+  const [acceptTokenOrUrl, setAcceptTokenOrUrl] = useState('')
+  const [acceptChildStoreId, setAcceptChildStoreId] = useState('')
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false)
+  const [acceptingLink, setAcceptingLink] = useState(false)
 
   const activeMembership = useMemo(() => {
     if (!storeId) return null
@@ -162,7 +174,7 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
 
   useEffect(() => {
     if (!storeId) return
-    setInviteStoreId(storeId)
+    setAcceptChildStoreId(storeId)
   }, [storeId])
 
   useEffect(() => {
@@ -245,19 +257,12 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
     }
 
     const normalizedEmail = inviteEmail.trim().toLowerCase()
-    const targetStoreId = inviteStoreId.trim() || storeId
+    const targetStoreId = storeId
     if (!normalizedEmail) {
       setError('Enter an email to save a staff member.')
       publish({ message: 'Enter an email to save a staff member.', tone: 'error' })
       return
     }
-    if (!targetStoreId) {
-      const message = 'Enter a Store ID to save this team member.'
-      setError(message)
-      publish({ message, tone: 'error' })
-      return
-    }
-
     setInviting(true)
     setError(null)
     try {
@@ -269,10 +274,7 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
         password: invitePassword.trim() || undefined,
       })
       publish({
-        message:
-          targetStoreId === storeId
-            ? 'Staff member saved.'
-            : `Access saved for Store ID ${targetStoreId}. Switch to that workspace to view the roster.`,
+        message: 'Staff member saved.',
         tone: 'success',
       })
       setInviteEmail('')
@@ -286,6 +288,67 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
       publish({ message, tone: 'error' })
     } finally {
       setInviting(false)
+    }
+  }
+
+  async function handleCreateMasterInviteLink() {
+    if (!storeId || linkCreating) return
+    if (!isOwner) {
+      publish({ message: 'Only owners can create workspace invite links.', tone: 'error' })
+      return
+    }
+
+    setLinkCreating(true)
+    try {
+      const result = await createStoreMasterInviteLink({
+        storeId,
+        role: linkRole,
+        maxUses: 1,
+        expiresInHours: 72,
+      })
+      setGeneratedInviteUrl(result.inviteUrl)
+      setGeneratedInviteToken(result.inviteToken)
+      publish({ message: 'Master invite link created.', tone: 'success' })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to create a master invite link.'
+      publish({ message, tone: 'error' })
+    } finally {
+      setLinkCreating(false)
+    }
+  }
+
+  async function handleAcceptMasterInvite(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!acceptTokenOrUrl.trim()) {
+      publish({ message: 'Paste an invite link or token to continue.', tone: 'error' })
+      return
+    }
+    if (!acceptChildStoreId.trim()) {
+      publish({ message: 'Select the store you want to link as a sub-store.', tone: 'error' })
+      return
+    }
+
+    setAcceptingLink(true)
+    try {
+      const result = await acceptStoreMasterInvite({
+        tokenOrUrl: acceptTokenOrUrl,
+        childStoreId: acceptChildStoreId.trim(),
+        confirmOverwrite,
+      })
+      publish({
+        message: result.overwritten
+          ? `Linked to ${result.parentStoreId}. Previous parent was replaced.`
+          : `Linked successfully under mother store ${result.parentStoreId}.`,
+        tone: 'success',
+      })
+      setAcceptTokenOrUrl('')
+      setConfirmOverwrite(false)
+      setRefreshToken(token => token + 1)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to accept invite link.'
+      publish({ message, tone: 'error' })
+    } finally {
+      setAcceptingLink(false)
     }
   }
 
@@ -487,15 +550,12 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
           </label>
 
           <label>
-            <span>Store ID</span>
+            <span>Workspace</span>
             <input
               type="text"
-              required
-              value={inviteStoreId}
-              onChange={event => setInviteStoreId(event.target.value)}
-              placeholder="store-branch-001"
+              value={storeId ?? ''}
               autoComplete="off"
-              disabled={!isOwner || inviting}
+              disabled
             />
           </label>
 
@@ -538,6 +598,91 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
             Only workspace owners can save staff members.
           </p>
         )}
+      </section>
+
+      <section className="card staff-card" aria-labelledby="workspace-linking">
+        <div className="staff-card__header">
+          <div>
+            <p className="staff-card__eyebrow">Workspace linking</p>
+            <h2 id="workspace-linking">Master invite links</h2>
+            <p className="staff-card__hint">
+              Create one link from the mother workspace. Other workspace owners can accept it to become sub-stores.
+            </p>
+          </div>
+        </div>
+
+        <div className="staff-card__form">
+          <label>
+            <span>Sub-store role after linking</span>
+            <select
+              value={linkRole}
+              onChange={event => setLinkRole(event.target.value === 'owner' ? 'owner' : 'staff')}
+              disabled={!isOwner || linkCreating}
+            >
+              <option value="owner">Admin</option>
+              <option value="staff">Staff</option>
+            </select>
+          </label>
+
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={!isOwner || linkCreating}
+            onClick={handleCreateMasterInviteLink}
+          >
+            {linkCreating ? 'Creating link…' : 'Create master invite link'}
+          </button>
+
+          {generatedInviteUrl && (
+            <label>
+              <span>Share this link</span>
+              <input type="text" readOnly value={generatedInviteUrl} />
+            </label>
+          )}
+          {generatedInviteToken && (
+            <p className="staff-card__hint">Backup token: {generatedInviteToken}</p>
+          )}
+        </div>
+
+        <form className="staff-card__form" onSubmit={handleAcceptMasterInvite}>
+          <label>
+            <span>Invite link or token</span>
+            <input
+              type="text"
+              value={acceptTokenOrUrl}
+              onChange={event => setAcceptTokenOrUrl(event.target.value)}
+              placeholder="Paste invite URL or token"
+              disabled={acceptingLink}
+              required
+            />
+          </label>
+
+          <label>
+            <span>Store to link as sub-store</span>
+            <input
+              type="text"
+              value={acceptChildStoreId}
+              onChange={event => setAcceptChildStoreId(event.target.value)}
+              placeholder="your-store-id"
+              disabled={acceptingLink}
+              required
+            />
+          </label>
+
+          <label>
+            <span>Overwrite current mother store (if linked)</span>
+            <input
+              type="checkbox"
+              checked={confirmOverwrite}
+              onChange={event => setConfirmOverwrite(event.target.checked)}
+              disabled={acceptingLink}
+            />
+          </label>
+
+          <button type="submit" className="button button--ghost" disabled={acceptingLink}>
+            {acceptingLink ? 'Linking workspace…' : 'Accept master invite'}
+          </button>
+        </form>
       </section>
 
       <section className="card staff-card" aria-labelledby="staff-list">

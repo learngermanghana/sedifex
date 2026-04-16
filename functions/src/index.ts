@@ -80,6 +80,19 @@ type ManageStaffPayload = {
   action?: unknown
 }
 
+type CreateStoreMasterInvitePayload = {
+  storeId?: unknown
+  role?: unknown
+  expiresInHours?: unknown
+  maxUses?: unknown
+}
+
+type AcceptStoreMasterInvitePayload = {
+  tokenOrUrl?: unknown
+  childStoreId?: unknown
+  confirmOverwrite?: unknown
+}
+
 type BillingStatus = 'trial' | 'active' | 'past_due' | 'inactive'
 
 type CreateCheckoutPayload = {
@@ -627,6 +640,61 @@ function normalizeManageStaffPayload(data: ManageStaffPayload) {
     : 'invite'
 
   return { storeId, email, role, password, action }
+}
+
+function normalizeCreateStoreMasterInvitePayload(data: CreateStoreMasterInvitePayload | undefined) {
+  const storeId = typeof data?.storeId === 'string' ? data.storeId.trim() : ''
+  if (!storeId) throw new functions.https.HttpsError('invalid-argument', 'A storeId is required')
+
+  const roleRaw = typeof data?.role === 'string' ? data.role.trim().toLowerCase() : 'staff'
+  const role = roleRaw === 'owner' ? 'owner' : 'staff'
+
+  const expiresInHoursRaw =
+    typeof data?.expiresInHours === 'number' && Number.isFinite(data.expiresInHours)
+      ? Math.floor(data.expiresInHours)
+      : 168
+  const expiresInHours = Math.min(Math.max(expiresInHoursRaw, 1), 24 * 30)
+
+  const maxUsesRaw =
+    typeof data?.maxUses === 'number' && Number.isFinite(data.maxUses)
+      ? Math.floor(data.maxUses)
+      : 1
+  const maxUses = Math.min(Math.max(maxUsesRaw, 1), 200)
+
+  return { storeId, role, expiresInHours, maxUses }
+}
+
+function extractInviteToken(tokenOrUrl: string) {
+  const value = tokenOrUrl.trim()
+  if (!value) return ''
+
+  if (value.includes('://')) {
+    try {
+      const parsed = new URL(value)
+      const token = parsed.searchParams.get('token') || parsed.searchParams.get('invite')
+      return token ? token.trim() : ''
+    } catch {
+      return ''
+    }
+  }
+
+  return value
+}
+
+function normalizeAcceptStoreMasterInvitePayload(data: AcceptStoreMasterInvitePayload | undefined) {
+  const tokenOrUrl = typeof data?.tokenOrUrl === 'string' ? data.tokenOrUrl : ''
+  const token = extractInviteToken(tokenOrUrl)
+  const childStoreId = typeof data?.childStoreId === 'string' ? data.childStoreId.trim() : ''
+  const confirmOverwrite = data?.confirmOverwrite === true
+
+  if (!token) {
+    throw new functions.https.HttpsError('invalid-argument', 'A valid invite token is required')
+  }
+  if (!childStoreId) {
+    throw new functions.https.HttpsError('invalid-argument', 'A childStoreId is required')
+  }
+
+  return { token, childStoreId, confirmOverwrite }
 }
 
 function normalizeListProductsPayload(data: ListStoreProductsPayload | undefined) {
@@ -1627,6 +1695,163 @@ export const manageStaffAccount = functions.https.onCall(
         errorMessage: typeof error?.message === 'string' ? error.message : 'Unknown error',
       })
       throw error
+    }
+  },
+)
+
+export const createStoreMasterInviteLink = functions.https.onCall(
+  async (data: unknown, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const { storeId, role, expiresInHours, maxUses } = normalizeCreateStoreMasterInvitePayload(
+      data as CreateStoreMasterInvitePayload,
+    )
+    const actorUid = context.auth!.uid
+    await verifyOwnerForStore(actorUid, storeId)
+
+    const token = crypto.randomBytes(24).toString('base64url')
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const now = Date.now()
+    const expiresAt = admin.firestore.Timestamp.fromMillis(now + expiresInHours * 60 * 60 * 1000)
+
+    const inviteRef = db.collection('storeMasterInvites').doc()
+    await inviteRef.set({
+      storeId,
+      role,
+      tokenHash,
+      status: 'active',
+      maxUses,
+      usesCount: 0,
+      createdBy: actorUid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt,
+    })
+
+    const projectId = process.env.GCLOUD_PROJECT || ''
+    const inviteUrl = projectId
+      ? `https://${projectId}.web.app/store-link/accept?token=${encodeURIComponent(token)}`
+      : `store-link://accept?token=${encodeURIComponent(token)}`
+
+    return {
+      ok: true,
+      storeId,
+      role,
+      inviteToken: token,
+      inviteUrl,
+      maxUses,
+      expiresAt: expiresAt.toDate().toISOString(),
+    }
+  },
+)
+
+export const acceptStoreMasterInvite = functions.https.onCall(
+  async (data: unknown, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const { token, childStoreId, confirmOverwrite } = normalizeAcceptStoreMasterInvitePayload(
+      data as AcceptStoreMasterInvitePayload,
+    )
+    const actorUid = context.auth!.uid
+    await verifyOwnerForStore(actorUid, childStoreId)
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const inviteSnap = await db
+      .collection('storeMasterInvites')
+      .where('tokenHash', '==', tokenHash)
+      .limit(1)
+      .get()
+
+    if (inviteSnap.empty) {
+      throw new functions.https.HttpsError('not-found', 'Invite link is invalid or no longer available')
+    }
+
+    const inviteDoc = inviteSnap.docs[0]
+    const inviteData = (inviteDoc.data() ?? {}) as Record<string, unknown>
+
+    const parentStoreId = typeof inviteData.storeId === 'string' ? inviteData.storeId.trim() : ''
+    const role = inviteData.role === 'owner' ? 'owner' : 'staff'
+    const status = typeof inviteData.status === 'string' ? inviteData.status : 'active'
+    const maxUses = typeof inviteData.maxUses === 'number' ? inviteData.maxUses : 1
+    const usesCount = typeof inviteData.usesCount === 'number' ? inviteData.usesCount : 0
+    const expiresAt =
+      inviteData.expiresAt instanceof admin.firestore.Timestamp ? inviteData.expiresAt : null
+
+    if (!parentStoreId) {
+      throw new functions.https.HttpsError('failed-precondition', 'Invite parent store is missing')
+    }
+    if (status !== 'active') {
+      throw new functions.https.HttpsError('failed-precondition', 'Invite link is no longer active')
+    }
+    if (expiresAt && expiresAt.toMillis() <= Date.now()) {
+      throw new functions.https.HttpsError('deadline-exceeded', 'Invite link has expired')
+    }
+    if (maxUses > 0 && usesCount >= maxUses) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Invite link has reached its usage limit')
+    }
+    if (parentStoreId === childStoreId) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'You cannot link a workspace to itself as a sub-store',
+      )
+    }
+
+    const childRef = db.collection('stores').doc(childStoreId)
+    const inviteRef = inviteDoc.ref
+    const eventRef = db.collection('storeLinkAudit').doc()
+
+    const overwritten = await db.runTransaction(async (transaction) => {
+      const childSnap = await transaction.get(childRef)
+      const childData = (childSnap.data() ?? {}) as Record<string, unknown>
+      const currentParent =
+        typeof childData.parentStoreId === 'string' ? childData.parentStoreId.trim() : ''
+
+      if (currentParent && currentParent !== parentStoreId && !confirmOverwrite) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'This workspace is already linked to a different mother store. Confirm overwrite to continue.',
+        )
+      }
+
+      const nextUsesCount = usesCount + 1
+      transaction.set(
+        childRef,
+        {
+          parentStoreId,
+          parentLinkRole: role,
+          parentLinkedBy: actorUid,
+          parentLinkedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      transaction.set(
+        inviteRef,
+        {
+          usesCount: nextUsesCount,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: maxUses > 0 && nextUsesCount >= maxUses ? 'consumed' : 'active',
+        },
+        { merge: true },
+      )
+      transaction.set(eventRef, {
+        parentStoreId,
+        childStoreId,
+        role,
+        actorUid,
+        inviteId: inviteDoc.id,
+        previousParentStoreId: currentParent || null,
+        overwritten: Boolean(currentParent && currentParent !== parentStoreId),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+
+      return Boolean(currentParent && currentParent !== parentStoreId)
+    })
+
+    return {
+      ok: true,
+      parentStoreId,
+      childStoreId,
+      role,
+      overwritten,
     }
   },
 )

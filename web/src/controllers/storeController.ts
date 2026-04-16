@@ -24,6 +24,36 @@ export type ManageStaffAccountResult = {
   claims?: unknown
 }
 
+export type CreateStoreMasterInviteLinkPayload = {
+  storeId: string
+  role?: StaffRole
+  expiresInHours?: number
+  maxUses?: number
+}
+
+export type CreateStoreMasterInviteLinkResult = {
+  ok: boolean
+  storeId: string
+  inviteToken: string
+  inviteUrl: string
+  expiresAt: string | null
+  maxUses: number | null
+}
+
+export type AcceptStoreMasterInvitePayload = {
+  tokenOrUrl: string
+  childStoreId: string
+  confirmOverwrite?: boolean
+}
+
+export type AcceptStoreMasterInviteResult = {
+  ok: boolean
+  parentStoreId: string
+  childStoreId: string
+  role: StaffRole
+  overwritten: boolean
+}
+
 function normalizePayload(input: ManageStaffAccountPayload): ManageStaffAccountPayload {
   return {
     storeId: input.storeId.trim(),
@@ -81,5 +111,69 @@ export async function manageStaffAccount(payload: ManageStaffAccountPayload): Pr
     }
   } catch (err) {
     throw friendlyError(err)
+  }
+}
+
+export async function createStoreMasterInviteLink(
+  payload: CreateStoreMasterInviteLinkPayload,
+): Promise<CreateStoreMasterInviteLinkResult> {
+  const callable = httpsCallable<CreateStoreMasterInviteLinkPayload, CreateStoreMasterInviteLinkResult>(
+    functions,
+    'createStoreMasterInviteLink',
+  )
+
+  const clean: CreateStoreMasterInviteLinkPayload = {
+    storeId: payload.storeId.trim(),
+    role: payload.role === 'owner' ? 'owner' : 'staff',
+    expiresInHours:
+      typeof payload.expiresInHours === 'number' && Number.isFinite(payload.expiresInHours)
+        ? payload.expiresInHours
+        : undefined,
+    maxUses:
+      typeof payload.maxUses === 'number' && Number.isFinite(payload.maxUses)
+        ? payload.maxUses
+        : undefined,
+  }
+
+  try {
+    const { data } = await callable(clean)
+    return {
+      ok: data?.ok === true,
+      storeId: data?.storeId ?? clean.storeId,
+      inviteToken: data?.inviteToken ?? '',
+      inviteUrl: data?.inviteUrl ?? '',
+      expiresAt: data?.expiresAt ?? null,
+      maxUses: typeof data?.maxUses === 'number' ? data.maxUses : null,
+    }
+  } catch (error) {
+    throw friendlyError(error)
+  }
+}
+
+export async function acceptStoreMasterInvite(
+  payload: AcceptStoreMasterInvitePayload,
+): Promise<AcceptStoreMasterInviteResult> {
+  const callable = httpsCallable<
+    AcceptStoreMasterInvitePayload,
+    AcceptStoreMasterInviteResult
+  >(functions, 'acceptStoreMasterInvite')
+
+  const clean: AcceptStoreMasterInvitePayload = {
+    tokenOrUrl: payload.tokenOrUrl.trim(),
+    childStoreId: payload.childStoreId.trim(),
+    confirmOverwrite: payload.confirmOverwrite === true,
+  }
+
+  try {
+    const { data } = await callable(clean)
+    return {
+      ok: data?.ok === true,
+      parentStoreId: data?.parentStoreId ?? '',
+      childStoreId: data?.childStoreId ?? clean.childStoreId,
+      role: data?.role === 'owner' ? 'owner' : 'staff',
+      overwritten: data?.overwritten === true,
+    }
+  } catch (error) {
+    throw friendlyError(error)
   }
 }

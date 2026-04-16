@@ -153,4 +153,39 @@ describe('useMemberships', () => {
 
     expect(result.current.memberships[0]?.storeId).toBe('workspace-from-default-db')
   })
+
+  it('includes linked child stores for owner memberships', async () => {
+    mockUseAuthUser.mockReturnValue({ uid: 'owner-123' })
+
+    const membershipDoc = {
+      id: 'owner-doc',
+      data: () => ({
+        uid: 'owner-123',
+        role: 'owner',
+        storeId: 'mother-store',
+      }),
+    }
+
+    const linkedStoreDoc = {
+      id: 'child-store-1',
+      data: () => ({
+        parentStoreId: 'mother-store',
+      }),
+    }
+
+    getDocsMock
+      .mockResolvedValueOnce({ docs: [membershipDoc] })
+      .mockResolvedValueOnce({ docs: [linkedStoreDoc] })
+
+    const { result } = renderHook(() => useMemberships())
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    expect(result.current.memberships.map(row => row.storeId)).toEqual([
+      'mother-store',
+      'child-store-1',
+    ])
+  })
 })
