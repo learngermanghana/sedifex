@@ -346,6 +346,7 @@ type AccountTab = 'workspace' | 'integrations' | 'promotions' | 'operations'
 type OperationsTab = 'billing' | 'team' | 'data-controls'
 type PublicPageTab = 'overview' | 'promo' | 'gallery' | 'website-sync'
 type PromoGalleryTab = 'upload' | 'view'
+type IntegrationTab = 'overview' | 'keys' | 'booking' | 'webhooks' | 'tests'
 
 export default function AccountOverview({
   headingLevel = 'h1',
@@ -396,6 +397,7 @@ export default function AccountOverview({
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [activeTab, setActiveTab] = useState<AccountTab>('workspace')
   const [operationsTab, setOperationsTab] = useState<OperationsTab>('billing')
+  const [integrationTab, setIntegrationTab] = useState<IntegrationTab>('overview')
 
   const [isSavingPromo, setIsSavingPromo] = useState(false)
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false)
@@ -2029,6 +2031,46 @@ export default function AccountOverview({
 
           <div className="account-overview__website-sync" role="status" aria-live="polite">
             <p className="account-overview__website-sync-title">Choose your integration tutorial.</p>
+            <div className="account-overview__tabs" aria-label="Integration sections">
+              <button
+                type="button"
+                className={`account-overview__tab ${integrationTab === 'overview' ? 'is-active' : ''}`}
+                onClick={() => setIntegrationTab('overview')}
+              >
+                Overview
+              </button>
+              <button
+                type="button"
+                className={`account-overview__tab ${integrationTab === 'keys' ? 'is-active' : ''}`}
+                onClick={() => setIntegrationTab('keys')}
+              >
+                API tokens
+              </button>
+              <button
+                type="button"
+                className={`account-overview__tab ${integrationTab === 'booking' ? 'is-active' : ''}`}
+                onClick={() => setIntegrationTab('booking')}
+              >
+                Booking sync
+              </button>
+              <button
+                type="button"
+                className={`account-overview__tab ${integrationTab === 'webhooks' ? 'is-active' : ''}`}
+                onClick={() => setIntegrationTab('webhooks')}
+              >
+                Webhooks
+              </button>
+              <button
+                type="button"
+                className={`account-overview__tab ${integrationTab === 'tests' ? 'is-active' : ''}`}
+                onClick={() => setIntegrationTab('tests')}
+              >
+                Tests
+              </button>
+            </div>
+
+            {(integrationTab === 'overview' || integrationTab === 'booking') && (
+              <>
             <p className="account-overview__hint">
               Booking ingestion mapping can be managed in
               {' '}
@@ -2073,6 +2115,9 @@ export default function AccountOverview({
               <code>{storeId}</code>
               . You can find it in <strong>Account overview → Workspace details</strong>.
             </p>
+              </>
+            )}
+            {(integrationTab === 'overview' || integrationTab === 'keys') && (
             <div className="account-overview__website-sync-actions">
               <button
                 type="button"
@@ -2090,7 +2135,8 @@ export default function AccountOverview({
                 Test Sedifex endpoint
               </button>
             </div>
-            {isOwner && (
+            )}
+            {isOwner && (integrationTab === 'overview' || integrationTab === 'keys') && (
               <div className="account-overview__website-sync-test">
                 <label>
                   <span>New integration key name</span>
@@ -2111,7 +2157,7 @@ export default function AccountOverview({
                 </button>
               </div>
             )}
-            {isOwner && latestIntegrationToken && (
+            {isOwner && latestIntegrationToken && (integrationTab === 'overview' || integrationTab === 'keys') && (
               <div className="account-overview__integration-token-notice" role="status" aria-live="polite">
                 <p>
                   <strong>This is your integration key.</strong>
@@ -2122,7 +2168,7 @@ export default function AccountOverview({
                 <code className="account-overview__integration-token-value">{latestIntegrationToken}</code>
               </div>
             )}
-            {isOwner && (
+            {isOwner && (integrationTab === 'overview' || integrationTab === 'keys') && (
               <div className="account-overview__website-sync-keys">
                 <p className="account-overview__hint">Active integration keys</p>
                 {integrationKeysLoading ? (
@@ -2167,7 +2213,7 @@ export default function AccountOverview({
                 )}
               </div>
             )}
-            {isOwner && (
+            {isOwner && (integrationTab === 'overview' || integrationTab === 'webhooks') && (
               <div className="account-overview__website-sync-keys">
                 <p className="account-overview__hint">Sedifex booking webhooks</p>
                 <p className="account-overview__hint">
@@ -2238,6 +2284,7 @@ export default function AccountOverview({
                 )}
               </div>
             )}
+            {(integrationTab === 'overview' || integrationTab === 'tests') && (
             <div className="account-overview__website-sync-test">
               <label>
                 <span>Test your endpoint</span>
@@ -2257,6 +2304,7 @@ export default function AccountOverview({
                 {isTestingEndpoint ? 'Testing…' : 'Test endpoint'}
               </button>
             </div>
+            )}
             {endpointTestStatus && <p className="account-overview__hint">{endpointTestStatus}</p>}
           </div>
 
