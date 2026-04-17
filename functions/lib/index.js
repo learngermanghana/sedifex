@@ -2925,8 +2925,13 @@ const DEFAULT_BOOKING_ALIASES = {
     serviceName: ['serviceName', 'productName', 'service_note_name', 'internalServiceName'],
     bookingDate: ['date', 'bookingDate'],
     bookingTime: ['time', 'bookingTime'],
+    branchLocationId: ['branchLocationId', 'branchId', 'locationId', 'storeBranchId'],
+    branchLocationName: ['branchLocationName', 'branchName', 'storeBranch', 'locationName', 'branch'],
+    eventLocation: ['eventLocation', 'eventVenue', 'venue', 'eventAddress'],
+    customerStayLocation: ['customerStayLocation', 'stayLocation', 'hotelLocation', 'guestLocation'],
     preferredBranch: ['preferredBranch', 'branch', 'branchName'],
     preferredContactMethod: ['preferredContactMethod', 'contactMethod'],
+    paymentAmount: ['paymentAmount', 'amount', 'total', 'price'],
     depositAmount: ['depositAmount', 'depositPaid', 'amountPaid'],
     paymentMethod: ['paymentMethod'],
 };
@@ -2937,8 +2942,13 @@ const DEFAULT_BOOKING_SHEET_HEADERS = {
     serviceName: 'Service',
     bookingDate: 'Booking Date',
     bookingTime: 'Booking Time',
+    branchLocationId: 'Branch Location ID',
+    branchLocationName: 'Branch Location Name',
+    eventLocation: 'Event Location',
+    customerStayLocation: 'Customer Stay Location',
     preferredBranch: 'Preferred Branch',
     preferredContactMethod: 'Preferred Contact Method',
+    paymentAmount: 'Payment Amount',
     paymentMethod: 'Payment Method',
     depositAmount: 'Deposit Amount',
     status: 'Status',
@@ -2977,11 +2987,25 @@ async function loadBookingIngestionConfig(storeId) {
         serviceName: [...DEFAULT_BOOKING_ALIASES.serviceName, ...normalizeBookingAliasList(fieldAliases.serviceName)],
         bookingDate: [...DEFAULT_BOOKING_ALIASES.bookingDate, ...normalizeBookingAliasList(fieldAliases.bookingDate)],
         bookingTime: [...DEFAULT_BOOKING_ALIASES.bookingTime, ...normalizeBookingAliasList(fieldAliases.bookingTime)],
+        branchLocationId: [
+            ...DEFAULT_BOOKING_ALIASES.branchLocationId,
+            ...normalizeBookingAliasList(fieldAliases.branchLocationId),
+        ],
+        branchLocationName: [
+            ...DEFAULT_BOOKING_ALIASES.branchLocationName,
+            ...normalizeBookingAliasList(fieldAliases.branchLocationName),
+        ],
+        eventLocation: [...DEFAULT_BOOKING_ALIASES.eventLocation, ...normalizeBookingAliasList(fieldAliases.eventLocation)],
+        customerStayLocation: [
+            ...DEFAULT_BOOKING_ALIASES.customerStayLocation,
+            ...normalizeBookingAliasList(fieldAliases.customerStayLocation),
+        ],
         preferredBranch: [...DEFAULT_BOOKING_ALIASES.preferredBranch, ...normalizeBookingAliasList(fieldAliases.preferredBranch)],
         preferredContactMethod: [
             ...DEFAULT_BOOKING_ALIASES.preferredContactMethod,
             ...normalizeBookingAliasList(fieldAliases.preferredContactMethod),
         ],
+        paymentAmount: [...DEFAULT_BOOKING_ALIASES.paymentAmount, ...normalizeBookingAliasList(fieldAliases.paymentAmount)],
         depositAmount: [...DEFAULT_BOOKING_ALIASES.depositAmount, ...normalizeBookingAliasList(fieldAliases.depositAmount)],
         paymentMethod: [...DEFAULT_BOOKING_ALIASES.paymentMethod, ...normalizeBookingAliasList(fieldAliases.paymentMethod)],
     };
@@ -3148,9 +3172,16 @@ function mapIntegrationBookingDoc(docSnap) {
             serviceName: toTrimmedStringOrNull(data.serviceName),
             bookingDate: toTrimmedStringOrNull(data.date),
             bookingTime: toTrimmedStringOrNull(data.time),
+            branchLocationId: toTrimmedStringOrNull(data.branchLocationId),
+            branchLocationName: toTrimmedStringOrNull(data.branchLocationName),
+            eventLocation: toTrimmedStringOrNull(data.eventLocation),
+            customerStayLocation: toTrimmedStringOrNull(data.customerStayLocation),
             preferredBranch: toTrimmedStringOrNull(data.preferredBranch),
             preferredContactMethod: toTrimmedStringOrNull(data.preferredContactMethod),
             paymentMethod: toTrimmedStringOrNull(data.paymentMethod),
+            paymentAmount: typeof data.paymentAmount === 'number' && Number.isFinite(data.paymentAmount)
+                ? data.paymentAmount
+                : toTrimmedStringOrNull(data.paymentAmount),
             depositAmount: typeof data.depositAmount === 'number' && Number.isFinite(data.depositAmount)
                 ? data.depositAmount
                 : toTrimmedStringOrNull(data.depositAmount),
@@ -4026,6 +4057,22 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         aliases: bookingConfig.aliases.bookingTime,
         lookups: [payloadLookup, attributesLookup],
     }), payload.time, payload.bookingTime, payloadAttributes.time, payloadAttributes.bookingTime);
+    const branchLocationId = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.branchLocationId,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.branchLocationId, payload.branchId, payload.locationId, payloadAttributes.branchLocationId, payloadAttributes.branchId, payloadAttributes.locationId);
+    const branchLocationName = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.branchLocationName,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.branchLocationName, payload.branchName, payload.branch, payloadAttributes.branchLocationName, payloadAttributes.branchName, payloadAttributes.branch);
+    const eventLocation = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.eventLocation,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.eventLocation, payload.eventVenue, payload.venue, payloadAttributes.eventLocation, payloadAttributes.eventVenue, payloadAttributes.venue);
+    const customerStayLocation = pickBookingString(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.customerStayLocation,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.customerStayLocation, payload.stayLocation, payload.hotelLocation, payloadAttributes.customerStayLocation, payloadAttributes.stayLocation, payloadAttributes.hotelLocation);
     const preferredBranch = pickBookingString(pickBookingValueFromAliases({
         aliases: bookingConfig.aliases.preferredBranch,
         lookups: [payloadLookup, attributesLookup],
@@ -4040,6 +4087,10 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         aliases: bookingConfig.aliases.depositAmount,
         lookups: [payloadLookup, attributesLookup],
     }), payload.depositAmount, payload.depositPaid, payload.amountPaid, payloadAttributes.depositAmount, payloadAttributes.depositPaid, payloadAttributes.amountPaid);
+    const paymentAmount = pickBookingAmount(pickBookingValueFromAliases({
+        aliases: bookingConfig.aliases.paymentAmount,
+        lookups: [payloadLookup, attributesLookup],
+    }), payload.paymentAmount, payload.amount, payload.total, payload.price, payloadAttributes.paymentAmount, payloadAttributes.amount, payloadAttributes.total, payloadAttributes.price);
     const paymentMethod = pickBookingString(pickBookingValueFromAliases({
         aliases: bookingConfig.aliases.paymentMethod,
         lookups: [payloadLookup, attributesLookup],
@@ -4079,9 +4130,14 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         serviceName,
         bookingDate,
         bookingTime,
+        branchLocationId,
+        branchLocationName,
+        eventLocation,
+        customerStayLocation,
         preferredBranch,
         preferredContactMethod,
         paymentMethod,
+        paymentAmount,
         depositAmount,
     };
     const sheetColumns = {};
@@ -4092,9 +4148,14 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         serviceName,
         bookingDate,
         bookingTime,
+        branchLocationId,
+        branchLocationName,
+        eventLocation,
+        customerStayLocation,
         preferredBranch,
         preferredContactMethod,
         paymentMethod,
+        paymentAmount: typeof paymentAmount === 'number' && Number.isFinite(paymentAmount) ? paymentAmount : paymentAmount ?? null,
         depositAmount: typeof depositAmount === 'number' && Number.isFinite(depositAmount) ? depositAmount : depositAmount ?? null,
         status: 'confirmed',
         quantity,
@@ -4122,12 +4183,17 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         serviceName: importantFields.serviceName,
         date: importantFields.bookingDate,
         time: importantFields.bookingTime,
+        branchLocationId: importantFields.branchLocationId,
+        branchLocationName: importantFields.branchLocationName,
+        eventLocation: importantFields.eventLocation,
+        customerStayLocation: importantFields.customerStayLocation,
         preferredBranch: importantFields.preferredBranch,
         sessionType,
         therapistPreference,
         preferredContactMethod: importantFields.preferredContactMethod,
         depositAmount: importantFields.depositAmount,
         paymentMethod: importantFields.paymentMethod,
+        paymentAmount: importantFields.paymentAmount,
         paymentScreenshotUrl,
         paymentScreenshotReady,
         noRefundAccepted,

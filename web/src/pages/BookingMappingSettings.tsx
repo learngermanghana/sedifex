@@ -14,8 +14,13 @@ type CanonicalFieldKey =
   | 'serviceName'
   | 'bookingDate'
   | 'bookingTime'
+  | 'branchLocationId'
+  | 'branchLocationName'
+  | 'eventLocation'
+  | 'customerStayLocation'
   | 'preferredBranch'
   | 'preferredContactMethod'
+  | 'paymentAmount'
   | 'depositAmount'
   | 'paymentMethod'
 
@@ -30,8 +35,13 @@ const CANONICAL_FIELD_KEYS: CanonicalFieldKey[] = [
   'serviceName',
   'bookingDate',
   'bookingTime',
+  'branchLocationId',
+  'branchLocationName',
+  'eventLocation',
+  'customerStayLocation',
   'preferredBranch',
   'preferredContactMethod',
+  'paymentAmount',
   'depositAmount',
   'paymentMethod',
 ]
@@ -45,8 +55,13 @@ const FIELD_LABELS: Record<SheetHeaderKey, string> = {
   serviceName: 'Service name',
   bookingDate: 'Booking date',
   bookingTime: 'Booking time',
+  branchLocationId: 'Branch location id',
+  branchLocationName: 'Branch location name',
+  eventLocation: 'Event location',
+  customerStayLocation: 'Customer stay location',
   preferredBranch: 'Preferred branch',
   preferredContactMethod: 'Preferred contact method',
+  paymentAmount: 'Payment amount',
   depositAmount: 'Deposit amount',
   paymentMethod: 'Payment method',
   status: 'Status',
@@ -60,8 +75,13 @@ const DEFAULT_SHEET_HEADERS: Record<SheetHeaderKey, string> = {
   serviceName: 'Service',
   bookingDate: 'Booking Date',
   bookingTime: 'Booking Time',
+  branchLocationId: 'Branch Location ID',
+  branchLocationName: 'Branch Location Name',
+  eventLocation: 'Event Location',
+  customerStayLocation: 'Customer Stay Location',
   preferredBranch: 'Preferred Branch',
   preferredContactMethod: 'Preferred Contact Method',
+  paymentAmount: 'Payment Amount',
   depositAmount: 'Deposit Amount',
   paymentMethod: 'Payment Method',
   status: 'Status',
