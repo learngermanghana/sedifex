@@ -226,6 +226,7 @@ Booking/registration note:
 - Build booking forms on each website using store-defined fields.
 - Put vertical-specific data (e.g., school/travel extras) inside `attributes` in the booking payload.
 - Keep API keys server-side; submit booking requests from your website backend only.
+- For a developer-ready canonical booking field dictionary (including `branchLocationId`, `eventLocation`, `customerStayLocation`, and `paymentAmount`) plus a full request example, see `docs/integration-api-guide.md` under **POST /v1IntegrationBookings**.
 
 ### Common 404 fix (important)
 

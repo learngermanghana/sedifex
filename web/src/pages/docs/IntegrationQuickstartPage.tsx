@@ -38,6 +38,27 @@ export default function IntegrationQuickstartPage() {
       </section>
 
       <section>
+        <h2>Booking field standardization (recommended)</h2>
+        <p>
+          To avoid sync errors across WordPress forms, page builders, and custom sites, map all incoming booking payloads
+          to canonical Sedifex field keys before sending them.
+        </p>
+        <ul>
+          <li><code>branchLocationId</code>: internal branch selector id (for multi-branch stores).</li>
+          <li><code>branchLocationName</code>: branch label shown to users (for reporting and sheet output).</li>
+          <li><code>eventLocation</code>: where an event takes place.</li>
+          <li><code>customerStayLocation</code>: where the customer is currently staying.</li>
+          <li><code>paymentMethod</code>: payment channel used (cash/card/transfer/etc.).</li>
+          <li><code>paymentAmount</code>: amount paid or to charge for the booking.</li>
+        </ul>
+        <p>
+          You can configure aliases for these keys in <strong>Settings → Integrations → Booking Mapping</strong>, so
+          labels like <code>venue</code>, <code>event_venue</code>, or <code>hotelLocation</code> still resolve to the
+          same canonical values.
+        </p>
+      </section>
+
+      <section>
         <h2>Next.js cache guidance</h2>
         <ul>
           <li><strong>30–120s</strong> revalidate window for frequent stock/price/promo/gallery changes.</li>

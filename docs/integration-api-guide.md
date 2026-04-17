@@ -188,6 +188,53 @@ Query parameters:
   - Existing customer records are matched by `storeId + phone` first, then `storeId + email`.
   - New customer records are tagged with `source: "integrationBooking"` for later segmentation.
 
+#### Booking canonical field map (for website developers)
+
+To prevent sync mismatches between different form builders, use these canonical keys in booking payloads and/or map your website labels to them in **Settings → Integrations → Booking Mapping**.
+
+| Canonical key | Purpose | Common website aliases |
+|---|---|---|
+| `customerName` | Booker full name | `name`, `fullName`, `clientName` |
+| `customerPhone` | Booker phone | `phone`, `phoneNumber`, `mobile`, `whatsapp` |
+| `customerEmail` | Booker email | `email`, `emailAddress` |
+| `serviceName` | Product/service selected | `productName`, `service_note_name` |
+| `bookingDate` | Booking date | `date` |
+| `bookingTime` | Booking time | `time` |
+| `branchLocationId` | Internal branch/store location id | `branchId`, `locationId`, `storeBranchId` |
+| `branchLocationName` | Human-readable branch name | `branchName`, `storeBranch`, `locationName` |
+| `eventLocation` | Where event takes place | `eventVenue`, `venue`, `eventAddress` |
+| `customerStayLocation` | Where customer is staying | `stayLocation`, `hotelLocation`, `guestLocation` |
+| `paymentMethod` | How customer pays | `payment_method`, `paymentType` |
+| `paymentAmount` | Amount charged/paid | `amount`, `total`, `price` |
+
+**Legacy compatibility:** `preferredBranch` and `depositAmount` are still supported, but new implementations should prefer `branchLocationId`/`branchLocationName` and `paymentAmount`.
+
+#### Example request body (recommended shape)
+
+```json
+{
+  "serviceId": "svc_event_001",
+  "slotId": "slot_2026_08_01_10_00",
+  "customer": {
+    "name": "Ada Mensah",
+    "phone": "+233201234567",
+    "email": "ada@example.com"
+  },
+  "quantity": 2,
+  "notes": "Need projector setup",
+  "paymentMethod": "bank_transfer",
+  "paymentAmount": 250,
+  "branchLocationId": "branch_accra_airport",
+  "branchLocationName": "Airport Branch",
+  "eventLocation": "National Theatre, Accra",
+  "customerStayLocation": "Labadi Beach Hotel",
+  "attributes": {
+    "source": "wordpress_booking_form",
+    "campaign": "summer_launch"
+  }
+}
+```
+
 ## 4) Deduplication and caching
 
 - Deduplicate by product `id` (and optionally `updatedAt` when merging data sources).
