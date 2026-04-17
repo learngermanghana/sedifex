@@ -327,6 +327,8 @@ export default function Bookings() {
       try {
         await updateDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), {
           status: nextStatus,
+          syncStatus: 'pending',
+          syncRequestedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         })
 
@@ -349,8 +351,6 @@ export default function Bookings() {
     },
     [storeId],
   )
-
-
 
   const handleDeleteBooking = useCallback(
     async (bookingId: string) => {
@@ -375,26 +375,6 @@ export default function Bookings() {
     [storeId],
   )
 
-  const handleSyncBooking = useCallback(
-    async (bookingId: string) => {
-      if (!storeId) return
-      setUpdatingBookingId(bookingId)
-      setErrorMessage(null)
-      try {
-        await updateDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), {
-          syncRequestedAt: Timestamp.now(),
-          syncStatus: 'pending',
-          updatedAt: Timestamp.now(),
-        })
-      } catch (error) {
-        console.error('[bookings] Failed to request booking sync', error)
-        setErrorMessage('Unable to queue this booking for sheet sync. Please retry.')
-      } finally {
-        setUpdatingBookingId(null)
-      }
-    },
-    [storeId],
-  )
 
   const filteredBookings = useMemo(() => {
     const queryText = searchTerm.trim().toLowerCase()
@@ -419,7 +399,7 @@ export default function Bookings() {
             </Link>
           </div>
           <p className="form__hint">
-            Website bookings appear here. New booking contact details are automatically mapped into Customers when they include a phone or email.
+            Website bookings appear here. New bookings and booking updates are synced automatically, and booking contact details are mapped into Customers when they include a phone or email.
           </p>
         </header>
 
@@ -538,21 +518,10 @@ export default function Bookings() {
                                 className="btn btn-secondary"
                                 type="button"
                                 disabled={updatingBookingId === booking.id}
-                                onClick={() => void handleSyncBooking(booking.id)}
-                              >
-                                Sync to sheet
-                              </button>
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                disabled={updatingBookingId === booking.id}
                                 onClick={() => void handleDeleteBooking(booking.id)}
                               >
                                 Delete
                               </button>
-                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">
-                                Open
-                              </Link>
                             </div>
                           </td>
                         </tr>
