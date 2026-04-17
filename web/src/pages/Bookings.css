@@ -6,6 +6,13 @@
   flex-wrap: wrap;
 }
 
+.bookings-page__intro {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #1f2937;
+}
+
 .bookings-page__filters {
   display: grid;
   gap: 12px;
