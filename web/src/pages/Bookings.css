@@ -1,3 +1,11 @@
+.bookings-page__header-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .bookings-page__filters {
   display: grid;
   gap: 12px;

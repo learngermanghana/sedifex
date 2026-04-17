@@ -292,9 +292,16 @@ export default function BookingMappingSettings() {
         <header className="booking-mapping-settings__header">
           <p className="booking-mapping-settings__crumbs">Settings → Integrations → Booking Mapping</p>
           <h1 id="booking-mapping-title">Booking mapping</h1>
-          <p className="form__hint">
-            Configure alias lookups and sheet column headers used by booking ingestion.
-          </p>
+          <div className="booking-mapping-settings__intro">
+            <p className="form__hint">
+              Configure alias lookups and sheet column headers used by booking ingestion.
+            </p>
+            <ul className="booking-mapping-settings__intro-list">
+              <li>Back to Integrations to review API key, booking, and webhook setup.</li>
+              <li>Add custom aliases that should map to each canonical field (up to {MAX_ALIASES_PER_FIELD} aliases per field).</li>
+              <li>Set output labels for each booking sheet column used during sync.</li>
+            </ul>
+          </div>
           <p className="form__hint">
             <Link to="/account">Back to Integrations</Link>
           </p>
@@ -318,7 +325,7 @@ export default function BookingMappingSettings() {
             <section className="booking-mapping-settings__section" aria-labelledby="booking-aliases-heading">
               <h2 id="booking-aliases-heading">Field aliases</h2>
               <p className="form__hint">
-                Add custom aliases that should map to each canonical field (up to {MAX_ALIASES_PER_FIELD} aliases per field).
+                Add custom aliases that should map incoming payload keys to each canonical field.
               </p>
 
               <div className="booking-mapping-settings__alias-grid">
@@ -389,7 +396,7 @@ export default function BookingMappingSettings() {
 
             <section className="booking-mapping-settings__section" aria-labelledby="sheet-headers-heading">
               <h2 id="sheet-headers-heading">Sheet headers</h2>
-              <p className="form__hint">Set output labels for each booking sheet column.</p>
+              <p className="form__hint">Set output labels for each booking sheet column used for sheet sync output.</p>
 
               <div className="booking-mapping-settings__header-grid">
                 {SHEET_HEADER_KEYS.map(key => (

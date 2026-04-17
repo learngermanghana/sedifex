@@ -55,7 +55,6 @@ const PAGE_SIZE = 25
 const STATUS_ALL = 'all'
 const SERVICE_ALL = 'all'
 
-const ACTIONABLE_STATUS = ['confirmed', 'rescheduled'] as const
 const STATUS_ACTIONS: Record<string, Array<{ label: string; nextStatus: string }>> = {
   confirmed: [
     { label: 'Reschedule', nextStatus: 'rescheduled' },
@@ -141,7 +140,6 @@ export default function Bookings() {
   const [hasNextPage, setHasNextPage] = useState(false)
   const [pageNumber, setPageNumber] = useState(1)
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null)
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
 
   const hydrateBooking = useCallback((docSnap: QueryDocumentSnapshot<DocumentData>, serviceMap: Map<string, string>) => {
     const data = docSnap.data() as Record<string, unknown>
@@ -367,10 +365,30 @@ export default function Bookings() {
         await deleteDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId))
 
         setBookings(previous => previous.filter(booking => booking.id !== bookingId))
-        setSelectedBookingId(previous => (previous === bookingId ? null : previous))
       } catch (error) {
         console.error('[bookings] Failed to delete booking', error)
         setErrorMessage('Delete failed. Please retry.')
+      } finally {
+        setUpdatingBookingId(null)
+      }
+    },
+    [storeId],
+  )
+
+  const handleSyncBooking = useCallback(
+    async (bookingId: string) => {
+      if (!storeId) return
+      setUpdatingBookingId(bookingId)
+      setErrorMessage(null)
+      try {
+        await updateDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), {
+          syncRequestedAt: Timestamp.now(),
+          syncStatus: 'pending',
+          updatedAt: Timestamp.now(),
+        })
+      } catch (error) {
+        console.error('[bookings] Failed to request booking sync', error)
+        setErrorMessage('Unable to queue this booking for sheet sync. Please retry.')
       } finally {
         setUpdatingBookingId(null)
       }
@@ -388,20 +406,18 @@ export default function Bookings() {
     })
   }, [bookings, searchTerm])
 
-  const confirmedCount = useMemo(
-    () => bookings.filter(booking => booking.status === 'confirmed').length,
-    [bookings],
-  )
-  const selectedBooking = useMemo(
-    () => bookings.find(booking => booking.id === selectedBookingId) ?? null,
-    [bookings, selectedBookingId],
-  )
+  const confirmedCount = useMemo(() => bookings.filter(booking => booking.status === 'confirmed').length, [bookings])
 
   return (
     <main className="page bookings-page">
       <section className="card stack gap-4">
         <header className="stack gap-1">
-          <h1>Bookings</h1>
+          <div className="bookings-page__header-row">
+            <h1>Bookings</h1>
+            <Link to="/bookings/new" className="btn btn-secondary">
+              Add booking
+            </Link>
+          </div>
           <p className="form__hint">
             Website bookings appear here. New booking contact details are automatically mapped into Customers when they include a phone or email.
           </p>
@@ -486,9 +502,7 @@ export default function Bookings() {
                       {filteredBookings.map(booking => (
                         <tr
                           key={booking.id}
-                          className={selectedBookingId === booking.id ? 'bookings-page__row bookings-page__row--selected' : 'bookings-page__row'}
-                          onClick={() => setSelectedBookingId(current => (current === booking.id ? null : booking.id))}
-                          style={{ cursor: 'pointer' }}
+                          className="bookings-page__row"
                         >
                           <td>{formatDate(booking.createdAt)}</td>
                           <td>{booking.serviceName || booking.serviceId}</td>
@@ -517,6 +531,17 @@ export default function Bookings() {
                                   {action.label}
                                 </button>
                               ))}
+                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">
+                                Edit
+                              </Link>
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                disabled={updatingBookingId === booking.id}
+                                onClick={() => void handleSyncBooking(booking.id)}
+                              >
+                                Sync to sheet
+                              </button>
                               <button
                                 className="btn btn-secondary"
                                 type="button"
@@ -525,9 +550,9 @@ export default function Bookings() {
                               >
                                 Delete
                               </button>
-                              {!ACTIONABLE_STATUS.includes(booking.status as (typeof ACTIONABLE_STATUS)[number]) && (
-                                <span className="form__hint">No status actions</span>
-                              )}
+                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">
+                                Open
+                              </Link>
                             </div>
                           </td>
                         </tr>
@@ -535,33 +560,6 @@ export default function Bookings() {
                     </tbody>
                   </table>
                 </div>
-                <section className="bookings-page__details card stack gap-2">
-                  <h3>Booking details</h3>
-                  {selectedBooking ? (
-                    <dl className="bookings-page__details-grid">
-                      <div><dt>Name</dt><dd>{selectedBooking.bookingName ?? selectedBooking.customerName ?? '—'}</dd></div>
-                      <div><dt>Phone</dt><dd>{selectedBooking.bookingPhone ?? selectedBooking.customerPhone ?? '—'}</dd></div>
-                      <div><dt>Service ID</dt><dd>{selectedBooking.serviceId}</dd></div>
-                      <div><dt>Date</dt><dd>{selectedBooking.bookingDate ?? '—'}</dd></div>
-                      <div><dt>Service name</dt><dd>{selectedBooking.serviceName || '—'}</dd></div>
-                      <div><dt>Time</dt><dd>{selectedBooking.bookingTime ?? '—'}</dd></div>
-                      <div><dt>Preferred Branch</dt><dd>{selectedBooking.preferredBranch ?? '—'}</dd></div>
-                      <div><dt>Session Type / Duration</dt><dd>{selectedBooking.sessionType ?? '—'}</dd></div>
-                      <div><dt>Therapist Preference</dt><dd>{selectedBooking.therapistPreference ?? '—'}</dd></div>
-                      <div><dt>Preferred Contact Method</dt><dd>{selectedBooking.preferredContactMethod ?? '—'}</dd></div>
-                      <div><dt>Deposit Amount</dt><dd>{selectedBooking.depositAmount ?? '—'}</dd></div>
-                      <div><dt>Payment Method</dt><dd>{selectedBooking.paymentMethod ?? '—'}</dd></div>
-                      <div><dt>Email</dt><dd>{selectedBooking.bookingEmail ?? selectedBooking.customerEmail ?? '—'}</dd></div>
-                      <div><dt>Payment Screenshot URL</dt><dd>{selectedBooking.paymentScreenshotUrl ?? '—'}</dd></div>
-                      <div><dt>Notes / Special requests</dt><dd>{selectedBooking.notes ?? '—'}</dd></div>
-                      <div><dt>Payment screenshot ready</dt><dd>{selectedBooking.paymentScreenshotReady === null ? '—' : selectedBooking.paymentScreenshotReady ? 'Yes' : 'No'}</dd></div>
-                      <div><dt>No-refund policy accepted</dt><dd>{selectedBooking.noRefundAccepted === null ? '—' : selectedBooking.noRefundAccepted ? 'Yes' : 'No'}</dd></div>
-                    </dl>
-                  ) : (
-                    <p className="form__hint">Click a booking row to view full details.</p>
-                  )}
-                  <p className="form__hint">Note: Payments are non-refundable after confirmation.</p>
-                </section>
                 <div className="bookings-page__pagination">
                   <button className="btn btn-secondary" type="button" disabled={pageNumber <= 1} onClick={handlePreviousPage}>
                     Previous
