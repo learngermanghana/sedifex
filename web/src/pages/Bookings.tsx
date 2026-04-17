@@ -32,6 +32,7 @@ type BookingRecord = {
   sessionType: string | null
   therapistPreference: string | null
   preferredContactMethod: string | null
+  paymentAmount: string | null
   depositAmount: string | null
   paymentMethod: string | null
   paymentScreenshotUrl: string | null
@@ -161,6 +162,7 @@ export default function Bookings() {
     const preferredContactMethod = pickString(data, ['preferredContactMethod', 'contactMethod'])
     const paymentMethod = pickString(data, ['paymentMethod'])
     const paymentScreenshotUrl = pickString(data, ['paymentScreenshotUrl', 'screenshotUrl'])
+    const paymentAmount = pickAmount(data, ['paymentAmount', 'amount', 'total', 'price'])
     const depositAmount = pickAmount(data, ['depositAmount', 'depositPaid', 'amountPaid'])
     const bookingDate = pickString(data, ['date', 'bookingDate'])
     const bookingTime = pickString(data, ['time', 'bookingTime'])
@@ -183,6 +185,7 @@ export default function Bookings() {
       preferredContactMethod,
       paymentMethod,
       paymentScreenshotUrl,
+      paymentAmount,
       depositAmount,
       paymentScreenshotReady,
       noRefundAccepted,
@@ -474,6 +477,7 @@ export default function Bookings() {
                         <th>Customer</th>
                         <th>Qty</th>
                         <th>Status</th>
+                        <th>Amount</th>
                         <th>Notes</th>
                         <th>Actions</th>
                       </tr>
@@ -497,6 +501,7 @@ export default function Bookings() {
                               {statusLabel(booking.status)}
                             </span>
                           </td>
+                          <td>{booking.paymentAmount ?? booking.depositAmount ?? '—'}</td>
                           <td>{booking.notes ?? '—'}</td>
                           <td>
                             <div className="bookings-page__actions">

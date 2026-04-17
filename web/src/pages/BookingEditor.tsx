@@ -18,6 +18,7 @@ type BookingFormState = {
   status: string
   quantity: string
   notes: string
+  paymentAmount: string
   depositAmount: string
   paymentMethod: string
 }
@@ -35,12 +36,15 @@ const DEFAULT_FORM: BookingFormState = {
   status: 'confirmed',
   quantity: '1',
   notes: '',
+  paymentAmount: '',
   depositAmount: '',
   paymentMethod: '',
 }
 
 function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
 }
 
 export default function BookingEditor() {
@@ -87,7 +91,8 @@ export default function BookingEditor() {
           status: stringValue(data.status) || 'confirmed',
           quantity: String(typeof data.quantity === 'number' ? data.quantity : 1),
           notes: stringValue(data.notes),
-          depositAmount: stringValue(data.depositAmount),
+          paymentAmount: stringValue(data.paymentAmount || data.amount || data.total || data.price),
+          depositAmount: stringValue(data.depositAmount || data.depositPaid || data.amountPaid),
           paymentMethod: stringValue(data.paymentMethod),
         })
       } catch (error) {
@@ -143,6 +148,7 @@ export default function BookingEditor() {
           status: form.status.trim() || 'confirmed',
           quantity: quantityValue,
           notes: form.notes.trim(),
+          paymentAmount: form.paymentAmount.trim(),
           depositAmount: form.depositAmount.trim(),
           paymentMethod: form.paymentMethod.trim(),
           customer: {
@@ -209,6 +215,7 @@ export default function BookingEditor() {
               </select>
             </label>
             <label><span>Quantity</span><input type="number" min={1} value={form.quantity} onChange={event => setForm(prev => ({ ...prev, quantity: event.target.value }))} /></label>
+            <label><span>Payment amount</span><input value={form.paymentAmount} onChange={event => setForm(prev => ({ ...prev, paymentAmount: event.target.value }))} /></label>
             <label><span>Deposit amount</span><input value={form.depositAmount} onChange={event => setForm(prev => ({ ...prev, depositAmount: event.target.value }))} /></label>
             <label><span>Payment method</span><input value={form.paymentMethod} onChange={event => setForm(prev => ({ ...prev, paymentMethod: event.target.value }))} /></label>
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
