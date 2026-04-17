@@ -392,15 +392,15 @@ export default function Bookings() {
     <main className="page bookings-page">
       <section className="card stack gap-4">
         <header className="stack gap-1">
-          <div className="bookings-page__header-row">
-            <h1>Bookings</h1>
-            <Link to="/bookings/new" className="btn btn-secondary">
-              Add booking
-            </Link>
-          </div>
-          <p className="form__hint">
-            Website bookings appear here. New bookings and booking updates are synced automatically, and booking contact details are mapped into Customers when they include a phone or email.
+          <h1>Bookings</h1>
+          <p className="bookings-page__intro">
+            Every website booking appears here in real time, including new appointments, reschedules, and cancellations, so your calendar always reflects the latest client
+            activity without manual updates. When a booking includes a phone number or email, we automatically map those contact details into Customers to reduce duplicate
+            entries, preserve complete client history, and make it easier for your team to confirm visits, send reminders, and deliver faster support.
           </p>
+          <Link to="/bookings/new" className="btn btn-secondary">
+            Add booking
+          </Link>
         </header>
 
         <div className="bookings-page__filters">
