@@ -83,6 +83,10 @@ export default function IntegrationQuickstartPage() {
           If your storefront is WordPress, follow the dedicated install flow at{' '}
           <a href="/docs/wordpress-install-guide">/docs/wordpress-install-guide</a>.
         </p>
+        <p>
+          For email campaigns with store-owned Google Sheets + Apps Script, use{' '}
+          <a href="/docs/bulk-email-google-sheets-guide">/docs/bulk-email-google-sheets-guide</a>.
+        </p>
       </section>
     </DocsPageLayout>
   )

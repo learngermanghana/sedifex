@@ -17,6 +17,7 @@ import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
 import BulkMessaging from './pages/BulkMessaging'
+import BulkEmail from './pages/BulkEmail'
 import StaffManagement from './pages/StaffManagement'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
 import Support from './pages/Support'
@@ -44,6 +45,7 @@ import TermsPage from './pages/legal/TermsPage'
 import ReturnPolicyPage from './pages/legal/ReturnPolicyPage'
 import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
 import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
+import BulkEmailGoogleSheetsPage from './pages/docs/BulkEmailGoogleSheetsPage'
 
 import { ToastProvider } from './components/ToastProvider'
 
@@ -78,6 +80,7 @@ const router = createBrowserRouter([
           { path: 'bookings/:bookingId', element: <BookingEditor /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
+          { path: 'bulk-email', element: <BulkEmail /> },
           { path: 'logi', element: <Logi /> },
 
           // Finance
@@ -110,6 +113,7 @@ const router = createBrowserRouter([
       { path: 'pricing', element: <PricingPage /> },
       { path: 'docs/integration-quickstart', element: <IntegrationQuickstartPage /> },
       { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
+      { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
 
       // Legal pages
       { path: 'legal/privacy', element: <PrivacyPage /> },
