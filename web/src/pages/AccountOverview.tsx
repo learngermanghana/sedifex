@@ -342,8 +342,13 @@ type AccountOverviewProps = {
   viewMode?: 'full' | 'promotions'
 }
 
-type AccountTab = 'workspace' | 'integrations' | 'promotions' | 'operations'
-type OperationsTab = 'billing' | 'team' | 'data-controls'
+type AccountTab =
+  | 'workspace'
+  | 'integrations'
+  | 'promotions'
+  | 'billing'
+  | 'team'
+  | 'data-controls'
 type PublicPageTab = 'overview' | 'promo' | 'gallery' | 'website-sync'
 type PromoGalleryTab = 'upload' | 'view'
 type IntegrationTab = 'overview' | 'keys' | 'booking' | 'webhooks' | 'tests'
@@ -396,7 +401,6 @@ export default function AccountOverview({
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [activeTab, setActiveTab] = useState<AccountTab>('workspace')
-  const [operationsTab, setOperationsTab] = useState<OperationsTab>('billing')
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>('overview')
 
   const [isSavingPromo, setIsSavingPromo] = useState(false)
@@ -1751,11 +1755,27 @@ export default function AccountOverview({
           </button>
           <button
             type="button"
-            className={`account-overview__tab ${activeTab === 'operations' ? 'is-active' : ''}`}
-            aria-pressed={activeTab === 'operations'}
-            onClick={() => setActiveTab('operations')}
+            className={`account-overview__tab ${activeTab === 'billing' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'billing'}
+            onClick={() => setActiveTab('billing')}
           >
-            Billing & team
+            Billing
+          </button>
+          <button
+            type="button"
+            className={`account-overview__tab ${activeTab === 'team' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'team'}
+            onClick={() => setActiveTab('team')}
+          >
+            Team
+          </button>
+          <button
+            type="button"
+            className={`account-overview__tab ${activeTab === 'data-controls' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'data-controls'}
+            onClick={() => setActiveTab('data-controls')}
+          >
+            Data
           </button>
         </nav>
       )}
@@ -2884,35 +2904,7 @@ export default function AccountOverview({
         </section>
       )}
 
-      {!isPromotionsView && activeTab === 'operations' && (
-        <>
-      <nav className="account-overview__tabs" aria-label="Account operations sections">
-        <button
-          type="button"
-          className={`account-overview__tab ${operationsTab === 'billing' ? 'is-active' : ''}`}
-          aria-pressed={operationsTab === 'billing'}
-          onClick={() => setOperationsTab('billing')}
-        >
-          Billing
-        </button>
-        <button
-          type="button"
-          className={`account-overview__tab ${operationsTab === 'team' ? 'is-active' : ''}`}
-          aria-pressed={operationsTab === 'team'}
-          onClick={() => setOperationsTab('team')}
-        >
-          Team roster
-        </button>
-        <button
-          type="button"
-          className={`account-overview__tab ${operationsTab === 'data-controls' ? 'is-active' : ''}`}
-          aria-pressed={operationsTab === 'data-controls'}
-          onClick={() => setOperationsTab('data-controls')}
-        >
-          Data controls
-        </button>
-      </nav>
-      {operationsTab === 'billing' && (
+      {!isPromotionsView && activeTab === 'billing' && (
         <>
       {/* ✅ Billing summary: prefer profile.ownerEmail, fallback to auth email */}
       <AccountBillingSection
@@ -2973,10 +2965,10 @@ export default function AccountOverview({
         </>
       )}
 
-      {operationsTab === 'data-controls' && (
+      {!isPromotionsView && activeTab === 'data-controls' && (
       <section aria-labelledby="account-overview-deletion">
         <div className="account-overview__section-header">
-          <h2 id="account-overview-deletion">Data controls</h2>
+          <h2 id="account-overview-deletion">Delete account</h2>
           <p className="account-overview__subtitle">
             Delete your workspace data instantly when you no longer want to keep it.
           </p>
@@ -3039,7 +3031,7 @@ export default function AccountOverview({
       </section>
       )}
 
-      {operationsTab === 'team' && (
+      {!isPromotionsView && activeTab === 'team' && (
       <section aria-labelledby="account-overview-roster">
         <h2 id="account-overview-roster">Team roster</h2>
 
@@ -3169,8 +3161,6 @@ export default function AccountOverview({
           </tbody>
         </table>
       </section>
-      )}
-        </>
       )}
     </div>
   )

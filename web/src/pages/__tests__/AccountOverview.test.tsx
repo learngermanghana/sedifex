@@ -123,7 +123,7 @@ afterAll(() => {
 describe('AccountOverview', () => {
   async function openOperationsTab() {
     await userEvent.click(
-      await screen.findByRole('button', { name: /billing & team/i }),
+      await screen.findByRole('button', { name: /^billing$/i }),
     )
   }
 

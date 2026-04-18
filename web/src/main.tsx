@@ -17,6 +17,7 @@ import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
 import BulkMessaging from './pages/BulkMessaging'
+import BulkEmail from './pages/BulkEmail'
 import StaffManagement from './pages/StaffManagement'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
 import Support from './pages/Support'
@@ -78,6 +79,7 @@ const router = createBrowserRouter([
           { path: 'bookings/:bookingId', element: <BookingEditor /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
+          { path: 'bulk-email', element: <BulkEmail /> },
           { path: 'logi', element: <Logi /> },
 
           // Finance

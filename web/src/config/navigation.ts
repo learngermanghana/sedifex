@@ -17,8 +17,8 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/bookings', label: 'Bookings', roles: ['owner', 'staff'] },
   { to: '/social-media', label: 'Social media', roles: ['owner'] },
   { to: '/bulk-messaging', label: 'SMS', roles: ['owner'] },
+  { to: '/bulk-email', label: 'Bulk email', roles: ['owner'] },
   { to: '/finance', label: 'Invoice', parentTo: '/sell', roles: ['owner'] },
-  { to: '/data-transfer', label: 'Data', roles: ['owner'] },
   { to: '/public-page', label: 'Public page', roles: ['owner'] },
   { to: '/account', label: 'Account', roles: ['owner'] },
 ]
