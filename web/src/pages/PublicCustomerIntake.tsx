@@ -50,6 +50,7 @@ export default function PublicCustomerIntake() {
     if (!inviteId || typeof window === 'undefined') return ''
     return `${window.location.origin}/join-customers/${encodeURIComponent(inviteId)}`
   }, [inviteId])
+  const fallbackLink = useMemo(() => profile.vanityPath || intakeUrl, [profile.vanityPath, intakeUrl])
 
   useEffect(() => {
     let active = true
@@ -205,7 +206,13 @@ export default function PublicCustomerIntake() {
           ) : (
             <div className="public-customer-intake__qr public-customer-intake__qr--empty">QR unavailable</div>
           )}
-          <p className="public-customer-intake__link">{profile.vanityPath || intakeUrl}</p>
+          {fallbackLink ? (
+            <a className="public-customer-intake__link" href={fallbackLink} target="_blank" rel="noreferrer">
+              {fallbackLink}
+            </a>
+          ) : (
+            <p className="public-customer-intake__link">Link unavailable. Please request a new invite link.</p>
+          )}
           <p className="public-customer-intake__fallback">If QR fails, type this link in your browser.</p>
           <div className="customers-page__form-actions">
             <button type="button" className="button button--ghost" onClick={() => setVariant(variant === 'a4' ? 'a5' : 'a4')}>

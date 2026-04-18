@@ -117,9 +117,10 @@
 }
 
 .public-customer-intake__link {
+  display: block;
   word-break: break-all;
   font-size: 0.85rem;
-  color: #475569;
+  color: #334155;
 }
 
 .public-customer-intake__fallback {
@@ -153,7 +154,6 @@
     align-content: center;
   }
 
-  .public-customer-intake__link,
   .public-customer-intake .button {
     display: none;
   }
