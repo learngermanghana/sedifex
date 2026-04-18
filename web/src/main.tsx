@@ -45,6 +45,7 @@ import TermsPage from './pages/legal/TermsPage'
 import ReturnPolicyPage from './pages/legal/ReturnPolicyPage'
 import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
 import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
+import BulkEmailGoogleSheetsPage from './pages/docs/BulkEmailGoogleSheetsPage'
 
 import { ToastProvider } from './components/ToastProvider'
 
@@ -112,6 +113,7 @@ const router = createBrowserRouter([
       { path: 'pricing', element: <PricingPage /> },
       { path: 'docs/integration-quickstart', element: <IntegrationQuickstartPage /> },
       { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
+      { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
 
       // Legal pages
       { path: 'legal/privacy', element: <PrivacyPage /> },
