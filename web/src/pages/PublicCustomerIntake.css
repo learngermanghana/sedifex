@@ -1,0 +1,111 @@
+.public-customer-intake {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: radial-gradient(circle at top, #f5f7ff 0%, #eef2ff 45%, #f8fafc 100%);
+}
+
+.public-customer-intake__card {
+  width: min(680px, 100%);
+  background: #ffffff;
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 50px -32px rgba(15, 23, 42, 0.35);
+  padding: 1.5rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.public-customer-intake__kicker {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4f46e5;
+}
+
+.public-customer-intake h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.public-customer-intake p {
+  margin: 0;
+  color: #334155;
+}
+
+.public-customer-intake__form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.public-customer-intake__form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.public-customer-intake__form input,
+.public-customer-intake__form textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+}
+
+.public-customer-intake__status {
+  font-weight: 600;
+}
+
+.public-customer-intake__status--error {
+  color: #b91c1c;
+}
+
+.public-customer-intake__qr {
+  width: min(360px, 100%);
+  margin-inline: auto;
+}
+
+.public-customer-intake__qr svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.public-customer-intake__qr--empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #94a3b8;
+  border-radius: 0.75rem;
+}
+
+.public-customer-intake__link {
+  word-break: break-all;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+@media print {
+  .public-customer-intake {
+    background: #fff;
+    padding: 0;
+  }
+
+  .public-customer-intake__card {
+    box-shadow: none;
+    border-color: #cbd5e1;
+    max-width: 100%;
+    min-height: 100vh;
+    align-content: center;
+  }
+
+  .public-customer-intake__link,
+  .public-customer-intake .button {
+    display: none;
+  }
+}

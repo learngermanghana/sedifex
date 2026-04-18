@@ -37,6 +37,7 @@ import BookingMappingSettings from './pages/BookingMappingSettings'
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
 import CustomerDisplay from './pages/CustomerDisplay'
+import PublicCustomerIntake from './pages/PublicCustomerIntake'
 
 import PrivacyPage from './pages/legal/PrivacyPage'
 import CookiesPage from './pages/legal/CookiesPage'
@@ -56,6 +57,8 @@ const router = createBrowserRouter([
   { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
+  { path: '/join-customers/:storeId', element: <PublicCustomerIntake /> },
+  { path: '/join-customers/:storeId/:mode', element: <PublicCustomerIntake /> },
 
   {
     path: '/',

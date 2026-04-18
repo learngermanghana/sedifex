@@ -71,7 +71,7 @@ type CachedSaleRecord = {
 } & Record<string, unknown>
 
 type MessageChannel = 'whatsapp' | 'telegram' | 'email'
-type CustomerTab = 'view' | 'add'
+type CustomerTab = 'view' | 'add' | 'invite'
 
 const RECENT_VISIT_DAYS = 90
 const HIGH_VALUE_THRESHOLD = 1000
@@ -357,6 +357,14 @@ export default function Customers() {
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<CustomerTab>('view')
+  const intakeLink = useMemo(() => {
+    if (!activeStoreId || typeof window === 'undefined') return null
+    return `${window.location.origin}/join-customers/${encodeURIComponent(activeStoreId)}`
+  }, [activeStoreId])
+  const intakeQrLink = useMemo(() => {
+    if (!intakeLink) return null
+    return `${intakeLink}/qr`
+  }, [intakeLink])
   useEffect(() => {
     return () => {
       if (messageTimeoutRef.current) {
@@ -1150,6 +1158,23 @@ export default function Customers() {
     setSelectedCustomerId(customer.id)
   }
 
+  async function copyInviteLink(target: 'form' | 'qr') {
+    const value = target === 'qr' ? intakeQrLink : intakeLink
+    if (!value) {
+      setError('No store selected yet. Please refresh and try again.')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(value)
+      showSuccess(target === 'qr' ? 'QR page link copied.' : 'Customer intake link copied.')
+      setError(null)
+    } catch (copyError) {
+      console.error('[customers] Failed to copy invite link', copyError)
+      setError('Could not copy link. Please copy it manually from the field.')
+    }
+  }
+
   const isFormDisabled = busy || isImporting
 
   const totalShown = filteredCustomers.length
@@ -1197,7 +1222,83 @@ export default function Customers() {
           >
             Add new customer
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'invite'}
+            className={`button button--small ${activeTab === 'invite' ? 'button--primary' : 'button--ghost'}`}
+            onClick={() => setActiveTab('invite')}
+          >
+            Invite link & QR
+          </button>
         </div>
+
+        {activeTab === 'invite' ? (
+          <section className="card" aria-label="Customer invite link">
+            <div className="customers-page__section-header">
+              <h3 className="card__title">Public customer intake</h3>
+              <p className="card__subtitle">
+                Share this public link so customers can submit their details directly into your customer list.
+              </p>
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="customer-intake-link">Public form link</label>
+              <input
+                id="customer-intake-link"
+                readOnly
+                value={intakeLink ?? ''}
+                placeholder="Select an active store to generate the link"
+              />
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="customer-intake-qr-link">Printable QR page</label>
+              <input
+                id="customer-intake-qr-link"
+                readOnly
+                value={intakeQrLink ?? ''}
+                placeholder="Select an active store to generate the QR page"
+              />
+            </div>
+
+            <div className="customers-page__form-actions">
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => copyInviteLink('form')}
+                disabled={!intakeLink}
+              >
+                Copy form link
+              </button>
+              <button
+                type="button"
+                className="button button--outline"
+                onClick={() => copyInviteLink('qr')}
+                disabled={!intakeQrLink}
+              >
+                Copy QR link
+              </button>
+              <a
+                className={`button button--ghost${!intakeQrLink ? ' button--disabled' : ''}`}
+                href={intakeQrLink ?? '#'}
+                target="_blank"
+                rel="noreferrer"
+                aria-disabled={!intakeQrLink}
+                onClick={event => {
+                  if (!intakeQrLink) event.preventDefault()
+                }}
+              >
+                Open QR page
+              </a>
+            </div>
+
+            {error && <p className="customers-page__message customers-page__message--error">{error}</p>}
+            {success && !error ? (
+              <p className="customers-page__message customers-page__message--success" role="status">{success}</p>
+            ) : null}
+          </section>
+        ) : null}
 
         {activeTab === 'add' ? (
           <section className="card" aria-label="Add a customer">
