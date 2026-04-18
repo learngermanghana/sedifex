@@ -47,6 +47,11 @@
   color: #334155;
 }
 
+.public-customer-intake__intro {
+  color: #0f172a;
+  font-weight: 500;
+}
+
 .public-customer-intake__form {
   display: grid;
   gap: 0.8rem;

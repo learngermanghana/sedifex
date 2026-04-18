@@ -25,7 +25,7 @@ export default function PublicCustomerIntake() {
   const { inviteId = '', mode } = useParams<{ inviteId: string; mode?: string }>()
   const [profile, setProfile] = useState<IntakeProfile>({
     storeName: null,
-    tagline: 'Join our customer list.',
+    tagline: 'Share your details below to join our customer list.',
     headline: 'Hello, kindly scan to join our customer list.',
     cta: 'Join now for updates and priority support.',
     accentColor: '#4f46e5',
@@ -79,7 +79,7 @@ export default function PublicCustomerIntake() {
         if (!response.ok) {
           setProfile({
             storeName: null,
-            tagline: 'Join our customer list.',
+            tagline: 'Share your details below to join our customer list.',
             headline: 'Hello, kindly scan to join our customer list.',
             cta: 'Join now for updates and priority support.',
             accentColor: '#4f46e5',
@@ -92,7 +92,7 @@ export default function PublicCustomerIntake() {
 
         setProfile({
           storeName: payload.storeName?.trim() || null,
-          tagline: payload.tagline?.trim() || 'Join our customer list.',
+          tagline: payload.tagline?.trim() || 'Share your details below to join our customer list.',
           headline: payload.headline?.trim() || 'Hello, kindly scan to join our customer list.',
           cta: payload.cta?.trim() || 'Join now for updates and priority support.',
           accentColor: normalizeAccentColor(payload.accentColor),
@@ -192,7 +192,7 @@ export default function PublicCustomerIntake() {
           {profile.logoUrl ? <img src={profile.logoUrl} alt={`${title} logo`} className="public-customer-intake__logo" /> : null}
           <p className="public-customer-intake__kicker" style={{ color: profile.accentColor }}>Customer Invite</p>
           <h1 className="public-customer-intake__headline">{profile.headline}</h1>
-          <p>{profile.storeName ? `You are joining ${profile.storeName}.` : 'You are joining our customer list.'}</p>
+          <p>{profile.storeName ? `You are joining ${profile.storeName} customer list.` : 'You are joining our customer list.'}</p>
           <p>{profile.cta}</p>
           <p className="public-customer-intake__fallback">
             This QR code stays active unless the business rotates or revokes the invite link.
@@ -233,8 +233,8 @@ export default function PublicCustomerIntake() {
       <section className="public-customer-intake__card" style={{ borderColor: `${profile.accentColor}33` }}>
         {profile.logoUrl ? <img src={profile.logoUrl} alt={`${title} logo`} className="public-customer-intake__logo" /> : null}
         <p className="public-customer-intake__kicker" style={{ color: profile.accentColor }}>{title}</p>
-        <h1>Join our customer list</h1>
-        <p>{profile.tagline}</p>
+        <h1>{profile.storeName ? `Join ${profile.storeName} customer list` : 'Join our customer list'}</h1>
+        <p className="public-customer-intake__intro">{profile.tagline}</p>
 
         {loadingProfile ? <p className="public-customer-intake__status">Loading…</p> : null}
 
