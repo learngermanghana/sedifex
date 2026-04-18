@@ -24,9 +24,6 @@ export default function BulkEmail() {
           <Link className="button button--primary" to="/customers">
             Manage customers
           </Link>
-          <Link className="button button--secondary" to="/docs/bulk-email-google-sheets-guide">
-            View setup guide
-          </Link>
           <Link className="button button--ghost" to="/account">
             Configure integrations
           </Link>
