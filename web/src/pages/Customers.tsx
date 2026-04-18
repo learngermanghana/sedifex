@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -326,6 +327,19 @@ function buildPhoneKey(value: string | null | undefined): string {
   return normalizePhoneNumber(value).replace(/\D/g, '')
 }
 
+function createInviteId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 24)
+  }
+  return Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14)
+}
+
+function normalizeColorInput(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return '#4f46e5'
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : '#4f46e5'
+}
+
 export default function Customers() {
   const { storeId: activeStoreId } = useActiveStore()
   const navigate = useNavigate()
@@ -357,10 +371,18 @@ export default function Customers() {
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<CustomerTab>('view')
+  const [inviteId, setInviteId] = useState<string | null>(null)
+  const [inviteStatus, setInviteStatus] = useState<'active' | 'revoked'>('active')
+  const [inviteHeadline, setInviteHeadline] = useState('Hello, kindly scan to join our customer list.')
+  const [inviteTagline, setInviteTagline] = useState('Share your details so we can serve you better.')
+  const [inviteCta, setInviteCta] = useState('Join now for updates and priority support.')
+  const [inviteAccentColor, setInviteAccentColor] = useState('#4f46e5')
+  const [inviteLogoUrl, setInviteLogoUrl] = useState('')
+  const [savingInviteSettings, setSavingInviteSettings] = useState(false)
   const intakeLink = useMemo(() => {
-    if (!activeStoreId || typeof window === 'undefined') return null
-    return `${window.location.origin}/join-customers/${encodeURIComponent(activeStoreId)}`
-  }, [activeStoreId])
+    if (!inviteId || typeof window === 'undefined') return null
+    return `${window.location.origin}/join-customers/${encodeURIComponent(inviteId)}`
+  }, [inviteId])
   const intakeQrLink = useMemo(() => {
     if (!intakeLink) return null
     return `${intakeLink}/qr`
@@ -373,6 +395,55 @@ export default function Customers() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadInviteSettings() {
+      if (!activeStoreId) {
+        setInviteId(null)
+        setInviteStatus('active')
+        return
+      }
+      try {
+        const snapshot = await getDoc(doc(db, 'stores', activeStoreId))
+        const data = snapshot.data() as Record<string, unknown> | undefined
+        if (cancelled) return
+        setInviteId(
+          typeof data?.customerIntakeInviteId === 'string' && data.customerIntakeInviteId.trim()
+            ? data.customerIntakeInviteId.trim()
+            : null,
+        )
+        setInviteStatus(data?.customerIntakeInviteStatus === 'revoked' ? 'revoked' : 'active')
+        setInviteHeadline(
+          typeof data?.customerIntakeHeadline === 'string' && data.customerIntakeHeadline.trim()
+            ? data.customerIntakeHeadline.trim()
+            : 'Hello, kindly scan to join our customer list.',
+        )
+        setInviteTagline(
+          typeof data?.customerIntakeTagline === 'string' && data.customerIntakeTagline.trim()
+            ? data.customerIntakeTagline.trim()
+            : 'Share your details so we can serve you better.',
+        )
+        setInviteCta(
+          typeof data?.customerIntakeCta === 'string' && data.customerIntakeCta.trim()
+            ? data.customerIntakeCta.trim()
+            : 'Join now for updates and priority support.',
+        )
+        setInviteAccentColor(
+          normalizeColorInput(typeof data?.customerIntakeAccentColor === 'string' ? data.customerIntakeAccentColor : ''),
+        )
+        setInviteLogoUrl(
+          typeof data?.customerIntakeLogoUrl === 'string' ? data.customerIntakeLogoUrl.trim() : '',
+        )
+      } catch (loadError) {
+        console.error('[customers] Failed to load invite settings', loadError)
+      }
+    }
+    void loadInviteSettings()
+    return () => {
+      cancelled = true
+    }
+  }, [activeStoreId])
 
   function showSuccess(message: string) {
     setSuccess(message)
@@ -1159,7 +1230,13 @@ export default function Customers() {
   }
 
   async function copyInviteLink(target: 'form' | 'qr') {
-    const value = target === 'qr' ? intakeQrLink : intakeLink
+    const activeInviteId = await ensureInviteId()
+    if (!activeInviteId) return
+    const baseLink =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/join-customers/${encodeURIComponent(activeInviteId)}`
+        : null
+    const value = target === 'qr' ? (baseLink ? `${baseLink}/qr` : null) : baseLink
     if (!value) {
       setError('No store selected yet. Please refresh and try again.')
       return
@@ -1172,6 +1249,117 @@ export default function Customers() {
     } catch (copyError) {
       console.error('[customers] Failed to copy invite link', copyError)
       setError('Could not copy link. Please copy it manually from the field.')
+    }
+  }
+
+  async function ensureInviteId() {
+    if (!activeStoreId) {
+      setError('No active store selected.')
+      return null
+    }
+    if (inviteId && inviteStatus === 'active') {
+      return inviteId
+    }
+    const nextInviteId = createInviteId()
+    setSavingInviteSettings(true)
+    try {
+      await updateDoc(doc(db, 'stores', activeStoreId), {
+        customerIntakeInviteId: nextInviteId,
+        customerIntakeInviteStatus: 'active',
+        customerIntakeHeadline: inviteHeadline.trim(),
+        customerIntakeTagline: inviteTagline.trim(),
+        customerIntakeCta: inviteCta.trim(),
+        customerIntakeAccentColor: normalizeColorInput(inviteAccentColor),
+        customerIntakeLogoUrl: inviteLogoUrl.trim() || null,
+        customerIntakeUpdatedAt: serverTimestamp(),
+      })
+      setInviteId(nextInviteId)
+      setInviteStatus('active')
+      showSuccess('Public invite link is ready.')
+      return nextInviteId
+    } catch (inviteError) {
+      console.error('[customers] Failed to initialize invite id', inviteError)
+      setError('Could not create invite link right now.')
+      return null
+    } finally {
+      setSavingInviteSettings(false)
+    }
+  }
+
+  async function rotateInviteId() {
+    if (!activeStoreId) {
+      setError('No active store selected.')
+      return
+    }
+    const confirmed = window.confirm(
+      'Rotate invite URL? Printed QR posters with the current link will stop working immediately.',
+    )
+    if (!confirmed) {
+      return
+    }
+    const nextInviteId = createInviteId()
+    setSavingInviteSettings(true)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'stores', activeStoreId), {
+        customerIntakeInviteId: nextInviteId,
+        customerIntakeInviteStatus: 'active',
+        customerIntakeUpdatedAt: serverTimestamp(),
+      })
+      setInviteId(nextInviteId)
+      setInviteStatus('active')
+      showSuccess('Invite link rotated. Previous URL is now disabled.')
+    } catch (rotateError) {
+      console.error('[customers] Failed to rotate invite id', rotateError)
+      setError('Could not rotate invite link.')
+    } finally {
+      setSavingInviteSettings(false)
+    }
+  }
+
+  async function toggleInviteStatus(nextStatus: 'active' | 'revoked') {
+    if (!activeStoreId) {
+      setError('No active store selected.')
+      return
+    }
+    setSavingInviteSettings(true)
+    try {
+      await updateDoc(doc(db, 'stores', activeStoreId), {
+        customerIntakeInviteStatus: nextStatus,
+        customerIntakeUpdatedAt: serverTimestamp(),
+      })
+      setInviteStatus(nextStatus)
+      showSuccess(nextStatus === 'active' ? 'Invite link activated.' : 'Invite link revoked.')
+    } catch (statusError) {
+      console.error('[customers] Failed to update invite status', statusError)
+      setError('Could not update invite status.')
+    } finally {
+      setSavingInviteSettings(false)
+    }
+  }
+
+  async function saveInviteBranding() {
+    if (!activeStoreId) {
+      setError('No active store selected.')
+      return
+    }
+    setSavingInviteSettings(true)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'stores', activeStoreId), {
+        customerIntakeHeadline: inviteHeadline.trim() || 'Hello, kindly scan to join our customer list.',
+        customerIntakeTagline: inviteTagline.trim() || 'Share your details so we can serve you better.',
+        customerIntakeCta: inviteCta.trim() || 'Join now for updates and priority support.',
+        customerIntakeAccentColor: normalizeColorInput(inviteAccentColor),
+        customerIntakeLogoUrl: inviteLogoUrl.trim() || null,
+        customerIntakeUpdatedAt: serverTimestamp(),
+      })
+      showSuccess('Invite branding saved.')
+    } catch (brandingError) {
+      console.error('[customers] Failed to save invite branding', brandingError)
+      setError('Could not save invite branding settings.')
+    } finally {
+      setSavingInviteSettings(false)
     }
   }
 
@@ -1267,7 +1455,7 @@ export default function Customers() {
                 type="button"
                 className="button button--primary"
                 onClick={() => copyInviteLink('form')}
-                disabled={!intakeLink}
+                disabled={savingInviteSettings}
               >
                 Copy form link
               </button>
@@ -1275,9 +1463,25 @@ export default function Customers() {
                 type="button"
                 className="button button--outline"
                 onClick={() => copyInviteLink('qr')}
-                disabled={!intakeQrLink}
+                disabled={savingInviteSettings}
               >
                 Copy QR link
+              </button>
+              <button
+                type="button"
+                className="button button--outline"
+                onClick={rotateInviteId}
+                disabled={!activeStoreId || savingInviteSettings}
+              >
+                Rotate invite URL
+              </button>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => toggleInviteStatus(inviteStatus === 'active' ? 'revoked' : 'active')}
+                disabled={!inviteId || savingInviteSettings}
+              >
+                {inviteStatus === 'active' ? 'Revoke link' : 'Reactivate link'}
               </button>
               <a
                 className={`button button--ghost${!intakeQrLink ? ' button--disabled' : ''}`}
@@ -1291,6 +1495,76 @@ export default function Customers() {
               >
                 Open QR page
               </a>
+            </div>
+
+            <p className="card__subtitle">
+              Invite status: <strong>{inviteStatus === 'active' ? 'Active' : 'Revoked'}</strong>
+            </p>
+            <p className="card__subtitle">
+              QR links do not expire automatically. They remain valid until you manually rotate or revoke them.
+            </p>
+
+            <div className="customers-page__form-row">
+              <div className="field">
+                <label className="field__label" htmlFor="customer-invite-headline">QR poster headline</label>
+                <input
+                  id="customer-invite-headline"
+                  value={inviteHeadline}
+                  onChange={event => setInviteHeadline(event.target.value)}
+                  placeholder="Hello, kindly scan to join our customer list."
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="customer-invite-cta">CTA sentence</label>
+                <input
+                  id="customer-invite-cta"
+                  value={inviteCta}
+                  onChange={event => setInviteCta(event.target.value)}
+                  placeholder="Join now for updates and priority support."
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="customer-invite-tagline">Public form tagline</label>
+              <input
+                id="customer-invite-tagline"
+                value={inviteTagline}
+                onChange={event => setInviteTagline(event.target.value)}
+                placeholder="Share your details so we can serve you better."
+              />
+            </div>
+
+            <div className="customers-page__form-row">
+              <div className="field">
+                <label className="field__label" htmlFor="customer-invite-logo-url">Logo URL</label>
+                <input
+                  id="customer-invite-logo-url"
+                  value={inviteLogoUrl}
+                  onChange={event => setInviteLogoUrl(event.target.value)}
+                  placeholder="https://example.com/logo.png"
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="customer-invite-accent">Accent color (#RRGGBB)</label>
+                <input
+                  id="customer-invite-accent"
+                  value={inviteAccentColor}
+                  onChange={event => setInviteAccentColor(event.target.value)}
+                  placeholder="#4f46e5"
+                />
+              </div>
+            </div>
+
+            <div className="customers-page__form-actions">
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={saveInviteBranding}
+                disabled={!activeStoreId || savingInviteSettings}
+              >
+                Save branding settings
+              </button>
             </div>
 
             {error && <p className="customers-page__message customers-page__message--error">{error}</p>}

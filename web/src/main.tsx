@@ -57,8 +57,8 @@ const router = createBrowserRouter([
   { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
-  { path: '/join-customers/:storeId', element: <PublicCustomerIntake /> },
-  { path: '/join-customers/:storeId/:mode', element: <PublicCustomerIntake /> },
+  { path: '/join-customers/:inviteId', element: <PublicCustomerIntake /> },
+  { path: '/join-customers/:inviteId/:mode', element: <PublicCustomerIntake /> },
 
   {
     path: '/',

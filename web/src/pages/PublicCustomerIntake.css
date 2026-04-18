@@ -17,6 +17,12 @@
   gap: 0.9rem;
 }
 
+.public-customer-intake__logo {
+  width: min(120px, 40%);
+  height: auto;
+  object-fit: contain;
+}
+
 .public-customer-intake__kicker {
   margin: 0;
   font-size: 0.8rem;
@@ -65,6 +71,27 @@
   color: #b91c1c;
 }
 
+.public-customer-intake__consent {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-weight: 500 !important;
+}
+
+.public-customer-intake__consent input {
+  width: 1.1rem !important;
+  height: 1.1rem;
+  margin-top: 0.12rem;
+}
+
+.public-customer-intake__bot-trap {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+}
+
 .public-customer-intake__qr {
   width: min(360px, 100%);
   margin-inline: auto;
@@ -88,6 +115,15 @@
   word-break: break-all;
   font-size: 0.85rem;
   color: #475569;
+}
+
+.public-customer-intake__fallback {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.public-customer-intake--a5 .public-customer-intake__card {
+  width: min(520px, 100%);
 }
 
 @media print {
