@@ -119,6 +119,10 @@ function toPublicProduct(productDoc, storeMetaByStoreId) {
   }
 }
 
+function resolvePublicCatalogCollectionName(itemType) {
+  return itemType === 'service' ? 'publicServices' : 'publicProducts'
+}
+
 function hasPublishedAt(value) {
   return (
     value instanceof admin.firestore.Timestamp ||
@@ -182,10 +186,16 @@ async function run() {
       continue
     }
 
-    const targetRef = db.collection('publicProducts').doc(productDoc.id)
+    const targetCollectionName = resolvePublicCatalogCollectionName(payload.itemType)
+    const targetRef = db.collection(targetCollectionName).doc(productDoc.id)
+    const oppositeRef =
+      targetCollectionName === 'publicServices'
+        ? db.collection('publicProducts').doc(productDoc.id)
+        : db.collection('publicServices').doc(productDoc.id)
     batch.set(targetRef, payload, { merge: true })
+    batch.delete(oppositeRef)
     upserts += 1
-    writes += 1
+    writes += 2
 
     if (writes >= 450) {
       await batch.commit()
@@ -202,46 +212,53 @@ async function run() {
     `[backfillPublicProducts] done. upserts=${upserts}, skipped=${skipped}, total=${productsSnapshot.size}`,
   )
 
-  let publicProductsQuery = db.collection('publicProducts')
-  if (targetStoreId) {
-    publicProductsQuery = publicProductsQuery.where('storeId', '==', targetStoreId)
-  }
-  const publicProductsSnapshot = await publicProductsQuery.get()
-  console.log(`[backfillPublicProducts] scanning ${publicProductsSnapshot.size} publicProducts docs for publishedAt`)
-
+  const publicCollections = ['publicProducts', 'publicServices']
   let publishedAtBackfills = 0
-  batch = db.batch()
-  writes = 0
 
-  for (const publicProductDoc of publicProductsSnapshot.docs) {
-    const data = publicProductDoc.data() || {}
-    if (hasPublishedAt(data.publishedAt)) {
-      continue
+  for (const collectionName of publicCollections) {
+    let publicQuery = db.collection(collectionName)
+    if (targetStoreId) {
+      publicQuery = publicQuery.where('storeId', '==', targetStoreId)
     }
-
-    batch.set(
-      publicProductDoc.ref,
-      {
-        publishedAt: resolvePublishedAtValue(data),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
+    const publicSnapshot = await publicQuery.get()
+    console.log(
+      `[backfillPublicProducts] scanning ${publicSnapshot.size} ${collectionName} docs for publishedAt`,
     )
-    publishedAtBackfills += 1
-    writes += 1
 
-    if (writes >= 450) {
+    batch = db.batch()
+    writes = 0
+    for (const publicDoc of publicSnapshot.docs) {
+      const data = publicDoc.data() || {}
+      if (hasPublishedAt(data.publishedAt)) {
+        continue
+      }
+
+      batch.set(
+        publicDoc.ref,
+        {
+          publishedAt: resolvePublishedAtValue(data),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      publishedAtBackfills += 1
+      writes += 1
+
+      if (writes >= 450) {
+        await batch.commit()
+        batch = db.batch()
+        writes = 0
+      }
+    }
+
+    if (writes > 0) {
       await batch.commit()
-      batch = db.batch()
-      writes = 0
     }
   }
 
-  if (writes > 0) {
-    await batch.commit()
-  }
-
-  console.log(`[backfillPublicProducts] publishedAt backfill complete. updated=${publishedAtBackfills}`)
+  console.log(
+    `[backfillPublicProducts] publishedAt backfill complete across publicProducts/publicServices. updated=${publishedAtBackfills}`,
+  )
 }
 
 run().catch(error => {
