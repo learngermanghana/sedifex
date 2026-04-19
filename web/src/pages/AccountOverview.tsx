@@ -726,6 +726,8 @@ export default function AccountOverview({
     } catch (error) {
       console.error('[account] Failed to load integration API keys', error)
       const callableError = error as FirebaseError | null
+      const errorCode = typeof callableError?.code === 'string' ? callableError.code : ''
+      const errorMessage = typeof callableError?.message === 'string' ? callableError.message : ''
       const detailsRaw =
         callableError && 'details' in callableError
           ? (callableError as FirebaseError & { details?: unknown }).details
@@ -737,15 +739,22 @@ export default function AccountOverview({
             ? detailsRaw
             : ''
       console.error('[account] listIntegrationApiKeys diagnostics', {
-        code: callableError?.code ?? null,
-        message: callableError?.message ?? null,
+        code: errorCode || null,
+        message: errorMessage || null,
         details: detailsRaw ?? null,
       })
-      const detail =
-        callableError && typeof callableError.code === 'string' && callableError.code
-          ? ` (${callableError.code}${callableError.message ? `: ${callableError.message}` : ''}${detailText ? ` | details: ${detailText}` : ''})`
+      const internalHint =
+        errorCode === 'functions/internal' && !detailText
+          ? ' Check Cloud Functions logs for listIntegrationApiKeys and verify VITE_FB_FUNCTIONS_REGION points to the deployed region.'
           : ''
-      publish({ message: `Unable to load integration API keys.${detail}`, tone: 'error' })
+      const detail =
+        errorCode
+          ? ` (${errorCode}${errorMessage ? `: ${errorMessage}` : ''}${detailText ? ` | details: ${detailText}` : ''})`
+          : ''
+      publish({
+        message: `Unable to load integration API keys.${detail}${internalHint}`,
+        tone: 'error',
+      })
       setIntegrationApiKeys([])
     } finally {
       setIntegrationKeysLoading(false)
