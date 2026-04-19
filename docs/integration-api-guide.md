@@ -106,6 +106,28 @@ Query parameters:
 
 `publicProducts` and `publicServices` are convenience buckets derived from `itemType` so storefronts can render physical products and services in separate sections without extra client-side sorting.
 
+### `GET /integrationPublicCatalog?storeId=<storeId>` or `?slug=<promoSlug>` (public, no API key)
+
+- Use this endpoint when external/public sites cannot securely store integration API keys.
+- The response also includes `products`, `publicProducts`, and `publicServices`.
+- `publicProducts` = non-service items; `publicServices` = service items.
+- If precomputed public collections are empty, Sedifex falls back to reading from `products` for the store.
+
+```json
+{
+  "storeId": "store_123",
+  "products": [],
+  "publicProducts": [],
+  "publicServices": []
+}
+```
+
+#### Which endpoint should other websites use?
+
+1. **Server-to-server (recommended):** `GET /v1IntegrationProducts?storeId=<storeId>` with `x-api-key`.
+2. **Public website without secret storage:** `GET /integrationPublicCatalog?slug=<promoSlug>` (or `storeId`).
+3. In both cases, render from `publicProducts` and `publicServices` directly.
+
 ### `GET /v1IntegrationPromo?storeId=<storeId>` (authenticated) or `?slug=<promoSlug>` (public)
 
 ```json

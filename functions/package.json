@@ -12,7 +12,9 @@
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions --project sedifex-web --force",
     "force-update-owner-email": "node scripts/forceUpdateOwnerEmailByUid.js",
-    "backfill-public-products": "node scripts/backfillPublicProducts.js"
+    "backfill-public-products": "node scripts/backfillPublicProducts.js",
+    "backfill-public-services": "node scripts/backfillPublicProducts.js",
+    "backfill-public-catalog": "node scripts/backfillPublicProducts.js"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",
