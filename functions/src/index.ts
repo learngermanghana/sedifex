@@ -2613,6 +2613,14 @@ export const listIntegrationApiKeys = functions.https.onCall(
       const keys = snapshot.docs
         .map(docSnap => {
           const data = docSnap.data() as Record<string, unknown>
+          const lastUsedAt =
+            data.lastUsedAt instanceof admin.firestore.Timestamp ? data.lastUsedAt.toMillis() : null
+          const createdAt =
+            data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt.toMillis() : null
+          const updatedAt =
+            data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toMillis() : null
+          const revokedAt =
+            data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt.toMillis() : null
           return {
             id: docSnap.id,
             name: typeof data.name === 'string' ? data.name : 'Unnamed key',
@@ -2621,15 +2629,15 @@ export const listIntegrationApiKeys = functions.https.onCall(
               typeof data.keyPreview === 'string' && data.keyPreview.trim()
                 ? data.keyPreview
                 : '••••••••',
-            lastUsedAt: data.lastUsedAt instanceof admin.firestore.Timestamp ? data.lastUsedAt : null,
-            createdAt: data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt : null,
-            updatedAt: data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt : null,
-            revokedAt: data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt : null,
+            lastUsedAt,
+            createdAt,
+            updatedAt,
+            revokedAt,
           }
         })
         .sort((a, b) => {
-          const aMillis = a.createdAt?.toMillis() ?? 0
-          const bMillis = b.createdAt?.toMillis() ?? 0
+          const aMillis = a.createdAt ?? 0
+          const bMillis = b.createdAt ?? 0
           return bMillis - aMillis
         })
         .slice(0, 50)
