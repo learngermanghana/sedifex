@@ -66,6 +66,20 @@ type BulkMessagePayload = {
   recipients?: unknown
 }
 
+type BulkEmailRecipient = {
+  id: string
+  name: string
+  email: string
+}
+
+type BulkEmailPayload = {
+  storeId?: unknown
+  fromName?: unknown
+  subject?: unknown
+  html?: unknown
+  recipients?: unknown
+}
+
 type SmsRateTable = {
   defaultGroup: string
   dialCodeToGroup: Record<string, string>
@@ -169,6 +183,7 @@ const GRACE_DAYS = 7
 const MILLIS_PER_DAY = 1000 * 60 * 60 * 24
 const BULK_MESSAGE_LIMIT = 1000
 const BULK_MESSAGE_BATCH_LIMIT = 200
+const BULK_EMAIL_BATCH_LIMIT = 500
 const SMS_SEGMENT_SIZE = 160
 const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' })
 const OPENAI_MODEL = defineString('OPENAI_MODEL', { default: 'gpt-4o-mini' })
@@ -517,6 +532,52 @@ function normalizeBulkMessagePayload(payload: BulkMessagePayload) {
   }
 
   return { storeId, channel, message, recipients }
+}
+
+function normalizeBulkEmailPayload(payload: BulkEmailPayload) {
+  if (!payload || typeof payload !== 'object') {
+    throw new functions.https.HttpsError('invalid-argument', 'Payload is required')
+  }
+
+  const storeId = typeof payload.storeId === 'string' ? payload.storeId.trim() : ''
+  if (!storeId) throw new functions.https.HttpsError('invalid-argument', 'Store id is required')
+
+  const fromName = typeof payload.fromName === 'string' ? payload.fromName.trim() : ''
+  const subject = typeof payload.subject === 'string' ? payload.subject.trim() : ''
+  const html = typeof payload.html === 'string' ? payload.html.trim() : ''
+
+  if (!subject) throw new functions.https.HttpsError('invalid-argument', 'Email subject is required')
+  if (!html) throw new functions.https.HttpsError('invalid-argument', 'Email content is required')
+
+  const recipientsRaw = Array.isArray(payload.recipients) ? payload.recipients : []
+  const recipients = recipientsRaw
+    .map(item => {
+      const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+      const id = typeof row.id === 'string' ? row.id.trim() : ''
+      const name = typeof row.name === 'string' ? row.name.trim() : ''
+      const email = typeof row.email === 'string' ? row.email.trim().toLowerCase() : ''
+      if (!email) return null
+      return { id, name, email }
+    })
+    .filter(Boolean) as BulkEmailRecipient[]
+
+  if (!recipients.length) {
+    throw new functions.https.HttpsError('invalid-argument', 'Select at least one recipient')
+  }
+  if (recipients.length > BULK_EMAIL_BATCH_LIMIT) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Recipient list is limited to ${BULK_EMAIL_BATCH_LIMIT} contacts per send`,
+    )
+  }
+
+  return {
+    storeId,
+    fromName: fromName || 'Sedifex Campaign',
+    subject,
+    html,
+    recipients,
+  }
 }
 
 function calculateDaysRemaining(
@@ -7074,6 +7135,79 @@ export const sendBulkMessage = functions.https.onCall(
       sent,
       failures: failures.map(({ phone, error }) => ({ phone, error })),
     }
+  },
+)
+
+export const sendBulkEmail = functions.https.onCall(
+  async (data: unknown, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+
+    const { storeId, fromName, subject, html, recipients } = normalizeBulkEmailPayload(
+      data as BulkEmailPayload,
+    )
+
+    await verifyOwnerForStore(context.auth!.uid, storeId)
+
+    const storeSnap = await db.collection('stores').doc(storeId).get()
+    if (!storeSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Store not found.')
+    }
+
+    const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
+    const integration =
+      storeData.bulkEmailIntegration && typeof storeData.bulkEmailIntegration === 'object'
+        ? (storeData.bulkEmailIntegration as Record<string, unknown>)
+        : {}
+    const webAppUrl = typeof integration.webAppUrl === 'string' ? integration.webAppUrl.trim() : ''
+    const sharedToken =
+      typeof integration.sharedToken === 'string' ? integration.sharedToken.trim() : ''
+
+    if (!webAppUrl || !sharedToken) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Email integration is incomplete. Open Account → Integrations → Email delivery.',
+      )
+    }
+
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(webAppUrl)
+    } catch {
+      throw new functions.https.HttpsError('failed-precondition', 'Configured Web App URL is invalid.')
+    }
+    if (parsedUrl.protocol !== 'https:') {
+      throw new functions.https.HttpsError('failed-precondition', 'Configured Web App URL must use HTTPS.')
+    }
+
+    const payload = {
+      token: sharedToken,
+      campaignId: `cmp_${Date.now()}`,
+      fromName,
+      subject,
+      html,
+      recipients,
+    }
+
+    const response = await fetch(parsedUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    const bodyText = await response.text()
+    let body: Record<string, unknown> = {}
+    try {
+      body = bodyText ? (JSON.parse(bodyText) as Record<string, unknown>) : {}
+    } catch {
+      body = { ok: false, error: bodyText || 'invalid-json-response' }
+    }
+
+    if (!response.ok || body.ok === false) {
+      const scriptError = typeof body.error === 'string' ? body.error : `send-failed (${response.status})`
+      throw new functions.https.HttpsError('internal', `Bulk email send failed: ${scriptError}`)
+    }
+
+    return body
   },
 )
 
