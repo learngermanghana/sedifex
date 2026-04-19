@@ -36,8 +36,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkMessage = exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = void 0;
+exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -62,6 +62,7 @@ const GRACE_DAYS = 7;
 const MILLIS_PER_DAY = 1000 * 60 * 60 * 24;
 const BULK_MESSAGE_LIMIT = 1000;
 const BULK_MESSAGE_BATCH_LIMIT = 200;
+const BULK_EMAIL_BATCH_LIMIT = 500;
 const SMS_SEGMENT_SIZE = 160;
 const OPENAI_API_KEY = (0, params_1.defineString)('OPENAI_API_KEY', { default: '' });
 const OPENAI_MODEL = (0, params_1.defineString)('OPENAI_MODEL', { default: 'gpt-4o-mini' });
@@ -337,6 +338,46 @@ function normalizeBulkMessagePayload(payload) {
         throw new functions.https.HttpsError('invalid-argument', `Recipient list is limited to ${BULK_MESSAGE_BATCH_LIMIT} contacts per send`);
     }
     return { storeId, channel, message, recipients };
+}
+function normalizeBulkEmailPayload(payload) {
+    if (!payload || typeof payload !== 'object') {
+        throw new functions.https.HttpsError('invalid-argument', 'Payload is required');
+    }
+    const storeId = typeof payload.storeId === 'string' ? payload.storeId.trim() : '';
+    if (!storeId)
+        throw new functions.https.HttpsError('invalid-argument', 'Store id is required');
+    const fromName = typeof payload.fromName === 'string' ? payload.fromName.trim() : '';
+    const subject = typeof payload.subject === 'string' ? payload.subject.trim() : '';
+    const html = typeof payload.html === 'string' ? payload.html.trim() : '';
+    if (!subject)
+        throw new functions.https.HttpsError('invalid-argument', 'Email subject is required');
+    if (!html)
+        throw new functions.https.HttpsError('invalid-argument', 'Email content is required');
+    const recipientsRaw = Array.isArray(payload.recipients) ? payload.recipients : [];
+    const recipients = recipientsRaw
+        .map(item => {
+        const row = item && typeof item === 'object' ? item : {};
+        const id = typeof row.id === 'string' ? row.id.trim() : '';
+        const name = typeof row.name === 'string' ? row.name.trim() : '';
+        const email = typeof row.email === 'string' ? row.email.trim().toLowerCase() : '';
+        if (!email)
+            return null;
+        return { id, name, email };
+    })
+        .filter(Boolean);
+    if (!recipients.length) {
+        throw new functions.https.HttpsError('invalid-argument', 'Select at least one recipient');
+    }
+    if (recipients.length > BULK_EMAIL_BATCH_LIMIT) {
+        throw new functions.https.HttpsError('invalid-argument', `Recipient list is limited to ${BULK_EMAIL_BATCH_LIMIT} contacts per send`);
+    }
+    return {
+        storeId,
+        fromName: fromName || 'Sedifex Campaign',
+        subject,
+        html,
+        recipients,
+    };
 }
 function calculateDaysRemaining(target, now) {
     if (!target || typeof target.toMillis !== 'function')
@@ -1916,6 +1957,19 @@ function isFirestoreMissingIndexError(error) {
         return true;
     return false;
 }
+function toMillisOrNull(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === 'object' && value !== null) {
+        const toMillis = value.toMillis;
+        if (typeof toMillis === 'function') {
+            const millis = toMillis.call(value);
+            return typeof millis === 'number' && Number.isFinite(millis) ? millis : null;
+        }
+    }
+    return null;
+}
 exports.listIntegrationApiKeys = functions.https.onCall(async (_data, context) => {
     let uid = null;
     let storeId = null;
@@ -1942,10 +1996,10 @@ exports.listIntegrationApiKeys = functions.https.onCall(async (_data, context) =
         const keys = snapshot.docs
             .map(docSnap => {
             const data = docSnap.data();
-            const lastUsedAt = data.lastUsedAt instanceof firestore_1.admin.firestore.Timestamp ? data.lastUsedAt.toMillis() : null;
-            const createdAt = data.createdAt instanceof firestore_1.admin.firestore.Timestamp ? data.createdAt.toMillis() : null;
-            const updatedAt = data.updatedAt instanceof firestore_1.admin.firestore.Timestamp ? data.updatedAt.toMillis() : null;
-            const revokedAt = data.revokedAt instanceof firestore_1.admin.firestore.Timestamp ? data.revokedAt.toMillis() : null;
+            const lastUsedAt = toMillisOrNull(data.lastUsedAt);
+            const createdAt = toMillisOrNull(data.createdAt);
+            const updatedAt = toMillisOrNull(data.updatedAt);
+            const revokedAt = toMillisOrNull(data.revokedAt);
             return {
                 id: docSnap.id,
                 name: typeof data.name === 'string' ? data.name : 'Unnamed key',
@@ -1959,11 +2013,7 @@ exports.listIntegrationApiKeys = functions.https.onCall(async (_data, context) =
                 revokedAt,
             };
         })
-            .sort((a, b) => {
-            const aMillis = a.createdAt ?? 0;
-            const bMillis = b.createdAt ?? 0;
-            return bMillis - aMillis;
-        })
+            .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
             .slice(0, 50);
         return { storeId, keys };
     }
@@ -5653,6 +5703,60 @@ exports.sendBulkMessage = functions.https.onCall(async (data, context) => {
         sent,
         failures: failures.map(({ phone, error }) => ({ phone, error })),
     };
+});
+exports.sendBulkEmail = functions.https.onCall(async (data, context) => {
+    assertOwnerAccess(context);
+    const { storeId, fromName, subject, html, recipients } = normalizeBulkEmailPayload(data);
+    await verifyOwnerForStore(context.auth.uid, storeId);
+    const storeSnap = await firestore_1.defaultDb.collection('stores').doc(storeId).get();
+    if (!storeSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Store not found.');
+    }
+    const storeData = (storeSnap.data() ?? {});
+    const integration = storeData.bulkEmailIntegration && typeof storeData.bulkEmailIntegration === 'object'
+        ? storeData.bulkEmailIntegration
+        : {};
+    const webAppUrl = typeof integration.webAppUrl === 'string' ? integration.webAppUrl.trim() : '';
+    const sharedToken = typeof integration.sharedToken === 'string' ? integration.sharedToken.trim() : '';
+    if (!webAppUrl || !sharedToken) {
+        throw new functions.https.HttpsError('failed-precondition', 'Email integration is incomplete. Open Account → Integrations → Email delivery.');
+    }
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(webAppUrl);
+    }
+    catch {
+        throw new functions.https.HttpsError('failed-precondition', 'Configured Web App URL is invalid.');
+    }
+    if (parsedUrl.protocol !== 'https:') {
+        throw new functions.https.HttpsError('failed-precondition', 'Configured Web App URL must use HTTPS.');
+    }
+    const payload = {
+        token: sharedToken,
+        campaignId: `cmp_${Date.now()}`,
+        fromName,
+        subject,
+        html,
+        recipients,
+    };
+    const response = await fetch(parsedUrl.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const bodyText = await response.text();
+    let body = {};
+    try {
+        body = bodyText ? JSON.parse(bodyText) : {};
+    }
+    catch {
+        body = { ok: false, error: bodyText || 'invalid-json-response' };
+    }
+    if (!response.ok || body.ok === false) {
+        const scriptError = typeof body.error === 'string' ? body.error : `send-failed (${response.status})`;
+        throw new functions.https.HttpsError('internal', `Bulk email send failed: ${scriptError}`);
+    }
+    return body;
 });
 /** ============================================================================
  *  PAYSTACK HELPERS

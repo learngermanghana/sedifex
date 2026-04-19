@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import PageSection from '../layout/PageSection'
-import { db } from '../firebase'
+import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useWorkspaceIdentity } from '../hooks/useWorkspaceIdentity'
 
@@ -25,6 +26,14 @@ type SendResult = {
   [key: string]: unknown
 }
 
+type SendBulkEmailPayload = {
+  storeId: string
+  fromName: string
+  subject: string
+  html: string
+  recipients: Array<{ id: string; name: string; email: string }>
+}
+
 function getCustomerName(customer: Pick<Customer, 'displayName' | 'name' | 'email'>) {
   const displayName = customer.displayName?.trim()
   if (displayName) return displayName
@@ -40,8 +49,6 @@ export default function BulkEmail() {
   const { name: workspaceName } = useWorkspaceIdentity()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [webAppUrl, setWebAppUrl] = useState('')
-  const [sharedToken, setSharedToken] = useState('')
   const [fromName, setFromName] = useState(workspaceName || 'Sedifex Campaign')
   const [subject, setSubject] = useState('')
   const [html, setHtml] = useState('')
@@ -52,6 +59,10 @@ export default function BulkEmail() {
   const [sendStatus, setSendStatus] = useState<string>('')
   const [sendError, setSendError] = useState<string>('')
   const [sendResult, setSendResult] = useState<SendResult | null>(null)
+  const sendBulkEmail = useMemo(
+    () => httpsCallable<SendBulkEmailPayload, SendResult>(functions, 'sendBulkEmail'),
+    [],
+  )
 
   useEffect(() => {
     if (!workspaceName) return
@@ -60,8 +71,6 @@ export default function BulkEmail() {
 
   useEffect(() => {
     if (!storeId) {
-      setWebAppUrl('')
-      setSharedToken('')
       setFromName(workspaceName || 'Sedifex Campaign')
       return
     }
@@ -88,13 +97,12 @@ export default function BulkEmail() {
 
         const savedWebAppUrl =
           typeof bulkEmailIntegration.webAppUrl === 'string' ? bulkEmailIntegration.webAppUrl.trim() : ''
-        const savedSharedToken =
-          typeof bulkEmailIntegration.sharedToken === 'string' ? bulkEmailIntegration.sharedToken.trim() : ''
+        const savedSharedToken = typeof bulkEmailIntegration.sharedToken === 'string'
+          ? bulkEmailIntegration.sharedToken.trim()
+          : ''
         const savedFromName =
           typeof bulkEmailIntegration.fromName === 'string' ? bulkEmailIntegration.fromName.trim() : ''
 
-        setWebAppUrl(savedWebAppUrl)
-        setSharedToken(savedSharedToken)
         setFromName(savedFromName || workspaceName || 'Sedifex Campaign')
 
         if (!savedWebAppUrl || !savedSharedToken) {
@@ -192,12 +200,8 @@ export default function BulkEmail() {
     setSendError('')
     setSendResult(null)
 
-    if (!webAppUrl.trim()) {
-      setSendError('Connect your Google Apps Script Web App URL in Account → Integrations → Email delivery.')
-      return
-    }
-    if (!sharedToken.trim()) {
-      setSendError('Set your shared token in Account → Integrations → Email delivery.')
+    if (!storeId) {
+      setSendError('Workspace is missing. Refresh and try again.')
       return
     }
     if (!subject.trim()) {
@@ -217,8 +221,7 @@ export default function BulkEmail() {
 
     try {
       const payload = {
-        token: sharedToken.trim(),
-        campaignId: `cmp_${Date.now()}`,
+        storeId,
         fromName: fromName.trim() || 'Sedifex Campaign',
         subject: subject.trim(),
         html: html.trim(),
@@ -229,22 +232,11 @@ export default function BulkEmail() {
         })),
       }
 
-      const response = await fetch(webAppUrl.trim(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await sendBulkEmail(payload)
+      const body = (response.data ?? {}) as SendResult
 
-      const bodyText = await response.text()
-      let body: SendResult = {}
-      try {
-        body = JSON.parse(bodyText) as SendResult
-      } catch {
-        body = { ok: false, error: bodyText || 'invalid-json-response' }
-      }
-
-      if (!response.ok || body.ok === false) {
-        const errorMessage = typeof body.error === 'string' ? body.error : `send-failed (${response.status})`
+      if (body.ok === false) {
+        const errorMessage = typeof body.error === 'string' ? body.error : 'send-failed'
         setSendError(errorMessage)
         setSendResult(body)
         return
