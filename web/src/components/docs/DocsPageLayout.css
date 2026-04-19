@@ -44,15 +44,29 @@
   margin: 0 0 8px;
 }
 
+.docs-page__content section,
+.docs-page__content h2,
+.docs-page__content h3,
+.docs-page__content p,
+.docs-page__content li,
+.docs-page__content strong {
+  color: #0f172a;
+}
+
 .docs-page__content p,
 .docs-page__content li {
   line-height: 1.6;
 }
 
-.docs-page__content code {
+.docs-page__content a {
+  color: #1d4ed8;
+}
+
+.docs-page__content :not(pre) > code {
   background: #e2e8f0;
   padding: 2px 6px;
   border-radius: 6px;
+  color: #0f172a;
 }
 
 .docs-page__content pre {
@@ -61,4 +75,12 @@
   border-radius: 10px;
   background: #0f172a;
   color: #e2e8f0;
+}
+
+.docs-page__content pre > code {
+  display: block;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
 }
