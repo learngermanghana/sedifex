@@ -2582,6 +2582,20 @@ function isFirestoreMissingIndexError(error: unknown) {
   return false
 }
 
+function toMillisOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'object' && value !== null) {
+    const toMillis = (value as { toMillis?: unknown }).toMillis
+    if (typeof toMillis === 'function') {
+      const millis = toMillis.call(value)
+      return typeof millis === 'number' && Number.isFinite(millis) ? millis : null
+    }
+  }
+  return null
+}
+
 export const listIntegrationApiKeys = functions.https.onCall(
   async (_data: unknown, context: functions.https.CallableContext) => {
     let uid: string | null = null
@@ -2613,14 +2627,10 @@ export const listIntegrationApiKeys = functions.https.onCall(
       const keys = snapshot.docs
         .map(docSnap => {
           const data = docSnap.data() as Record<string, unknown>
-          const lastUsedAt =
-            data.lastUsedAt instanceof admin.firestore.Timestamp ? data.lastUsedAt.toMillis() : null
-          const createdAt =
-            data.createdAt instanceof admin.firestore.Timestamp ? data.createdAt.toMillis() : null
-          const updatedAt =
-            data.updatedAt instanceof admin.firestore.Timestamp ? data.updatedAt.toMillis() : null
-          const revokedAt =
-            data.revokedAt instanceof admin.firestore.Timestamp ? data.revokedAt.toMillis() : null
+          const lastUsedAt = toMillisOrNull(data.lastUsedAt)
+          const createdAt = toMillisOrNull(data.createdAt)
+          const updatedAt = toMillisOrNull(data.updatedAt)
+          const revokedAt = toMillisOrNull(data.revokedAt)
           return {
             id: docSnap.id,
             name: typeof data.name === 'string' ? data.name : 'Unnamed key',
@@ -2635,11 +2645,7 @@ export const listIntegrationApiKeys = functions.https.onCall(
             revokedAt,
           }
         })
-        .sort((a, b) => {
-          const aMillis = a.createdAt ?? 0
-          const bMillis = b.createdAt ?? 0
-          return bMillis - aMillis
-        })
+        .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
         .slice(0, 50)
 
       return { storeId, keys }
