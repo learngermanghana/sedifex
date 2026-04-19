@@ -2970,6 +2970,18 @@ function toPlainObject(value) {
     }
     return value;
 }
+function splitCatalogItemsByType(items) {
+    const publicProducts = [];
+    const publicServices = [];
+    for (const item of items) {
+        if (item.itemType === 'service') {
+            publicServices.push(item);
+            continue;
+        }
+        publicProducts.push(item);
+    }
+    return { publicProducts, publicServices };
+}
 const BOOKING_ATTRIBUTE_MAX_KEYS = 40;
 const BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH = 500;
 const DEFAULT_BOOKING_ALIASES = {
@@ -3705,10 +3717,13 @@ exports.integrationProducts = functions.https.onRequest(async (req, res) => {
             storeCity: storeMeta?.storeCity ?? null,
         };
     });
+    const { publicProducts, publicServices } = splitCatalogItemsByType(enrichedProducts);
     res.status(200).json({
         storeId: scopeStoreId ?? null,
         scope: isAllStoresRead ? 'all-stores' : 'store',
         products: enrichedProducts,
+        publicProducts,
+        publicServices,
     });
 });
 exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
@@ -3808,10 +3823,13 @@ exports.v1IntegrationProducts = functions.https.onRequest(async (req, res) => {
             storeCity: storeMeta?.storeCity ?? null,
         };
     });
+    const { publicProducts, publicServices } = splitCatalogItemsByType(enrichedProducts);
     res.status(200).json({
         storeId: scopeStoreId ?? null,
         scope: isAllStoresRead ? 'all-stores' : 'store',
         products: enrichedProducts,
+        publicProducts,
+        publicServices,
     });
 });
 exports.integrationPromo = functions.https.onRequest(async (req, res) => {
@@ -4538,25 +4556,7 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
         return;
     }
     const { storeId } = storeContext;
-    let productsSnapshot;
-    try {
-        productsSnapshot = await firestore_1.defaultDb
-            .collection('products')
-            .where('storeId', '==', storeId)
-            .orderBy('updatedAt', 'desc')
-            .limit(200)
-            .get();
-    }
-    catch (error) {
-        const code = error?.code;
-        const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
-        if (!isMissingIndex) {
-            throw error;
-        }
-        productsSnapshot = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
-    }
-    const products = productsSnapshot.docs
-        .map(docSnap => {
+    const mapCatalogDoc = (docSnap) => {
         const data = docSnap.data();
         const name = typeof data.name === 'string' ? data.name.trim() : '';
         if (!name)
@@ -4575,9 +4575,77 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
                     : 'product',
             updatedAt: normalizeTimestampIso(data.updatedAt),
         };
-    })
-        .filter(item => item !== null);
-    res.status(200).json({ storeId, products });
+    };
+    const loadCatalogCollection = async (collectionName) => {
+        let snapshot;
+        try {
+            snapshot = await firestore_1.defaultDb
+                .collection(collectionName)
+                .where('storeId', '==', storeId)
+                .orderBy('updatedAt', 'desc')
+                .limit(200)
+                .get();
+        }
+        catch (error) {
+            const code = error?.code;
+            const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+            if (!isMissingIndex) {
+                throw error;
+            }
+            snapshot = await firestore_1.defaultDb.collection(collectionName).where('storeId', '==', storeId).limit(200).get();
+        }
+        return snapshot;
+    };
+    const [publicProductsSnapshot, publicServicesSnapshot] = await Promise.all([
+        loadCatalogCollection('publicProducts'),
+        loadCatalogCollection('publicServices'),
+    ]);
+    const publicCatalogDocs = [...publicProductsSnapshot.docs, ...publicServicesSnapshot.docs];
+    let products = publicCatalogDocs
+        .map(mapCatalogDoc)
+        .filter(item => item !== null)
+        .sort((a, b) => {
+        if (!a.updatedAt && !b.updatedAt)
+            return 0;
+        if (!a.updatedAt)
+            return 1;
+        if (!b.updatedAt)
+            return -1;
+        return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+    });
+    if (!products.length) {
+        let productsSnapshot;
+        try {
+            productsSnapshot = await firestore_1.defaultDb
+                .collection('products')
+                .where('storeId', '==', storeId)
+                .orderBy('updatedAt', 'desc')
+                .limit(200)
+                .get();
+        }
+        catch (error) {
+            const code = error?.code;
+            const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+            if (!isMissingIndex) {
+                throw error;
+            }
+            productsSnapshot = await firestore_1.defaultDb.collection('products').where('storeId', '==', storeId).limit(200).get();
+        }
+        products = productsSnapshot.docs
+            .map(mapCatalogDoc)
+            .filter(item => item !== null)
+            .sort((a, b) => {
+            if (!a.updatedAt && !b.updatedAt)
+                return 0;
+            if (!a.updatedAt)
+                return 1;
+            if (!b.updatedAt)
+                return -1;
+            return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+        });
+    }
+    const { publicProducts, publicServices } = splitCatalogItemsByType(products);
+    res.status(200).json({ storeId, products, publicProducts, publicServices });
 });
 exports.integrationGoogleMerchantFeed = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
@@ -5183,27 +5251,37 @@ function toPublicProductPayload(productId, source, existing, storeMeta) {
         updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
     };
 }
+function resolvePublicCatalogCollectionName(itemType) {
+    return itemType === 'service' ? 'publicServices' : 'publicProducts';
+}
 exports.syncPublicProducts = functions.firestore
     .document('products/{productId}')
     .onWrite(async (change, context) => {
     const productId = context.params.productId;
     const publicProductRef = firestore_1.defaultDb.collection('publicProducts').doc(productId);
+    const publicServiceRef = firestore_1.defaultDb.collection('publicServices').doc(productId);
     if (!change.after.exists) {
         await publicProductRef.delete().catch(() => undefined);
+        await publicServiceRef.delete().catch(() => undefined);
         return;
     }
     const sourceData = (change.after.data() ?? {});
-    const existingPublicProductSnap = await publicProductRef.get();
-    const existingData = existingPublicProductSnap.exists
-        ? existingPublicProductSnap.data()
+    const destinationCollectionName = resolvePublicCatalogCollectionName(sourceData.itemType);
+    const destinationRef = firestore_1.defaultDb.collection(destinationCollectionName).doc(productId);
+    const oppositeRef = destinationCollectionName === 'publicServices' ? publicProductRef : publicServiceRef;
+    const existingDestinationSnap = await destinationRef.get();
+    const existingData = existingDestinationSnap.exists
+        ? existingDestinationSnap.data()
         : null;
     const storeMeta = await resolveStorePublicMetaByStoreId(typeof sourceData.storeId === 'string' ? sourceData.storeId : '');
     const payload = toPublicProductPayload(productId, sourceData, existingData, storeMeta);
     if (!payload) {
         await publicProductRef.delete().catch(() => undefined);
+        await publicServiceRef.delete().catch(() => undefined);
         return;
     }
-    await publicProductRef.set(payload, { merge: true });
+    await destinationRef.set(payload, { merge: true });
+    await oppositeRef.delete().catch(() => undefined);
 });
 exports.enrichProductDataAfterSave = functions.firestore
     .document('products/{productId}')

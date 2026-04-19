@@ -3853,6 +3853,21 @@ function toPlainObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+function splitCatalogItemsByType<T extends { itemType: 'product' | 'service' | 'made_to_order' }>(
+  items: T[],
+): { publicProducts: T[]; publicServices: T[] } {
+  const publicProducts: T[] = []
+  const publicServices: T[] = []
+  for (const item of items) {
+    if (item.itemType === 'service') {
+      publicServices.push(item)
+      continue
+    }
+    publicProducts.push(item)
+  }
+  return { publicProducts, publicServices }
+}
+
 const BOOKING_ATTRIBUTE_MAX_KEYS = 40
 const BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH = 500
 
@@ -4756,11 +4771,14 @@ export const integrationProducts = functions.https.onRequest(async (req, res) =>
       storeCity: storeMeta?.storeCity ?? null,
     }
   })
+  const { publicProducts, publicServices } = splitCatalogItemsByType(enrichedProducts)
 
   res.status(200).json({
     storeId: scopeStoreId ?? null,
     scope: isAllStoresRead ? 'all-stores' : 'store',
     products: enrichedProducts,
+    publicProducts,
+    publicServices,
   })
 })
 
@@ -4864,11 +4882,14 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res) 
       storeCity: storeMeta?.storeCity ?? null,
     }
   })
+  const { publicProducts, publicServices } = splitCatalogItemsByType(enrichedProducts)
 
   res.status(200).json({
     storeId: scopeStoreId ?? null,
     scope: isAllStoresRead ? 'all-stores' : 'store',
     products: enrichedProducts,
+    publicProducts,
+    publicServices,
   })
 })
 
@@ -5755,50 +5776,98 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
   }
   const { storeId } = storeContext
 
-  let productsSnapshot: admin.firestore.QuerySnapshot
-  try {
-    productsSnapshot = await db
-      .collection('products')
-      .where('storeId', '==', storeId)
-      .orderBy('updatedAt', 'desc')
-      .limit(200)
-      .get()
-  } catch (error) {
-    const code = (error as { code?: number | string } | null)?.code
-    const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
-    if (!isMissingIndex) {
-      throw error
-    }
+  const mapCatalogDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
+    const data = docSnap.data() as Record<string, unknown>
+    const name = typeof data.name === 'string' ? data.name.trim() : ''
+    if (!name) return null
 
-    productsSnapshot = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+    return {
+      id: docSnap.id,
+      name,
+      description:
+        typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+      category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
+      price: typeof data.price === 'number' ? data.price : null,
+      ...extractProductImageSet(data),
+      itemType:
+        data.itemType === 'service'
+          ? 'service'
+          : data.itemType === 'made_to_order'
+            ? 'made_to_order'
+            : 'product',
+      updatedAt: normalizeTimestampIso(data.updatedAt),
+    } as const
   }
 
-  const products = productsSnapshot.docs
-    .map(docSnap => {
-      const data = docSnap.data() as Record<string, unknown>
-      const name = typeof data.name === 'string' ? data.name.trim() : ''
-      if (!name) return null
-
-      return {
-        id: docSnap.id,
-        name,
-        description:
-          typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
-        category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : null,
-        price: typeof data.price === 'number' ? data.price : null,
-        ...extractProductImageSet(data),
-        itemType:
-          data.itemType === 'service'
-            ? 'service'
-            : data.itemType === 'made_to_order'
-              ? 'made_to_order'
-              : 'product',
-        updatedAt: normalizeTimestampIso(data.updatedAt),
+  const loadCatalogCollection = async (collectionName: 'publicProducts' | 'publicServices') => {
+    let snapshot: admin.firestore.QuerySnapshot
+    try {
+      snapshot = await db
+        .collection(collectionName)
+        .where('storeId', '==', storeId)
+        .orderBy('updatedAt', 'desc')
+        .limit(200)
+        .get()
+    } catch (error) {
+      const code = (error as { code?: number | string } | null)?.code
+      const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+      if (!isMissingIndex) {
+        throw error
       }
-    })
-    .filter(item => item !== null)
+      snapshot = await db.collection(collectionName).where('storeId', '==', storeId).limit(200).get()
+    }
+    return snapshot
+  }
 
-  res.status(200).json({ storeId, products })
+  const [publicProductsSnapshot, publicServicesSnapshot] = await Promise.all([
+    loadCatalogCollection('publicProducts'),
+    loadCatalogCollection('publicServices'),
+  ])
+
+  const publicCatalogDocs = [...publicProductsSnapshot.docs, ...publicServicesSnapshot.docs]
+  let products = publicCatalogDocs
+    .map(mapCatalogDoc)
+    .filter(item => item !== null)
+    .sort((a, b) => {
+      if (!a.updatedAt && !b.updatedAt) return 0
+      if (!a.updatedAt) return 1
+      if (!b.updatedAt) return -1
+      return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+    })
+
+  if (!products.length) {
+    let productsSnapshot: admin.firestore.QuerySnapshot
+    try {
+      productsSnapshot = await db
+        .collection('products')
+        .where('storeId', '==', storeId)
+        .orderBy('updatedAt', 'desc')
+        .limit(200)
+        .get()
+    } catch (error) {
+      const code = (error as { code?: number | string } | null)?.code
+      const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+      if (!isMissingIndex) {
+        throw error
+      }
+
+      productsSnapshot = await db.collection('products').where('storeId', '==', storeId).limit(200).get()
+    }
+
+    products = productsSnapshot.docs
+      .map(mapCatalogDoc)
+      .filter(item => item !== null)
+      .sort((a, b) => {
+        if (!a.updatedAt && !b.updatedAt) return 0
+        if (!a.updatedAt) return 1
+        if (!b.updatedAt) return -1
+        return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
+      })
+  }
+
+  const { publicProducts, publicServices } = splitCatalogItemsByType(products)
+
+  res.status(200).json({ storeId, products, publicProducts, publicServices })
 })
 
 export const integrationGoogleMerchantFeed = functions.https.onRequest(async (req, res) => {
@@ -6505,21 +6574,31 @@ function toPublicProductPayload(
   }
 }
 
+function resolvePublicCatalogCollectionName(itemType: unknown): 'publicProducts' | 'publicServices' {
+  return itemType === 'service' ? 'publicServices' : 'publicProducts'
+}
+
 export const syncPublicProducts = functions.firestore
   .document('products/{productId}')
   .onWrite(async (change, context) => {
     const productId = context.params.productId
     const publicProductRef = db.collection('publicProducts').doc(productId)
+    const publicServiceRef = db.collection('publicServices').doc(productId)
 
     if (!change.after.exists) {
       await publicProductRef.delete().catch(() => undefined)
+      await publicServiceRef.delete().catch(() => undefined)
       return
     }
 
     const sourceData = (change.after.data() ?? {}) as Record<string, unknown>
-    const existingPublicProductSnap = await publicProductRef.get()
-    const existingData = existingPublicProductSnap.exists
-      ? (existingPublicProductSnap.data() as Record<string, unknown>)
+    const destinationCollectionName = resolvePublicCatalogCollectionName(sourceData.itemType)
+    const destinationRef = db.collection(destinationCollectionName).doc(productId)
+    const oppositeRef = destinationCollectionName === 'publicServices' ? publicProductRef : publicServiceRef
+
+    const existingDestinationSnap = await destinationRef.get()
+    const existingData = existingDestinationSnap.exists
+      ? (existingDestinationSnap.data() as Record<string, unknown>)
       : null
 
     const storeMeta = await resolveStorePublicMetaByStoreId(
@@ -6528,10 +6607,12 @@ export const syncPublicProducts = functions.firestore
     const payload = toPublicProductPayload(productId, sourceData, existingData, storeMeta)
     if (!payload) {
       await publicProductRef.delete().catch(() => undefined)
+      await publicServiceRef.delete().catch(() => undefined)
       return
     }
 
-    await publicProductRef.set(payload, { merge: true })
+    await destinationRef.set(payload, { merge: true })
+    await oppositeRef.delete().catch(() => undefined)
   })
 
 export const enrichProductDataAfterSave = functions.firestore

@@ -47,6 +47,8 @@ export interface IntegrationPromo {
 export interface IntegrationProductsResponse {
   storeId: string
   products: IntegrationProduct[]
+  publicProducts?: IntegrationProduct[]
+  publicServices?: IntegrationProduct[]
 }
 
 export interface IntegrationPromoResponse {

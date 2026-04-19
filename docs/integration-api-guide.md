@@ -98,9 +98,13 @@ Query parameters:
       "imageAlt": "Item image",
       "updatedAt": "2026-04-13T00:00:00.000Z"
     }
-  ]
+  ],
+  "publicProducts": [],
+  "publicServices": []
 }
 ```
+
+`publicProducts` and `publicServices` are convenience buckets derived from `itemType` so storefronts can render physical products and services in separate sections without extra client-side sorting.
 
 ### `GET /v1IntegrationPromo?storeId=<storeId>` (authenticated) or `?slug=<promoSlug>` (public)
 
