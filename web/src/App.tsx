@@ -116,6 +116,13 @@ export default function App() {
       </main>
     )
   } else if (storeAccessStatus === 'failed' && !isPublicRoute && !isAccountRoute) {
+    const normalizedStoreAccessError = storeAccessError?.toLowerCase() ?? ''
+    const hasBillingRelatedError =
+      normalizedStoreAccessError.includes('bill') ||
+      normalizedStoreAccessError.includes('payment') ||
+      normalizedStoreAccessError.includes('subscription') ||
+      normalizedStoreAccessError.includes('plan')
+
     content = (
       <main className="app" style={appStyle}>
         <div className="app__card">
@@ -124,9 +131,15 @@ export default function App() {
             {storeAccessError ??
               'Your Sedifex workspace is unavailable. Please upgrade your plan or contact support to restore access.'}
           </p>
-          <p className="form__hint">
-            Billing issues can block workspace access. Update your subscription to restore it.
-          </p>
+          {hasBillingRelatedError ? (
+            <p className="form__hint">
+              Billing issues can block workspace access. Update your subscription to restore it.
+            </p>
+          ) : (
+            <p className="form__hint">
+              This looks like an internal workspace setup issue. Please contact support to restore access.
+            </p>
+          )}
           <div className="flex gap-3 mt-4">
             <Link className="button button--primary" to="/account">
               Go to billing
