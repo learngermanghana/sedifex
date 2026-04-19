@@ -189,7 +189,7 @@ function isTimestamp(value: unknown): value is Timestamp {
 
 function toTimestamp(value: unknown): Timestamp | null {
   if (isTimestamp(value)) return value
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
     return Timestamp.fromMillis(value)
   }
   return null
