@@ -187,6 +187,14 @@ function isTimestamp(value: unknown): value is Timestamp {
   )
 }
 
+function toTimestamp(value: unknown): Timestamp | null {
+  if (isTimestamp(value)) return value
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Timestamp.fromMillis(value)
+  }
+  return null
+}
+
 function mapStoreSnapshot(
   snapshot:
     | DocumentSnapshot<DocumentData>
@@ -708,10 +716,10 @@ export default function AccountOverview({
               typeof item.keyPreview === 'string' && item.keyPreview.trim()
                 ? item.keyPreview
                 : '••••••••',
-            createdAt: isTimestamp(item.createdAt) ? item.createdAt : null,
-            updatedAt: isTimestamp(item.updatedAt) ? item.updatedAt : null,
-            revokedAt: isTimestamp(item.revokedAt) ? item.revokedAt : null,
-            lastUsedAt: isTimestamp(item.lastUsedAt) ? item.lastUsedAt : null,
+            createdAt: toTimestamp(item.createdAt),
+            updatedAt: toTimestamp(item.updatedAt),
+            revokedAt: toTimestamp(item.revokedAt),
+            lastUsedAt: toTimestamp(item.lastUsedAt),
           }))
         : []
       setIntegrationApiKeys(keys.filter(key => key.id))
