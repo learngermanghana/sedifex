@@ -1,3 +1,5 @@
+import './LegalPage.css'
+
 export default function TermsPage() {
   const today = new Date().toLocaleDateString(undefined, {
     year: 'numeric',
@@ -6,7 +8,8 @@ export default function TermsPage() {
   })
 
   return (
-    <main className="prose prose-slate mx-auto max-w-3xl px-4 py-12">
+    <main className="legal-page">
+      <article className="legal-page__content prose prose-slate mx-auto max-w-3xl px-4 py-12">
       <p className="text-sm font-semibold uppercase tracking-wide text-violet-600">Legal</p>
 
       <h1 className="mb-2 text-3xl font-bold text-slate-900">Terms of Service</h1>
@@ -120,6 +123,7 @@ export default function TermsPage() {
           </li>
         </ul>
       </section>
+      </article>
     </main>
   )
 }
