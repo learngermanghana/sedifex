@@ -1,4 +1,5 @@
 import { httpsCallable } from 'firebase/functions'
+import { FirebaseError } from 'firebase/app'
 import { functions } from '../firebase'
 import { requestAiAdvisor } from './aiAdvisor'
 
@@ -142,5 +143,23 @@ export async function requestSocialPost(payload: GenerateSocialPostPayload): Pro
     return (response.data ?? {}) as GenerateSocialPostResponse
   } catch (_error) {
     return requestSocialPostFallback(payload)
+  }
+}
+
+export async function confirmSocialBackendReachable(): Promise<boolean> {
+  const callable = httpsCallable(functions, 'generateSocialPost')
+
+  try {
+    await callable({ platform: 'instagram', product: { name: '' } })
+    return true
+  } catch (error) {
+    if (error instanceof FirebaseError) {
+      const code = typeof error.code === 'string' ? error.code.trim() : ''
+      if (code === 'functions/unavailable' || code === 'functions/not-found') {
+        return false
+      }
+    }
+
+    return true
   }
 }

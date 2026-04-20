@@ -5,7 +5,12 @@ import { db } from '../firebase'
 import PageSection from '../layout/PageSection'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
-import { requestSocialPost, type GenerateSocialPostResponse, type SocialPlatform } from '../api/socialPost'
+import {
+  confirmSocialBackendReachable,
+  requestSocialPost,
+  type GenerateSocialPostResponse,
+  type SocialPlatform,
+} from '../api/socialPost'
 import type { Product } from '../types/product'
 
 type ProductOption = {
@@ -446,21 +451,22 @@ export default function SocialMediaPage() {
     if (!storeId || !selectedProduct) return
     setLoading(true)
     setInlineError(null)
-    try {
-      const response = await requestSocialPost({
-        storeId,
-        platform,
-        productId: selectedProduct.id,
-        product: {
-          id: selectedProduct.id,
-          name: selectedProduct.name,
-          category: selectedProduct.category,
-          description: selectedProduct.description,
-          price: selectedProduct.price,
-          imageUrl: selectedProduct.imageUrl,
-          itemType: selectedProduct.itemType,
-        },
-      })
+    const requestPayload = {
+      storeId,
+      platform,
+      productId: selectedProduct.id,
+      product: {
+        id: selectedProduct.id,
+        name: selectedProduct.name,
+        category: selectedProduct.category,
+        description: selectedProduct.description,
+        price: selectedProduct.price,
+        imageUrl: selectedProduct.imageUrl,
+        itemType: selectedProduct.itemType,
+      },
+    }
+
+    const mergeGeneratedResult = (response: GenerateSocialPostResponse) => {
       const styledPost = applyPresets(response.post)
       const styledResponse: GenerateSocialPostResponse = {
         ...response,
@@ -483,9 +489,36 @@ export default function SocialMediaPage() {
 
       setResult(merged)
       persistHistory(merged)
+      return merged
+    }
+
+    try {
+      const response = await requestSocialPost(requestPayload)
+      mergeGeneratedResult(response)
       publish({ tone: 'success', message: 'Social post draft generated. Review before publishing.' })
     } catch (error) {
       console.error('[social-media] Failed to generate social post', error)
+      const backendReachable = await confirmSocialBackendReachable()
+
+      if (backendReachable) {
+        try {
+          publish({ tone: 'warning', message: 'AI backend is reachable. Retrying generation once…' })
+          const retryResponse = await requestSocialPost(requestPayload)
+          mergeGeneratedResult(retryResponse)
+          publish({ tone: 'success', message: 'Social post draft generated after retry.' })
+          return
+        } catch (retryError) {
+          console.error('[social-media] Retry failed after backend reachability check', retryError)
+          const retryMessage = getCallableErrorMessage(retryError)
+          publish({ tone: 'error', message: retryMessage || 'Retry failed. Please try again shortly.' })
+          setInlineError(
+            retryMessage ||
+              'Generation failed after retry. Confirm Firebase Functions configuration and try again in a moment.',
+          )
+          return
+        }
+      }
+
       const serverMessage = getCallableErrorMessage(error)
       publish({
         tone: 'error',
@@ -495,7 +528,7 @@ export default function SocialMediaPage() {
       })
       setInlineError(
         serverMessage ||
-          'Generation failed. Confirm the AI backend (Firebase Functions) is deployed and reachable, then retry.',
+          'Generation failed. Firebase Functions AI backend appears unreachable. Deploy/verify backend, then retry.',
       )
     } finally {
       setLoading(false)
