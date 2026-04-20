@@ -178,7 +178,6 @@ type GenerateSocialPostPayload = {
 }
 
 const VALID_ROLES = new Set(['owner', 'staff'])
-const TRIAL_DAYS = 14
 const GRACE_DAYS = 7
 const MILLIS_PER_DAY = 1000 * 60 * 60 * 24
 const BULK_MESSAGE_LIMIT = 1000
@@ -919,23 +918,20 @@ export const initializeStore = functions.https.onCall(
       const previousBilling = (baseStoreData.billing || {}) as Record<string, any>
 
       const nowTs = admin.firestore.Timestamp.now()
-      const trialEndsAt =
-        previousBilling.trialEndsAt ||
-        previousBilling.trialEnd ||
-        timestampDaysFromNow(TRIAL_DAYS)
+      const trialEndsAt = previousBilling.trialEndsAt || previousBilling.trialEnd || null
       const graceEndsAt =
         previousBilling.graceEndsAt ||
         previousBilling.graceEnd ||
-        timestampDaysFromNow(TRIAL_DAYS + GRACE_DAYS)
+        timestampDaysFromNow(GRACE_DAYS)
 
       const billingStatus: BillingStatus =
         previousBilling.status === 'active' ||
         previousBilling.status === 'past_due'
           ? previousBilling.status
-          : 'trial'
+          : 'active'
 
       const billingData: admin.firestore.DocumentData = {
-        planKey: previousBilling.planKey || 'standard',
+        planKey: previousBilling.planKey || 'free',
         status: billingStatus,
         trialEndsAt,
         graceEndsAt,
@@ -992,7 +988,7 @@ export const initializeStore = functions.https.onCall(
 
         status: baseStoreData.status || 'active',
         workspaceSlug,
-        contractStatus: baseStoreData.contractStatus || 'trial',
+        contractStatus: baseStoreData.contractStatus || 'active',
         productCount:
           typeof baseStoreData.productCount === 'number'
             ? baseStoreData.productCount
@@ -1105,28 +1101,21 @@ export const resolveStoreAccess = functions.https.onCall(
     const paymentStatusRaw =
       typeof baseStore.paymentStatus === 'string' ? baseStore.paymentStatus : null
 
-    const trialEndsAt =
-      previousBilling.trialEndsAt ||
-      previousBilling.trialEnd ||
-      timestampDaysFromNow(TRIAL_DAYS)
+    const trialEndsAt = previousBilling.trialEndsAt || previousBilling.trialEnd || null
     const graceEndsAt =
       previousBilling.graceEndsAt ||
       previousBilling.graceEnd ||
-      timestampDaysFromNow(TRIAL_DAYS + GRACE_DAYS)
+      timestampDaysFromNow(GRACE_DAYS)
 
     const contractStatusRaw =
       typeof baseStore.contractStatus === 'string'
         ? baseStore.contractStatus.trim()
         : null
-    const normalizedContractStatus =
-      contractStatusRaw && contractStatusRaw !== ''
-        ? contractStatusRaw.toLowerCase()
-        : null
 
     const billingStatus: BillingStatus =
       previousBilling.status === 'active' || previousBilling.status === 'past_due'
         ? previousBilling.status
-        : 'trial'
+        : 'active'
 
     const trialDaysRemaining = calculateDaysRemaining(trialEndsAt, nowTs)
     const graceDaysRemaining = calculateDaysRemaining(graceEndsAt, nowTs)
@@ -1142,27 +1131,17 @@ export const resolveStoreAccess = functions.https.onCall(
       typeof contractEndTs.toMillis === 'function' &&
       contractEndTs.toMillis() <= nowTs.toMillis()
 
-    const trialExpired =
-      (normalizedContractStatus === 'trial' || billingStatus === 'trial') &&
-      paymentStatusRaw !== 'active' &&
-      trialDaysRemaining !== null &&
-      trialDaysRemaining <= 0
-
     const normalizedBillingStatus: BillingStatus = contractExpired
       ? 'inactive'
-      : trialExpired
-        ? 'past_due'
-        : billingStatus
+      : billingStatus
 
     const normalizedPaymentStatus: BillingStatus = contractExpired
       ? 'inactive'
-      : trialExpired
-        ? 'past_due'
-        : paymentStatusRaw === 'active'
+      : paymentStatusRaw === 'active'
           ? 'active'
           : paymentStatusRaw === 'past_due'
             ? 'past_due'
-            : billingStatus
+            : 'active'
 
     const graceExpired =
       normalizedPaymentStatus === 'past_due' &&
@@ -1170,7 +1149,7 @@ export const resolveStoreAccess = functions.https.onCall(
       graceDaysRemaining <= 0
 
     const billingData: admin.firestore.DocumentData = {
-      planKey: previousBilling.planKey || 'standard',
+      planKey: previousBilling.planKey || 'free',
       status: normalizedBillingStatus,
       trialEndsAt,
       graceEndsAt,
@@ -1210,7 +1189,7 @@ export const resolveStoreAccess = functions.https.onCall(
       workspaceSlug: baseStore.workspaceSlug || workspaceSlug,
       contractStatus: contractExpired
         ? 'inactive'
-        : contractStatusRaw || baseStore.contractStatus || 'trial',
+        : contractStatusRaw || baseStore.contractStatus || 'active',
       productCount:
         typeof baseStore.productCount === 'number' ? baseStore.productCount : 0,
       totalStockCount:
@@ -1253,17 +1232,6 @@ export const resolveStoreAccess = functions.https.onCall(
           : null,
       trialDaysRemaining:
         trialDaysRemaining === null ? null : Math.max(trialDaysRemaining, 0),
-    }
-
-    if (trialExpired) {
-      const endDate =
-        trialEndsAt && typeof trialEndsAt.toDate === 'function'
-          ? trialEndsAt.toDate().toISOString().slice(0, 10)
-          : 'your trial end date'
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        `Your free trial ended on ${endDate}. Please upgrade to continue.`,
-      )
     }
 
     if (graceExpired) {

@@ -44,7 +44,7 @@ const PLAN_CATALOG = {
 };
 function getBillingConfig() {
     return {
-        trialDays: 14,
+        trialDays: 0,
         defaultPlanId: exports.DEFAULT_PLAN_ID,
         plans: PLAN_CATALOG,
     };

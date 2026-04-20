@@ -52,7 +52,7 @@ const PLAN_CATALOG: Record<PlanId, Plan> = {
 
 export function getBillingConfig() {
   return {
-    trialDays: 14,
+    trialDays: 0,
     defaultPlanId: DEFAULT_PLAN_ID,
     plans: PLAN_CATALOG,
   }

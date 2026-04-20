@@ -57,7 +57,6 @@ var googleBusinessProfile_1 = require("./googleBusinessProfile");
 Object.defineProperty(exports, "googleBusinessLocations", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessLocations; } });
 Object.defineProperty(exports, "googleBusinessUploadLocationMedia", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessUploadLocationMedia; } });
 const VALID_ROLES = new Set(['owner', 'staff']);
-const TRIAL_DAYS = 14;
 const GRACE_DAYS = 7;
 const MILLIS_PER_DAY = 1000 * 60 * 60 * 24;
 const BULK_MESSAGE_LIMIT = 1000;
@@ -652,18 +651,16 @@ exports.initializeStore = functions.https.onCall(async (data, context) => {
         const baseStoreData = storeSnap.data() ?? {};
         const previousBilling = (baseStoreData.billing || {});
         const nowTs = firestore_1.admin.firestore.Timestamp.now();
-        const trialEndsAt = previousBilling.trialEndsAt ||
-            previousBilling.trialEnd ||
-            timestampDaysFromNow(TRIAL_DAYS);
+        const trialEndsAt = previousBilling.trialEndsAt || previousBilling.trialEnd || null;
         const graceEndsAt = previousBilling.graceEndsAt ||
             previousBilling.graceEnd ||
-            timestampDaysFromNow(TRIAL_DAYS + GRACE_DAYS);
+            timestampDaysFromNow(GRACE_DAYS);
         const billingStatus = previousBilling.status === 'active' ||
             previousBilling.status === 'past_due'
             ? previousBilling.status
-            : 'trial';
+            : 'active';
         const billingData = {
-            planKey: previousBilling.planKey || 'standard',
+            planKey: previousBilling.planKey || 'free',
             status: billingStatus,
             trialEndsAt,
             graceEndsAt,
@@ -707,7 +704,7 @@ exports.initializeStore = functions.https.onCall(async (data, context) => {
             addressLine1: profile.addressLine1 ?? baseStoreData.addressLine1 ?? null,
             status: baseStoreData.status || 'active',
             workspaceSlug,
-            contractStatus: baseStoreData.contractStatus || 'trial',
+            contractStatus: baseStoreData.contractStatus || 'active',
             productCount: typeof baseStoreData.productCount === 'number'
                 ? baseStoreData.productCount
                 : 0,
@@ -791,21 +788,16 @@ exports.resolveStoreAccess = functions.https.onCall(async (data, context) => {
     const previousBilling = (baseStore.billing || {});
     const nowTs = firestore_1.admin.firestore.Timestamp.now();
     const paymentStatusRaw = typeof baseStore.paymentStatus === 'string' ? baseStore.paymentStatus : null;
-    const trialEndsAt = previousBilling.trialEndsAt ||
-        previousBilling.trialEnd ||
-        timestampDaysFromNow(TRIAL_DAYS);
+    const trialEndsAt = previousBilling.trialEndsAt || previousBilling.trialEnd || null;
     const graceEndsAt = previousBilling.graceEndsAt ||
         previousBilling.graceEnd ||
-        timestampDaysFromNow(TRIAL_DAYS + GRACE_DAYS);
+        timestampDaysFromNow(GRACE_DAYS);
     const contractStatusRaw = typeof baseStore.contractStatus === 'string'
         ? baseStore.contractStatus.trim()
         : null;
-    const normalizedContractStatus = contractStatusRaw && contractStatusRaw !== ''
-        ? contractStatusRaw.toLowerCase()
-        : null;
     const billingStatus = previousBilling.status === 'active' || previousBilling.status === 'past_due'
         ? previousBilling.status
-        : 'trial';
+        : 'active';
     const trialDaysRemaining = calculateDaysRemaining(trialEndsAt, nowTs);
     const graceDaysRemaining = calculateDaysRemaining(graceEndsAt, nowTs);
     const contractEndRaw = baseStore.contractEnd ||
@@ -816,29 +808,21 @@ exports.resolveStoreAccess = functions.https.onCall(async (data, context) => {
     const contractExpired = !!contractEndTs &&
         typeof contractEndTs.toMillis === 'function' &&
         contractEndTs.toMillis() <= nowTs.toMillis();
-    const trialExpired = (normalizedContractStatus === 'trial' || billingStatus === 'trial') &&
-        paymentStatusRaw !== 'active' &&
-        trialDaysRemaining !== null &&
-        trialDaysRemaining <= 0;
     const normalizedBillingStatus = contractExpired
         ? 'inactive'
-        : trialExpired
-            ? 'past_due'
-            : billingStatus;
+        : billingStatus;
     const normalizedPaymentStatus = contractExpired
         ? 'inactive'
-        : trialExpired
-            ? 'past_due'
-            : paymentStatusRaw === 'active'
-                ? 'active'
-                : paymentStatusRaw === 'past_due'
-                    ? 'past_due'
-                    : billingStatus;
+        : paymentStatusRaw === 'active'
+            ? 'active'
+            : paymentStatusRaw === 'past_due'
+                ? 'past_due'
+                : 'active';
     const graceExpired = normalizedPaymentStatus === 'past_due' &&
         graceDaysRemaining !== null &&
         graceDaysRemaining <= 0;
     const billingData = {
-        planKey: previousBilling.planKey || 'standard',
+        planKey: previousBilling.planKey || 'free',
         status: normalizedBillingStatus,
         trialEndsAt,
         graceEndsAt,
@@ -870,7 +854,7 @@ exports.resolveStoreAccess = functions.https.onCall(async (data, context) => {
         workspaceSlug: baseStore.workspaceSlug || workspaceSlug,
         contractStatus: contractExpired
             ? 'inactive'
-            : contractStatusRaw || baseStore.contractStatus || 'trial',
+            : contractStatusRaw || baseStore.contractStatus || 'active',
         productCount: typeof baseStore.productCount === 'number' ? baseStore.productCount : 0,
         totalStockCount: typeof baseStore.totalStockCount === 'number' ? baseStore.totalStockCount : 0,
         createdAt: baseStore.createdAt || timestamp,
@@ -904,12 +888,6 @@ exports.resolveStoreAccess = functions.https.onCall(async (data, context) => {
             : null,
         trialDaysRemaining: trialDaysRemaining === null ? null : Math.max(trialDaysRemaining, 0),
     };
-    if (trialExpired) {
-        const endDate = trialEndsAt && typeof trialEndsAt.toDate === 'function'
-            ? trialEndsAt.toDate().toISOString().slice(0, 10)
-            : 'your trial end date';
-        throw new functions.https.HttpsError('permission-denied', `Your free trial ended on ${endDate}. Please upgrade to continue.`);
-    }
     if (graceExpired) {
         const graceEndDate = graceEndsAt && typeof graceEndsAt.toDate === 'function'
             ? graceEndsAt.toDate().toISOString().slice(0, 10)
