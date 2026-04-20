@@ -44,7 +44,7 @@ async function createOwnerStoreAndWorkspace(params) {
     await firestore_1.defaultDb.collection('stores').doc(storeId).set({
         ownerId: uid,
         status: 'Active',
-        contractStatus: 'trial',
+        contractStatus: 'active',
         inventorySummary: {
             trackedSkus: 0,
             lowStockSkus: 0,
@@ -67,9 +67,9 @@ async function createOwnerStoreAndWorkspace(params) {
         storeId,
         company: company || 'New Store',
         contactEmail: email,
-        plan: 'Growth',
+        plan: 'Free',
         billingCycle: 'annual',
-        paymentStatus: 'trial',
+        paymentStatus: 'active',
         status: 'active',
         updatedAt: now,
     }, { merge: true });

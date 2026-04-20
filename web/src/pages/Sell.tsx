@@ -597,7 +597,7 @@ export default function Sell() {
     if (receiptDownload?.url) URL.revokeObjectURL(receiptDownload.url)
 
     const built = buildReceiptPdf(lastReceipt)
-    const shareUrl = `${PUBLIC_ORIGIN}/receipt/${encodeURIComponent(lastReceipt.saleId)}`
+    const shareUrl = `${window.location.origin}/receipt/${encodeURIComponent(lastReceipt.saleId)}`
     const shareText = `Sale receipt${lastReceipt.companyName ? ` - ${lastReceipt.companyName}` : ''}\nView receipt: ${shareUrl}`
 
     setReceiptDownload({
@@ -1645,7 +1645,7 @@ export default function Sell() {
 
       if (displaySessionId) {
         displaySaleCompleteRef.current = true
-        const receiptUrl = `${PUBLIC_ORIGIN}/receipt/${encodeURIComponent(saleId)}`
+        const receiptUrl = `${window.location.origin}/receipt/${encodeURIComponent(saleId)}`
         setDoc(
           doc(db, 'stores', activeStoreId, 'displaySessions', displaySessionId),
           {
@@ -2090,61 +2090,6 @@ export default function Sell() {
           <details className="sell-page__scan-options" style={{ marginTop: 20 }}>
             <summary>More checkout options (not often used)</summary>
             <div className="sell-page__scan-options-body">
-              <div className="sell-page__display">
-                <div className="sell-page__display-header">
-                  <div>
-                    <p className="sell-page__display-title">Customer display</p>
-                    <p className="sell-page__display-subtitle">Show live cart totals on a second device.</p>
-                  </div>
-                  {!displaySessionId ? (
-                    <button type="button" className="button button--ghost" onClick={handleStartCustomerDisplay}>
-                      Start customer display
-                    </button>
-                  ) : (
-                    <button type="button" className="button button--ghost" onClick={handleStopCustomerDisplay}>
-                      Stop display
-                    </button>
-                  )}
-                </div>
-
-                {displaySessionId && displayLink ? (
-                  <div className="sell-page__display-body">
-                    <div className="sell-page__display-info">
-                      <div>
-                        <p className="sell-page__display-label">Pairing code</p>
-                        <p className="sell-page__display-code">{displayPairCode ?? '—'}</p>
-                      </div>
-                      <div>
-                        <p className="sell-page__display-label">Display link</p>
-                        <div className="sell-page__display-link-row">
-                          <a className="sell-page__display-link" href={displayLink} target="_blank" rel="noreferrer">
-                            {displayLink}
-                          </a>
-                          <button type="button" className="sell-page__display-link-copy" onClick={handleShareCustomerDisplay}>
-                            Copy link
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {displayQrSvg ? (
-                      <div className="sell-page__display-qr" dangerouslySetInnerHTML={{ __html: displayQrSvg }} aria-hidden={!displayQrSvg} />
-                    ) : (
-                      <div className="sell-page__display-qr sell-page__display-qr--empty">
-                        QR unavailable
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="sell-page__display-hint">
-                    Open <strong>{PUBLIC_ORIGIN.replace(/https?:\/\//, '')}/display</strong> on a phone or tablet and scan
-                    the QR code to pair.
-                  </p>
-                )}
-
-                {displayStatus && <p className="sell-page__display-status">{displayStatus}</p>}
-              </div>
-
               <div className="sell-page__payment" style={{ marginTop: 20 }}>
                 <div className="field">
                   <label className="field__label">Payment method</label>
