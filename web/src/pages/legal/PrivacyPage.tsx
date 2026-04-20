@@ -1,3 +1,5 @@
+import './LegalPage.css'
+
 export default function PrivacyPage() {
   const today = new Date().toLocaleDateString(undefined, {
     year: "numeric",
@@ -6,7 +8,8 @@ export default function PrivacyPage() {
   });
 
   return (
-    <main className="prose prose-slate mx-auto max-w-3xl px-4 py-12">
+    <main className="legal-page">
+      <article className="legal-page__content prose prose-slate mx-auto max-w-3xl px-4 py-12">
       <p className="text-sm font-semibold uppercase tracking-wide text-violet-600">
         Legal
       </p>
@@ -208,6 +211,7 @@ export default function PrivacyPage() {
           </li>
         </ul>
       </section>
+      </article>
     </main>
   );
 }
