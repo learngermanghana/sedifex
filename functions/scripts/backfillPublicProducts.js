@@ -9,6 +9,44 @@ if (!admin.apps.length) {
 
 const db = admin.firestore()
 
+function parseCliArgs(argv) {
+  const options = {
+    storeId: null,
+    showHelp: false,
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index]
+    if (!token) continue
+    if (token === '--help' || token === '-h') {
+      options.showHelp = true
+      continue
+    }
+    if (token === '--store-id') {
+      options.storeId = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    if (token.startsWith('--store-id=')) {
+      options.storeId = token.slice('--store-id='.length)
+      continue
+    }
+    if (!token.startsWith('--') && !options.storeId) {
+      // Backward-compatible positional form: node backfillPublicProducts.js <storeId>
+      options.storeId = token
+    }
+  }
+
+  return options
+}
+
+function printHelp() {
+  console.log('Usage: node scripts/backfillPublicProducts.js [--store-id=<storeId>]')
+  console.log('')
+  console.log('Backfills products into publicProducts/publicServices based on itemType.')
+  console.log('If --store-id is omitted, the script processes all products.')
+}
+
 function toTrimmedStringOrNull(value) {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -148,7 +186,13 @@ function resolvePublishedAtValue(data) {
 }
 
 async function run() {
-  const targetStoreId = toTrimmedStringOrNull(process.argv[2])
+  const args = parseCliArgs(process.argv.slice(2))
+  if (args.showHelp) {
+    printHelp()
+    return
+  }
+
+  const targetStoreId = toTrimmedStringOrNull(args.storeId)
   let query = db.collection('products')
 
   if (targetStoreId) {
