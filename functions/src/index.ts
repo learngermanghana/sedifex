@@ -4511,6 +4511,77 @@ function isMarketplaceVisibleProduct(data: Record<string, unknown>, name: string
   if (data.archived === true || data.isArchived === true) return false
   if (data.hidden === true || data.isHidden === true) return false
   if (data.visible === false || data.isVisible === false) return false
+  if (!isPublishedForPublicRead(data)) return false
+  return true
+}
+
+function toTimestampMillis(value: unknown): number | null {
+  if (!value) return null
+  if (value instanceof admin.firestore.Timestamp) return value.toMillis()
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.getTime()
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    const dateValue = (value as { toDate?: unknown }).toDate
+    if (typeof dateValue === 'function') {
+      const resolved = (dateValue as () => Date).call(value)
+      if (resolved instanceof Date && Number.isFinite(resolved.getTime())) return resolved.getTime()
+    }
+  }
+  return null
+}
+
+function isPublishedForPublicRead(data: Record<string, unknown>, nowMs = Date.now()): boolean {
+  if (data.isPublished !== true) return false
+  const publishedAtMs = toTimestampMillis(data.publishedAt)
+  if (publishedAtMs !== null && publishedAtMs > nowMs) return false
+  const unpublishedAtMs = toTimestampMillis(data.unpublishedAt)
+  if (unpublishedAtMs !== null && unpublishedAtMs <= nowMs) return false
+  return true
+}
+
+function tokenizeSearchText(value: string): string[] {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function buildSearchTokens(data: Record<string, unknown>): string[] {
+  const name = typeof data.name === 'string' ? data.name : ''
+  const category = typeof data.category === 'string' ? data.category : ''
+  const description = typeof data.description === 'string' ? data.description.slice(0, 180) : ''
+  const mergedTokens = [
+    ...tokenizeSearchText(name),
+    ...tokenizeSearchText(category),
+    ...tokenizeSearchText(description),
+  ]
+  const uniqueTokens = [...new Set(mergedTokens)]
+  return uniqueTokens.slice(0, 40)
+}
+
+function buildNamePrefix(data: Record<string, unknown>): string | null {
+  if (typeof data.name !== 'string') return null
+  const normalized = data.name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+  return normalized ? normalized.slice(0, 80) : null
+}
+
+function arraysEqual(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false
+  }
   return true
 }
 
@@ -5785,6 +5856,9 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
           : data.itemType === 'made_to_order'
             ? 'made_to_order'
             : 'product',
+      isPublished: data.isPublished === true,
+      publishedAt: normalizeTimestampIso(data.publishedAt),
+      unpublishedAt: normalizeTimestampIso(data.unpublishedAt),
       updatedAt: normalizeTimestampIso(data.updatedAt),
     } as const
   }
@@ -5795,6 +5869,7 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
       snapshot = await db
         .collection(collectionName)
         .where('storeId', '==', storeId)
+        .where('isPublished', '==', true)
         .orderBy('updatedAt', 'desc')
         .limit(200)
         .get()
@@ -5804,7 +5879,12 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
       if (!isMissingIndex) {
         throw error
       }
-      snapshot = await db.collection(collectionName).where('storeId', '==', storeId).limit(200).get()
+      snapshot = await db
+        .collection(collectionName)
+        .where('storeId', '==', storeId)
+        .where('isPublished', '==', true)
+        .limit(200)
+        .get()
     }
     return snapshot
   }
@@ -5825,6 +5905,8 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
       return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
     })
   products = dedupeCatalogItemsById(products)
+  const nowMs = Date.now()
+  products = products.filter(item => isPublishedForPublicRead(item as Record<string, unknown>, nowMs))
 
   if (!products.length) {
     let productsSnapshot: admin.firestore.QuerySnapshot
@@ -5848,6 +5930,7 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
     products = productsSnapshot.docs
       .map(mapCatalogDoc)
       .filter(item => item !== null)
+      .filter(item => isPublishedForPublicRead(item as Record<string, unknown>, nowMs))
       .sort((a, b) => {
         if (!a.updatedAt && !b.updatedAt) return 0
         if (!a.updatedAt) return 1
@@ -6528,6 +6611,14 @@ function toPublicProductPayload(
   if (!storeId || !name) {
     return null
   }
+  const isPublished = source.isPublished === true
+  const unpublishedAt =
+    isPublished
+      ? null
+      : source.unpublishedAt ??
+        existing?.unpublishedAt ??
+        source.updatedAt ??
+        admin.firestore.FieldValue.serverTimestamp()
 
   return {
     sourceProductId: productId,
@@ -6556,9 +6647,12 @@ function toPublicProductPayload(
         : source.itemType === 'made_to_order'
           ? 'made_to_order'
           : 'product',
-    isPublished: source.isPublished !== false,
+    isPublished,
+    searchTokens: buildSearchTokens(source),
+    namePrefix: buildNamePrefix(source),
     ...extractProductImageSet(source),
-    publishedAt: resolvePublicProductPublishedAt(source, existing),
+    publishedAt: isPublished ? resolvePublicProductPublishedAt(source, existing) : null,
+    unpublishedAt,
     createdAt: source.createdAt ?? existing?.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
     sourceUpdatedAt: source.updatedAt ?? null,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -6642,7 +6736,16 @@ export const enrichProductDataAfterSave = functions.firestore
             imageUrl: typeof afterData.imageUrl === 'string' ? afterData.imageUrl : null,
           })
         : null
-    if (!enrichment && !duplicateCandidate) return
+    const nextSearchTokens = buildSearchTokens(afterData)
+    const existingSearchTokens = Array.isArray(afterData.searchTokens)
+      ? afterData.searchTokens.filter(token => typeof token === 'string')
+      : []
+    const nextNamePrefix = buildNamePrefix(afterData)
+    const existingNamePrefix = typeof afterData.namePrefix === 'string' ? afterData.namePrefix : null
+    const needsSearchIndexUpdate =
+      !arraysEqual(existingSearchTokens, nextSearchTokens) || existingNamePrefix !== nextNamePrefix
+
+    if (!enrichment && !duplicateCandidate && !needsSearchIndexUpdate) return
 
     const updates: Record<string, unknown> = {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -6661,6 +6764,10 @@ export const enrichProductDataAfterSave = functions.firestore
     if (enrichment?.manufacturerName) updates.manufacturerName = enrichment.manufacturerName
     if (enrichment?.description) updates.description = enrichment.description
     if (enrichment?.imageAlt) updates.imageAlt = enrichment.imageAlt
+    if (needsSearchIndexUpdate) {
+      updates.searchTokens = nextSearchTokens
+      updates.namePrefix = nextNamePrefix
+    }
     if (duplicateCandidate) {
       updates.catalogQuality = {
         duplicateRisk: 'high',
@@ -6680,6 +6787,10 @@ export const enrichProductDataAfterSave = functions.firestore
     const currentManufacturer = typeof afterData.manufacturerName === 'string' ? afterData.manufacturerName.trim() : null
     const currentDescription = typeof afterData.description === 'string' ? afterData.description.trim() : null
     const currentImageAlt = typeof afterData.imageAlt === 'string' ? afterData.imageAlt.trim() : null
+    const currentSearchTokens = Array.isArray(afterData.searchTokens)
+      ? afterData.searchTokens.filter(token => typeof token === 'string')
+      : []
+    const currentNamePrefix = typeof afterData.namePrefix === 'string' ? afterData.namePrefix : null
     const currentDuplicateProductId =
       afterData.catalogQuality && typeof afterData.catalogQuality === 'object'
         ? toTrimmedStringOrNull((afterData.catalogQuality as Record<string, unknown>).duplicateProductId)
@@ -6691,6 +6802,8 @@ export const enrichProductDataAfterSave = functions.firestore
       currentManufacturer !== (typeof updates.manufacturerName === 'string' ? updates.manufacturerName : currentManufacturer) ||
       currentDescription !== (typeof updates.description === 'string' ? updates.description : currentDescription) ||
       currentImageAlt !== (typeof updates.imageAlt === 'string' ? updates.imageAlt : currentImageAlt) ||
+      !arraysEqual(currentSearchTokens, nextSearchTokens) ||
+      currentNamePrefix !== nextNamePrefix ||
       currentDuplicateProductId !== nextDuplicateProductId
     if (!shouldWrite) return
 
