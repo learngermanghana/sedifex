@@ -6569,6 +6569,23 @@ function resolvePublicCatalogCollectionName(itemType: unknown): 'publicProducts'
   return itemType === 'service' ? 'publicServices' : 'publicProducts'
 }
 
+async function deleteLegacyPublicCatalogDuplicates(productId: string): Promise<void> {
+  const cleanupCollection = async (collectionName: 'publicProducts' | 'publicServices') => {
+    const snapshot = await db.collection(collectionName).where('sourceProductId', '==', productId).limit(50).get()
+    if (snapshot.empty) return
+    const staleDocs = snapshot.docs.filter(doc => doc.id !== productId)
+    if (!staleDocs.length) return
+
+    const batch = db.batch()
+    for (const doc of staleDocs) {
+      batch.delete(doc.ref)
+    }
+    await batch.commit()
+  }
+
+  await Promise.all([cleanupCollection('publicProducts'), cleanupCollection('publicServices')])
+}
+
 export const syncPublicProducts = functions.firestore
   .document('products/{productId}')
   .onWrite(async (change, context) => {
@@ -6604,6 +6621,7 @@ export const syncPublicProducts = functions.firestore
 
     await destinationRef.set(payload, { merge: true })
     await oppositeRef.delete().catch(() => undefined)
+    await deleteLegacyPublicCatalogDuplicates(productId).catch(() => undefined)
   })
 
 export const enrichProductDataAfterSave = functions.firestore
