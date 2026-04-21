@@ -4490,7 +4490,7 @@ exports.integrationGallery = functions.https.onRequest(async (req, res) => {
     if (!storeContext) {
         return;
     }
-    const { storeId } = storeContext;
+    const { storeId, data: storeData } = storeContext;
     const gallerySnapshot = await firestore_1.defaultDb
         .collection('stores')
         .doc(storeId)
@@ -4628,7 +4628,7 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
     if (!storeContext) {
         return;
     }
-    const { storeId } = storeContext;
+    const { storeId, data: storeData } = storeContext;
     const mapCatalogDoc = (docSnap) => {
         const data = docSnap.data();
         const name = typeof data.name === 'string' ? data.name.trim() : '';
@@ -4731,7 +4731,21 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
         });
     }
     const { publicProducts, publicServices } = splitCatalogItemsByType(products);
-    res.status(200).json({ storeId, products, publicProducts, publicServices });
+    const syncHealth = {
+        publicCatalogLastSyncedAt: normalizeTimestampIso(storeData.publicCatalogLastSyncedAt),
+        publicCatalogDocCount: {
+            products: typeof storeData.publicCatalogDocCount?.products === 'number'
+                ? Math.max(0, Math.floor(storeData.publicCatalogDocCount.products))
+                : null,
+            services: typeof storeData.publicCatalogDocCount?.services === 'number'
+                ? Math.max(0, Math.floor(storeData.publicCatalogDocCount.services))
+                : null,
+        },
+        publicCatalogOutOfSyncCount: typeof storeData.publicCatalogOutOfSyncCount === 'number'
+            ? Math.max(0, Math.floor(storeData.publicCatalogOutOfSyncCount))
+            : null,
+    };
+    res.status(200).json({ storeId, products, publicProducts, publicServices, syncHealth });
 });
 exports.integrationGoogleMerchantFeed = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
@@ -5319,7 +5333,7 @@ function toPublicProductPayload(productId, source, existing, storeMeta) {
         websiteLink: toTrimmedStringOrNull(source.websiteLink) ?? storeMeta?.websiteLink ?? null,
         name,
         description: typeof source.description === 'string' && source.description.trim() ? source.description.trim() : null,
-        category: typeof source.category === 'string' && source.category.trim() ? source.category.trim() : null,
+        category: normalizeCatalogCategory(source.category),
         sku: toTrimmedStringOrNull(source.sku),
         barcode: toTrimmedStringOrNull(source.barcode),
         manufacturerName: toTrimmedStringOrNull(source.manufacturerName),
@@ -5350,6 +5364,52 @@ function toPublicProductPayload(productId, source, existing, storeMeta) {
 function resolvePublicCatalogCollectionName(itemType) {
     return itemType === 'service' ? 'publicServices' : 'publicProducts';
 }
+function normalizeCatalogCategory(value) {
+    if (typeof value !== 'string')
+        return null;
+    const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase();
+    return normalized || null;
+}
+async function updateStorePublicCatalogHealth(storeId) {
+    const normalizedStoreId = toTrimmedStringOrNull(storeId);
+    if (!normalizedStoreId)
+        return;
+    const [publishedProductsSnap, publicProductsSnap, publicServicesSnap] = await Promise.all([
+        firestore_1.defaultDb.collection('products').where('storeId', '==', normalizedStoreId).where('isPublished', '==', true).get(),
+        firestore_1.defaultDb.collection('publicProducts').where('storeId', '==', normalizedStoreId).get(),
+        firestore_1.defaultDb.collection('publicServices').where('storeId', '==', normalizedStoreId).get(),
+    ]);
+    const publicProductIds = new Set(publicProductsSnap.docs.map(doc => doc.id));
+    const publicServiceIds = new Set(publicServicesSnap.docs.map(doc => doc.id));
+    const publishedSourceIds = new Set();
+    let outOfSyncCount = 0;
+    for (const sourceDoc of publishedProductsSnap.docs) {
+        publishedSourceIds.add(sourceDoc.id);
+        const sourceData = (sourceDoc.data() ?? {});
+        const expectedCollection = resolvePublicCatalogCollectionName(sourceData.itemType);
+        const existsInProducts = publicProductIds.has(sourceDoc.id);
+        const existsInServices = publicServiceIds.has(sourceDoc.id);
+        const isInSync = expectedCollection === 'publicServices'
+            ? existsInServices && !existsInProducts
+            : existsInProducts && !existsInServices;
+        if (!isInSync) {
+            outOfSyncCount += 1;
+        }
+    }
+    for (const publicDoc of [...publicProductsSnap.docs, ...publicServicesSnap.docs]) {
+        if (!publishedSourceIds.has(publicDoc.id)) {
+            outOfSyncCount += 1;
+        }
+    }
+    await firestore_1.defaultDb.collection('stores').doc(normalizedStoreId).set({
+        publicCatalogLastSyncedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        publicCatalogDocCount: {
+            products: publicProductsSnap.size,
+            services: publicServicesSnap.size,
+        },
+        publicCatalogOutOfSyncCount: outOfSyncCount,
+    }, { merge: true });
+}
 async function deleteLegacyPublicCatalogDuplicates(productId) {
     const cleanupCollection = async (collectionName) => {
         const snapshot = await firestore_1.defaultDb.collection(collectionName).where('sourceProductId', '==', productId).limit(50).get();
@@ -5372,12 +5432,22 @@ exports.syncPublicProducts = functions.firestore
     const productId = context.params.productId;
     const publicProductRef = firestore_1.defaultDb.collection('publicProducts').doc(productId);
     const publicServiceRef = firestore_1.defaultDb.collection('publicServices').doc(productId);
+    const beforeData = change.before.exists ? (change.before.data() ?? {}) : null;
+    const afterData = change.after.exists ? (change.after.data() ?? {}) : null;
+    const touchedStoreIds = new Set();
+    const beforeStoreId = toTrimmedStringOrNull(beforeData?.storeId);
+    const afterStoreId = toTrimmedStringOrNull(afterData?.storeId);
+    if (beforeStoreId)
+        touchedStoreIds.add(beforeStoreId);
+    if (afterStoreId)
+        touchedStoreIds.add(afterStoreId);
     if (!change.after.exists) {
         await publicProductRef.delete().catch(() => undefined);
         await publicServiceRef.delete().catch(() => undefined);
+        await Promise.all([...touchedStoreIds].map(storeId => updateStorePublicCatalogHealth(storeId)));
         return;
     }
-    const sourceData = (change.after.data() ?? {});
+    const sourceData = afterData ?? {};
     const destinationCollectionName = resolvePublicCatalogCollectionName(sourceData.itemType);
     const destinationRef = firestore_1.defaultDb.collection(destinationCollectionName).doc(productId);
     const oppositeRef = destinationCollectionName === 'publicServices' ? publicProductRef : publicServiceRef;
@@ -5395,6 +5465,7 @@ exports.syncPublicProducts = functions.firestore
     await destinationRef.set(payload, { merge: true });
     await oppositeRef.delete().catch(() => undefined);
     await deleteLegacyPublicCatalogDuplicates(productId).catch(() => undefined);
+    await Promise.all([...touchedStoreIds].map(storeId => updateStorePublicCatalogHealth(storeId)));
 });
 exports.enrichProductDataAfterSave = functions.firestore
     .document('products/{productId}')

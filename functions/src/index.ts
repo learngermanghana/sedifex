@@ -5683,7 +5683,7 @@ export const integrationGallery = functions.https.onRequest(async (req, res) => 
   if (!storeContext) {
     return
   }
-  const { storeId } = storeContext
+  const { storeId, data: storeData } = storeContext
 
   const gallerySnapshot = await db
     .collection('stores')
@@ -5835,7 +5835,7 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
   if (!storeContext) {
     return
   }
-  const { storeId } = storeContext
+  const { storeId, data: storeData } = storeContext
 
   const mapCatalogDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
     const data = docSnap.data() as Record<string, unknown>
@@ -5941,7 +5941,31 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
 
   const { publicProducts, publicServices } = splitCatalogItemsByType(products)
 
-  res.status(200).json({ storeId, products, publicProducts, publicServices })
+  const syncHealth = {
+    publicCatalogLastSyncedAt: normalizeTimestampIso(storeData.publicCatalogLastSyncedAt),
+    publicCatalogDocCount: {
+      products:
+        typeof (storeData.publicCatalogDocCount as Record<string, unknown> | undefined)?.products === 'number'
+          ? Math.max(
+              0,
+              Math.floor((storeData.publicCatalogDocCount as Record<string, unknown>).products as number),
+            )
+          : null,
+      services:
+        typeof (storeData.publicCatalogDocCount as Record<string, unknown> | undefined)?.services === 'number'
+          ? Math.max(
+              0,
+              Math.floor((storeData.publicCatalogDocCount as Record<string, unknown>).services as number),
+            )
+          : null,
+    },
+    publicCatalogOutOfSyncCount:
+      typeof storeData.publicCatalogOutOfSyncCount === 'number'
+        ? Math.max(0, Math.floor(storeData.publicCatalogOutOfSyncCount))
+        : null,
+  }
+
+  res.status(200).json({ storeId, products, publicProducts, publicServices, syncHealth })
 })
 
 export const integrationGoogleMerchantFeed = functions.https.onRequest(async (req, res) => {
@@ -6629,7 +6653,7 @@ function toPublicProductPayload(
     websiteLink: toTrimmedStringOrNull(source.websiteLink) ?? storeMeta?.websiteLink ?? null,
     name,
     description: typeof source.description === 'string' && source.description.trim() ? source.description.trim() : null,
-    category: typeof source.category === 'string' && source.category.trim() ? source.category.trim() : null,
+    category: normalizeCatalogCategory(source.category),
     sku: toTrimmedStringOrNull(source.sku),
     barcode: toTrimmedStringOrNull(source.barcode),
     manufacturerName: toTrimmedStringOrNull(source.manufacturerName),
@@ -6663,6 +6687,62 @@ function resolvePublicCatalogCollectionName(itemType: unknown): 'publicProducts'
   return itemType === 'service' ? 'publicServices' : 'publicProducts'
 }
 
+function normalizeCatalogCategory(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
+  return normalized || null
+}
+
+async function updateStorePublicCatalogHealth(storeId: string): Promise<void> {
+  const normalizedStoreId = toTrimmedStringOrNull(storeId)
+  if (!normalizedStoreId) return
+
+  const [publishedProductsSnap, publicProductsSnap, publicServicesSnap] = await Promise.all([
+    db.collection('products').where('storeId', '==', normalizedStoreId).where('isPublished', '==', true).get(),
+    db.collection('publicProducts').where('storeId', '==', normalizedStoreId).get(),
+    db.collection('publicServices').where('storeId', '==', normalizedStoreId).get(),
+  ])
+
+  const publicProductIds = new Set(publicProductsSnap.docs.map(doc => doc.id))
+  const publicServiceIds = new Set(publicServicesSnap.docs.map(doc => doc.id))
+  const publishedSourceIds = new Set<string>()
+  let outOfSyncCount = 0
+
+  for (const sourceDoc of publishedProductsSnap.docs) {
+    publishedSourceIds.add(sourceDoc.id)
+    const sourceData = (sourceDoc.data() ?? {}) as Record<string, unknown>
+    const expectedCollection = resolvePublicCatalogCollectionName(sourceData.itemType)
+    const existsInProducts = publicProductIds.has(sourceDoc.id)
+    const existsInServices = publicServiceIds.has(sourceDoc.id)
+    const isInSync =
+      expectedCollection === 'publicServices'
+        ? existsInServices && !existsInProducts
+        : existsInProducts && !existsInServices
+
+    if (!isInSync) {
+      outOfSyncCount += 1
+    }
+  }
+
+  for (const publicDoc of [...publicProductsSnap.docs, ...publicServicesSnap.docs]) {
+    if (!publishedSourceIds.has(publicDoc.id)) {
+      outOfSyncCount += 1
+    }
+  }
+
+  await db.collection('stores').doc(normalizedStoreId).set(
+    {
+      publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+      publicCatalogDocCount: {
+        products: publicProductsSnap.size,
+        services: publicServicesSnap.size,
+      },
+      publicCatalogOutOfSyncCount: outOfSyncCount,
+    },
+    { merge: true },
+  )
+}
+
 async function deleteLegacyPublicCatalogDuplicates(productId: string): Promise<void> {
   const cleanupCollection = async (collectionName: 'publicProducts' | 'publicServices') => {
     const snapshot = await db.collection(collectionName).where('sourceProductId', '==', productId).limit(50).get()
@@ -6686,14 +6766,23 @@ export const syncPublicProducts = functions.firestore
     const productId = context.params.productId
     const publicProductRef = db.collection('publicProducts').doc(productId)
     const publicServiceRef = db.collection('publicServices').doc(productId)
+    const beforeData = change.before.exists ? ((change.before.data() ?? {}) as Record<string, unknown>) : null
+    const afterData = change.after.exists ? ((change.after.data() ?? {}) as Record<string, unknown>) : null
+    const touchedStoreIds = new Set<string>()
+
+    const beforeStoreId = toTrimmedStringOrNull(beforeData?.storeId)
+    const afterStoreId = toTrimmedStringOrNull(afterData?.storeId)
+    if (beforeStoreId) touchedStoreIds.add(beforeStoreId)
+    if (afterStoreId) touchedStoreIds.add(afterStoreId)
 
     if (!change.after.exists) {
       await publicProductRef.delete().catch(() => undefined)
       await publicServiceRef.delete().catch(() => undefined)
+      await Promise.all([...touchedStoreIds].map(storeId => updateStorePublicCatalogHealth(storeId)))
       return
     }
 
-    const sourceData = (change.after.data() ?? {}) as Record<string, unknown>
+    const sourceData = afterData ?? {}
     const destinationCollectionName = resolvePublicCatalogCollectionName(sourceData.itemType)
     const destinationRef = db.collection(destinationCollectionName).doc(productId)
     const oppositeRef = destinationCollectionName === 'publicServices' ? publicProductRef : publicServiceRef
@@ -6716,6 +6805,7 @@ export const syncPublicProducts = functions.firestore
     await destinationRef.set(payload, { merge: true })
     await oppositeRef.delete().catch(() => undefined)
     await deleteLegacyPublicCatalogDuplicates(productId).catch(() => undefined)
+    await Promise.all([...touchedStoreIds].map(storeId => updateStorePublicCatalogHealth(storeId)))
   })
 
 export const enrichProductDataAfterSave = functions.firestore

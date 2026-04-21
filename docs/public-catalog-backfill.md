@@ -58,3 +58,31 @@ Then verify a few sample product IDs:
 
 - A `service` item should only exist in `publicServices/<productId>`.
 - A non-service item should only exist in `publicProducts/<productId>`.
+
+## Reconciliation mode (verify + repair)
+
+Run reconciliation when you want to actively check for drift and repair it:
+
+```bash
+npm --prefix functions run backfill-public-catalog -- --mode=reconcile
+```
+
+Single-store reconciliation:
+
+```bash
+npm --prefix functions run backfill-public-catalog -- --mode=reconcile --store-id=YOUR_STORE_ID
+```
+
+Reconciliation validates published `products/<id>` documents map to exactly one target (`publicProducts` or `publicServices`), then repairs:
+
+- wrong-collection drift after `itemType` changes,
+- missing `publishedAt` / `updatedAt`,
+- non-normalized `category` values (trimmed, single-spaced, lowercase),
+- orphan public docs with no matching published source product.
+
+It also emits a per-store summary report and refreshes store health fields:
+
+- `publicCatalogLastSyncedAt`
+- `publicCatalogDocCount.products`
+- `publicCatalogDocCount.services`
+- `publicCatalogOutOfSyncCount`
