@@ -3836,6 +3836,28 @@ function splitCatalogItemsByType<T extends { itemType: 'product' | 'service' | '
   return { publicProducts, publicServices }
 }
 
+function dedupeCatalogItemsById<T extends { id: string; updatedAt?: string | null }>(items: T[]): T[] {
+  const byId = new Map<string, T>()
+  for (const item of items) {
+    const existing = byId.get(item.id)
+    if (!existing) {
+      byId.set(item.id, item)
+      continue
+    }
+
+    const existingTime = existing.updatedAt ? Date.parse(existing.updatedAt) : Number.NaN
+    const incomingTime = item.updatedAt ? Date.parse(item.updatedAt) : Number.NaN
+
+    if (Number.isNaN(existingTime) && Number.isNaN(incomingTime)) {
+      continue
+    }
+    if (Number.isNaN(existingTime) || (!Number.isNaN(incomingTime) && incomingTime > existingTime)) {
+      byId.set(item.id, item)
+    }
+  }
+  return [...byId.values()]
+}
+
 const BOOKING_ATTRIBUTE_MAX_KEYS = 40
 const BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH = 500
 
@@ -5802,6 +5824,7 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
       if (!b.updatedAt) return -1
       return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
     })
+  products = dedupeCatalogItemsById(products)
 
   if (!products.length) {
     let productsSnapshot: admin.firestore.QuerySnapshot
