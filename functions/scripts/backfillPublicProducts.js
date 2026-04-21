@@ -13,6 +13,7 @@ function parseCliArgs(argv) {
   const options = {
     storeId: null,
     showHelp: false,
+    mode: 'backfill',
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -31,6 +32,15 @@ function parseCliArgs(argv) {
       options.storeId = token.slice('--store-id='.length)
       continue
     }
+    if (token === '--mode') {
+      options.mode = argv[index + 1] ?? options.mode
+      index += 1
+      continue
+    }
+    if (token.startsWith('--mode=')) {
+      options.mode = token.slice('--mode='.length)
+      continue
+    }
     if (!token.startsWith('--') && !options.storeId) {
       // Backward-compatible positional form: node backfillPublicProducts.js <storeId>
       options.storeId = token
@@ -41,10 +51,11 @@ function parseCliArgs(argv) {
 }
 
 function printHelp() {
-  console.log('Usage: node scripts/backfillPublicProducts.js [--store-id=<storeId>]')
+  console.log('Usage: node scripts/backfillPublicProducts.js [--store-id=<storeId>] [--mode=backfill|reconcile]')
   console.log('')
-  console.log('Backfills products into publicProducts/publicServices based on itemType.')
-  console.log('If --store-id is omitted, the script processes all products.')
+  console.log('Modes:')
+  console.log('  backfill   Backfills products into publicProducts/publicServices (default).')
+  console.log('  reconcile Verify + repair published catalog consistency and metadata drift.')
 }
 
 function toTrimmedStringOrNull(value) {
@@ -111,52 +122,6 @@ function extractProductImageSet(data) {
   }
 }
 
-function toPublicProduct(productDoc, storeMetaByStoreId) {
-  const data = productDoc.data() || {}
-  const storeId = toTrimmedStringOrNull(data.storeId)
-  const name = toTrimmedStringOrNull(data.name)
-  const storeMeta = storeMetaByStoreId.get(storeId) || null
-
-  if (!storeId || !name) {
-    return null
-  }
-
-  return {
-    sourceProductId: productDoc.id,
-    storeId,
-    storeName: toTrimmedStringOrNull(data.storeName) || storeMeta?.storeName || null,
-    storeCity: toTrimmedStringOrNull(data.storeCity) || storeMeta?.storeCity || null,
-    storePhone: toTrimmedStringOrNull(data.storePhone) || storeMeta?.storePhone || null,
-    websiteLink: toTrimmedStringOrNull(data.websiteLink) || storeMeta?.websiteLink || null,
-    name,
-    description: toTrimmedStringOrNull(data.description),
-    category: toTrimmedStringOrNull(data.category),
-    sku: toTrimmedStringOrNull(data.sku),
-    barcode: toTrimmedStringOrNull(data.barcode),
-    manufacturerName: toTrimmedStringOrNull(data.manufacturerName),
-    price: typeof data.price === 'number' ? data.price : null,
-    stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
-    reorderPoint: typeof data.reorderPoint === 'number' ? data.reorderPoint : null,
-    taxRate: typeof data.taxRate === 'number' ? data.taxRate : null,
-    productionDate: isFirestoreTimestampLike(data.productionDate) || typeof data.productionDate === 'string' ? data.productionDate : null,
-    expiryDate: isFirestoreTimestampLike(data.expiryDate) || typeof data.expiryDate === 'string' ? data.expiryDate : null,
-    batchNumber: toTrimmedStringOrNull(data.batchNumber),
-    showOnReceipt: data.showOnReceipt === true,
-    itemType:
-      data.itemType === 'service'
-        ? 'service'
-        : data.itemType === 'made_to_order'
-          ? 'made_to_order'
-          : 'product',
-    isPublished: data.isPublished !== false,
-    ...extractProductImageSet(data),
-    publishedAt: data.publishedAt ?? data.createdAt ?? data.updatedAt ?? admin.firestore.FieldValue.serverTimestamp(),
-    createdAt: data.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
-    sourceUpdatedAt: data.updatedAt ?? null,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }
-}
-
 function resolvePublicCatalogCollectionName(itemType) {
   return itemType === 'service' ? 'publicServices' : 'publicProducts'
 }
@@ -185,14 +150,84 @@ function resolvePublishedAtValue(data) {
   return admin.firestore.FieldValue.serverTimestamp()
 }
 
-async function run() {
-  const args = parseCliArgs(process.argv.slice(2))
-  if (args.showHelp) {
-    printHelp()
-    return
+function normalizeCategory(value) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
+  return normalized || null
+}
+
+function toPublicProduct(productDoc, storeMetaByStoreId, existingDocData = null) {
+  const data = productDoc.data() || {}
+  const storeId = toTrimmedStringOrNull(data.storeId)
+  const name = toTrimmedStringOrNull(data.name)
+  const storeMeta = storeMetaByStoreId.get(storeId) || null
+
+  if (!storeId || !name) {
+    return null
   }
 
-  const targetStoreId = toTrimmedStringOrNull(args.storeId)
+  const category = normalizeCategory(data.category)
+
+  return {
+    sourceProductId: productDoc.id,
+    storeId,
+    storeName: toTrimmedStringOrNull(data.storeName) || storeMeta?.storeName || null,
+    storeCity: toTrimmedStringOrNull(data.storeCity) || storeMeta?.storeCity || null,
+    storePhone: toTrimmedStringOrNull(data.storePhone) || storeMeta?.storePhone || null,
+    websiteLink: toTrimmedStringOrNull(data.websiteLink) || storeMeta?.websiteLink || null,
+    name,
+    description: toTrimmedStringOrNull(data.description),
+    category,
+    sku: toTrimmedStringOrNull(data.sku),
+    barcode: toTrimmedStringOrNull(data.barcode),
+    manufacturerName: toTrimmedStringOrNull(data.manufacturerName),
+    price: typeof data.price === 'number' ? data.price : null,
+    stockCount: typeof data.stockCount === 'number' ? data.stockCount : null,
+    reorderPoint: typeof data.reorderPoint === 'number' ? data.reorderPoint : null,
+    taxRate: typeof data.taxRate === 'number' ? data.taxRate : null,
+    productionDate: isFirestoreTimestampLike(data.productionDate) || typeof data.productionDate === 'string' ? data.productionDate : null,
+    expiryDate: isFirestoreTimestampLike(data.expiryDate) || typeof data.expiryDate === 'string' ? data.expiryDate : null,
+    batchNumber: toTrimmedStringOrNull(data.batchNumber),
+    showOnReceipt: data.showOnReceipt === true,
+    itemType:
+      data.itemType === 'service'
+        ? 'service'
+        : data.itemType === 'made_to_order'
+          ? 'made_to_order'
+          : 'product',
+    isPublished: data.isPublished !== false,
+    ...extractProductImageSet(data),
+    publishedAt: resolvePublishedAtValue(existingDocData || data),
+    createdAt: data.createdAt ?? existingDocData?.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
+    sourceUpdatedAt: data.updatedAt ?? null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }
+}
+
+async function flushBatch(state) {
+  if (state.writes === 0) return
+  await state.batch.commit()
+  state.batch = db.batch()
+  state.writes = 0
+}
+
+function queueSet(state, ref, payload, options = { merge: true }) {
+  state.batch.set(ref, payload, options)
+  state.writes += 1
+}
+
+function queueDelete(state, ref) {
+  state.batch.delete(ref)
+  state.writes += 1
+}
+
+async function maybeFlushBatch(state) {
+  if (state.writes >= 450) {
+    await flushBatch(state)
+  }
+}
+
+async function runBackfill(targetStoreId) {
   let query = db.collection('products')
 
   if (targetStoreId) {
@@ -220,8 +255,7 @@ async function run() {
 
   let upserts = 0
   let skipped = 0
-  let batch = db.batch()
-  let writes = 0
+  const batchState = { batch: db.batch(), writes: 0 }
 
   for (const productDoc of productsSnapshot.docs) {
     const payload = toPublicProduct(productDoc, storeMetaByStoreId)
@@ -236,21 +270,15 @@ async function run() {
       targetCollectionName === 'publicServices'
         ? db.collection('publicProducts').doc(productDoc.id)
         : db.collection('publicServices').doc(productDoc.id)
-    batch.set(targetRef, payload, { merge: true })
-    batch.delete(oppositeRef)
+
+    queueSet(batchState, targetRef, payload, { merge: true })
+    queueDelete(batchState, oppositeRef)
     upserts += 1
-    writes += 2
 
-    if (writes >= 450) {
-      await batch.commit()
-      batch = db.batch()
-      writes = 0
-    }
+    await maybeFlushBatch(batchState)
   }
 
-  if (writes > 0) {
-    await batch.commit()
-  }
+  await flushBatch(batchState)
 
   console.log(
     `[backfillPublicProducts] done. upserts=${upserts}, skipped=${skipped}, total=${productsSnapshot.size}`,
@@ -269,40 +297,230 @@ async function run() {
       `[backfillPublicProducts] scanning ${publicSnapshot.size} ${collectionName} docs for publishedAt`,
     )
 
-    batch = db.batch()
-    writes = 0
+    const publicBatchState = { batch: db.batch(), writes: 0 }
     for (const publicDoc of publicSnapshot.docs) {
       const data = publicDoc.data() || {}
-      if (hasPublishedAt(data.publishedAt)) {
+      const needsPublishedAt = !hasPublishedAt(data.publishedAt)
+      const normalizedCategory = normalizeCategory(data.category)
+      const needsCategoryRepair = data.category !== normalizedCategory
+      const needsUpdatedAt = !isFirestoreTimestampLike(data.updatedAt) && !hasPublishedAt(data.updatedAt)
+
+      if (!needsPublishedAt && !needsCategoryRepair && !needsUpdatedAt) {
         continue
       }
 
-      batch.set(
+      queueSet(
+        publicBatchState,
         publicDoc.ref,
         {
-          publishedAt: resolvePublishedAtValue(data),
+          publishedAt: needsPublishedAt ? resolvePublishedAtValue(data) : data.publishedAt,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          category: normalizedCategory,
         },
         { merge: true },
       )
       publishedAtBackfills += 1
-      writes += 1
-
-      if (writes >= 450) {
-        await batch.commit()
-        batch = db.batch()
-        writes = 0
-      }
+      await maybeFlushBatch(publicBatchState)
     }
 
-    if (writes > 0) {
-      await batch.commit()
-    }
+    await flushBatch(publicBatchState)
   }
 
   console.log(
-    `[backfillPublicProducts] publishedAt backfill complete across publicProducts/publicServices. updated=${publishedAtBackfills}`,
+    `[backfillPublicProducts] metadata backfill complete across publicProducts/publicServices. updated=${publishedAtBackfills}`,
   )
+}
+
+async function reconcileStore(storeId, storeMetaByStoreId) {
+  const productsSnapshot = await db
+    .collection('products')
+    .where('storeId', '==', storeId)
+    .where('isPublished', '==', true)
+    .get()
+  const [publicProductsSnapshot, publicServicesSnapshot] = await Promise.all([
+    db.collection('publicProducts').where('storeId', '==', storeId).get(),
+    db.collection('publicServices').where('storeId', '==', storeId).get(),
+  ])
+
+  const publicProductsById = new Map(publicProductsSnapshot.docs.map(doc => [doc.id, doc]))
+  const publicServicesById = new Map(publicServicesSnapshot.docs.map(doc => [doc.id, doc]))
+  const publishedIds = new Set(productsSnapshot.docs.map(doc => doc.id))
+
+  const summary = {
+    storeId,
+    publishedProducts: productsSnapshot.size,
+    existingPublicProducts: publicProductsSnapshot.size,
+    existingPublicServices: publicServicesSnapshot.size,
+    missingTarget: 0,
+    wrongCollectionRepaired: 0,
+    duplicateTargetRepaired: 0,
+    metadataRepairs: 0,
+    orphanPublicDocsRemoved: 0,
+    sourceMetadataRepairs: 0,
+    outOfSyncDetected: 0,
+  }
+
+  const batchState = { batch: db.batch(), writes: 0 }
+
+  for (const productDoc of productsSnapshot.docs) {
+    const productData = productDoc.data() || {}
+    const expectedCollection = resolvePublicCatalogCollectionName(productData.itemType)
+    const expectedRef = db.collection(expectedCollection).doc(productDoc.id)
+    const oppositeRef =
+      expectedCollection === 'publicServices'
+        ? db.collection('publicProducts').doc(productDoc.id)
+        : db.collection('publicServices').doc(productDoc.id)
+
+    const existingExpected = expectedCollection === 'publicServices'
+      ? publicServicesById.get(productDoc.id) || null
+      : publicProductsById.get(productDoc.id) || null
+    const existingOpposite = expectedCollection === 'publicServices'
+      ? publicProductsById.get(productDoc.id) || null
+      : publicServicesById.get(productDoc.id) || null
+
+    if (!existingExpected) {
+      summary.missingTarget += 1
+      summary.outOfSyncDetected += 1
+      const payload = toPublicProduct(productDoc, storeMetaByStoreId)
+      if (payload) {
+        queueSet(batchState, expectedRef, payload, { merge: true })
+      }
+    }
+
+    if (existingOpposite) {
+      summary.wrongCollectionRepaired += 1
+      summary.outOfSyncDetected += 1
+      queueDelete(batchState, oppositeRef)
+    }
+
+    if (existingExpected && existingOpposite) {
+      summary.duplicateTargetRepaired += 1
+    }
+
+    const normalizedSourceCategory = normalizeCategory(productData.category)
+    const needsSourceCategoryRepair = productData.category !== normalizedSourceCategory
+    const needsSourcePublishedAt = !hasPublishedAt(productData.publishedAt)
+    const needsSourceUpdatedAt = !isFirestoreTimestampLike(productData.updatedAt) && !hasPublishedAt(productData.updatedAt)
+
+    if (needsSourceCategoryRepair || needsSourcePublishedAt || needsSourceUpdatedAt) {
+      summary.sourceMetadataRepairs += 1
+      queueSet(batchState, productDoc.ref, {
+        category: normalizedSourceCategory,
+        publishedAt: needsSourcePublishedAt ? resolvePublishedAtValue(productData) : productData.publishedAt,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
+
+    const expectedData = existingExpected ? existingExpected.data() || {} : null
+    if (expectedData) {
+      const normalizedCategory = normalizeCategory(expectedData.category)
+      const needsCategoryRepair = expectedData.category !== normalizedCategory
+      const needsPublishedAtRepair = !hasPublishedAt(expectedData.publishedAt)
+      const needsUpdatedAtRepair = !isFirestoreTimestampLike(expectedData.updatedAt) && !hasPublishedAt(expectedData.updatedAt)
+      if (needsCategoryRepair || needsPublishedAtRepair || needsUpdatedAtRepair) {
+        summary.metadataRepairs += 1
+        queueSet(batchState, expectedRef, {
+          category: normalizedCategory,
+          publishedAt: needsPublishedAtRepair ? resolvePublishedAtValue(expectedData) : expectedData.publishedAt,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+      }
+    }
+
+    await maybeFlushBatch(batchState)
+  }
+
+  for (const publicDoc of [...publicProductsSnapshot.docs, ...publicServicesSnapshot.docs]) {
+    if (publishedIds.has(publicDoc.id)) continue
+    summary.orphanPublicDocsRemoved += 1
+    summary.outOfSyncDetected += 1
+    queueDelete(batchState, publicDoc.ref)
+    await maybeFlushBatch(batchState)
+  }
+
+  await flushBatch(batchState)
+
+  const [nextPublicProductsSnapshot, nextPublicServicesSnapshot] = await Promise.all([
+    db.collection('publicProducts').where('storeId', '==', storeId).get(),
+    db.collection('publicServices').where('storeId', '==', storeId).get(),
+  ])
+
+  await db.collection('stores').doc(storeId).set(
+    {
+      publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+      publicCatalogDocCount: {
+        products: nextPublicProductsSnapshot.size,
+        services: nextPublicServicesSnapshot.size,
+      },
+      publicCatalogOutOfSyncCount: 0,
+    },
+    { merge: true },
+  )
+
+  return summary
+}
+
+async function runReconciliation(targetStoreId) {
+  let productsQuery = db.collection('products').where('isPublished', '==', true)
+  if (targetStoreId) {
+    productsQuery = productsQuery.where('storeId', '==', targetStoreId)
+    console.log(`[backfillPublicProducts] reconcile mode for storeId=${targetStoreId}`)
+  } else {
+    console.log('[backfillPublicProducts] reconcile mode for all stores')
+  }
+
+  const publishedProductsSnapshot = await productsQuery.get()
+  const storeIds = new Set()
+  for (const productDoc of publishedProductsSnapshot.docs) {
+    const storeId = toTrimmedStringOrNull(productDoc.get('storeId'))
+    if (storeId) storeIds.add(storeId)
+  }
+  if (targetStoreId) {
+    storeIds.add(targetStoreId)
+  }
+
+  const storeMetaByStoreId = new Map()
+  for (const storeId of storeIds) {
+    const storeSnap = await db.collection('stores').doc(storeId).get()
+    if (!storeSnap.exists) continue
+    storeMetaByStoreId.set(storeId, buildStorePublicMeta(storeSnap.data() || {}))
+  }
+
+  const summaries = []
+  for (const storeId of [...storeIds]) {
+    const summary = await reconcileStore(storeId, storeMetaByStoreId)
+    summaries.push(summary)
+    console.log(
+      `[reconcile] store=${summary.storeId} published=${summary.publishedProducts} missingTarget=${summary.missingTarget} ` +
+      `wrongCollectionRepaired=${summary.wrongCollectionRepaired} metadataRepairs=${summary.metadataRepairs} ` +
+      `sourceMetadataRepairs=${summary.sourceMetadataRepairs} orphanRemoved=${summary.orphanPublicDocsRemoved} outOfSyncDetected=${summary.outOfSyncDetected}`,
+    )
+  }
+
+  console.log('[reconcile] summary report by store:')
+  console.log(JSON.stringify(summaries, null, 2))
+}
+
+async function run() {
+  const args = parseCliArgs(process.argv.slice(2))
+  if (args.showHelp) {
+    printHelp()
+    return
+  }
+
+  const mode = toTrimmedStringOrNull(args.mode) || 'backfill'
+  const targetStoreId = toTrimmedStringOrNull(args.storeId)
+
+  if (mode !== 'backfill' && mode !== 'reconcile') {
+    throw new Error(`Unsupported mode: ${mode}. Use --mode=backfill or --mode=reconcile`)
+  }
+
+  if (mode === 'reconcile') {
+    await runReconciliation(targetStoreId)
+    return
+  }
+
+  await runBackfill(targetStoreId)
 }
 
 run().catch(error => {

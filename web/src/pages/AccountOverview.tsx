@@ -79,6 +79,10 @@ type StoreProfile = {
   bulkEmailWebAppUrl: string | null
   bulkEmailSharedToken: string | null
   bulkEmailFromName: string | null
+  publicCatalogLastSyncedAt: Timestamp | null
+  publicCatalogDocCountProducts: number
+  publicCatalogDocCountServices: number
+  publicCatalogOutOfSyncCount: number
 }
 
 type SubscriptionProfile = {
@@ -241,6 +245,10 @@ function mapStoreSnapshot(
     data.bulkEmailIntegration && typeof data.bulkEmailIntegration === 'object'
       ? (data.bulkEmailIntegration as Record<string, unknown>)
       : {}
+  const publicCatalogDocCountRaw =
+    data.publicCatalogDocCount && typeof data.publicCatalogDocCount === 'object'
+      ? (data.publicCatalogDocCount as Record<string, unknown>)
+      : {}
 
   return {
     name: toNullableString(data.name),
@@ -280,6 +288,20 @@ function mapStoreSnapshot(
     bulkEmailWebAppUrl: toNullableString(bulkEmailRaw.webAppUrl),
     bulkEmailSharedToken: toNullableString(bulkEmailRaw.sharedToken),
     bulkEmailFromName: toNullableString(bulkEmailRaw.fromName),
+    publicCatalogLastSyncedAt: toTimestamp((data as any).publicCatalogLastSyncedAt),
+    publicCatalogDocCountProducts:
+      typeof publicCatalogDocCountRaw.products === 'number' && Number.isFinite(publicCatalogDocCountRaw.products)
+        ? Math.max(0, Math.floor(publicCatalogDocCountRaw.products))
+        : 0,
+    publicCatalogDocCountServices:
+      typeof publicCatalogDocCountRaw.services === 'number' && Number.isFinite(publicCatalogDocCountRaw.services)
+        ? Math.max(0, Math.floor(publicCatalogDocCountRaw.services))
+        : 0,
+    publicCatalogOutOfSyncCount:
+      typeof (data as any).publicCatalogOutOfSyncCount === 'number' &&
+      Number.isFinite((data as any).publicCatalogOutOfSyncCount)
+        ? Math.max(0, Math.floor((data as any).publicCatalogOutOfSyncCount))
+        : 0,
   }
 }
 
@@ -2235,6 +2257,22 @@ export default function AccountOverview({
               <code>{storeId}</code>
               . You can find it in <strong>Account overview → Workspace details</strong>.
             </p>
+            {profile && (
+              <div className="account-overview__website-sync-keys">
+                <p className="account-overview__hint"><strong>Catalog sync health</strong></p>
+                <p className="account-overview__hint">
+                  Last synced: {formatTimestamp(profile.publicCatalogLastSyncedAt)}
+                </p>
+                <p className="account-overview__hint">
+                  Public products: {profile.publicCatalogDocCountProducts}
+                  {' · '}
+                  Public services: {profile.publicCatalogDocCountServices}
+                </p>
+                <p className="account-overview__hint">
+                  Out-of-sync items: {profile.publicCatalogOutOfSyncCount}
+                </p>
+              </div>
+            )}
               </>
             )}
             {(integrationTab === 'overview' || integrationTab === 'keys') && (
