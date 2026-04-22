@@ -2979,6 +2979,41 @@ function dedupeCatalogItemsById(items) {
     }
     return [...byId.values()];
 }
+function resolveDailyCatalogShuffleEnabled(value) {
+    if (typeof value !== 'string')
+        return true;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized)
+        return true;
+    return !['0', 'false', 'no', 'off'].includes(normalized);
+}
+function getUtcDayKeyFromMs(nowMs) {
+    return new Date(nowMs).toISOString().slice(0, 10);
+}
+function buildStableDailyOrderKey(params) {
+    return crypto
+        .createHash('sha256')
+        .update(`${params.storeId}:${params.utcDayKey}:${params.itemId}`)
+        .digest('hex');
+}
+function sortCatalogItemsByDailyStableOrder(params) {
+    const utcDayKey = getUtcDayKeyFromMs(params.nowMs);
+    return [...params.items].sort((a, b) => {
+        const aKey = buildStableDailyOrderKey({ storeId: params.storeId, itemId: a.id, utcDayKey });
+        const bKey = buildStableDailyOrderKey({ storeId: params.storeId, itemId: b.id, utcDayKey });
+        if (aKey !== bKey)
+            return aKey.localeCompare(bKey);
+        if (!a.updatedAt && !b.updatedAt)
+            return a.id.localeCompare(b.id);
+        if (!a.updatedAt)
+            return 1;
+        if (!b.updatedAt)
+            return -1;
+        if (a.updatedAt === b.updatedAt)
+            return a.id.localeCompare(b.id);
+        return a.updatedAt > b.updatedAt ? -1 : 1;
+    });
+}
 const BOOKING_ATTRIBUTE_MAX_KEYS = 40;
 const BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH = 500;
 const DEFAULT_BOOKING_ALIASES = {
@@ -4629,6 +4664,7 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
         return;
     }
     const { storeId, data: storeData } = storeContext;
+    const shuffleDaily = resolveDailyCatalogShuffleEnabled(req.query.shuffleDaily);
     const mapCatalogDoc = (docSnap) => {
         const data = docSnap.data();
         const name = typeof data.name === 'string' ? data.name.trim() : '';
@@ -4698,6 +4734,9 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
     products = dedupeCatalogItemsById(products);
     const nowMs = Date.now();
     products = products.filter(item => isPublishedForPublicRead(item, nowMs));
+    if (shuffleDaily) {
+        products = sortCatalogItemsByDailyStableOrder({ items: products, storeId, nowMs });
+    }
     if (!products.length) {
         let productsSnapshot;
         try {
@@ -4729,6 +4768,9 @@ exports.integrationPublicCatalog = functions.https.onRequest(async (req, res) =>
                 return -1;
             return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
         });
+        if (shuffleDaily) {
+            products = sortCatalogItemsByDailyStableOrder({ items: products, storeId, nowMs });
+        }
     }
     const { publicProducts, publicServices } = splitCatalogItemsByType(products);
     const syncHealth = {
