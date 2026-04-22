@@ -66,6 +66,11 @@ export default function PrivacyPage() {
             approximate location, and in-app actions.
           </li>
           <li>
+            <strong>Public page social content</strong> – if you enable a public
+            Sedifex page and connect social channels, we may display selected
+            TikTok and YouTube content on that public page.
+          </li>
+          <li>
             <strong>Support information</strong> – messages and attachments sent
             through support channels.
           </li>

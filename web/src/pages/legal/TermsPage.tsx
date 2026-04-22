@@ -79,7 +79,9 @@ export default function TermsPage() {
         <h2 className="text-xl font-semibold">6. Third-party services</h2>
         <p>
           Some features depend on third-party services (for example, payment processors or social
-          integration providers). Their services are subject to their own terms and policies.
+          integration providers). Sedifex may offer a public-facing page for your business that can
+          display your TikTok and YouTube content where you choose to connect those channels. Their
+          services are subject to their own terms and policies.
         </p>
       </section>
 
