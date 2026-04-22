@@ -4,6 +4,22 @@ This guide explains how third-party clients (including Buy Sedifex) should authe
 
 ## 1) Authentication and API keys
 
+### Required integration secrets/config
+
+Set these values in your website/server environment before calling Sedifex integration endpoints:
+
+- `SEDIFEX_INTEGRATION_API_KEY` (or legacy alias `SEDIFEX_INTEGRATION_KEY`) → your integration key.
+- `SEDIFEX_API_BASE_URL` (or legacy alias `SEDIFEX_INTEGRATION_API_BASE_URL`) → API base URL, typically `https://us-central1-sedifex-web.cloudfunctions.net`.
+- `SEDIFEX_STORE_ID` → store id to query in `?storeId=<storeId>`.
+
+Example server-side env:
+
+```bash
+SEDIFEX_API_BASE_URL=https://us-central1-sedifex-web.cloudfunctions.net
+SEDIFEX_STORE_ID=store_123
+SEDIFEX_INTEGRATION_API_KEY=sk_live_xxx
+```
+
 1. Choose one auth mode:
    - **Admin master key mode:** set Firebase Functions param `SEDIFEX_INTEGRATION_API_KEY` (can fetch all stores from integration products endpoints when `storeId` is omitted).
    - **Store key mode:** create a store integration key from Sedifex Account settings (must include that `storeId`; access is store-scoped).
@@ -186,6 +202,139 @@ Query parameters:
   ]
 }
 ```
+
+### `GET /integrationGallery?storeId=<storeId>` (public via store/slug resolution)
+
+- Returns published gallery images sorted by `sortOrder asc`.
+- Useful for `/integrationGallery` page sections on partner websites.
+
+```json
+{
+  "storeId": "store_123",
+  "gallery": [
+    {
+      "id": "gallery_1",
+      "url": "https://...",
+      "alt": "Front store display",
+      "caption": "Grand opening",
+      "sortOrder": 1,
+      "isPublished": true,
+      "createdAt": "2026-04-13T00:00:00.000Z",
+      "updatedAt": "2026-04-13T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `GET /integrationCustomers?storeId=<storeId>` (authenticated)
+
+- Returns up to 500 customers for the store, sorted by latest update.
+- Useful for `/integrationCustomers` sync/import views.
+
+```json
+{
+  "storeId": "store_123",
+  "customers": [
+    {
+      "id": "cust_1",
+      "storeId": "store_123",
+      "name": "Ada Mensah",
+      "displayName": "Ada",
+      "phone": "+233201234567",
+      "email": "ada@example.com",
+      "notes": null,
+      "tags": ["vip"],
+      "birthdate": null,
+      "createdAt": "2026-04-01T10:00:00.000Z",
+      "updatedAt": "2026-04-13T10:00:00.000Z",
+      "debt": {
+        "outstandingCents": 5000,
+        "dueDate": "2026-04-20T00:00:00.000Z",
+        "lastReminderAt": null
+      }
+    }
+  ]
+}
+```
+
+### `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10` (authenticated)
+
+- Aggregates `saleItems` over a rolling window (`days`, min 1 max 365).
+- `limit` is clamped between 1 and 50.
+- Useful for `/integrationTopSelling` widgets and merchandising blocks.
+
+```json
+{
+  "storeId": "store_123",
+  "windowDays": 30,
+  "generatedAt": "2026-04-13T00:00:00.000Z",
+  "topSelling": [
+    {
+      "productId": "product_1",
+      "name": "Item",
+      "category": "Meals",
+      "imageUrl": "https://...",
+      "imageUrls": ["https://..."],
+      "imageAlt": "Item image",
+      "itemType": "product",
+      "qtySold": 42,
+      "grossSales": 1890,
+      "lastSoldAt": "2026-04-12T18:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `GET /integrationTikTokVideos?storeId=<storeId>` (authenticated)
+
+- Returns published TikTok videos sorted by `sortOrder asc`, then recency.
+- Useful for `/integrationTikTokVideos` embeds.
+
+```json
+{
+  "storeId": "store_123",
+  "videos": [
+    {
+      "id": "tt_1",
+      "videoId": "7390000000000000000",
+      "embedUrl": "https://www.tiktok.com/embed/v2/7390000000000000000",
+      "permalink": "https://www.tiktok.com/@store/video/7390000000000000000",
+      "caption": "New arrivals this week",
+      "thumbnailUrl": "https://...",
+      "duration": 24,
+      "viewCount": 1200,
+      "likeCount": 220,
+      "commentCount": 12,
+      "shareCount": 7,
+      "sortOrder": 1,
+      "publishedAt": "2026-04-12T12:00:00.000Z",
+      "createdAt": "2026-04-12T12:00:00.000Z",
+      "updatedAt": "2026-04-13T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+## 3.1) Integration page steps for `/integrationGallery`, `/integrationCustomers`, `/integrationTopSelling`, `/integrationTikTokVideos`
+
+Use this sequence when wiring those integration pages/widgets in external websites:
+
+1. Load env config (`SEDIFEX_API_BASE_URL`, `SEDIFEX_STORE_ID`, `SEDIFEX_INTEGRATION_API_KEY`).
+2. Build headers:
+   - `x-api-key: <integration_key>`
+   - `X-Sedifex-Contract-Version: 2026-04-13`
+   - `Accept: application/json`
+3. Issue GET requests with `?storeId=<storeId>`:
+   - `/integrationGallery`
+   - `/integrationCustomers`
+   - `/integrationTopSelling?days=30&limit=10` (adjust as needed)
+   - `/integrationTikTokVideos`
+4. Normalize and cache:
+   - Gallery/videos: preserve `sortOrder`; filter to published records only.
+   - Customers/top-selling: dedupe by `id`/`productId`; sort by latest `updatedAt`/`lastSoldAt`.
+5. Fallback safely:
+   - Keep local fallback data for UI continuity.
+   - Retry idempotent GET failures with backoff and log `x-sedifex-request-id`.
 
 ### `GET /v1IntegrationBookings?storeId=<storeId>&status=<status>&serviceId=<serviceId>` (authenticated)
 
