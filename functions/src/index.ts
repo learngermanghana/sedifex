@@ -3858,6 +3858,43 @@ function dedupeCatalogItemsById<T extends { id: string; updatedAt?: string | nul
   return [...byId.values()]
 }
 
+function resolveDailyCatalogShuffleEnabled(value: unknown): boolean {
+  if (typeof value !== 'string') return true
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return true
+  return !['0', 'false', 'no', 'off'].includes(normalized)
+}
+
+function getUtcDayKeyFromMs(nowMs: number): string {
+  return new Date(nowMs).toISOString().slice(0, 10)
+}
+
+function buildStableDailyOrderKey(params: { storeId: string; itemId: string; utcDayKey: string }): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${params.storeId}:${params.utcDayKey}:${params.itemId}`)
+    .digest('hex')
+}
+
+function sortCatalogItemsByDailyStableOrder<T extends { id: string; updatedAt?: string | null }>(params: {
+  items: T[]
+  storeId: string
+  nowMs: number
+}): T[] {
+  const utcDayKey = getUtcDayKeyFromMs(params.nowMs)
+  return [...params.items].sort((a, b) => {
+    const aKey = buildStableDailyOrderKey({ storeId: params.storeId, itemId: a.id, utcDayKey })
+    const bKey = buildStableDailyOrderKey({ storeId: params.storeId, itemId: b.id, utcDayKey })
+    if (aKey !== bKey) return aKey.localeCompare(bKey)
+
+    if (!a.updatedAt && !b.updatedAt) return a.id.localeCompare(b.id)
+    if (!a.updatedAt) return 1
+    if (!b.updatedAt) return -1
+    if (a.updatedAt === b.updatedAt) return a.id.localeCompare(b.id)
+    return a.updatedAt > b.updatedAt ? -1 : 1
+  })
+}
+
 const BOOKING_ATTRIBUTE_MAX_KEYS = 40
 const BOOKING_ATTRIBUTE_MAX_VALUE_LENGTH = 500
 
@@ -5836,6 +5873,7 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
     return
   }
   const { storeId, data: storeData } = storeContext
+  const shuffleDaily = resolveDailyCatalogShuffleEnabled(req.query.shuffleDaily)
 
   const mapCatalogDoc = (docSnap: admin.firestore.QueryDocumentSnapshot) => {
     const data = docSnap.data() as Record<string, unknown>
@@ -5907,6 +5945,9 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
   products = dedupeCatalogItemsById(products)
   const nowMs = Date.now()
   products = products.filter(item => isPublishedForPublicRead(item as Record<string, unknown>, nowMs))
+  if (shuffleDaily) {
+    products = sortCatalogItemsByDailyStableOrder({ items: products, storeId, nowMs })
+  }
 
   if (!products.length) {
     let productsSnapshot: admin.firestore.QuerySnapshot
@@ -5937,6 +5978,9 @@ export const integrationPublicCatalog = functions.https.onRequest(async (req, re
         if (!b.updatedAt) return -1
         return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
       })
+    if (shuffleDaily) {
+      products = sortCatalogItemsByDailyStableOrder({ items: products, storeId, nowMs })
+    }
   }
 
   const { publicProducts, publicServices } = splitCatalogItemsByType(products)
