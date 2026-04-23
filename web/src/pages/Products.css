@@ -67,6 +67,13 @@
   font-size: 12px;
 }
 
+.field__required {
+  color: #b91c1c;
+  font-weight: 500;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
 .products-page__edit-card {
   margin: 12px 0;
 }
