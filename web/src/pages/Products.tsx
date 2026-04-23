@@ -201,6 +201,25 @@ function renderProductDescription(description: string): React.ReactNode {
   return content
 }
 
+function toFriendlyFormError(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'You do not have permission to save this item for the selected store.'
+      case 'unavailable':
+        return 'We could not reach the server. Check your connection and try again.'
+      case 'deadline-exceeded':
+        return 'Saving took too long. Please try again.'
+      case 'failed-precondition':
+        return 'This item could not be saved right now. Refresh and try again.'
+      default:
+        break
+    }
+  }
+  if (error instanceof Error && error.message.trim()) return error.message
+  return fallback
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null
   try {
@@ -988,9 +1007,9 @@ export default function Products() {
     const primaryImageUrl = normalizedImageUrls[0] ?? null
     const imageAlt = imageAltInput.trim()
 
-    if (!isService && (Number.isNaN(priceNumber) || priceNumber < 0)) {
+    if (Number.isNaN(priceNumber) || priceNumber < 0) {
       setFormStatus('error')
-      setFormError('Enter a valid selling price.')
+      setFormError('Price is required. Enter a valid selling price (0 or more).')
       return
     }
     if (descriptionWordCount > MAX_DESCRIPTION_WORDS) {
@@ -1138,11 +1157,7 @@ export default function Products() {
     } catch (error) {
       console.error('[products] Failed to add item', error)
       setFormStatus('error')
-      setFormError(
-        error instanceof Error
-          ? error.message
-          : 'We could not save this item. Please try again.',
-      )
+      setFormError(toFriendlyFormError(error, 'We could not save this item. Please try again.'))
       void playSound('error')
     } finally {
       setIsSaving(false)
@@ -1369,9 +1384,9 @@ export default function Products() {
     const primaryImageUrl = normalizedImageUrls[0] ?? null
     const imageAlt = editImageAltInput.trim()
 
-    if (!isStockTracked && (Number.isNaN(priceNumber) || priceNumber < 0)) {
+    if (Number.isNaN(priceNumber) || priceNumber < 0) {
       setFormStatus('error')
-      setFormError('Enter a valid selling price.')
+      setFormError('Price is required. Enter a valid selling price (0 or more).')
       return
     }
     if (descriptionWordCount > MAX_DESCRIPTION_WORDS) {
@@ -1464,11 +1479,7 @@ export default function Products() {
     } catch (error) {
       console.error('[products] Failed to update item', error)
       setFormStatus('error')
-      setFormError(
-        error instanceof Error
-          ? error.message
-          : 'We could not update this item. Please try again.',
-      )
+      setFormError(toFriendlyFormError(error, 'We could not update this item. Please try again.'))
     }
   }
 
@@ -1623,13 +1634,14 @@ export default function Products() {
           <form className="form" onSubmit={handleAddItem}>
             <div className="field">
               <label className="field__label" htmlFor="add-name">
-                Name
+                Name <span className="field__required">(required)</span>
               </label>
               <input
                 id="add-name"
                 placeholder="e.g. House Blend Coffee or Acrylic Nails"
                 value={name}
                 onChange={e => setName(e.target.value)}
+                required
               />
             </div>
 
@@ -1676,7 +1688,7 @@ export default function Products() {
 
             <div className="field">
               <label className="field__label" htmlFor="add-price">
-                Price
+                Price <span className="field__required">(required)</span>
               </label>
               <input
                 id="add-price"
@@ -1686,9 +1698,10 @@ export default function Products() {
                 placeholder="How much you sell it for"
                 value={priceInput}
                 onChange={e => setPriceInput(e.target.value)}
+                required
               />
               <p className="field__hint">
-                We save the price as you enter it, rounded to 2 decimal places.
+                Price is required before you can save. We round it to 2 decimal places.
               </p>
             </div>
 
@@ -2162,11 +2175,14 @@ export default function Products() {
                       <>
                         <div className="products-page__list-grid">
                           <div className="products-page__list-field">
-                            <label className="field__label">Name</label>
+                            <label className="field__label">
+                              Name <span className="field__required">(required)</span>
+                            </label>
                             {isEditing ? (
                               <input
                                 value={editName}
                                 onChange={event => setEditName(event.target.value)}
+                                required
                               />
                             ) : (
                               <p className="products-page__list-value">{product.name}</p>
@@ -2396,15 +2412,23 @@ export default function Products() {
                       </div>
 
                       <div className="products-page__list-field">
-                        <label className="field__label">Price</label>
+                        <label className="field__label">
+                          Price <span className="field__required">(required)</span>
+                        </label>
                         {isEditing ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={editPriceInput}
-                            onChange={event => setEditPriceInput(event.target.value)}
-                          />
+                          <>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editPriceInput}
+                              onChange={event => setEditPriceInput(event.target.value)}
+                              required
+                            />
+                            <p className="field__hint">
+                              Price is required before you can save changes.
+                            </p>
+                          </>
                         ) : (
                           <p className="products-page__list-value">{formatCurrency(product.price)}</p>
                         )}
