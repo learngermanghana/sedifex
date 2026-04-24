@@ -65,21 +65,24 @@ const MAX_DESCRIPTION_WORDS = 500
 type DescriptionTemplate = 'general' | 'skin-care' | 'food' | 'fashion' | 'electronics'
 const DESCRIPTION_TEMPLATE_OPTIONS: Array<{ value: DescriptionTemplate; label: string }> = [
   { value: 'general', label: 'General product' },
-  { value: 'skin-care', label: 'Skin care' },
-  { value: 'food', label: 'Food & beverages' },
+  { value: 'skin-care', label: 'Skin Care' },
+  { value: 'food', label: 'Food & Beverages' },
   { value: 'fashion', label: 'Fashion' },
   { value: 'electronics', label: 'Electronics' },
 ]
 const SUGGESTED_PRODUCT_CATEGORIES = [
-  'Supplements',
-  'Skin care',
-  'Hair care',
-  'Food & beverages',
+  'General Products',
+  'Skin Supplements',
+  'Skin Care',
+  'Hair Care',
+  'Weight',
+  'Food & Beverages',
   'Household',
-  'Baby care',
+  'Baby Care',
   'Electronics',
   'Fashion',
 ] as const
+const DEFAULT_PRODUCT_CATEGORY = 'General Products'
 
 function buildDescriptionPrompt(input: {
   itemName: string
@@ -268,7 +271,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
   const normalizedBarcode = normalizeBarcode(barcodeSource)
 
   const itemType = data.itemType === 'service' ? 'service' : 'product'
-  const category = typeof data.category === 'string' ? data.category.trim() : ''
+  const category = normalizeProductCategory(data.category)
 
   const expiryDate = toDate(data.expiryDate)
   const productionDate = toDate(data.productionDate)
@@ -286,7 +289,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
   return {
     id,
     name: normalizedName || 'Untitled item',
-    category: category || null,
+    category,
     description,
     sku: skuRaw.trim() || null,
     barcode: normalizedBarcode || null,
@@ -345,6 +348,9 @@ async function backfillProductDefaults(
     if (normalizedProductName && normalizedProductName !== data.name.trim()) {
       updates.name = normalizedProductName
     }
+  }
+  if (shouldBackfillCategory(data.category)) {
+    updates.category = normalizeProductCategory(data.category)
   }
 
   if (!Object.keys(updates).length) return
@@ -441,6 +447,29 @@ function normalizeProductName(value: string): string {
     .replace(/\b[a-z]/g, character => character.toUpperCase())
 }
 
+function toTitleCaseWords(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b[a-z]/g, character => character.toUpperCase())
+}
+
+function normalizeProductCategory(value: unknown): string {
+  const normalizedRaw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+  if (!normalizedRaw) return DEFAULT_PRODUCT_CATEGORY
+
+  const canonical = normalizedRaw.toLowerCase()
+  if (canonical === 'beverage' || canonical === 'beverages') {
+    return 'Weight'
+  }
+
+  return toTitleCaseWords(normalizedRaw)
+}
+
+function shouldBackfillCategory(value: unknown): boolean {
+  if (typeof value !== 'string') return true
+  return normalizeProductCategory(value) !== value.trim()
+}
+
 function normalizeLookupValue(value: string | null | undefined): string {
   if (!value) return ''
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -510,7 +539,7 @@ export default function Products() {
   const [itemType, setItemType] = useState<ItemType>('product')
   const [sku, setSku] = useState('')
   const [hasManualSkuOverride, setHasManualSkuOverride] = useState(false)
-  const [categoryInput, setCategoryInput] = useState('')
+  const [categoryInput, setCategoryInput] = useState(DEFAULT_PRODUCT_CATEGORY)
   const [priceInput, setPriceInput] = useState('')
   const [descriptionInput, setDescriptionInput] = useState('')
   const [descriptionTemplate, setDescriptionTemplate] = useState<DescriptionTemplate>('general')
@@ -593,7 +622,7 @@ export default function Products() {
     const uniqueCategories = new Set<string>()
     SUGGESTED_PRODUCT_CATEGORIES.forEach(category => uniqueCategories.add(category))
     products.forEach(product => {
-      const category = product.category?.trim()
+      const category = normalizeProductCategory(product.category)
       if (category) {
         uniqueCategories.add(category)
       }
@@ -912,7 +941,7 @@ export default function Products() {
       const generated = await generateDescriptionWithAi({
         itemName: normalizedProductName,
         itemType,
-        category: categoryInput.trim(),
+        category: normalizeProductCategory(categoryInput),
         template: descriptionTemplate,
       })
       if (!generated) {
@@ -949,7 +978,7 @@ export default function Products() {
       const generated = await generateDescriptionWithAi({
         itemName: normalizedProductName,
         itemType: editItemType,
-        category: editCategoryInput.trim(),
+        category: normalizeProductCategory(editCategoryInput),
         template: editDescriptionTemplate,
       })
       if (!generated) {
@@ -1049,7 +1078,7 @@ export default function Products() {
     }
 
     const trimmedSku = sku.trim()
-    const trimmedCategory = categoryInput.trim()
+    const normalizedCategory = normalizeProductCategory(categoryInput)
     const normalizedName = normalizeLookupValue(normalizedProductName)
     const normalizedSku = normalizeBarcode(trimmedSku)
 
@@ -1095,7 +1124,7 @@ export default function Products() {
         websiteLink: productStoreMeta.websiteLink,
         name: normalizedProductName,
         itemType,
-        category: trimmedCategory || null,
+        category: normalizedCategory,
         description: trimmedDescription || null,
         price: finalPrice,
         // 🔹 Keep SKU as typed, but also store a normalized barcode field
@@ -1130,7 +1159,7 @@ export default function Products() {
       setItemType('product')
       setSku('')
       setHasManualSkuOverride(false)
-      setCategoryInput('')
+      setCategoryInput(DEFAULT_PRODUCT_CATEGORY)
       setPriceInput('')
       setDescriptionInput('')
       setDescriptionTemplate('general')
@@ -1427,7 +1456,7 @@ export default function Products() {
       !isStockTracked || stockNumberRaw === null ? null : Math.floor(stockNumberRaw)
 
     const trimmedSku = editSku.trim()
-    const trimmedCategory = editCategoryInput.trim()
+    const normalizedCategory = normalizeProductCategory(editCategoryInput)
 
     setFormStatus('idle')
     setFormError(null)
@@ -1437,7 +1466,7 @@ export default function Products() {
       await updateDoc(ref, {
         name: normalizedProductName,
         itemType: editItemType,
-        category: trimmedCategory || null,
+        category: normalizedCategory,
         description: trimmedDescription || null,
         sku: isStockTracked ? trimmedSku || null : null,
         barcode: isStockTracked ? normalizeBarcode(trimmedSku) || null : null,
@@ -1742,19 +1771,20 @@ export default function Products() {
                 {countWords(descriptionInput)} / {MAX_DESCRIPTION_WORDS} words
               </p>
               <p className="field__hint">
-                Pick a template (skin care, food, and more) then tap Generate by A.I for a fast draft.
+                Pick a template (Skin Care, food, and more) then tap Generate by A.I for a fast draft.
               </p>
             </div>
 
             <div className="field">
               <label className="field__label" htmlFor="add-category">
-                Category <span className="field__optional">(optional)</span>
+                Category
               </label>
               <input
                 id="add-category"
                 type="text"
                 value={categoryInput}
                 onChange={e => setCategoryInput(e.target.value)}
+                onBlur={e => setCategoryInput(normalizeProductCategory(e.target.value))}
                 list="category-options-add"
                 placeholder="Select or type a category"
               />
@@ -2332,6 +2362,7 @@ export default function Products() {
                             type="text"
                             value={editCategoryInput}
                             onChange={event => setEditCategoryInput(event.target.value)}
+                            onBlur={event => setEditCategoryInput(normalizeProductCategory(event.target.value))}
                             list="category-options-edit"
                             placeholder="Select or type a category"
                           />
