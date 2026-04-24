@@ -72,7 +72,7 @@ const DESCRIPTION_TEMPLATE_OPTIONS: Array<{ value: DescriptionTemplate; label: s
 ]
 const SUGGESTED_PRODUCT_CATEGORIES = [
   'General Products',
-  'Supplements',
+  'Skin Supplements',
   'Skin Care',
   'Hair Care',
   'Weight',
@@ -463,6 +463,11 @@ function normalizeProductCategory(value: unknown): string {
   }
 
   return toTitleCaseWords(normalizedRaw)
+}
+
+function shouldBackfillCategory(value: unknown): boolean {
+  if (typeof value !== 'string') return true
+  return normalizeProductCategory(value) !== value.trim()
 }
 
 function normalizeLookupValue(value: string | null | undefined): string {
