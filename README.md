@@ -104,6 +104,7 @@ Set these in your Vercel project:
   - set `imageUrl = null` when missing
   - set `imageAlt = product.name` when `imageUrl` exists and `imageAlt` is missing
 - Run `npm --prefix functions run backfill-public-products -- [storeId]` to copy `products` documents into `publicProducts` for public-catalog reads (optional `storeId` limits the backfill scope).
+- Run `npm --prefix functions run backfill-product-normalization -- [--store-id=STORE_ID]` to normalize every `products` document (name/category/image/barcode/default fields) through an admin script instead of waiting for page-open backfills.
 
 ## Quick start (local dev)
 1) Install Node 20+.

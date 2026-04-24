@@ -14,7 +14,8 @@
     "force-update-owner-email": "node scripts/forceUpdateOwnerEmailByUid.js",
     "backfill-public-products": "node scripts/backfillPublicProducts.js",
     "backfill-public-services": "node scripts/backfillPublicProducts.js",
-    "backfill-public-catalog": "node scripts/backfillPublicProducts.js"
+    "backfill-public-catalog": "node scripts/backfillPublicProducts.js",
+    "backfill-product-normalization": "node scripts/backfillProductNormalization.js"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",
