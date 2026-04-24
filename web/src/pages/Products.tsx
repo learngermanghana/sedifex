@@ -465,11 +465,6 @@ function normalizeProductCategory(value: unknown): string {
   return toTitleCaseWords(normalizedRaw)
 }
 
-function shouldBackfillCategory(value: unknown): boolean {
-  if (typeof value !== 'string') return true
-  return normalizeProductCategory(value) !== value.trim()
-}
-
 function normalizeLookupValue(value: string | null | undefined): string {
   if (!value) return ''
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
