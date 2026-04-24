@@ -349,6 +349,9 @@ async function backfillProductDefaults(
       updates.name = normalizedProductName
     }
   }
+  if (shouldBackfillCategory(data.category)) {
+    updates.category = normalizeProductCategory(data.category)
+  }
 
   if (!Object.keys(updates).length) return
 
@@ -614,7 +617,7 @@ export default function Products() {
     const uniqueCategories = new Set<string>()
     SUGGESTED_PRODUCT_CATEGORIES.forEach(category => uniqueCategories.add(category))
     products.forEach(product => {
-      const category = product.category?.trim()
+      const category = normalizeProductCategory(product.category)
       if (category) {
         uniqueCategories.add(category)
       }
