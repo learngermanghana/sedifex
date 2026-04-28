@@ -445,6 +445,7 @@ export default function AccountOverview({
 
   const [isSavingPromo, setIsSavingPromo] = useState(false)
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false)
+  const [isDisconnectingTikTok, setIsDisconnectingTikTok] = useState(false)
   const [promoDraft, setPromoDraft] = useState({
     title: '',
     summary: '',
@@ -1643,6 +1644,37 @@ export default function AccountOverview({
     }
   }
 
+  async function handleDisconnectTikTok() {
+    if (!storeId) {
+      publish({ message: 'No store selected for TikTok disconnection.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsDisconnectingTikTok(true)
+      const callable = httpsCallable(functions, 'revokeTikTokConnect')
+      await callable({ storeId })
+      setProfile(current =>
+        current
+          ? {
+              ...current,
+              tiktokConnectionStatus: 'disconnected',
+              tiktokConnectedAt: null,
+            }
+          : current,
+      )
+      publish({ message: 'TikTok account disconnected.', tone: 'success' })
+    } catch (error) {
+      console.error('[account] Failed to disconnect TikTok', error)
+      publish({
+        message: 'Unable to disconnect TikTok right now. Please try again.',
+        tone: 'error',
+      })
+    } finally {
+      setIsDisconnectingTikTok(false)
+    }
+  }
+
   async function handleTestSedifexProducts() {
     try {
       const listStoreProducts = httpsCallable(functions, 'listStoreProducts')
@@ -2722,9 +2754,22 @@ export default function AccountOverview({
                     type="button"
                     className="button button--secondary"
                     onClick={handleConnectTikTok}
-                    disabled={isConnectingTikTok || !isOwner}
+                    disabled={isConnectingTikTok || isDisconnectingTikTok || !isOwner}
                   >
                     {isConnectingTikTok ? 'Connecting TikTok…' : 'Connect TikTok account'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={handleDisconnectTikTok}
+                    disabled={
+                      isConnectingTikTok ||
+                      isDisconnectingTikTok ||
+                      !isOwner ||
+                      profile?.tiktokConnectionStatus !== 'connected'
+                    }
+                  >
+                    {isDisconnectingTikTok ? 'Disconnecting TikTok…' : 'Disconnect TikTok account'}
                   </button>
                   <span className="account-overview__hint">
                     Status:{' '}

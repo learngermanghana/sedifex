@@ -3075,6 +3075,55 @@ export const startTikTokConnect = functions.https.onCall(
   },
 )
 
+export const revokeTikTokConnect = functions.https.onCall(
+  async (data: StartTikTokConnectPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const ownerStoreId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, ownerStoreId)
+
+    const requestedStoreId = normalizeOptionalStoreId(data?.storeId)
+    const storeId = requestedStoreId ?? ownerStoreId
+
+    if (storeId !== ownerStoreId) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You can only disconnect TikTok for your active owner store.',
+      )
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    const tiktokRef = db.collection('stores').doc(storeId).collection('integrations').doc('tiktok')
+    await tiktokRef.set(
+      {
+        provider: 'tiktok',
+        status: 'revoked',
+        revokedAt: now,
+        revokedBy: uid,
+        accessToken: admin.firestore.FieldValue.delete(),
+        refreshToken: admin.firestore.FieldValue.delete(),
+        accessTokenExpiresInSeconds: admin.firestore.FieldValue.delete(),
+        refreshTokenExpiresInSeconds: admin.firestore.FieldValue.delete(),
+        accessTokenExpiresAt: admin.firestore.FieldValue.delete(),
+        refreshTokenExpiresAt: admin.firestore.FieldValue.delete(),
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+
+    await db.collection('stores').doc(storeId).set(
+      {
+        tiktokConnectionStatus: 'disconnected',
+        tiktokConnectedAt: admin.firestore.FieldValue.delete(),
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+
+    return { ok: true }
+  },
+)
+
 function buildTikTokRedirectTarget(baseUrl: string | null, params: Record<string, string>) {
   if (!baseUrl) return null
   try {
