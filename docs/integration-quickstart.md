@@ -228,6 +228,109 @@ Booking/registration note:
 - Keep API keys server-side; submit booking requests from your website backend only.
 - For a developer-ready canonical booking field dictionary (including `branchLocationId`, `eventLocation`, `customerStayLocation`, and `paymentAmount`) plus a full request example, see `docs/integration-api-guide.md` under **POST /v1IntegrationBookings**.
 
+### Sync bookings/customers into Google Sheets
+
+Some stores need a live operational sheet for customer support, call centers, or back-office teams. You can enable this without adding a new backend service by pulling Sedifex integration endpoints from Google Apps Script.
+
+Recommended flow:
+
+1. Create a Google Sheet with tabs like:
+   - `bookings_raw`
+   - `customers_raw`
+2. Open **Extensions → Apps Script** and add a script that:
+   - Calls `GET /v1IntegrationBookings?storeId=<storeId>&limit=200`
+   - Calls `GET /integrationCustomers?storeId=<storeId>`
+   - Uses headers:
+     - `x-api-key: <integration_key>`
+     - `X-Sedifex-Contract-Version: 2026-04-13`
+   - Rewrites the tab rows each run (header row + current records).
+3. Add a time-driven trigger in Apps Script (for example every 5 or 15 minutes).
+4. Keep the integration key in script properties, not in sheet cells.
+
+Minimal Apps Script example:
+
+```javascript
+const API_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
+const STORE_ID = 'YOUR_STORE_ID'
+const CONTRACT_VERSION = '2026-04-13'
+
+function syncSedifexToSheets() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('SEDIFEX_INTEGRATION_KEY')
+  if (!apiKey) throw new Error('Missing SEDIFEX_INTEGRATION_KEY script property')
+
+  const bookings = fetchJson_(
+    `${API_BASE_URL}/v1IntegrationBookings?storeId=${encodeURIComponent(STORE_ID)}&limit=200`,
+    apiKey,
+  ).bookings || []
+
+  const customers = fetchJson_(
+    `${API_BASE_URL}/integrationCustomers?storeId=${encodeURIComponent(STORE_ID)}`,
+    apiKey,
+  ).customers || []
+
+  writeRows_('bookings_raw', [
+    ['id', 'serviceId', 'slotId', 'status', 'customerName', 'customerPhone', 'customerEmail', 'quantity', 'createdAt', 'updatedAt'],
+    ...bookings.map((b) => [
+      b.id || '',
+      b.serviceId || '',
+      b.slotId || '',
+      b.status || '',
+      (b.customer && b.customer.name) || '',
+      (b.customer && b.customer.phone) || '',
+      (b.customer && b.customer.email) || '',
+      b.quantity || '',
+      b.createdAt || '',
+      b.updatedAt || '',
+    ]),
+  ])
+
+  writeRows_('customers_raw', [
+    ['id', 'name', 'displayName', 'phone', 'email', 'updatedAt'],
+    ...customers.map((c) => [
+      c.id || '',
+      c.name || '',
+      c.displayName || '',
+      c.phone || '',
+      c.email || '',
+      c.updatedAt || '',
+    ]),
+  ])
+}
+
+function fetchJson_(url, apiKey) {
+  const response = UrlFetchApp.fetch(url, {
+    method: 'get',
+    muteHttpExceptions: true,
+    headers: {
+      'x-api-key': apiKey,
+      'X-Sedifex-Contract-Version': CONTRACT_VERSION,
+      Accept: 'application/json',
+    },
+  })
+  const code = response.getResponseCode()
+  const bodyText = response.getContentText()
+  if (code < 200 || code >= 300) {
+    throw new Error(`Sedifex request failed (${code}): ${bodyText}`)
+  }
+  return JSON.parse(bodyText)
+}
+
+function writeRows_(sheetName, rows) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName)
+  sheet.clearContents()
+  if (rows.length) {
+    sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows)
+  }
+}
+```
+
+Notes:
+
+- For high-volume stores, keep `bookings_raw` as a rolling window (e.g., last 200) and move historical analytics to BigQuery or your data warehouse.
+- Use one integration key per store and rotate it when staff ownership changes.
+- If Google Sheets is not required, this same pull model can write into any CRM or customer sheet backend.
+
 ### Common 404 fix (important)
 
 If your app logs a 404 such as:
