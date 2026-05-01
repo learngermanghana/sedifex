@@ -397,9 +397,9 @@ export default function Bookings() {
         <header className="stack gap-1">
           <h1>Bookings</h1>
           <p className="bookings-page__intro">
-            Every website booking appears here in real time, including new appointments, reschedules, and cancellations, so your calendar always reflects the latest client
-            activity without manual updates. When a booking includes a phone number or email, we automatically map those contact details into Customers to reduce duplicate
-            entries, preserve complete client history, and make it easier for your team to confirm visits, send reminders, and deliver faster support.
+            Connect your website booking form to Sedifex and every new booking, reschedule, or cancellation will appear here in real time.
+            If you prefer, your team can also add bookings manually using <strong>Add booking</strong>.
+            When a booking includes a phone number or email, Sedifex automatically links it to the customer profile to keep history complete and avoid duplicates.
           </p>
           <Link to="/bookings/new" className="btn btn-secondary">
             Add booking
@@ -462,9 +462,8 @@ export default function Bookings() {
         )}
         {!loading && !errorMessage && (
           <>
-            <p className="form__hint">
-              Total bookings: <strong>{bookings.length}</strong> • Confirmed: <strong>{confirmedCount}</strong> • Page:{' '}
-              <strong>{pageNumber}</strong>
+            <p className="bookings-page__summary">
+              Total bookings: <strong>{bookings.length}</strong> • Confirmed: <strong>{confirmedCount}</strong> • Page: <strong>{pageNumber}</strong>
             </p>
             {filteredBookings.length ? (
               <>
@@ -545,9 +544,9 @@ export default function Bookings() {
               </>
             ) : (
               <div className="stack gap-2">
-                <p className="form__hint">No bookings yet.</p>
-                <p className="form__hint">
-                  Set up your booking widget and integration to start receiving appointments.
+                <p className="bookings-page__empty-title">No bookings yet.</p>
+                <p className="bookings-page__empty-text">
+                  Connect your website to Sedifex bookings, or add appointments manually to get started.
                 </p>
                 <Link to="/docs/integration-quickstart" className="btn btn-secondary" style={{ width: 'fit-content' }}>
                   Open integration guide
