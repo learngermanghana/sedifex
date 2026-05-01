@@ -103,3 +103,26 @@
   font-weight: 600;
   word-break: break-word;
 }
+
+
+.bookings-page__summary,
+.bookings-page__empty-title,
+.bookings-page__empty-text {
+  color: #111827;
+}
+
+.bookings-page__summary {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.bookings-page__empty-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.bookings-page__empty-text {
+  margin: 0;
+  font-size: 0.95rem;
+}
