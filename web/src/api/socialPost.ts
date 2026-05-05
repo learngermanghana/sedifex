@@ -3,7 +3,7 @@ import { FirebaseError } from 'firebase/app'
 import { functions } from '../firebase'
 import { requestAiAdvisor } from './aiAdvisor'
 
-export type SocialPlatform = 'instagram' | 'tiktok'
+export type SocialPlatform = 'instagram' | 'tiktok' | 'google_business'
 
 export type SocialPostProductPayload = {
   id?: string
@@ -67,7 +67,7 @@ async function requestSocialPostFallback(payload: GenerateSocialPostPayload): Pr
     'Generate a social media post draft as strict JSON only (no markdown, no prose).',
     `Platform: ${payload.platform}`,
     'Return this schema exactly:',
-    '{"platform":"instagram|tiktok","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
+    '{"platform":"instagram|tiktok|google_business","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
     'Product JSON:',
     JSON.stringify(product).slice(0, 3_000),
   ].join('\n')
@@ -103,7 +103,12 @@ async function requestSocialPostFallback(payload: GenerateSocialPostPayload): Pr
       itemType: product.itemType === 'service' || product.itemType === 'made_to_order' ? product.itemType : 'product',
     },
     post: {
-      platform: parsed.platform === 'tiktok' ? 'tiktok' : payload.platform,
+      platform:
+        parsed.platform === 'tiktok'
+          ? 'tiktok'
+          : parsed.platform === 'google_business'
+            ? 'google_business'
+            : payload.platform,
       caption: typeof parsed.caption === 'string' ? parsed.caption.trim() : '',
       hashtags,
       imagePrompt: typeof parsed.imagePrompt === 'string' ? parsed.imagePrompt.trim() : '',
