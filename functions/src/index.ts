@@ -251,7 +251,8 @@ function normalizeAiAdvicePayload(raw: GenerateAiAdvicePayload | undefined) {
 function normalizeSocialPostPayload(raw: GenerateSocialPostPayload | undefined) {
   const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : ''
   const platformRaw = typeof raw?.platform === 'string' ? raw.platform.trim().toLowerCase() : ''
-  const platform = platformRaw === 'tiktok' ? 'tiktok' : 'instagram'
+  const platform =
+    platformRaw === 'tiktok' ? 'tiktok' : platformRaw === 'google_business' ? 'google_business' : 'instagram'
   const productId = typeof raw?.productId === 'string' ? raw.productId.trim() : ''
 
   const productRaw =
@@ -1444,9 +1445,9 @@ export const generateSocialPost = functions.https.onCall(
       `Workspace: ${storeId}`,
       `Platform: ${platform}`,
       'Return JSON schema:',
-      '{"platform":"instagram|tiktok","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
+      '{"platform":"instagram|tiktok|google_business","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
       'Rules:',
-      '- caption max 220 chars for instagram, 150 chars for tiktok.',
+      '- caption max 220 chars for instagram, 150 chars for tiktok, 1500 chars for google_business.',
       '- hashtags: 5 to 10 relevant hashtags.',
       '- include clear CTA.',
       '- if price or measurable claim appears, add disclaimer; else null.',
@@ -1511,7 +1512,12 @@ export const generateSocialPost = functions.https.onCall(
       throw new functions.https.HttpsError('internal', 'AI returned invalid JSON for social post.')
     }
 
-    const safePlatform = parsed.platform === 'tiktok' ? 'tiktok' : 'instagram'
+    const safePlatform =
+      parsed.platform === 'tiktok'
+        ? 'tiktok'
+        : parsed.platform === 'google_business'
+          ? 'google_business'
+          : 'instagram'
     const safeHashtags = Array.isArray(parsed.hashtags)
       ? parsed.hashtags
           .map(tag => (typeof tag === 'string' ? tag.trim() : ''))
