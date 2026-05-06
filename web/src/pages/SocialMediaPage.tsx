@@ -629,6 +629,16 @@ export default function SocialMediaPage() {
           </select>
         </label>
 
+        {platform === 'google_business' ? (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => window.open('https://business.google.com/', '_blank', 'noopener,noreferrer')}
+          >
+            Connect to Google Business
+          </button>
+        ) : null}
+
         <label style={{ display: 'grid', gap: 6 }}>
           <span id="social-product-search-label">Search products or services</span>
           <input
