@@ -7566,11 +7566,6 @@ const SEDIFEX_API_BASE_URL = defineString('SEDIFEX_API_BASE_URL')
 // Legacy: was a single plan code for all checkouts. Kept for backwards compatibility.
 const PAYSTACK_STANDARD_PLAN_CODE = defineString('PAYSTACK_STANDARD_PLAN_CODE')
 
-// New: map frontend plan keys -> Paystack plan codes (optional).
-const PAYSTACK_STARTER_PLAN_CODE = defineString('PAYSTACK_STARTER_PLAN_CODE')
-const PAYSTACK_GROWTH_PLAN_CODE = defineString('PAYSTACK_GROWTH_PLAN_CODE')
-const PAYSTACK_SCALE_PLAN_CODE = defineString('PAYSTACK_SCALE_PLAN_CODE')
-
 const PAYSTACK_CURRENCY = defineString('PAYSTACK_CURRENCY')
 
 type PaystackPlanKey = 'starter' | 'growth' | 'scale' | 'scale_plus' | string
@@ -7588,18 +7583,14 @@ function getPaystackConfig() {
   const publicKey = PAYSTACK_PUBLIC_KEY.value()
   const currency = PAYSTACK_CURRENCY.value() || 'GHS'
 
-  const starterPlan = PAYSTACK_STARTER_PLAN_CODE.value() || PAYSTACK_STANDARD_PLAN_CODE.value()
-  const growthPlan = PAYSTACK_GROWTH_PLAN_CODE.value()
-  const scalePlan = PAYSTACK_SCALE_PLAN_CODE.value()
+  const standardPlan = PAYSTACK_STANDARD_PLAN_CODE.value()
 
   if (!paystackConfigLogged) {
     console.log('[paystack] startup config', {
       hasSecret: !!secret,
       hasPublicKey: !!publicKey,
       currency,
-      hasStarterPlan: !!starterPlan,
-      hasGrowthPlan: !!growthPlan,
-      hasScalePlan: !!scalePlan,
+      hasStandardPlan: !!standardPlan,
     })
     paystackConfigLogged = true
   }
@@ -7609,9 +7600,7 @@ function getPaystackConfig() {
     publicKey,
     currency,
     plans: {
-      starter: starterPlan,
-      growth: growthPlan,
-      scale: scalePlan,
+      starter: standardPlan,
     } as Record<string, string | undefined>,
   }
 }
