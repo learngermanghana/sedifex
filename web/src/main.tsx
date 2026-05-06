@@ -33,6 +33,10 @@ import PromoLandingPage from './pages/PromoLandingPage'
 import PublicPageSettings from './pages/PublicPageSettings'
 import SocialMediaPage from './pages/SocialMediaPage'
 import BookingMappingSettings from './pages/BookingMappingSettings'
+import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
+import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
+import IntegrationEmailSettings from './pages/IntegrationEmailSettings'
+import IntegrationGoogleBusinessSettings from './pages/IntegrationGoogleBusinessSettings'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -105,6 +109,10 @@ const router = createBrowserRouter([
           { path: 'merchant-feed', element: <Navigate to="/social-media" replace /> },
           { path: 'support', element: <Support /> },
           { path: 'settings/integrations/booking-mapping', element: <BookingMappingSettings /> },
+          { path: 'settings/integrations/website', element: <IntegrationWebsiteSettings /> },
+          { path: 'settings/integrations/bookings', element: <IntegrationBookingsSettings /> },
+          { path: 'settings/integrations/email', element: <IntegrationEmailSettings /> },
+          { path: 'settings/integrations/google-business', element: <IntegrationGoogleBusinessSettings /> },
         ],
       },
 
