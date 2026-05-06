@@ -365,7 +365,7 @@ describe('AccountOverview', () => {
     })
 
     expect(await screen.findByText('Turn on website sync.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /copy api token/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /copy website api token/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /test endpoint/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /install on wordpress/i })).toHaveAttribute(
       'href',
@@ -779,6 +779,6 @@ describe('AccountOverview', () => {
     })
 
     render(<AccountOverview defaultAccountTab="integrations" defaultIntegrationTab="keys" />)
-    expect(await screen.findByRole('button', { name: /copy api token/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /copy website api token/i })).toBeInTheDocument()
     expect(screen.queryByText(/new integration key name/i)).not.toBeInTheDocument()
   })

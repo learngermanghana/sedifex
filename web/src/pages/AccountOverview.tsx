@@ -2141,7 +2141,7 @@ export default function AccountOverview({
                 className={`account-overview__tab ${visibleIntegrationTab === 'keys' ? 'is-active' : ''}`}
                 onClick={() => setIntegrationTab('keys')}
               >
-                API tokens
+                Website API tokens
               </button>
               <button
                 type="button"
@@ -2246,7 +2246,7 @@ export default function AccountOverview({
                 onClick={handleCopyApiToken}
                 disabled={isCopyingApiToken}
               >
-                {isCopyingApiToken ? 'Copying token…' : 'Copy API token'}
+                {isCopyingApiToken ? 'Copying token…' : 'Copy website API token'}
               </button>
               <button
                 type="button"
