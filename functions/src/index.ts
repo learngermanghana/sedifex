@@ -3022,11 +3022,16 @@ export const revokeWebhookEndpoint = functions.https.onCall(
  *  CALLABLES: TikTok OAuth connect (owner)
  * ==========================================================================*/
 
-const TIKTOK_CLIENT_KEY = defineString('TIKTOK_CLIENT_KEY')
-const TIKTOK_CLIENT_SECRET = defineString('TIKTOK_CLIENT_SECRET')
-const TIKTOK_REDIRECT_URI = defineString('TIKTOK_REDIRECT_URI')
-const TIKTOK_SUCCESS_REDIRECT_URL = defineString('TIKTOK_SUCCESS_REDIRECT_URL')
-const TIKTOK_ERROR_REDIRECT_URL = defineString('TIKTOK_ERROR_REDIRECT_URL')
+function getOptionalEnvString(name: string) {
+  const value = process.env[name]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const TIKTOK_CLIENT_KEY = getOptionalEnvString('TIKTOK_CLIENT_KEY')
+const TIKTOK_CLIENT_SECRET = getOptionalEnvString('TIKTOK_CLIENT_SECRET')
+const TIKTOK_REDIRECT_URI = getOptionalEnvString('TIKTOK_REDIRECT_URI')
+const TIKTOK_SUCCESS_REDIRECT_URL = getOptionalEnvString('TIKTOK_SUCCESS_REDIRECT_URL')
+const TIKTOK_ERROR_REDIRECT_URL = getOptionalEnvString('TIKTOK_ERROR_REDIRECT_URL')
 const DEFAULT_TIKTOK_SCOPES = 'user.info.basic,video.list'
 const TIKTOK_STATE_TTL_MILLIS = 1000 * 60 * 15
 
@@ -3047,8 +3052,8 @@ export const startTikTokConnect = functions.https.onCall(
       )
     }
 
-    const clientKey = TIKTOK_CLIENT_KEY.value().trim()
-    const redirectUri = TIKTOK_REDIRECT_URI.value().trim()
+    const clientKey = TIKTOK_CLIENT_KEY
+    const redirectUri = TIKTOK_REDIRECT_URI
 
     if (!clientKey || !redirectUri) {
       throw new functions.https.HttpsError(
@@ -3134,8 +3139,8 @@ export const tiktokOAuthCallback = functions.https.onRequest(async (req, res) =>
   const errorDescription =
     typeof req.query.error_description === 'string' ? req.query.error_description.trim() : ''
 
-  const successRedirectBase = TIKTOK_SUCCESS_REDIRECT_URL.value().trim() || null
-  const errorRedirectBase = TIKTOK_ERROR_REDIRECT_URL.value().trim() || null
+  const successRedirectBase = TIKTOK_SUCCESS_REDIRECT_URL || null
+  const errorRedirectBase = TIKTOK_ERROR_REDIRECT_URL || null
 
   function handleError(message: string, reason: string) {
     const target = buildTikTokRedirectTarget(errorRedirectBase, {
@@ -3191,9 +3196,9 @@ export const tiktokOAuthCallback = functions.https.onRequest(async (req, res) =>
     return
   }
 
-  const clientKey = TIKTOK_CLIENT_KEY.value().trim()
-  const clientSecret = TIKTOK_CLIENT_SECRET.value().trim()
-  const redirectUri = TIKTOK_REDIRECT_URI.value().trim()
+  const clientKey = TIKTOK_CLIENT_KEY
+  const clientSecret = TIKTOK_CLIENT_SECRET
+  const redirectUri = TIKTOK_REDIRECT_URI
   if (!clientKey || !clientSecret || !redirectUri) {
     handleError('TikTok environment variables are missing on the server.', 'missing_server_config')
     return

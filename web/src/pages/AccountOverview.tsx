@@ -389,7 +389,7 @@ type AccountTab =
   | 'billing'
   | 'team'
   | 'data-controls'
-type PublicPageTab = 'overview' | 'promo' | 'gallery' | 'website-sync'
+type PublicPageTab = 'overview' | 'promo' | 'gallery'
 type PromoGalleryTab = 'upload' | 'view'
 type IntegrationTab = 'overview' | 'keys' | 'booking' | 'webhooks' | 'email' | 'tests'
 
@@ -444,7 +444,6 @@ export default function AccountOverview({
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>('overview')
 
   const [isSavingPromo, setIsSavingPromo] = useState(false)
-  const [isConnectingTikTok, setIsConnectingTikTok] = useState(false)
   const [promoDraft, setPromoDraft] = useState({
     title: '',
     summary: '',
@@ -1608,41 +1607,6 @@ export default function AccountOverview({
     }
   }
 
-  async function handleConnectTikTok() {
-    if (!storeId) {
-      publish({ message: 'No store selected for TikTok connection.', tone: 'error' })
-      return
-    }
-
-    try {
-      setIsConnectingTikTok(true)
-      const callable = httpsCallable(functions, 'startTikTokConnect')
-      const response = await callable({ storeId })
-      const data = (response.data ?? {}) as { authorizationUrl?: unknown }
-      const authorizationUrl =
-        typeof data.authorizationUrl === 'string' ? data.authorizationUrl.trim() : ''
-
-      if (!authorizationUrl) {
-        publish({
-          message: 'TikTok connection could not start. Missing authorization URL.',
-          tone: 'error',
-        })
-        return
-      }
-
-      window.location.assign(authorizationUrl)
-    } catch (error) {
-      console.error('[account] Failed to start TikTok connect flow', error)
-      publish({
-        message:
-          'Unable to open TikTok connection right now. Ask support to confirm TikTok integration is configured.',
-        tone: 'error',
-      })
-    } finally {
-      setIsConnectingTikTok(false)
-    }
-  }
-
   async function handleTestSedifexProducts() {
     try {
       const listStoreProducts = httpsCallable(functions, 'listStoreProducts')
@@ -2550,14 +2514,6 @@ export default function AccountOverview({
             >
               Gallery
             </button>
-            <button
-              type="button"
-              className={`account-overview__tab ${publicPageTab === 'website-sync' ? 'is-active' : ''}`}
-              aria-pressed={publicPageTab === 'website-sync'}
-              onClick={() => setPublicPageTab('website-sync')}
-            >
-              Website sync
-            </button>
           </nav>
 
           {publicPageTab === 'overview' && (
@@ -2713,26 +2669,6 @@ export default function AccountOverview({
                     data-testid="account-promo-tiktok"
                   />
                 </label>
-                <p className="account-overview__hint" style={{ marginTop: 6 }}>
-                  Add your TikTok profile URL above, then connect your TikTok account below so
-                  Sedifex can fetch feed content for integrations.
-                </p>
-                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="button button--secondary"
-                    onClick={handleConnectTikTok}
-                    disabled={isConnectingTikTok || !isOwner}
-                  >
-                    {isConnectingTikTok ? 'Connecting TikTok…' : 'Connect TikTok account'}
-                  </button>
-                  <span className="account-overview__hint">
-                    Status:{' '}
-                    {profile?.tiktokConnectionStatus === 'connected'
-                      ? `Connected${profile.tiktokConnectedAt ? ` (${formatTimestamp(profile.tiktokConnectedAt)})` : ''}`
-                      : 'Not connected'}
-                  </span>
-                </div>
               </div>
               <div>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3065,21 +3001,6 @@ export default function AccountOverview({
                   </p>
                 ) : null}
               </div>
-              )}
-              {publicPageTab === 'website-sync' && (
-                <div className="account-overview__card">
-                  <p className="account-overview__hint" style={{ marginBottom: 8 }}>
-                    Need your website to update automatically when you edit this page?
-                  </p>
-                  <p className="account-overview__hint">
-                    Contact the Sedifex team to connect your website so promo, gallery, and catalog
-                    changes sync automatically.
-                  </p>
-                  <p className="account-overview__hint" style={{ marginTop: 8 }}>
-                    Existing integrations can fetch this data using your integration API keys in the
-                    <Link to="/settings#website-sync"> Integrations tab</Link>.
-                  </p>
-                </div>
               )}
             </>
           ) : (
