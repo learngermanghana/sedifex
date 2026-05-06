@@ -287,6 +287,27 @@
   color: #1e3a8a;
 }
 
+.account-overview__integration-hub {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.account-overview__integration-hub-card {
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-overview__integration-hub-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .account-overview__website-sync-actions {
   display: flex;
   flex-wrap: wrap;

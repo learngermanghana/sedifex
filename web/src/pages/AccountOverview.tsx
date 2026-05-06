@@ -2130,6 +2130,48 @@ export default function AccountOverview({
 
           <div className="account-overview__website-sync" role="status" aria-live="polite">
             <p className="account-overview__website-sync-title">Choose your integration tutorial.</p>
+            <div className="account-overview__integration-hub">
+              <article className="account-overview__integration-hub-card">
+                <h3>Website integration</h3>
+                <p className="account-overview__hint">
+                  API keys, webhooks, and endpoint testing for WordPress/Next.js websites.
+                </p>
+                <button type="button" className="button button--secondary" onClick={() => setIntegrationTab('keys')}>
+                  Open website setup
+                </button>
+              </article>
+              <article className="account-overview__integration-hub-card">
+                <h3>Bookings</h3>
+                <p className="account-overview__hint">
+                  Manage booking records on the dedicated bookings page and configure booking mapping.
+                </p>
+                <div className="account-overview__website-sync-actions">
+                  <Link to="/bookings" className="button button--secondary">Open bookings page</Link>
+                  <button type="button" className="button button--secondary" onClick={() => setIntegrationTab('booking')}>
+                    Booking setup
+                  </button>
+                </div>
+              </article>
+              <article className="account-overview__integration-hub-card">
+                <h3>Bulk email</h3>
+                <p className="account-overview__hint">
+                  Send campaigns from the Bulk Email page and keep delivery credentials in one place.
+                </p>
+                <div className="account-overview__website-sync-actions">
+                  <Link to="/bulk-email" className="button button--secondary">Open bulk email page</Link>
+                  <button type="button" className="button button--secondary" onClick={() => setIntegrationTab('email')}>
+                    Email setup
+                  </button>
+                </div>
+              </article>
+              <article className="account-overview__integration-hub-card">
+                <h3>Google Business</h3>
+                <p className="account-overview__hint">
+                  Prepare Google Business content from Social Media and keep website integrations separate.
+                </p>
+                <Link to="/social-media" className="button button--secondary">Open social media page</Link>
+              </article>
+            </div>
             <div className="account-overview__tabs" aria-label="Integration sections">
               <button
                 type="button"
