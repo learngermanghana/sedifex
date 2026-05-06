@@ -114,7 +114,7 @@ function normalizeAiAdvicePayload(raw) {
 function normalizeSocialPostPayload(raw) {
     const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : '';
     const platformRaw = typeof raw?.platform === 'string' ? raw.platform.trim().toLowerCase() : '';
-    const platform = platformRaw === 'tiktok' ? 'tiktok' : 'instagram';
+    const platform = platformRaw === 'tiktok' ? 'tiktok' : platformRaw === 'google_business' ? 'google_business' : 'instagram';
     const productId = typeof raw?.productId === 'string' ? raw.productId.trim() : '';
     const productRaw = raw?.product && typeof raw.product === 'object'
         ? raw.product
@@ -1031,9 +1031,9 @@ exports.generateSocialPost = functions.https.onCall(async (rawData, context) => 
         `Workspace: ${storeId}`,
         `Platform: ${platform}`,
         'Return JSON schema:',
-        '{"platform":"instagram|tiktok","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
+        '{"platform":"instagram|tiktok|google_business","caption":"string","hashtags":["#tag"],"imagePrompt":"string","cta":"string","designSpec":{"aspectRatio":"string","safeTextZones":["string"],"visualStyle":"string"},"disclaimer":"string|null"}',
         'Rules:',
-        '- caption max 220 chars for instagram, 150 chars for tiktok.',
+        '- caption max 220 chars for instagram, 150 chars for tiktok, 1500 chars for google_business.',
         '- hashtags: 5 to 10 relevant hashtags.',
         '- include clear CTA.',
         '- if price or measurable claim appears, add disclaimer; else null.',
@@ -1086,7 +1086,11 @@ exports.generateSocialPost = functions.https.onCall(async (rawData, context) => 
     if (!parsed) {
         throw new functions.https.HttpsError('internal', 'AI returned invalid JSON for social post.');
     }
-    const safePlatform = parsed.platform === 'tiktok' ? 'tiktok' : 'instagram';
+    const safePlatform = parsed.platform === 'tiktok'
+        ? 'tiktok'
+        : parsed.platform === 'google_business'
+            ? 'google_business'
+            : 'instagram';
     const safeHashtags = Array.isArray(parsed.hashtags)
         ? parsed.hashtags
             .map(tag => (typeof tag === 'string' ? tag.trim() : ''))
@@ -2278,11 +2282,15 @@ exports.revokeWebhookEndpoint = functions.https.onCall(async (data, context) => 
 /** ============================================================================
  *  CALLABLES: TikTok OAuth connect (owner)
  * ==========================================================================*/
-const TIKTOK_CLIENT_KEY = (0, params_1.defineString)('TIKTOK_CLIENT_KEY');
-const TIKTOK_CLIENT_SECRET = (0, params_1.defineString)('TIKTOK_CLIENT_SECRET');
-const TIKTOK_REDIRECT_URI = (0, params_1.defineString)('TIKTOK_REDIRECT_URI');
-const TIKTOK_SUCCESS_REDIRECT_URL = (0, params_1.defineString)('TIKTOK_SUCCESS_REDIRECT_URL');
-const TIKTOK_ERROR_REDIRECT_URL = (0, params_1.defineString)('TIKTOK_ERROR_REDIRECT_URL');
+function getOptionalEnvString(name) {
+    const value = process.env[name];
+    return typeof value === 'string' ? value.trim() : '';
+}
+const TIKTOK_CLIENT_KEY = getOptionalEnvString('TIKTOK_CLIENT_KEY');
+const TIKTOK_CLIENT_SECRET = getOptionalEnvString('TIKTOK_CLIENT_SECRET');
+const TIKTOK_REDIRECT_URI = getOptionalEnvString('TIKTOK_REDIRECT_URI');
+const TIKTOK_SUCCESS_REDIRECT_URL = getOptionalEnvString('TIKTOK_SUCCESS_REDIRECT_URL');
+const TIKTOK_ERROR_REDIRECT_URL = getOptionalEnvString('TIKTOK_ERROR_REDIRECT_URL');
 const DEFAULT_TIKTOK_SCOPES = 'user.info.basic,video.list';
 const TIKTOK_STATE_TTL_MILLIS = 1000 * 60 * 15;
 exports.startTikTokConnect = functions.https.onCall(async (data, context) => {
@@ -2295,8 +2303,8 @@ exports.startTikTokConnect = functions.https.onCall(async (data, context) => {
     if (storeId !== ownerStoreId) {
         throw new functions.https.HttpsError('permission-denied', 'You can only connect TikTok for your active owner store.');
     }
-    const clientKey = TIKTOK_CLIENT_KEY.value().trim();
-    const redirectUri = TIKTOK_REDIRECT_URI.value().trim();
+    const clientKey = TIKTOK_CLIENT_KEY;
+    const redirectUri = TIKTOK_REDIRECT_URI;
     if (!clientKey || !redirectUri) {
         throw new functions.https.HttpsError('failed-precondition', 'TikTok connection is not configured. Ask support to set TikTok env vars.');
     }
@@ -2369,8 +2377,8 @@ exports.tiktokOAuthCallback = functions.https.onRequest(async (req, res) => {
     const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
     const error = typeof req.query.error === 'string' ? req.query.error.trim() : '';
     const errorDescription = typeof req.query.error_description === 'string' ? req.query.error_description.trim() : '';
-    const successRedirectBase = TIKTOK_SUCCESS_REDIRECT_URL.value().trim() || null;
-    const errorRedirectBase = TIKTOK_ERROR_REDIRECT_URL.value().trim() || null;
+    const successRedirectBase = TIKTOK_SUCCESS_REDIRECT_URL || null;
+    const errorRedirectBase = TIKTOK_ERROR_REDIRECT_URL || null;
     function handleError(message, reason) {
         const target = buildTikTokRedirectTarget(errorRedirectBase, {
             tiktokConnect: 'error',
@@ -2414,9 +2422,9 @@ exports.tiktokOAuthCallback = functions.https.onRequest(async (req, res) => {
         handleError('This TikTok connection session is no longer valid. Please retry.', 'expired_state');
         return;
     }
-    const clientKey = TIKTOK_CLIENT_KEY.value().trim();
-    const clientSecret = TIKTOK_CLIENT_SECRET.value().trim();
-    const redirectUri = TIKTOK_REDIRECT_URI.value().trim();
+    const clientKey = TIKTOK_CLIENT_KEY;
+    const clientSecret = TIKTOK_CLIENT_SECRET;
+    const redirectUri = TIKTOK_REDIRECT_URI;
     if (!clientKey || !clientSecret || !redirectUri) {
         handleError('TikTok environment variables are missing on the server.', 'missing_server_config');
         return;
