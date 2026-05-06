@@ -393,13 +393,13 @@ type AccountTab =
   | 'data-controls'
 type PublicPageTab = 'overview' | 'promo' | 'gallery'
 type PromoGalleryTab = 'upload' | 'view'
-type IntegrationTab = 'overview' | 'keys' | 'booking' | 'webhooks' | 'email' | 'tests'
+type IntegrationTab = 'keys' | 'booking' | 'webhooks' | 'email' | 'tests'
 
 export default function AccountOverview({
   headingLevel = 'h1',
   viewMode = 'full',
   defaultAccountTab = 'workspace',
-  defaultIntegrationTab = 'overview',
+  defaultIntegrationTab = 'keys',
 }: AccountOverviewProps) {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
   const {
@@ -446,6 +446,8 @@ export default function AccountOverview({
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [activeTab, setActiveTab] = useState<AccountTab>(defaultAccountTab)
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(defaultIntegrationTab)
+  const isFocusedIntegrationView = viewMode === 'full' && defaultAccountTab === 'integrations'
+  const visibleIntegrationTab: IntegrationTab = isFocusedIntegrationView ? defaultIntegrationTab : integrationTab
 
   const [isSavingPromo, setIsSavingPromo] = useState(false)
   const [promoDraft, setPromoDraft] = useState({
@@ -2126,123 +2128,53 @@ export default function AccountOverview({
       {profile && !isPromotionsView && activeTab === 'integrations' && (
         <section aria-labelledby="account-overview-integrations">
           <div className="account-overview__section-header">
-            <h2 id="account-overview-integrations">Website integrations</h2>
+            <h2 id="account-overview-integrations">{isFocusedIntegrationView ? "Integration settings" : "Website integrations"}</h2>
             <p className="account-overview__subtitle">
-              Use this tab for WordPress or Next.js (Vercel) setup guides, API keys, and endpoint tests.
+              Manage integration settings for website, bookings, email, and webhooks.
             </p>
           </div>
-
           <div className="account-overview__website-sync" role="status" aria-live="polite">
-            <p className="account-overview__website-sync-title">Choose your integration tutorial.</p>
-            <div className="account-overview__integration-hub">
-              <article className="account-overview__integration-hub-card" role="region" aria-labelledby="hub-website-title" aria-describedby="hub-website-hint">
-                <h3 id="hub-website-title">Website integration</h3>
-                <p className="account-overview__hint" id="hub-website-hint">
-                  API keys, webhooks, and endpoint testing for WordPress/Next.js websites.
-                </p>
-                <p className="account-overview__hint"><strong>Status:</strong> {integrationApiKeys.length} active API keys</p>
-                <div className="account-overview__website-sync-actions">
-                  <Link to="/settings/integrations/website" className="button button--secondary">Open settings page</Link>
-                  <button type="button" className="button button--secondary" onClick={() => setIntegrationTab('keys')}>Open tab</button>
-                </div>
-              </article>
-              <article className="account-overview__integration-hub-card" role="region" aria-labelledby="hub-bookings-title" aria-describedby="hub-bookings-hint">
-                <h3 id="hub-bookings-title">Bookings</h3>
-                <p className="account-overview__hint" id="hub-bookings-hint">
-                  Manage booking records on the dedicated bookings page and configure booking mapping.
-                </p>
-                <p className="account-overview__hint"><strong>Status:</strong> {webhookEndpoints.some(endpoint => endpoint.hasSecret) ? 'Mapping configured' : 'Mapping missing'}</p>
-                <div className="account-overview__website-sync-actions">
-                  <Link to="/bookings" className="button button--secondary">Open bookings page</Link>
-                  <Link to="/settings/integrations/bookings" className="button button--secondary">Bookings settings</Link>
-                  <button type="button" className="button button--secondary" onClick={() => setIntegrationTab('booking')}>
-                    Booking setup
-                  </button>
-                </div>
-              </article>
-              <article className="account-overview__integration-hub-card" role="region" aria-labelledby="hub-email-title" aria-describedby="hub-email-hint">
-                <h3 id="hub-email-title">Bulk email</h3>
-                <p className="account-overview__hint" id="hub-email-hint">
-                  Send campaigns from the Bulk Email page and keep delivery credentials in one place.
-                </p>
-                <p className="account-overview__hint"><strong>Status:</strong> {bulkEmailWebAppUrl ? 'Connected' : 'Not configured'}</p>
-                <div className="account-overview__website-sync-actions">
-                  <Link to="/bulk-email" className="button button--secondary">Open bulk email page</Link>
-                  <Link to="/settings/integrations/email" className="button button--secondary">Email settings</Link>
-                  <button type="button" className="button button--secondary" onClick={() => setIntegrationTab('email')}>
-                    Email setup
-                  </button>
-                </div>
-              </article>
-              <article className="account-overview__integration-hub-card" role="region" aria-labelledby="hub-google-title" aria-describedby="hub-google-hint">
-                <h3 id="hub-google-title">Google Business</h3>
-                <p className="account-overview__hint" id="hub-google-hint">
-                  Connect Google account and prepare Google Business content from Social Media.
-                </p>
-                <p className="account-overview__hint"><strong>Status:</strong> {profile.googleBusinessConnected ? `Connected (${profile.googleBusinessEmail || 'Google account'})` : 'Not connected'}</p>
-                <div className="account-overview__website-sync-actions">
-                  <a href={`/api/google/oauth-start?storeId=${encodeURIComponent(storeId)}&integration=business`} className="button button--secondary">{profile.googleBusinessConnected ? 'Reconnect Google account' : 'Connect Google account'}</a>
-                  <Link to="/settings/integrations/google-business" className="button button--secondary">Google settings</Link>
-                  <Link to="/social-media" className="button button--secondary">Disconnect in Social Media</Link>
-                </div>
-              </article>
-            </div>
+            {!isFocusedIntegrationView && (
             <div className="account-overview__tabs" aria-label="Integration sections">
               <button
                 type="button"
-                className={`account-overview__tab ${integrationTab === 'overview' ? 'is-active' : ''}`}
-                onClick={() => setIntegrationTab('overview')}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                className={`account-overview__tab ${integrationTab === 'keys' ? 'is-active' : ''}`}
+                className={`account-overview__tab ${visibleIntegrationTab === 'keys' ? 'is-active' : ''}`}
                 onClick={() => setIntegrationTab('keys')}
               >
                 API tokens
               </button>
               <button
                 type="button"
-                className={`account-overview__tab ${integrationTab === 'booking' ? 'is-active' : ''}`}
+                className={`account-overview__tab ${visibleIntegrationTab === 'booking' ? 'is-active' : ''}`}
                 onClick={() => setIntegrationTab('booking')}
               >
                 Booking sync
               </button>
               <button
                 type="button"
-                className={`account-overview__tab ${integrationTab === 'webhooks' ? 'is-active' : ''}`}
+                className={`account-overview__tab ${visibleIntegrationTab === 'webhooks' ? 'is-active' : ''}`}
                 onClick={() => setIntegrationTab('webhooks')}
               >
                 Webhooks
               </button>
               <button
                 type="button"
-                className={`account-overview__tab ${integrationTab === 'email' ? 'is-active' : ''}`}
+                className={`account-overview__tab ${visibleIntegrationTab === 'email' ? 'is-active' : ''}`}
                 onClick={() => setIntegrationTab('email')}
               >
                 Email delivery
               </button>
               <button
                 type="button"
-                className={`account-overview__tab ${integrationTab === 'tests' ? 'is-active' : ''}`}
+                className={`account-overview__tab ${visibleIntegrationTab === 'tests' ? 'is-active' : ''}`}
                 onClick={() => setIntegrationTab('tests')}
               >
                 Tests
               </button>
             </div>
-
-            {integrationTab === 'overview' && (
-              <div className="account-overview__website-sync-keys">
-                <p className="account-overview__hint"><strong>Integration health summary</strong></p>
-                <p className="account-overview__hint">Website: {integrationApiKeys.length} active API keys</p>
-                <p className="account-overview__hint">Bookings: {webhookEndpoints.some(endpoint => endpoint.hasSecret) ? 'Mapping configured' : 'Mapping missing'}</p>
-                <p className="account-overview__hint">Bulk email: {bulkEmailWebAppUrl ? 'Connected' : 'Not configured'}</p>
-                <p className="account-overview__hint">Google Business: {profile.googleBusinessConnected ? 'Connected' : 'Not connected'}</p>
-              </div>
             )}
 
-            {integrationTab === 'booking' && (
+            {visibleIntegrationTab === 'booking' && (
               <>
             <p className="account-overview__hint">
               Booking ingestion mapping can be managed in
@@ -2252,7 +2184,7 @@ export default function AccountOverview({
             <p className="account-overview__hint">
               Sedifex supports both WordPress and Next.js storefronts.
               {' '}
-              <a href="/docs/integration-quickstart" target="_blank" rel="noreferrer">
+              <a href="/docs/integration-quickstart">
                 Next.js + Vercel tutorial
               </a>
               {' · '}
@@ -2306,7 +2238,7 @@ export default function AccountOverview({
             )}
               </>
             )}
-            {integrationTab === 'keys' && (
+            {visibleIntegrationTab === 'keys' && (
             <div className="account-overview__website-sync-actions">
               <button
                 type="button"
@@ -2325,7 +2257,7 @@ export default function AccountOverview({
               </button>
             </div>
             )}
-            {isOwner && integrationTab === 'keys' && (
+            {isOwner && visibleIntegrationTab === 'keys' && (
               <div className="account-overview__website-sync-test">
                 <label>
                   <span>New integration key name</span>
@@ -2346,7 +2278,7 @@ export default function AccountOverview({
                 </button>
               </div>
             )}
-            {isOwner && latestIntegrationToken && integrationTab === 'keys' && (
+            {isOwner && latestIntegrationToken && visibleIntegrationTab === 'keys' && (
               <div className="account-overview__integration-token-notice" role="status" aria-live="polite">
                 <p>
                   <strong>This is your integration key.</strong>
@@ -2357,7 +2289,7 @@ export default function AccountOverview({
                 <code className="account-overview__integration-token-value">{latestIntegrationToken}</code>
               </div>
             )}
-            {isOwner && integrationTab === 'keys' && (
+            {isOwner && visibleIntegrationTab === 'keys' && (
               <div className="account-overview__website-sync-keys">
                 <p className="account-overview__hint">Active integration keys</p>
                 {integrationKeysLoading ? (
@@ -2402,7 +2334,7 @@ export default function AccountOverview({
                 )}
               </div>
             )}
-            {isOwner && integrationTab === 'webhooks' && (
+            {isOwner && visibleIntegrationTab === 'webhooks' && (
               <div className="account-overview__website-sync-keys">
                 <p className="account-overview__hint">Sedifex booking webhooks</p>
                 <p className="account-overview__hint">
@@ -2473,7 +2405,7 @@ export default function AccountOverview({
                 )}
               </div>
             )}
-            {integrationTab === 'email' && (
+            {visibleIntegrationTab === 'email' && (
               <div className="account-overview__website-sync-keys">
                 <p className="account-overview__hint">Bulk email delivery integration</p>
                 <p className="account-overview__hint">
@@ -2519,7 +2451,7 @@ export default function AccountOverview({
                 </div>
               </div>
             )}
-            {integrationTab === 'tests' && (
+            {visibleIntegrationTab === 'tests' && (
             <div className="account-overview__website-sync-test">
               <label>
                 <span>Test your endpoint</span>
