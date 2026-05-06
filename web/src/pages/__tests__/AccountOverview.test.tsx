@@ -750,4 +750,35 @@ describe('AccountOverview', () => {
       }),
     )
   })
-})
+
+  it('shows integration settings links and overview health cards', async () => {
+    render(<AccountOverview defaultAccountTab="integrations" />)
+
+    expect(await screen.findByRole('link', { name: /open settings page/i })).toHaveAttribute('href', '/settings/integrations/website')
+    expect(screen.getByRole('link', { name: /bookings settings/i })).toHaveAttribute('href', '/settings/integrations/bookings')
+    expect(screen.getByRole('link', { name: /email settings/i })).toHaveAttribute('href', '/settings/integrations/email')
+    expect(screen.getByRole('link', { name: /google settings/i })).toHaveAttribute('href', '/settings/integrations/google-business')
+    expect(screen.getByText(/integration health summary/i)).toBeInTheDocument()
+  })
+
+  it('switches integration sections from shortcut buttons', async () => {
+    render(<AccountOverview defaultAccountTab="integrations" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /booking setup/i }))
+    expect(await screen.findByText(/booking ingestion mapping can be managed in/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /email setup/i }))
+    expect(await screen.findByText(/bulk email delivery integration/i)).toBeInTheDocument()
+  })
+
+  it('keeps owner-only integration key controls restricted for non-owners', async () => {
+    mockUseMemberships.mockReturnValue({
+      memberships: [{ storeId: 'store-123', role: 'staff', status: 'active', email: 'staff@example.com' }],
+      loading: false,
+      error: null,
+    })
+
+    render(<AccountOverview defaultAccountTab="integrations" defaultIntegrationTab="keys" />)
+    expect(await screen.findByRole('button', { name: /copy api token/i })).toBeInTheDocument()
+    expect(screen.queryByText(/new integration key name/i)).not.toBeInTheDocument()
+  })
