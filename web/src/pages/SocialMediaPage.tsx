@@ -630,13 +630,18 @@ export default function SocialMediaPage() {
         </label>
 
         {platform === 'google_business' ? (
-          <button
-            type="button"
-            className="button secondary"
-            onClick={() => window.open('https://business.google.com/', '_blank', 'noopener,noreferrer')}
-          >
-            Connect to Google Business
-          </button>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => window.open('https://business.google.com/', '_blank', 'noopener,noreferrer')}
+            >
+              Open Google Business Profile
+            </button>
+            <p style={{ margin: 0, fontSize: 13, opacity: 0.85 }}>
+              Sedifex generates the Google post draft for you, then copies caption + hashtags + image link. Final posting still happens inside Google Business Profile.
+            </p>
+          </div>
         ) : null}
 
         <label style={{ display: 'grid', gap: 6 }}>
