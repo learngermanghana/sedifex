@@ -2132,6 +2132,13 @@ export default function AccountOverview({
             <p className="account-overview__subtitle">
               Manage integration settings for website, bookings, email, and webhooks.
             </p>
+            <p className="account-overview__hint">
+              Need Google Business OAuth? Open
+              {' '}
+              <Link to="/settings/integrations/google-business">Google settings</Link>
+              {' '}
+              and click <strong>Connect Google Business</strong>.
+            </p>
           </div>
           <div className="account-overview__website-sync" role="status" aria-live="polite">
             {!isFocusedIntegrationView && (
