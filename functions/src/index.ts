@@ -4518,7 +4518,7 @@ async function validateIntegrationTokenOrReply(
   return { storeId, isMasterKey: false }
 }
 
-type MarketplaceSortMode = 'newest' | 'price' | 'featured' | 'store-diverse'
+type MarketplaceSortMode = 'balanced' | 'newest' | 'price' | 'featured' | 'store-diverse' | 'daily-random'
 
 type MarketplaceProductRow = {
   id: string
@@ -4541,10 +4541,41 @@ function toFiniteNumberOrNull(value: unknown): number | null {
 }
 
 function getSortMode(value: unknown): MarketplaceSortMode {
-  if (value === 'price' || value === 'featured' || value === 'store-diverse') return value
-  return 'newest'
+  if (
+    value === 'balanced' ||
+    value === 'price' ||
+    value === 'featured' ||
+    value === 'store-diverse' ||
+    value === 'daily-random' ||
+    value === 'newest'
+  ) return value
+  return 'balanced'
 }
 
+
+
+function computeStableHash(input: string): number {
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function getUtcDayKey(nowMs = Date.now()): string {
+  return new Date(nowMs).toISOString().slice(0, 10)
+}
+
+function sortByDailyStableRandom(products: MarketplaceProductRow[], nowMs = Date.now()): MarketplaceProductRow[] {
+  const dayKey = getUtcDayKey(nowMs)
+  return [...products].sort((a, b) => {
+    const aHash = computeStableHash(`${dayKey}:${a.storeId}:${a.id}`)
+    const bHash = computeStableHash(`${dayKey}:${b.storeId}:${b.id}`)
+    if (aHash !== bHash) return aHash - bHash
+    return compareByFeaturedThenUpdated(a, b)
+  })
+}
 function compareByFeaturedThenUpdated(a: MarketplaceProductRow, b: MarketplaceProductRow): number {
   if (a.featuredRank !== b.featuredRank) return b.featuredRank - a.featuredRank
   if (!a.updatedAt && !b.updatedAt) return 0
@@ -4712,6 +4743,7 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
   const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0)
   const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0
   const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null
+  const effectiveMaxPerStore = maxPerStore ?? (sort === 'balanced' ? 3 : null)
 
   let productsSnap: admin.firestore.QuerySnapshot
   try {
@@ -4723,7 +4755,34 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
     productsSnap = await db.collection('products').limit(2000).get()
   }
 
-  const visibleProducts = productsSnap.docs
+  const loadPublicCollection = async (collectionName: 'publicProducts' | 'publicServices') => {
+    try {
+      return await db
+        .collection(collectionName)
+        .where('isPublished', '==', true)
+        .orderBy('updatedAt', 'desc')
+        .limit(1000)
+        .get()
+    } catch (error) {
+      const code = (error as { code?: number | string } | null)?.code
+      const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+      if (!isMissingIndex) throw error
+      return db.collection(collectionName).where('isPublished', '==', true).limit(1000).get()
+    }
+  }
+
+  const [publicProductsSnap, publicServicesSnap] = await Promise.all([
+    loadPublicCollection('publicProducts'),
+    loadPublicCollection('publicServices'),
+  ])
+
+  const sourceDocs = dedupeCatalogItemsById([
+    ...publicProductsSnap.docs,
+    ...publicServicesSnap.docs,
+    ...productsSnap.docs,
+  ])
+
+  const visibleProducts = sourceDocs
     .map(docSnap => {
       const data = docSnap.data() as Record<string, unknown>
       const storeId = typeof data.storeId === 'string' ? data.storeId.trim() : ''
@@ -4756,7 +4815,11 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
   const sortedProducts =
     sort === 'store-diverse'
       ? interleaveStoreDiverse(visibleProducts)
-      : [...visibleProducts].sort((a, b) => {
+      : sort === 'daily-random'
+        ? sortByDailyStableRandom(interleaveStoreDiverse(visibleProducts))
+        : sort === 'balanced'
+          ? interleaveStoreDiverse(sortByDailyStableRandom(visibleProducts))
+        : [...visibleProducts].sort((a, b) => {
           if (sort === 'featured') return compareByFeaturedThenUpdated(a, b)
           if (sort === 'price') {
             const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY
@@ -4769,13 +4832,13 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
           return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
         })
 
-  const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore)
+  const products = paginateProducts(sortedProducts, page, pageSize, effectiveMaxPerStore)
 
   res.status(200).json({
     sort,
     page,
     pageSize,
-    maxPerStore,
+    maxPerStore: effectiveMaxPerStore,
     total: sortedProducts.length,
     products,
   })

@@ -3494,9 +3494,35 @@ function toFiniteNumberOrNull(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 function getSortMode(value) {
-    if (value === 'price' || value === 'featured' || value === 'store-diverse')
+    if (value === 'balanced' ||
+        value === 'price' ||
+        value === 'featured' ||
+        value === 'store-diverse' ||
+        value === 'daily-random' ||
+        value === 'newest')
         return value;
-    return 'newest';
+    return 'balanced';
+}
+function computeStableHash(input) {
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+        hash ^= input.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+function getUtcDayKey(nowMs = Date.now()) {
+    return new Date(nowMs).toISOString().slice(0, 10);
+}
+function sortByDailyStableRandom(products, nowMs = Date.now()) {
+    const dayKey = getUtcDayKey(nowMs);
+    return [...products].sort((a, b) => {
+        const aHash = computeStableHash(`${dayKey}:${a.storeId}:${a.id}`);
+        const bHash = computeStableHash(`${dayKey}:${b.storeId}:${b.id}`);
+        if (aHash !== bHash)
+            return aHash - bHash;
+        return compareByFeaturedThenUpdated(a, b);
+    });
 }
 function compareByFeaturedThenUpdated(a, b) {
     if (a.featuredRank !== b.featuredRank)
@@ -3670,6 +3696,7 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
     const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0);
     const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0;
     const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null;
+    const effectiveMaxPerStore = maxPerStore ?? (sort === 'balanced' ? 3 : null);
     let productsSnap;
     try {
         productsSnap = await firestore_1.defaultDb.collection('products').orderBy('updatedAt', 'desc').limit(2000).get();
@@ -3709,29 +3736,33 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
         .filter((item) => item !== null);
     const sortedProducts = sort === 'store-diverse'
         ? interleaveStoreDiverse(visibleProducts)
-        : [...visibleProducts].sort((a, b) => {
-            if (sort === 'featured')
-                return compareByFeaturedThenUpdated(a, b);
-            if (sort === 'price') {
-                const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
-                const bPrice = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
-                if (aPrice !== bPrice)
-                    return aPrice - bPrice;
-            }
-            if (!a.updatedAt && !b.updatedAt)
-                return 0;
-            if (!a.updatedAt)
-                return 1;
-            if (!b.updatedAt)
-                return -1;
-            return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
-        });
-    const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore);
+        : sort === 'daily-random'
+            ? sortByDailyStableRandom(interleaveStoreDiverse(visibleProducts))
+            : sort === 'balanced'
+                ? interleaveStoreDiverse(sortByDailyStableRandom(visibleProducts))
+                : [...visibleProducts].sort((a, b) => {
+                    if (sort === 'featured')
+                        return compareByFeaturedThenUpdated(a, b);
+                    if (sort === 'price') {
+                        const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
+                        const bPrice = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
+                        if (aPrice !== bPrice)
+                            return aPrice - bPrice;
+                    }
+                    if (!a.updatedAt && !b.updatedAt)
+                        return 0;
+                    if (!a.updatedAt)
+                        return 1;
+                    if (!b.updatedAt)
+                        return -1;
+                    return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+                });
+    const products = paginateProducts(sortedProducts, page, pageSize, effectiveMaxPerStore);
     res.status(200).json({
         sort,
         page,
         pageSize,
-        maxPerStore,
+        maxPerStore: effectiveMaxPerStore,
         total: sortedProducts.length,
         products,
     });
@@ -6096,10 +6127,6 @@ const PAYSTACK_PUBLIC_KEY = (0, params_1.defineString)('PAYSTACK_PUBLIC_KEY');
 const SEDIFEX_API_BASE_URL = (0, params_1.defineString)('SEDIFEX_API_BASE_URL');
 // Legacy: was a single plan code for all checkouts. Kept for backwards compatibility.
 const PAYSTACK_STANDARD_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STANDARD_PLAN_CODE');
-// New: map frontend plan keys -> Paystack plan codes (optional).
-const PAYSTACK_STARTER_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_STARTER_PLAN_CODE');
-const PAYSTACK_GROWTH_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_GROWTH_PLAN_CODE');
-const PAYSTACK_SCALE_PLAN_CODE = (0, params_1.defineString)('PAYSTACK_SCALE_PLAN_CODE');
 const PAYSTACK_CURRENCY = (0, params_1.defineString)('PAYSTACK_CURRENCY');
 // Fixed packages (GHS)
 const BULK_CREDITS_PACKAGES = {
@@ -6112,17 +6139,13 @@ function getPaystackConfig() {
     const secret = PAYSTACK_SECRET_KEY.value();
     const publicKey = PAYSTACK_PUBLIC_KEY.value();
     const currency = PAYSTACK_CURRENCY.value() || 'GHS';
-    const starterPlan = PAYSTACK_STARTER_PLAN_CODE.value() || PAYSTACK_STANDARD_PLAN_CODE.value();
-    const growthPlan = PAYSTACK_GROWTH_PLAN_CODE.value();
-    const scalePlan = PAYSTACK_SCALE_PLAN_CODE.value();
+    const standardPlan = PAYSTACK_STANDARD_PLAN_CODE.value();
     if (!paystackConfigLogged) {
         console.log('[paystack] startup config', {
             hasSecret: !!secret,
             hasPublicKey: !!publicKey,
             currency,
-            hasStarterPlan: !!starterPlan,
-            hasGrowthPlan: !!growthPlan,
-            hasScalePlan: !!scalePlan,
+            hasStandardPlan: !!standardPlan,
         });
         paystackConfigLogged = true;
     }
@@ -6131,9 +6154,7 @@ function getPaystackConfig() {
         publicKey,
         currency,
         plans: {
-            starter: starterPlan,
-            growth: growthPlan,
-            scale: scalePlan,
+            starter: standardPlan,
         },
     };
 }
