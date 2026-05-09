@@ -3494,14 +3494,30 @@ function toFiniteNumberOrNull(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 function getSortMode(value) {
-    if (value === 'balanced' ||
-        value === 'price' ||
-        value === 'featured' ||
-        value === 'store-diverse' ||
-        value === 'daily-random' ||
-        value === 'newest')
+    if (value === 'price' || value === 'featured' || value === 'store-diverse' || value === 'daily-random')
         return value;
     return 'balanced';
+}
+function computeStableHash(input) {
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+        hash ^= input.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+function getUtcDayKey(nowMs = Date.now()) {
+    return new Date(nowMs).toISOString().slice(0, 10);
+}
+function sortByDailyStableRandom(products, nowMs = Date.now()) {
+    const dayKey = getUtcDayKey(nowMs);
+    return [...products].sort((a, b) => {
+        const aHash = computeStableHash(`${dayKey}:${a.storeId}:${a.id}`);
+        const bHash = computeStableHash(`${dayKey}:${b.storeId}:${b.id}`);
+        if (aHash !== bHash)
+            return aHash - bHash;
+        return compareByFeaturedThenUpdated(a, b);
+    });
 }
 function computeStableHash(input) {
     let hash = 2166136261;
@@ -3686,7 +3702,8 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
         res.status(405).json({ error: 'method-not-allowed' });
         return;
     }
-    const sort = getSortMode(req.query.sort);
+    const requestedSort = getSortMode(req.query.sort);
+    const sort = requestedSort === 'newest' ? 'daily-random' : requestedSort;
     const pageRaw = Number(req.query.page ?? 1);
     const requestedPage = Number.isFinite(pageRaw) ? Math.floor(pageRaw) : 1;
     const page = Math.max(1, requestedPage);
@@ -3738,26 +3755,24 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
         ? interleaveStoreDiverse(visibleProducts)
         : sort === 'daily-random'
             ? sortByDailyStableRandom(interleaveStoreDiverse(visibleProducts))
-            : sort === 'balanced'
-                ? interleaveStoreDiverse(sortByDailyStableRandom(visibleProducts))
-                : [...visibleProducts].sort((a, b) => {
-                    if (sort === 'featured')
-                        return compareByFeaturedThenUpdated(a, b);
-                    if (sort === 'price') {
-                        const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
-                        const bPrice = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
-                        if (aPrice !== bPrice)
-                            return aPrice - bPrice;
-                    }
-                    if (!a.updatedAt && !b.updatedAt)
-                        return 0;
-                    if (!a.updatedAt)
-                        return 1;
-                    if (!b.updatedAt)
-                        return -1;
-                    return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
-                });
-    const products = paginateProducts(sortedProducts, page, pageSize, effectiveMaxPerStore);
+            : [...visibleProducts].sort((a, b) => {
+                if (sort === 'featured')
+                    return compareByFeaturedThenUpdated(a, b);
+                if (sort === 'price') {
+                    const aPrice = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
+                    const bPrice = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
+                    if (aPrice !== bPrice)
+                        return aPrice - bPrice;
+                }
+                if (!a.updatedAt && !b.updatedAt)
+                    return 0;
+                if (!a.updatedAt)
+                    return 1;
+                if (!b.updatedAt)
+                    return -1;
+                return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
+            });
+    const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore);
     res.status(200).json({
         sort,
         page,
