@@ -3496,7 +3496,28 @@ function toFiniteNumberOrNull(value) {
 function getSortMode(value) {
     if (value === 'price' || value === 'featured' || value === 'store-diverse' || value === 'daily-random')
         return value;
-    return 'newest';
+    return 'balanced';
+}
+function computeStableHash(input) {
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+        hash ^= input.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+function getUtcDayKey(nowMs = Date.now()) {
+    return new Date(nowMs).toISOString().slice(0, 10);
+}
+function sortByDailyStableRandom(products, nowMs = Date.now()) {
+    const dayKey = getUtcDayKey(nowMs);
+    return [...products].sort((a, b) => {
+        const aHash = computeStableHash(`${dayKey}:${a.storeId}:${a.id}`);
+        const bHash = computeStableHash(`${dayKey}:${b.storeId}:${b.id}`);
+        if (aHash !== bHash)
+            return aHash - bHash;
+        return compareByFeaturedThenUpdated(a, b);
+    });
 }
 function computeStableHash(input) {
     let hash = 2166136261;
@@ -3692,6 +3713,7 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
     const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0);
     const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0;
     const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null;
+    const effectiveMaxPerStore = maxPerStore ?? (sort === 'balanced' ? 3 : null);
     let productsSnap;
     try {
         productsSnap = await firestore_1.defaultDb.collection('products').orderBy('updatedAt', 'desc').limit(2000).get();
@@ -3755,7 +3777,7 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
         sort,
         page,
         pageSize,
-        maxPerStore,
+        maxPerStore: effectiveMaxPerStore,
         total: sortedProducts.length,
         products,
     });

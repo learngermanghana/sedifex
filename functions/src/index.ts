@@ -4737,6 +4737,7 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
   const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0)
   const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0
   const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null
+  const effectiveMaxPerStore = maxPerStore ?? (sort === 'balanced' ? 3 : null)
 
   let productsSnap: admin.firestore.QuerySnapshot
   try {
@@ -4796,13 +4797,13 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
           return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0
         })
 
-  const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore)
+  const products = paginateProducts(sortedProducts, page, pageSize, effectiveMaxPerStore)
 
   res.status(200).json({
     sort,
     page,
     pageSize,
-    maxPerStore,
+    maxPerStore: effectiveMaxPerStore,
     total: sortedProducts.length,
     products,
   })
