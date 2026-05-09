@@ -4749,7 +4749,34 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
     productsSnap = await db.collection('products').limit(2000).get()
   }
 
-  const visibleProducts = productsSnap.docs
+  const loadPublicCollection = async (collectionName: 'publicProducts' | 'publicServices') => {
+    try {
+      return await db
+        .collection(collectionName)
+        .where('isPublished', '==', true)
+        .orderBy('updatedAt', 'desc')
+        .limit(1000)
+        .get()
+    } catch (error) {
+      const code = (error as { code?: number | string } | null)?.code
+      const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition'
+      if (!isMissingIndex) throw error
+      return db.collection(collectionName).where('isPublished', '==', true).limit(1000).get()
+    }
+  }
+
+  const [publicProductsSnap, publicServicesSnap] = await Promise.all([
+    loadPublicCollection('publicProducts'),
+    loadPublicCollection('publicServices'),
+  ])
+
+  const sourceDocs = dedupeCatalogItemsById([
+    ...publicProductsSnap.docs,
+    ...publicServicesSnap.docs,
+    ...productsSnap.docs,
+  ])
+
+  const visibleProducts = sourceDocs
     .map(docSnap => {
       const data = docSnap.data() as Record<string, unknown>
       const storeId = typeof data.storeId === 'string' ? data.storeId.trim() : ''
