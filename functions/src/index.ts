@@ -4518,7 +4518,7 @@ async function validateIntegrationTokenOrReply(
   return { storeId, isMasterKey: false }
 }
 
-type MarketplaceSortMode = 'balanced' | 'newest' | 'price' | 'featured' | 'store-diverse' | 'daily-random'
+type MarketplaceSortMode = 'newest' | 'price' | 'featured' | 'store-diverse' | 'daily-random'
 
 type MarketplaceProductRow = {
   id: string
@@ -4541,15 +4541,8 @@ function toFiniteNumberOrNull(value: unknown): number | null {
 }
 
 function getSortMode(value: unknown): MarketplaceSortMode {
-  if (
-    value === 'balanced' ||
-    value === 'price' ||
-    value === 'featured' ||
-    value === 'store-diverse' ||
-    value === 'daily-random' ||
-    value === 'newest'
-  ) return value
-  return 'balanced'
+  if (value === 'price' || value === 'featured' || value === 'store-diverse' || value === 'daily-random') return value
+  return 'newest'
 }
 
 
@@ -4733,7 +4726,8 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
     return
   }
 
-  const sort = getSortMode(req.query.sort)
+  const requestedSort = getSortMode(req.query.sort)
+  const sort: MarketplaceSortMode = requestedSort === 'newest' ? 'daily-random' : requestedSort
   const pageRaw = Number(req.query.page ?? 1)
   const requestedPage = Number.isFinite(pageRaw) ? Math.floor(pageRaw) : 1
   const page = Math.max(1, requestedPage)
@@ -4817,8 +4811,6 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
       ? interleaveStoreDiverse(visibleProducts)
       : sort === 'daily-random'
         ? sortByDailyStableRandom(interleaveStoreDiverse(visibleProducts))
-        : sort === 'balanced'
-          ? interleaveStoreDiverse(sortByDailyStableRandom(visibleProducts))
         : [...visibleProducts].sort((a, b) => {
           if (sort === 'featured') return compareByFeaturedThenUpdated(a, b)
           if (sort === 'price') {
