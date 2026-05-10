@@ -5805,6 +5805,40 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     return
   }
 
+  if (clientOrderId) {
+    const duplicateSnap = await db
+      .collection('stores')
+      .doc(authContext.storeId)
+      .collection('integrationOrders')
+      .where('clientOrderId', '==', clientOrderId)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get()
+    if (!duplicateSnap.empty) {
+      const existing = duplicateSnap.docs[0].data() as Record<string, unknown>
+      const existingStatus = toTrimmedStringOrNull(existing.paymentStatus)?.toLowerCase() ?? 'pending'
+      if (existingStatus === 'pending') {
+        res.status(200).json({
+          ok: true,
+          reference: existing.reference ?? duplicateSnap.docs[0].id,
+          sedifexOrderId: existing.sedifexOrderId ?? null,
+          authorizationUrl: existing.authorizationUrl ?? null,
+          expiresAt: null,
+          reusedPendingOrder: true,
+        })
+        return
+      }
+      res.status(409).json({
+        ok: false,
+        error: 'duplicate-client-order-id',
+        message: 'clientOrderId already exists for this store',
+        reference: existing.reference ?? duplicateSnap.docs[0].id,
+        paymentStatus: existingStatus,
+      })
+      return
+    }
+  }
+
   const paystackConfig = ensurePaystackConfig()
   const reference = `${authContext.storeId}_${Date.now()}`
   const sedifexOrderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -5848,6 +5882,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     currency,
     paymentStatus: 'pending',
     orderStatus: 'pending',
+    authorizationUrl: responseJson?.data?.authorization_url ?? null,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
@@ -6540,6 +6575,39 @@ export const integrationTopSelling = functions.https.onRequest(async (req, res) 
 function computeWebhookSignature(secret: string, payload: string) {
   const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex')
   return `sha256=${digest}`
+}
+
+const INTEGRATION_WEBHOOK_BACKOFF_MINUTES = [1, 5, 30, 120, 720] as const
+const INTEGRATION_WEBHOOK_MAX_ATTEMPTS = INTEGRATION_WEBHOOK_BACKOFF_MINUTES.length
+
+async function enqueueIntegrationWebhookDelivery(params: {
+  storeId: string
+  endpointId: string
+  endpointUrl: string
+  endpointSecret: string
+  eventType: string
+  reference: string
+  payload: string
+  deliveryId: string
+}) {
+  const now = admin.firestore.Timestamp.now()
+  await db.collection('webhookDeliveries').add({
+    storeId: params.storeId,
+    endpointId: params.endpointId,
+    endpointUrl: params.endpointUrl,
+    endpointSecret: params.endpointSecret,
+    eventType: params.eventType,
+    reference: params.reference,
+    payload: params.payload,
+    deliveryId: params.deliveryId,
+    attemptCount: 0,
+    maxAttempts: INTEGRATION_WEBHOOK_MAX_ATTEMPTS,
+    nextAttemptAt: now,
+    status: 'queued',
+    deadLetter: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
 }
 
 function shouldDeliverWebhookEvent(endpointEventsRaw: unknown, eventType: string) {
@@ -7388,6 +7456,7 @@ export const emitIntegrationOrderWebhooks = functions.firestore
       netAmount: typeof afterData.netAmount === 'number' ? afterData.netAmount : null,
     }
     const payload = JSON.stringify(payloadObject)
+    const deliveryId = `d_${context.eventId}`
     const endpointSnapshot = await db.collection('webhookEndpoints').where('storeId', '==', storeId).where('status', '==', 'active').get()
     if (endpointSnapshot.empty) return
     await Promise.all(endpointSnapshot.docs.map(async endpointDoc => {
@@ -7395,25 +7464,119 @@ export const emitIntegrationOrderWebhooks = functions.firestore
       const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
       const secret = typeof endpoint.secret === 'string' ? endpoint.secret : ''
       if (!url || !secret) return
-      const signature = computeWebhookSignature(secret, payload)
+      await enqueueIntegrationWebhookDelivery({
+        storeId,
+        endpointId: endpointDoc.id,
+        endpointUrl: url,
+        endpointSecret: secret,
+        eventType,
+        reference,
+        payload,
+        deliveryId,
+      })
+    }))
+  })
+
+export const processIntegrationWebhookDeliveries = functions.pubsub
+  .schedule('every 1 minutes')
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now()
+    const queueSnap = await db
+      .collection('webhookDeliveries')
+      .where('status', 'in', ['queued', 'retrying'])
+      .where('deadLetter', '==', false)
+      .where('nextAttemptAt', '<=', now)
+      .limit(50)
+      .get()
+
+    if (queueSnap.empty) return null
+
+    for (const docSnap of queueSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>
+      const endpointUrl = toTrimmedStringOrNull(data.endpointUrl)
+      const endpointSecret = toTrimmedStringOrNull(data.endpointSecret)
+      const payload = typeof data.payload === 'string' ? data.payload : ''
+      const eventType = toTrimmedStringOrNull(data.eventType) ?? 'payment.succeeded'
+      const deliveryId = toTrimmedStringOrNull(data.deliveryId) ?? `d_${docSnap.id}`
+      const attemptCount = typeof data.attemptCount === 'number' ? data.attemptCount : 0
+      const maxAttempts = typeof data.maxAttempts === 'number' ? data.maxAttempts : INTEGRATION_WEBHOOK_MAX_ATTEMPTS
+
+      if (!endpointUrl || !endpointSecret || !payload) {
+        await docSnap.ref.set({
+          status: 'failed',
+          deadLetter: true,
+          deadLetterReason: 'missing-delivery-fields',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+        continue
+      }
+
+      const signature = computeWebhookSignature(endpointSecret, payload)
+      let ok = false
+      let statusCode: number | null = null
+      let errorMessage: string | null = null
       try {
-        const response = await fetch(url, {
+        const response = await fetch(endpointUrl, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             'x-sedifex-event': eventType,
-            'x-sedifex-delivery-id': `d_${context.eventId}`,
+            'x-sedifex-delivery-id': deliveryId,
             'x-sedifex-timestamp': `${Date.now()}`,
-            'x-sedifex-signature': `sha256=${signature}`,
+            'x-sedifex-signature': signature,
             'x-sedifex-contract-version': INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13',
           },
           body: payload,
         })
-        await db.collection('webhookDeliveries').add({ storeId, endpointId: endpointDoc.id, eventType, reference, ok: response.ok, statusCode: response.status, createdAt: admin.firestore.FieldValue.serverTimestamp() })
+        ok = response.ok
+        statusCode = response.status
       } catch (error) {
-        await db.collection('webhookDeliveries').add({ storeId, endpointId: endpointDoc.id, eventType, reference, ok: false, statusCode: null, error: error instanceof Error ? error.message : 'unknown error', createdAt: admin.firestore.FieldValue.serverTimestamp() })
+        errorMessage = error instanceof Error ? error.message : 'unknown error'
       }
-    }))
+
+      const nextAttemptCount = attemptCount + 1
+      if (ok) {
+        await docSnap.ref.set({
+          status: 'sent',
+          ok: true,
+          statusCode,
+          attemptCount: nextAttemptCount,
+          sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          deadLetter: false,
+        }, { merge: true })
+        continue
+      }
+
+      if (nextAttemptCount >= maxAttempts) {
+        await docSnap.ref.set({
+          status: 'failed',
+          ok: false,
+          statusCode,
+          error: errorMessage,
+          attemptCount: nextAttemptCount,
+          deadLetter: true,
+          deadLetterReason: 'max-attempts-exhausted',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+        continue
+      }
+
+      const delayMinutes = INTEGRATION_WEBHOOK_BACKOFF_MINUTES[Math.min(nextAttemptCount - 1, INTEGRATION_WEBHOOK_BACKOFF_MINUTES.length - 1)]
+      const nextAttemptAt = admin.firestore.Timestamp.fromMillis(Date.now() + delayMinutes * 60 * 1000)
+      await docSnap.ref.set({
+        status: 'retrying',
+        ok: false,
+        statusCode,
+        error: errorMessage,
+        attemptCount: nextAttemptCount,
+        nextAttemptAt,
+        deadLetter: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
+
+    return null
   })
 /** ============================================================================
  *  HUBTEL BULK MESSAGING

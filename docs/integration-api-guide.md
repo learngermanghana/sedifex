@@ -579,6 +579,53 @@ Partner receiver requirements:
 
 Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
 
+Dead-letter behavior:
+
+- Sedifex stores outbound attempts in `webhookDeliveries`.
+- After max attempts, delivery is marked `deadLetter: true` with `deadLetterReason: "max-attempts-exhausted"`.
+- Partners can request replay support from Sedifex support using `deliveryId` and `reference`.
+
+### Signature verification examples (partner receivers)
+
+Use your endpoint secret and the **raw** request body bytes.
+
+Node.js (Express):
+
+```js
+import crypto from 'crypto'
+
+function verifySedifexSignature(rawBodyBuffer, headerSignature, endpointSecret) {
+  const digest = crypto.createHmac('sha256', endpointSecret).update(rawBodyBuffer).digest('hex')
+  const expected = `sha256=${digest}`
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(headerSignature || ''))
+}
+```
+
+PHP:
+
+```php
+<?php
+function verify_sedifex_signature(string $rawBody, string $headerSignature, string $secret): bool {
+  $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
+  return hash_equals($expected, $headerSignature);
+}
+```
+
+Python:
+
+```python
+import hmac
+import hashlib
+
+def verify_sedifex_signature(raw_body: bytes, header_signature: str, secret: str) -> bool:
+    expected = "sha256=" + hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, header_signature or "")
+```
+
 ### Golden path sequence
 
 1. Partner website fetches catalog via `/v1IntegrationProducts` (server-side) or `/integrationPublicCatalog` (public mode).
@@ -598,3 +645,20 @@ Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
 - Validate webhook signature and timestamp tolerance.
 - Force-test retry path by returning `500` once from webhook receiver.
 - Validate reconciliation export includes `reference`, amounts, and final status.
+
+## 9) Operational dashboards (recommended)
+
+Before production, add internal dashboards for:
+
+- **Integration Orders Monitor**
+  - pending > 15 minutes
+  - failed payments by store/day
+  - duplicate `clientOrderId` conflicts
+- **Webhook Delivery Monitor**
+  - queued/retrying/sent/failed counts
+  - dead-letter queue (`deadLetter == true`)
+  - median delivery latency (createdAt → sentAt)
+- **Partner Health**
+  - failure rate per endpoint URL
+  - top failing status codes
+  - last successful delivery timestamp per endpoint
