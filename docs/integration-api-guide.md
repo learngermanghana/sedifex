@@ -448,3 +448,153 @@ Use `shared/integrationTypes.ts` as the shared source of truth for:
 - `IntegrationPromo`
 - `IntegrationProductsResponse`
 - `IntegrationPromoResponse`
+
+
+## 8) Client website communication contract (Partner Spec v1)
+
+For partner websites, keep checkout communication limited to three endpoints and one webhook contract.
+
+### Canonical IDs (required on every transaction)
+
+Persist all three IDs together for reconciliation and support:
+
+- `reference`: Paystack/Sedifex payment reference (authoritative payment lookup key).
+- `sedifexOrderId`: internal Sedifex order/booking id.
+- `clientOrderId`: partner website order id.
+
+### `POST /integration/checkout/create` (authenticated)
+
+Purpose: client website server asks Sedifex to create a hosted checkout session.
+
+Headers:
+
+- `x-api-key: <integration_key>`
+- `X-Sedifex-Contract-Version: 2026-04-13`
+- `Content-Type: application/json`
+
+Request body:
+
+```json
+{
+  "storeId": "store_123",
+  "clientOrderId": "WEB-98452",
+  "orderType": "product",
+  "currency": "GHS",
+  "items": [
+    {
+      "id": "product_1",
+      "name": "Item A",
+      "unitPrice": 45,
+      "qty": 2
+    }
+  ],
+  "amount": 90,
+  "customer": {
+    "email": "buyer@example.com",
+    "phone": "+233200000000",
+    "name": "Buyer Name"
+  },
+  "returnUrl": "https://clientsite.com/payment/return",
+  "metadata": {
+    "channel": "client-website",
+    "clientWebsiteId": "site_01"
+  }
+}
+```
+
+Success response:
+
+```json
+{
+  "ok": true,
+  "reference": "store_123_1746880000000",
+  "sedifexOrderId": "ord_01JV...",
+  "authorizationUrl": "https://checkout.paystack.com/...",
+  "expiresAt": "2026-05-10T12:45:00Z"
+}
+```
+
+### `GET /integration/orders/:reference` (authenticated)
+
+Purpose: partner poll endpoint to verify outcome when webhook is delayed/unavailable.
+
+Success response:
+
+```json
+{
+  "ok": true,
+  "reference": "store_123_1746880000000",
+  "sedifexOrderId": "ord_01JV...",
+  "storeId": "store_123",
+  "clientOrderId": "WEB-98452",
+  "orderType": "product",
+  "paymentStatus": "success",
+  "orderStatus": "confirmed",
+  "bookingStatus": null,
+  "amount": 90,
+  "currency": "GHS",
+  "updatedAt": "2026-05-10T12:51:10Z"
+}
+```
+
+### `POST /integration/webhooks/payment-status` (Sedifex outbound webhook)
+
+Purpose: Sedifex sends final payment/order state updates to partner websites.
+
+Delivery headers:
+
+- `Content-Type: application/json`
+- `X-Sedifex-Event: payment.succeeded | payment.failed | order.confirmed | booking.confirmed`
+- `X-Sedifex-Delivery-Id: <uuid>`
+- `X-Sedifex-Timestamp: <unix-ms>`
+- `X-Sedifex-Signature: sha256=<hmac_of_raw_body>`
+- `X-Sedifex-Contract-Version: 2026-04-13`
+
+Webhook payload:
+
+```json
+{
+  "event": "payment.succeeded",
+  "deliveryId": "d_01JV....",
+  "sentAt": "2026-05-10T12:51:04Z",
+  "storeId": "store_123",
+  "reference": "store_123_1746880000000",
+  "sedifexOrderId": "ord_01JV...",
+  "clientOrderId": "WEB-98452",
+  "orderType": "product",
+  "amount": 90,
+  "currency": "GHS",
+  "paymentStatus": "success",
+  "paidAt": "2026-05-10T12:50:31Z",
+  "fees": 1.2,
+  "netAmount": 88.8
+}
+```
+
+Partner receiver requirements:
+
+1. Return `2xx` in under 5 seconds.
+2. Process idempotently on `reference + event` (or `deliveryId`).
+3. Verify HMAC signature using the shared webhook secret.
+
+Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
+
+### Golden path sequence
+
+1. Partner website fetches catalog via `/v1IntegrationProducts` (server-side) or `/integrationPublicCatalog` (public mode).
+2. Buyer selects product/service.
+3. Partner server calls `POST /integration/checkout/create`.
+4. Buyer completes payment on returned Paystack `authorizationUrl`.
+5. Paystack webhook updates Sedifex internal payment state.
+6. Sedifex emits `POST /integration/webhooks/payment-status` to partner website.
+7. Partner website updates local order status and storefront UI.
+8. If webhook is delayed, partner polls `GET /integration/orders/:reference`.
+
+### Security and go-live checklist
+
+- Keep Sedifex API key server-side only (never in browser code).
+- Persist `reference`, `sedifexOrderId`, and `clientOrderId` before redirecting checkout.
+- Treat Sedifex webhook events as authoritative final state.
+- Validate webhook signature and timestamp tolerance.
+- Force-test retry path by returning `500` once from webhook receiver.
+- Validate reconciliation export includes `reference`, amounts, and final status.

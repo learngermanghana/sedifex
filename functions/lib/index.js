@@ -36,8 +36,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = void 0;
+exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -3496,28 +3496,7 @@ function toFiniteNumberOrNull(value) {
 function getSortMode(value) {
     if (value === 'price' || value === 'featured' || value === 'store-diverse' || value === 'daily-random')
         return value;
-    return 'balanced';
-}
-function computeStableHash(input) {
-    let hash = 2166136261;
-    for (let index = 0; index < input.length; index += 1) {
-        hash ^= input.charCodeAt(index);
-        hash = Math.imul(hash, 16777619);
-    }
-    return hash >>> 0;
-}
-function getUtcDayKey(nowMs = Date.now()) {
-    return new Date(nowMs).toISOString().slice(0, 10);
-}
-function sortByDailyStableRandom(products, nowMs = Date.now()) {
-    const dayKey = getUtcDayKey(nowMs);
-    return [...products].sort((a, b) => {
-        const aHash = computeStableHash(`${dayKey}:${a.storeId}:${a.id}`);
-        const bHash = computeStableHash(`${dayKey}:${b.storeId}:${b.id}`);
-        if (aHash !== bHash)
-            return aHash - bHash;
-        return compareByFeaturedThenUpdated(a, b);
-    });
+    return 'newest';
 }
 function computeStableHash(input) {
     let hash = 2166136261;
@@ -3725,7 +3704,33 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
             throw error;
         productsSnap = await firestore_1.defaultDb.collection('products').limit(2000).get();
     }
-    const visibleProducts = productsSnap.docs
+    const loadPublicCollection = async (collectionName) => {
+        try {
+            return await firestore_1.defaultDb
+                .collection(collectionName)
+                .where('isPublished', '==', true)
+                .orderBy('updatedAt', 'desc')
+                .limit(1000)
+                .get();
+        }
+        catch (error) {
+            const code = error?.code;
+            const isMissingIndex = code === 9 || code === '9' || code === 'failed-precondition';
+            if (!isMissingIndex)
+                throw error;
+            return firestore_1.defaultDb.collection(collectionName).where('isPublished', '==', true).limit(1000).get();
+        }
+    };
+    const [publicProductsSnap, publicServicesSnap] = await Promise.all([
+        loadPublicCollection('publicProducts'),
+        loadPublicCollection('publicServices'),
+    ]);
+    const sourceDocs = dedupeCatalogItemsById([
+        ...publicProductsSnap.docs,
+        ...publicServicesSnap.docs,
+        ...productsSnap.docs,
+    ]);
+    const visibleProducts = sourceDocs
         .map(docSnap => {
         const data = docSnap.data();
         const storeId = typeof data.storeId === 'string' ? data.storeId.trim() : '';
@@ -3772,7 +3777,7 @@ exports.v1Products = functions.https.onRequest(async (req, res) => {
                     return -1;
                 return a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : 0;
             });
-    const products = paginateProducts(sortedProducts, page, pageSize, maxPerStore);
+    const products = paginateProducts(sortedProducts, page, pageSize, effectiveMaxPerStore);
     res.status(200).json({
         sort,
         page,
@@ -4567,6 +4572,124 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
     });
     res.status(201).json({
         booking,
+    });
+});
+exports.integrationCheckoutCreate = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'method-not-allowed' });
+        return;
+    }
+    const authContext = await validateIntegrationTokenOrReply(req, res, { allowedMethods: ['POST'] });
+    if (!authContext?.storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return;
+    }
+    const payload = (req.body ?? {});
+    const email = toTrimmedStringOrNull(payload.customer?.email);
+    const amount = Number(payload.amount);
+    const clientOrderId = toTrimmedStringOrNull(payload.clientOrderId);
+    const currency = toTrimmedStringOrNull(payload.currency) ?? 'GHS';
+    const returnUrl = toTrimmedStringOrNull(payload.returnUrl);
+    if (!email || !Number.isFinite(amount) || amount <= 0) {
+        res.status(400).json({ error: 'invalid-request', message: 'customer.email and amount are required' });
+        return;
+    }
+    const paystackConfig = ensurePaystackConfig();
+    const reference = `${authContext.storeId}_${Date.now()}`;
+    const sedifexOrderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const metadata = {
+        ...(typeof payload.metadata === 'object' && payload.metadata ? payload.metadata : {}),
+        storeId: authContext.storeId,
+        clientOrderId,
+        sedifexOrderId,
+        orderType: toTrimmedStringOrNull(payload.orderType) ?? 'product',
+        channel: 'client-website',
+    };
+    const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${paystackConfig.secret}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            email,
+            amount: Math.round(amount * 100),
+            currency,
+            reference,
+            callback_url: returnUrl ?? undefined,
+            metadata,
+        }),
+    });
+    const responseJson = (await response.json());
+    if (!response.ok || !responseJson?.status) {
+        res.status(502).json({ error: 'paystack-init-failed', details: responseJson?.message ?? null });
+        return;
+    }
+    await firestore_1.defaultDb.collection('stores').doc(authContext.storeId).collection('integrationOrders').doc(reference).set({
+        reference,
+        sedifexOrderId,
+        storeId: authContext.storeId,
+        clientOrderId,
+        orderType: metadata.orderType,
+        amount,
+        currency,
+        paymentStatus: 'pending',
+        orderStatus: 'pending',
+        createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.status(200).json({
+        ok: true,
+        reference,
+        sedifexOrderId,
+        authorizationUrl: responseJson?.data?.authorization_url ?? null,
+        expiresAt: null,
+    });
+});
+exports.integrationOrderStatus = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res))
+        return;
+    if (req.method !== 'GET') {
+        res.status(405).json({ error: 'method-not-allowed' });
+        return;
+    }
+    const authContext = await validateIntegrationTokenOrReply(req, res, { allowedMethods: ['GET'] });
+    if (!authContext?.storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return;
+    }
+    const reference = req.path.split('/').filter(Boolean).pop() || '';
+    if (!reference) {
+        res.status(400).json({ error: 'missing-reference' });
+        return;
+    }
+    const snap = await firestore_1.defaultDb.collection('stores').doc(authContext.storeId).collection('integrationOrders').doc(reference).get();
+    if (!snap.exists) {
+        res.status(404).json({ ok: false, error: 'not-found' });
+        return;
+    }
+    const data = snap.data();
+    res.status(200).json({
+        ok: true,
+        reference,
+        sedifexOrderId: data.sedifexOrderId ?? null,
+        storeId: data.storeId ?? authContext.storeId,
+        clientOrderId: data.clientOrderId ?? null,
+        orderType: data.orderType ?? null,
+        paymentStatus: data.paymentStatus ?? 'pending',
+        orderStatus: data.orderStatus ?? 'pending',
+        bookingStatus: data.bookingStatus ?? null,
+        amount: data.amount ?? null,
+        currency: data.currency ?? null,
+        updatedAt: normalizeTimestampIso(data.updatedAt),
     });
 });
 exports.integrationGallery = functions.https.onRequest(async (req, res) => {
@@ -5845,6 +5968,71 @@ exports.emitBookingWebhooks = functions.firestore
         createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
     })));
 });
+exports.emitIntegrationOrderWebhooks = functions.firestore
+    .document('stores/{storeId}/integrationOrders/{reference}')
+    .onWrite(async (change, context) => {
+    if (!change.after.exists)
+        return;
+    const storeId = String(context.params.storeId || '').trim();
+    const reference = String(context.params.reference || '').trim();
+    if (!storeId || !reference)
+        return;
+    const beforeData = (change.before.exists ? change.before.data() : null);
+    const afterData = (change.after.data() ?? {});
+    const beforeStatus = toTrimmedStringOrNull(beforeData?.paymentStatus)?.toLowerCase() ?? null;
+    const afterStatus = toTrimmedStringOrNull(afterData.paymentStatus)?.toLowerCase() ?? null;
+    if (!afterStatus || beforeStatus === afterStatus)
+        return;
+    const eventType = afterStatus === 'success' ? 'payment.succeeded' : afterStatus === 'failed' ? 'payment.failed' : null;
+    if (!eventType)
+        return;
+    const payloadObject = {
+        event: eventType,
+        deliveryId: `d_${context.eventId}`,
+        sentAt: new Date().toISOString(),
+        storeId,
+        reference,
+        sedifexOrderId: toTrimmedStringOrNull(afterData.sedifexOrderId),
+        clientOrderId: toTrimmedStringOrNull(afterData.clientOrderId),
+        orderType: toTrimmedStringOrNull(afterData.orderType),
+        amount: typeof afterData.amount === 'number' ? afterData.amount : null,
+        currency: toTrimmedStringOrNull(afterData.currency),
+        paymentStatus: afterStatus,
+        paidAt: normalizeTimestampIso(afterData.paidAt),
+        fees: typeof afterData.fees === 'number' ? afterData.fees : null,
+        netAmount: typeof afterData.netAmount === 'number' ? afterData.netAmount : null,
+    };
+    const payload = JSON.stringify(payloadObject);
+    const endpointSnapshot = await firestore_1.defaultDb.collection('webhookEndpoints').where('storeId', '==', storeId).where('status', '==', 'active').get();
+    if (endpointSnapshot.empty)
+        return;
+    await Promise.all(endpointSnapshot.docs.map(async (endpointDoc) => {
+        const endpoint = endpointDoc.data();
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : '';
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : '';
+        if (!url || !secret)
+            return;
+        const signature = computeWebhookSignature(secret, payload);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-sedifex-event': eventType,
+                    'x-sedifex-delivery-id': `d_${context.eventId}`,
+                    'x-sedifex-timestamp': `${Date.now()}`,
+                    'x-sedifex-signature': `sha256=${signature}`,
+                    'x-sedifex-contract-version': INTEGRATION_CONTRACT_VERSION.value().trim() || '2026-04-13',
+                },
+                body: payload,
+            });
+            await firestore_1.defaultDb.collection('webhookDeliveries').add({ storeId, endpointId: endpointDoc.id, eventType, reference, ok: response.ok, statusCode: response.status, createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp() });
+        }
+        catch (error) {
+            await firestore_1.defaultDb.collection('webhookDeliveries').add({ storeId, endpointId: endpointDoc.id, eventType, reference, ok: false, statusCode: null, error: error instanceof Error ? error.message : 'unknown error', createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp() });
+        }
+    }));
+});
 /** ============================================================================
  *  HUBTEL BULK MESSAGING
  * ==========================================================================*/
@@ -6731,6 +6919,12 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
             const reference = typeof data.reference === 'string' ? data.reference : null;
             const storeId = typeof metadata.storeId === 'string' ? metadata.storeId.trim() : '';
             const kind = typeof metadata.kind === 'string' ? metadata.kind.trim() : null;
+            const clientOrderId = typeof metadata.clientOrderId === 'string' && metadata.clientOrderId.trim()
+                ? metadata.clientOrderId.trim()
+                : null;
+            const sedifexOrderId = typeof metadata.sedifexOrderId === 'string' && metadata.sedifexOrderId.trim()
+                ? metadata.sedifexOrderId.trim()
+                : null;
             // ✅ BULK CREDITS FLOW
             if (kind === 'bulk_credits') {
                 if (!storeId) {
@@ -6854,6 +7048,21 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
                 updatedAt: timestamp,
                 lastEvent: eventName,
             }, { merge: true });
+            if (reference) {
+                const orderRef = firestore_1.defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference);
+                await orderRef.set({
+                    reference,
+                    storeId,
+                    clientOrderId,
+                    sedifexOrderId,
+                    paymentStatus: 'success',
+                    orderStatus: 'confirmed',
+                    paidAt: typeof data.paid_at === 'string'
+                        ? firestore_1.admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
+                        : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+            }
         }
         res.status(200).send('ok');
     }
