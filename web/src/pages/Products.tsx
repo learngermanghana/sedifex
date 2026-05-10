@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   where,
 } from 'firebase/firestore'
 import './Products.css'
@@ -309,6 +310,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     lastReceiptAt: data.lastReceiptAt,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    sortOrder: sanitizeNumber(data.sortOrder),
   }
 }
 
@@ -690,9 +692,12 @@ export default function Products() {
         console.warn('[products] Failed to cache products', error)
       })
 
-      const sorted = [...rows].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-      )
+      const sorted = [...rows].sort((a, b) => {
+        const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER
+        const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER
+        if (aOrder !== bOrder) return aOrder - bOrder
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      })
       setProducts(sorted)
     })
 
@@ -708,9 +713,12 @@ export default function Products() {
           ),
         )
         setProducts(
-          mapped.sort((a, b) =>
-            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-          ),
+          mapped.sort((a, b) => {
+            const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER
+            const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER
+            if (aOrder !== bOrder) return aOrder - bOrder
+            return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          }),
         )
       })
       .catch(error => {
@@ -1176,6 +1184,7 @@ export default function Products() {
         imageUrl: primaryImageUrl,
         imageUrls: normalizedImageUrls,
         imageAlt: primaryImageUrl ? imageAlt || normalizedProductName : null,
+        sortOrder: products.length + 1,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
