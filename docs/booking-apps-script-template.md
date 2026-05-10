@@ -3,7 +3,7 @@
 Use this template when you want to:
 
 - receive booking webhooks from Sedifex/middleware
-- accept bookings with or without `booking_id` (it is optional)
+- upsert bookings by `booking_id` when available
 - send confirmation email once
 - send reminders at 3 days, 2 days, and 1 day before appointment
 
@@ -14,8 +14,6 @@ Use this template when you want to:
 3. Run the script once (or let the first webhook hit it).
 
 The script auto-creates and maintains the full header row via `ensureHeaders_()`.
-
-`booking_id` is optional. When present, the script updates the matching row; when absent, it creates a new row.
 
 ## Apps Script code
 
