@@ -398,17 +398,52 @@ function str_(v) { return v === null || v === undefined ? '' : String(v).trim();
 function numOrDefault_(v, d) { const n = Number(v); return isNaN(n) ? d : n; }
 function numOrBlank_(v) { if (v === null || v === undefined || v === '') return ''; const n = Number(v); return isNaN(n) ? '' : n; }
 
+
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Sedifex Automation')
+    .addItem('Install 5-minute trigger', 'installFiveMinuteTrigger')
+    .addItem('Remove scheduled trigger', 'removeScheduledTrigger')
+    .addItem('Run scheduled messages now', 'runScheduledMessagesNow')
+    .addToUi();
+}
+
+function installFiveMinuteTrigger() {
+  removeScheduledTrigger();
+  ScriptApp.newTrigger('processScheduledMessages')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+  SpreadsheetApp.getActive().toast('5-minute trigger installed for processScheduledMessages.');
+}
+
+function removeScheduledTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction && t.getHandlerFunction() === 'processScheduledMessages') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+}
+
+function runScheduledMessagesNow() {
+  processScheduledMessages();
+  SpreadsheetApp.getActive().toast('Scheduled messages run complete.');
+}
 function json_(status, payload) {
   payload.httpStatus = status;
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
 }
 ```
 
-## Trigger setup
+## Trigger setup (no code edits needed after paste)
 
-1. In Apps Script, open **Triggers**.
-2. Add trigger for `processScheduledMessages`.
-3. Select **Time-driven**, every 15 minutes (or every 30 minutes).
+1. Reload the Google Sheet (or run `onOpen` once) to show the **Sedifex Automation** menu.
+2. Click **Sedifex Automation → Install 5-minute trigger**.
+3. Authorize when prompted.
+4. Optional: click **Sedifex Automation → Run scheduled messages now** any time you want to force a manual run from the sheet.
+5. Optional cleanup: click **Sedifex Automation → Remove scheduled trigger** to delete all time-driven triggers for `processScheduledMessages`.
 
 ## Minimum webhook payload
 
