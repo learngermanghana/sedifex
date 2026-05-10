@@ -534,6 +534,7 @@ export default function Products() {
   const [searchText, setSearchText] = useState('')
   const [showLowStockOnly, setShowLowStockOnly] = useState(false)
   const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set())
+  const [draggingProductId, setDraggingProductId] = useState<string | null>(null)
   // add-item form state
   const [name, setName] = useState('')
   const [itemType, setItemType] = useState<ItemType>('product')
@@ -910,6 +911,34 @@ export default function Products() {
   )
   const hasReachedProductLimit =
     maxProductsAllowed !== null && products.length >= maxProductsAllowed
+
+  const moveProductBefore = (draggedId: string, targetId: string) => {
+    if (!draggedId || !targetId || draggedId === targetId) return
+    setProducts(current => {
+      const dragged = current.find(product => product.id === draggedId)
+      const target = current.find(product => product.id === targetId)
+      if (!dragged || !target) return current
+
+      const draggedVisibleIndex = visibleProducts.findIndex(product => product.id === draggedId)
+      const targetVisibleIndex = visibleProducts.findIndex(product => product.id === targetId)
+      if (draggedVisibleIndex < 0 || targetVisibleIndex < 0) return current
+
+      const visibleWithoutDragged = visibleProducts.filter(product => product.id !== draggedId)
+      const insertionIndex =
+        draggedVisibleIndex < targetVisibleIndex ? targetVisibleIndex - 1 : targetVisibleIndex
+      visibleWithoutDragged.splice(insertionIndex, 0, dragged)
+      const visibleOrder = new Map(visibleWithoutDragged.map((product, index) => [product.id, index]))
+
+      return [...current].sort((a, b) => {
+        const aIndex = visibleOrder.get(a.id)
+        const bIndex = visibleOrder.get(b.id)
+        if (typeof aIndex === 'number' && typeof bIndex === 'number') return aIndex - bIndex
+        if (typeof aIndex === 'number') return -1
+        if (typeof bIndex === 'number') return 1
+        return 0
+      })
+    })
+  }
 
   async function generateDescriptionWithAi(input: {
     itemName: string
@@ -2160,6 +2189,19 @@ export default function Products() {
                   <article
                     key={product.id}
                     className={`products-page__list-card ${isEditing ? 'is-editing' : ''}`}
+                    draggable={activeTab === 'search' && !editingId}
+                    onDragStart={() => setDraggingProductId(product.id)}
+                    onDragOver={event => {
+                      event.preventDefault()
+                    }}
+                    onDrop={event => {
+                      event.preventDefault()
+                      if (draggingProductId) {
+                        moveProductBefore(draggingProductId, product.id)
+                      }
+                      setDraggingProductId(null)
+                    }}
+                    onDragEnd={() => setDraggingProductId(null)}
                   >
                     <header className="products-page__list-card__header">
                       <div className="products-page__thumb-wrap">
