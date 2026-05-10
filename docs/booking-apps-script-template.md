@@ -3,15 +3,17 @@
 Use this template when you want to:
 
 - receive booking webhooks from Sedifex/middleware
-- upsert bookings by `booking_id`
+- upsert bookings by `booking_id` when available
 - send confirmation email once
 - send reminders at 3 days, 2 days, and 1 day before appointment
 
-## Required sheet columns
+## Sheet setup (recommended)
 
-Create a sheet tab named `Bookings` with this header row:
+1. Create a sheet tab named `Bookings`.
+2. Leave the tab completely empty (no headers).
+3. Run the script once (or let the first webhook hit it).
 
-`booking_id, store_id, service_id, service_name, slot_id, customer_name, customer_phone, customer_email, quantity, notes, booking_date, booking_time, appointment_iso, payment_method, payment_amount, branch_location_id, branch_location_name, event_location, customer_stay_location, attributes_json, source, updated_at, created_at, status, last_event_type, cancelled_at, confirmation_sent_at, reminder_3d_sent_at, reminder_2d_sent_at, reminder_1d_sent_at, thank_you_sent_at, last_error, next_action_at, last_notified_appointment_iso, notification_version`
+The script auto-creates and maintains the full header row via `ensureHeaders_()`.
 
 ## Apps Script code
 
@@ -46,7 +48,6 @@ function doPost(e) {
     if (!body) return json_(400, { ok: false, error: 'invalid-json-body' });
 
     const p = normalizePayload_(body);
-    if (!p.booking_id) return json_(400, { ok: false, error: 'missing-booking-id' });
     if (!p.booking_date || !p.booking_time) return json_(400, { ok: false, error: 'missing-date-time' });
     if (!p.customer_email || !p.customer_name) return json_(400, { ok: false, error: 'missing-customer' });
 
@@ -55,7 +56,7 @@ function doPost(e) {
 
     p.appointment_iso = combineDateTimeInTz_(p.booking_date, p.booking_time, CONFIG.timezone) || '';
 
-    const row = findRowByBookingId_(sheet, p.booking_id);
+    const row = p.booking_id ? findRowByBookingId_(sheet, p.booking_id) : 0;
     const nowIso = new Date().toISOString();
 
     if (row) {
@@ -82,7 +83,7 @@ function doPost(e) {
     p.created_at = nowIso;
     p.notification_version = 1;
     writeRow_(sheet, sheet.getLastRow() + 1, p);
-    return json_(201, { ok: true, action: 'created', row: sheet.getLastRow(), bookingId: p.booking_id });
+    return json_(201, { ok: true, action: 'created', row: sheet.getLastRow(), bookingId: p.booking_id || '' });
   } catch (err) {
     return json_(500, { ok: false, error: String(err && err.message ? err.message : err) });
   }
