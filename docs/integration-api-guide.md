@@ -454,6 +454,8 @@ Use `shared/integrationTypes.ts` as the shared source of truth for:
 
 For partner websites, keep checkout communication limited to three endpoints and one webhook contract.
 
+This contract supports both **product sales** and **service bookings**. Set `orderType` accordingly (`product` or `service`) and consume `bookingStatus` when the transaction represents a booking.
+
 ### Canonical IDs (required on every transaction)
 
 Persist all three IDs together for reconciliation and support:
@@ -461,6 +463,8 @@ Persist all three IDs together for reconciliation and support:
 - `reference`: Paystack/Sedifex payment reference (authoritative payment lookup key).
 - `sedifexOrderId`: internal Sedifex order/booking id.
 - `clientOrderId`: partner website order id.
+
+For service bookings, include your booking identifier in `clientOrderId` (or in `metadata.bookingId`) so customer support can reconcile website bookings to Sedifex records.
 
 ### `POST /integration/checkout/create` (authenticated)
 
