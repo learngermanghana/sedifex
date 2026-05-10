@@ -1564,6 +1564,37 @@ export default function AccountOverview({
     }
   }
 
+
+  async function handleActivateWebhookEndpoint(endpoint: WebhookEndpoint) {
+    try {
+      setActioningWebhookEndpointId(endpoint.id)
+      const callable = httpsCallable(functions, 'activateWebhookEndpoint')
+      await callable({ endpointId: endpoint.id })
+      publish({ message: 'Webhook endpoint activated.', tone: 'success' })
+      await refreshWebhookEndpoints()
+    } catch (error) {
+      console.error('[account] Failed to activate webhook endpoint', error)
+      publish({ message: 'Unable to activate webhook endpoint.', tone: 'error' })
+    } finally {
+      setActioningWebhookEndpointId(null)
+    }
+  }
+
+  async function handleDeleteWebhookEndpoint(endpointId: string) {
+    try {
+      setActioningWebhookEndpointId(endpointId)
+      const callable = httpsCallable(functions, 'deleteWebhookEndpoint')
+      await callable({ endpointId })
+      publish({ message: 'Webhook endpoint deleted.', tone: 'success' })
+      await refreshWebhookEndpoints()
+    } catch (error) {
+      console.error('[account] Failed to delete webhook endpoint', error)
+      publish({ message: 'Unable to delete webhook endpoint.', tone: 'error' })
+    } finally {
+      setActioningWebhookEndpointId(null)
+    }
+  }
+
   async function handleSaveBulkEmailIntegration() {
     if (!storeId) {
       publish({ message: 'No store selected for email integration.', tone: 'error' })
@@ -2346,7 +2377,7 @@ export default function AccountOverview({
                 <p className="account-overview__hint">Sedifex booking webhooks</p>
                 <p className="account-overview__hint">
                   Add your Google Apps Script <code>/exec</code> URL and a secret.
-                  Sedifex will sign booking webhook events with this secret.
+                  The URL can be plain <code>/exec</code> (no query token required). Sedifex will sign booking webhook events with this secret.
                 </p>
                 <div className="account-overview__website-sync-test">
                   <label>
@@ -2395,15 +2426,32 @@ export default function AccountOverview({
                           </p>
                         </div>
                         <div className="account-overview__website-sync-actions">
+                          {endpoint.status === 'revoked' ? (
+                            <button
+                              type="button"
+                              className="button button--secondary"
+                              onClick={() => handleActivateWebhookEndpoint(endpoint)}
+                              disabled={actioningWebhookEndpointId === endpoint.id}
+                            >
+                              Unrevoke
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="button button--secondary"
+                              onClick={() => handleRevokeWebhookEndpoint(endpoint.id)}
+                              disabled={actioningWebhookEndpointId === endpoint.id}
+                            >
+                              Revoke
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="button button--secondary"
-                            onClick={() => handleRevokeWebhookEndpoint(endpoint.id)}
-                            disabled={
-                              actioningWebhookEndpointId === endpoint.id || endpoint.status === 'revoked'
-                            }
+                            onClick={() => handleDeleteWebhookEndpoint(endpoint.id)}
+                            disabled={actioningWebhookEndpointId === endpoint.id}
                           >
-                            Revoke
+                            Delete
                           </button>
                         </div>
                       </li>

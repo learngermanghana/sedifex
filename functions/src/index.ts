@@ -160,6 +160,10 @@ type RevokeWebhookEndpointPayload = {
   endpointId?: unknown
 }
 
+type DeleteWebhookEndpointPayload = {
+  endpointId?: unknown
+}
+
 type StartTikTokConnectPayload = {
   storeId?: unknown
 }
@@ -3010,6 +3014,73 @@ export const revokeWebhookEndpoint = functions.https.onCall(
     await db.collection('integrationAuditLogs').add({
       storeId,
       action: 'webhook.revoked',
+      actorUid: uid,
+      targetId: endpointId,
+      createdAt: timestamp,
+    })
+    return { ok: true, endpointId }
+  },
+)
+
+
+export const activateWebhookEndpoint = functions.https.onCall(
+  async (data: RevokeWebhookEndpointPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+    const endpointId = normalizeWebhookEndpointId(data?.endpointId)
+    const endpointRef = db.collection('webhookEndpoints').doc(endpointId)
+    const endpointSnapshot = await endpointRef.get()
+    if (!endpointSnapshot.exists) {
+      throw new functions.https.HttpsError('not-found', 'Webhook endpoint not found.')
+    }
+    const endpointData = (endpointSnapshot.data() ?? {}) as Record<string, unknown>
+    if (endpointData.storeId !== storeId) {
+      throw new functions.https.HttpsError('permission-denied', 'Endpoint does not belong to this store.')
+    }
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+    await endpointRef.set(
+      {
+        status: 'active',
+        revokedAt: null,
+        revokedBy: null,
+        updatedAt: timestamp,
+      },
+      { merge: true },
+    )
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: 'webhook.activated',
+      actorUid: uid,
+      targetId: endpointId,
+      createdAt: timestamp,
+    })
+    return { ok: true, endpointId }
+  },
+)
+
+export const deleteWebhookEndpoint = functions.https.onCall(
+  async (data: DeleteWebhookEndpointPayload | undefined, context: functions.https.CallableContext) => {
+    assertOwnerAccess(context)
+    const uid = context.auth!.uid
+    const storeId = await resolveStaffStoreId(uid)
+    await verifyOwnerForStore(uid, storeId)
+    const endpointId = normalizeWebhookEndpointId(data?.endpointId)
+    const endpointRef = db.collection('webhookEndpoints').doc(endpointId)
+    const endpointSnapshot = await endpointRef.get()
+    if (!endpointSnapshot.exists) {
+      throw new functions.https.HttpsError('not-found', 'Webhook endpoint not found.')
+    }
+    const endpointData = (endpointSnapshot.data() ?? {}) as Record<string, unknown>
+    if (endpointData.storeId !== storeId) {
+      throw new functions.https.HttpsError('permission-denied', 'Endpoint does not belong to this store.')
+    }
+    const timestamp = admin.firestore.FieldValue.serverTimestamp()
+    await endpointRef.delete()
+    await db.collection('integrationAuditLogs').add({
+      storeId,
+      action: 'webhook.deleted',
       actorUid: uid,
       targetId: endpointId,
       createdAt: timestamp,
