@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   where,
 } from 'firebase/firestore'
 import './Products.css'
@@ -309,6 +310,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     lastReceiptAt: data.lastReceiptAt,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    sortOrder: sanitizeNumber(data.sortOrder),
   }
 }
 
@@ -534,6 +536,7 @@ export default function Products() {
   const [searchText, setSearchText] = useState('')
   const [showLowStockOnly, setShowLowStockOnly] = useState(false)
   const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set())
+  const [draggingProductId, setDraggingProductId] = useState<string | null>(null)
   // add-item form state
   const [name, setName] = useState('')
   const [itemType, setItemType] = useState<ItemType>('product')
@@ -689,9 +692,12 @@ export default function Products() {
         console.warn('[products] Failed to cache products', error)
       })
 
-      const sorted = [...rows].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-      )
+      const sorted = [...rows].sort((a, b) => {
+        const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER
+        const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER
+        if (aOrder !== bOrder) return aOrder - bOrder
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      })
       setProducts(sorted)
     })
 
@@ -707,9 +713,12 @@ export default function Products() {
           ),
         )
         setProducts(
-          mapped.sort((a, b) =>
-            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-          ),
+          mapped.sort((a, b) => {
+            const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER
+            const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER
+            if (aOrder !== bOrder) return aOrder - bOrder
+            return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          }),
         )
       })
       .catch(error => {
@@ -910,6 +919,59 @@ export default function Products() {
   )
   const hasReachedProductLimit =
     maxProductsAllowed !== null && products.length >= maxProductsAllowed
+
+  const moveProductBefore = (draggedId: string, targetId: string) => {
+    if (!draggedId || !targetId || draggedId === targetId) return
+    setProducts(current => {
+      const dragged = current.find(product => product.id === draggedId)
+      const target = current.find(product => product.id === targetId)
+      if (!dragged || !target) return current
+
+      const draggedVisibleIndex = visibleProducts.findIndex(product => product.id === draggedId)
+      const targetVisibleIndex = visibleProducts.findIndex(product => product.id === targetId)
+      if (draggedVisibleIndex < 0 || targetVisibleIndex < 0) return current
+
+      const visibleWithoutDragged = visibleProducts.filter(product => product.id !== draggedId)
+      const insertionIndex =
+        draggedVisibleIndex < targetVisibleIndex ? targetVisibleIndex - 1 : targetVisibleIndex
+      visibleWithoutDragged.splice(insertionIndex, 0, dragged)
+      const visibleOrder = new Map(visibleWithoutDragged.map((product, index) => [product.id, index]))
+
+      const reordered = [...current].sort((a, b) => {
+        const aIndex = visibleOrder.get(a.id)
+        const bIndex = visibleOrder.get(b.id)
+        if (typeof aIndex === 'number' && typeof bIndex === 'number') return aIndex - bIndex
+        if (typeof aIndex === 'number') return -1
+        if (typeof bIndex === 'number') return 1
+        return 0
+      })
+      void persistSortOrder(reordered)
+      return reordered
+    })
+  }
+
+  async function persistSortOrder(sortedProducts: Product[]) {
+    if (!activeStoreId) return
+    try {
+      const batch = writeBatch(db)
+      sortedProducts.forEach((product, index) => {
+        const nextSortOrder = index + 1
+        if (product.sortOrder === nextSortOrder) return
+        batch.update(doc(db, 'products', product.id), {
+          sortOrder: nextSortOrder,
+          updatedAt: serverTimestamp(),
+        })
+        batch.set(
+          doc(db, product.itemType === 'service' ? 'publicServices' : 'publicProducts', product.id),
+          { sortOrder: nextSortOrder, updatedAt: serverTimestamp() },
+          { merge: true },
+        )
+      })
+      await batch.commit()
+    } catch (error) {
+      console.error('[products] Failed to persist item sort order', error)
+    }
+  }
 
   async function generateDescriptionWithAi(input: {
     itemName: string
@@ -1147,6 +1209,7 @@ export default function Products() {
         imageUrl: primaryImageUrl,
         imageUrls: normalizedImageUrls,
         imageAlt: primaryImageUrl ? imageAlt || normalizedProductName : null,
+        sortOrder: products.length + 1,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -2160,6 +2223,19 @@ export default function Products() {
                   <article
                     key={product.id}
                     className={`products-page__list-card ${isEditing ? 'is-editing' : ''}`}
+                    draggable={activeTab === 'search' && !editingId}
+                    onDragStart={() => setDraggingProductId(product.id)}
+                    onDragOver={event => {
+                      event.preventDefault()
+                    }}
+                    onDrop={event => {
+                      event.preventDefault()
+                      if (draggingProductId) {
+                        moveProductBefore(draggingProductId, product.id)
+                      }
+                      setDraggingProductId(null)
+                    }}
+                    onDragEnd={() => setDraggingProductId(null)}
                   >
                     <header className="products-page__list-card__header">
                       <div className="products-page__thumb-wrap">

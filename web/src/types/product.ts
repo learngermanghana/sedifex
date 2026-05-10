@@ -23,4 +23,5 @@ export type Product = {
   lastReceiptAt?: unknown
   createdAt?: unknown
   updatedAt?: unknown
+  sortOrder?: number | null
 }
