@@ -6,6 +6,7 @@ Use this template when you want to:
 - upsert bookings by `booking_id` when available
 - send confirmation email once
 - send reminders at 3 days, 2 days, and 1 day before appointment
+- send cancellation, reschedule, and booking update emails
 
 ## Sheet setup (recommended)
 
@@ -68,7 +69,14 @@ function doPost(e) {
       p.reminder_1d_sent_at = old.reminder_1d_sent_at || '';
       p.thank_you_sent_at = old.thank_you_sent_at || '';
       p.notification_version = old.notification_version || 1;
-      if ((old.appointment_iso || '') !== (p.appointment_iso || '')) {
+      const oldStatus = String(old.status || '').toLowerCase();
+      const newStatus = String(p.status || '').toLowerCase();
+      const wasCancelled = oldStatus === 'cancelled';
+      const isCancelled = newStatus === 'cancelled';
+      const apptChanged = (old.appointment_iso || '') !== (p.appointment_iso || '');
+      const detailsChanged = bookingDetailsChanged_(old, p);
+
+      if (apptChanged) {
         p.reminder_3d_sent_at = '';
         p.reminder_2d_sent_at = '';
         p.reminder_1d_sent_at = '';
@@ -76,6 +84,15 @@ function doPost(e) {
       }
       p.updated_at = nowIso;
       writeRow_(sheet, row, p);
+
+      if (!wasCancelled && isCancelled) {
+        sendImmediateEmail_(sheet, row, p, 'cancellation');
+      } else if (apptChanged) {
+        sendImmediateEmail_(sheet, row, p, 'reschedule');
+      } else if (detailsChanged) {
+        sendImmediateEmail_(sheet, row, p, 'update');
+      }
+
       return json_(200, { ok: true, action: 'updated', row: row, bookingId: p.booking_id });
     }
 
@@ -151,6 +168,29 @@ function dueDate_(appt, stage) {
   return d;
 }
 
+function sendImmediateEmail_(sheet, rowNum, row, stage) {
+  if (!row.customer_email || !row.customer_name) return;
+  const msg = messageForStage_(row, stage);
+  GmailApp.sendEmail(row.customer_email, msg.subject, msg.text, { htmlBody: msg.html, name: CONFIG.fromName });
+  sheet.getRange(rowNum, COLS.indexOf('updated_at') + 1).setValue(new Date().toISOString());
+}
+
+function bookingDetailsChanged_(oldRow, newRow) {
+  const keys = [
+    'service_name',
+    'booking_date',
+    'booking_time',
+    'branch_location_name',
+    'event_location',
+    'customer_stay_location',
+    'notes',
+    'quantity'
+  ];
+  return keys.some(function(k) {
+    return String(oldRow[k] || '').trim() !== String(newRow[k] || '').trim();
+  });
+}
+
 function messageForStage_(row, stage) {
   const when = formatAppt_(row.appointment_iso);
   const name = row.customer_name || 'there';
@@ -161,6 +201,30 @@ function messageForStage_(row, stage) {
       subject: 'Booking confirmed',
       text: `Hi ${name}, your booking is confirmed for ${service} on ${when}.`,
       html: `<p>Hi ${escapeHtml_(name)},</p><p>Your booking is confirmed for <b>${escapeHtml_(service)}</b> on <b>${escapeHtml_(when)}</b>.</p>`
+    };
+  }
+
+  if (stage === 'cancellation') {
+    return {
+      subject: 'Booking cancelled',
+      text: `Hi ${name}, your booking for ${service} on ${when} has been cancelled.`,
+      html: `<p>Hi ${escapeHtml_(name)},</p><p>Your booking for <b>${escapeHtml_(service)}</b> on <b>${escapeHtml_(when)}</b> has been cancelled.</p>`
+    };
+  }
+
+  if (stage === 'reschedule') {
+    return {
+      subject: 'Booking rescheduled',
+      text: `Hi ${name}, your booking has been rescheduled to ${when} for ${service}.`,
+      html: `<p>Hi ${escapeHtml_(name)},</p><p>Your booking has been rescheduled to <b>${escapeHtml_(when)}</b> for <b>${escapeHtml_(service)}</b>.</p>`
+    };
+  }
+
+  if (stage === 'update') {
+    return {
+      subject: 'Booking updated',
+      text: `Hi ${name}, your booking details were updated for ${service} on ${when}.`,
+      html: `<p>Hi ${escapeHtml_(name)},</p><p>Your booking details were updated for <b>${escapeHtml_(service)}</b> on <b>${escapeHtml_(when)}</b>.</p>`
     };
   }
 
