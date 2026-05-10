@@ -84,6 +84,75 @@ Typical flow:
 4. Update `Status`, `Date`, `Time`, `Email`, `Name`, `Branch`, `Source Updated At`.
 5. Let your existing reminder/thank-you/review logic run from the sheet.
 
+## New: Universal booking automation template for every store (simplified)
+
+To keep implementation focused, use the template only for:
+
+- booking sync to Google Sheet via `bookingId` upsert
+- confirmation email sending
+- reminder emails at 3 days, 2 days, and 1 day before appointment
+
+### Required flow
+
+1. Sedifex (or your middleware) sends booking webhook payload to Apps Script `doPost`.
+2. Apps Script upserts by `booking_id` (create/update same row).
+3. Time-driven trigger runs reminder processor every 15 to 30 minutes.
+4. Script checks send-state columns so each email stage is sent once.
+
+### Required sheet schema
+
+Use this exact column set so all stores follow one contract:
+
+- `booking_id`
+- `store_id`
+- `service_id`
+- `service_name`
+- `slot_id`
+- `customer_name`
+- `customer_phone`
+- `customer_email`
+- `quantity`
+- `notes`
+- `booking_date`
+- `booking_time`
+- `appointment_iso`
+- `payment_method`
+- `payment_amount`
+- `branch_location_id`
+- `branch_location_name`
+- `event_location`
+- `customer_stay_location`
+- `attributes_json`
+- `source`
+- `updated_at`
+- `created_at`
+- `status`
+- `last_event_type`
+- `cancelled_at`
+- `confirmation_sent_at`
+- `reminder_3d_sent_at`
+- `reminder_2d_sent_at`
+- `reminder_1d_sent_at`
+- `thank_you_sent_at`
+- `last_error`
+- `next_action_at`
+- `last_notified_appointment_iso`
+- `notification_version`
+
+### Minimum payload fields
+
+At minimum for confirmation/reminder workflows:
+
+- `bookingId`
+- `bookingDate` (prefer `YYYY-MM-DD`)
+- `bookingTime` (e.g. `14:30` or `2:30pm`)
+- `customerEmail`
+- `customerName`
+
+Recommended:
+
+- `serviceName`, `storeId`, `status`, `eventType`
+
 ## Suggested status policy
 
 - `pending`: hold reminders until approved.
@@ -100,4 +169,3 @@ For travel agencies, schools, and event operators, webhook-driven booking sync d
 - Better attendance/show-up rate
 - Cleaner, auditable operations data
 - Improved customer experience and retention
-
