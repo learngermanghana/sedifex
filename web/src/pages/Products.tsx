@@ -937,7 +937,7 @@ export default function Products() {
       visibleWithoutDragged.splice(insertionIndex, 0, dragged)
       const visibleOrder = new Map(visibleWithoutDragged.map((product, index) => [product.id, index]))
 
-      const reordered = [...current].sort((a, b) => {
+      return [...current].sort((a, b) => {
         const aIndex = visibleOrder.get(a.id)
         const bIndex = visibleOrder.get(b.id)
         if (typeof aIndex === 'number' && typeof bIndex === 'number') return aIndex - bIndex
@@ -945,32 +945,7 @@ export default function Products() {
         if (typeof bIndex === 'number') return 1
         return 0
       })
-      void persistSortOrder(reordered)
-      return reordered
     })
-  }
-
-  async function persistSortOrder(sortedProducts: Product[]) {
-    if (!activeStoreId) return
-    try {
-      const batch = writeBatch(db)
-      sortedProducts.forEach((product, index) => {
-        const nextSortOrder = index + 1
-        if (product.sortOrder === nextSortOrder) return
-        batch.update(doc(db, 'products', product.id), {
-          sortOrder: nextSortOrder,
-          updatedAt: serverTimestamp(),
-        })
-        batch.set(
-          doc(db, product.itemType === 'service' ? 'publicServices' : 'publicProducts', product.id),
-          { sortOrder: nextSortOrder, updatedAt: serverTimestamp() },
-          { merge: true },
-        )
-      })
-      await batch.commit()
-    } catch (error) {
-      console.error('[products] Failed to persist item sort order', error)
-    }
   }
 
   async function generateDescriptionWithAi(input: {
