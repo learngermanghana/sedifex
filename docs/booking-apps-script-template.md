@@ -50,7 +50,8 @@ function doPost(e) {
 
     const p = normalizePayload_(body);
     if (!p.booking_date || !p.booking_time) return json_(400, { ok: false, error: 'missing-date-time' });
-    if (!p.customer_email || !p.customer_name) return json_(400, { ok: false, error: 'missing-customer' });
+    if (!p.customer_name) return json_(400, { ok: false, error: 'missing-customer-name' });
+    if (!p.customer_email && !p.customer_phone) return json_(400, { ok: false, error: 'missing-contact-method' });
 
     const sheet = getOrCreateSheet_(CONFIG.sheetName);
     ensureHeaders_(sheet);
@@ -245,13 +246,13 @@ function normalizePayload_(body) {
     service_id: str_(body.serviceId || body.service_id),
     service_name: str_(body.serviceName || body.service_name),
     slot_id: str_(body.slotId || body.slot_id),
-    customer_name: str_(body.customerName || body.customer_name || customer.name),
-    customer_phone: str_(body.customerPhone || body.customer_phone || customer.phone),
-    customer_email: str_(body.customerEmail || body.customer_email || customer.email),
+    customer_name: str_(body.customerName || body.customer_name || body.fullName || body.full_name || body.name || customer.name),
+    customer_phone: str_(body.customerPhone || body.customer_phone || body.phone || body.phoneNumber || body.phone_number || body.whatsapp || customer.phone),
+    customer_email: str_(body.customerEmail || body.customer_email || body.email || customer.email),
     quantity: numOrDefault_(body.quantity, 1),
-    notes: str_(body.notes),
-    booking_date: str_(body.bookingDate || body.booking_date || body.date),
-    booking_time: str_(body.bookingTime || body.booking_time || body.time),
+    notes: str_(body.notes || body.message || body.details || body.help || body.how_can_we_help),
+    booking_date: str_(body.bookingDate || body.booking_date || body.preferredDate || body.preferred_date || body.date),
+    booking_time: str_(body.bookingTime || body.booking_time || body.preferredTime || body.preferred_time || body.time),
     appointment_iso: '',
     payment_method: str_(body.paymentMethod || body.payment_method),
     payment_amount: numOrBlank_(body.paymentAmount || body.payment_amount || body.amount),
