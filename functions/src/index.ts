@@ -4863,7 +4863,7 @@ export const v1Products = functions.https.onRequest(async (req, res) => {
   const maxPerStoreRaw = Number(req.query.maxPerStore ?? 0)
   const maxPerStoreCandidate = Number.isFinite(maxPerStoreRaw) ? Math.floor(maxPerStoreRaw) : 0
   const maxPerStore = maxPerStoreCandidate > 0 ? maxPerStoreCandidate : null
-  const effectiveMaxPerStore = maxPerStore ?? (sort === 'balanced' ? 3 : null)
+  const effectiveMaxPerStore = maxPerStore ?? (sort === 'store-diverse' ? 3 : null)
 
   let productsSnap: admin.firestore.QuerySnapshot
   try {
@@ -7320,7 +7320,7 @@ export const emitProductWebhooks = functions.firestore
 
         const isGoogleAppsScriptEndpoint = /^https:\/\/script\.google\.com\/macros\//i.test(url)
         const bodyObject = isGoogleAppsScriptEndpoint
-          ? buildAppsScriptBookingPayload({ storeId, bookingId, eventType, afterData })
+          ? buildAppsScriptBookingPayload({ storeId, bookingId: productId, eventType, afterData })
           : payloadObject
         const body = JSON.stringify(bodyObject)
         const signature = computeWebhookSignature(secret, body)
