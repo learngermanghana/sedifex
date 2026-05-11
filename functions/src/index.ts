@@ -7783,6 +7783,94 @@ export const emitBookingWebhooks = functions.firestore
     )
   })
 
+
+export const syncPendingIntegrationBookingToAppsScript = functions.firestore
+  .document('stores/{storeId}/integrationBookings/{bookingId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return
+
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : ''
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : ''
+    if (!storeId || !bookingId) return
+
+    const afterData = (change.after.data() ?? {}) as Record<string, unknown>
+    const syncStatus = toTrimmedStringOrNull(afterData.syncStatus)?.toLowerCase() ?? ''
+    if (syncStatus !== 'pending') return
+
+    const endpointSnapshot = await db
+      .collection('webhookEndpoints')
+      .where('storeId', '==', storeId)
+      .where('status', '==', 'active')
+      .get()
+
+    const appsScriptEndpoints = endpointSnapshot.docs.filter(docSnap => {
+      const endpoint = docSnap.data() as Record<string, unknown>
+      const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
+      const secret = typeof endpoint.secret === 'string' ? endpoint.secret.trim() : ''
+      return Boolean(url && secret && /^https:\/\/script\.google\.com\/macros\//i.test(url))
+    })
+
+    if (appsScriptEndpoints.length === 0) {
+      await change.after.ref.set(
+        {
+          syncStatus: 'failed',
+          syncLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          syncError: 'no-active-apps-script-endpoint',
+        },
+        { merge: true },
+      )
+      return
+    }
+
+    const bodyObject = buildAppsScriptBookingPayload({
+      storeId,
+      bookingId,
+      eventType: 'booking.updated',
+      afterData,
+    })
+    const body = JSON.stringify(bodyObject)
+
+    let firstError: string | null = null
+
+    for (const endpointDoc of appsScriptEndpoints) {
+      const endpoint = endpointDoc.data() as Record<string, unknown>
+      const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
+      const secret = typeof endpoint.secret === 'string' ? endpoint.secret : ''
+      const signature = computeWebhookSignature(secret, body)
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-sedifex-signature': signature,
+            'x-sedifex-event': 'booking.updated',
+            'x-sedifex-event-id': `evt_${context.eventId}`,
+          },
+          body,
+        })
+
+        if (!response.ok) {
+          firstError = firstError ?? `endpoint ${endpointDoc.id} returned ${response.status}`
+        }
+      } catch (error) {
+        firstError = firstError ?? (error instanceof Error ? error.message : 'unknown error')
+      }
+    }
+
+    const existingAttempts = Math.max(0, Math.floor(toFiniteNumber(afterData.syncAttempts, 0)))
+    await change.after.ref.set(
+      {
+        syncStatus: firstError ? 'failed' : 'synced',
+        syncError: firstError,
+        syncAttempts: existingAttempts + 1,
+        syncLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        syncLastSuccessAt: firstError ? null : admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+  })
+
 export const emitIntegrationOrderWebhooks = functions.firestore
   .document('stores/{storeId}/integrationOrders/{reference}')
   .onWrite(async (change, context) => {
