@@ -6013,7 +6013,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res) 
   })
 })
 
-async function handleIntegrationCheckoutCreate(req: functions.Request, res: functions.Response<any>) {
+async function handleIntegrationCheckoutCreate(req: functions.https.Request, res: functions.Response<any>) {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
   if (req.method === 'OPTIONS') {
@@ -6126,7 +6126,7 @@ async function handleIntegrationCheckoutCreate(req: functions.Request, res: func
 
 export const integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate)
 
-async function handleIntegrationOrderStatus(req: functions.Request, res: functions.Response<any>) {
+async function handleIntegrationOrderStatus(req: functions.https.Request, res: functions.Response<any>) {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
   if (req.method !== 'GET') {

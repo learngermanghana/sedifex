@@ -36,8 +36,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationBookingPaymentVerify = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.emitBookingWebhooks = void 0;
+exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationBookingPaymentVerify = exports.integration = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.emitBookingWebhooks = exports.emitProductWebhooks = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -4760,7 +4760,7 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
         booking,
     });
 });
-exports.integrationCheckoutCreate = functions.https.onRequest(async (req, res) => {
+async function handleIntegrationCheckoutCreate(req, res) {
     setIntegrationResponseHeaders(res);
     if (!validateIntegrationContractVersionOrReply(req, res))
         return;
@@ -4863,8 +4863,9 @@ exports.integrationCheckoutCreate = functions.https.onRequest(async (req, res) =
         authorizationUrl: responseJson?.data?.authorization_url ?? null,
         expiresAt: null,
     });
-});
-exports.integrationOrderStatus = functions.https.onRequest(async (req, res) => {
+}
+exports.integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate);
+async function handleIntegrationOrderStatus(req, res) {
     setIntegrationResponseHeaders(res);
     if (!validateIntegrationContractVersionOrReply(req, res))
         return;
@@ -4906,6 +4907,20 @@ exports.integrationOrderStatus = functions.https.onRequest(async (req, res) => {
         currency: data.currency ?? null,
         updatedAt: normalizeTimestampIso(data.updatedAt),
     });
+}
+exports.integrationOrderStatus = functions.https.onRequest(handleIntegrationOrderStatus);
+exports.integration = functions.https.onRequest(async (req, res) => {
+    const path = req.path.replace(/^\/+/, '');
+    if (path === 'checkout/create') {
+        await handleIntegrationCheckoutCreate(req, res);
+        return;
+    }
+    if (path.startsWith('orders/')) {
+        await handleIntegrationOrderStatus(req, res);
+        return;
+    }
+    setIntegrationResponseHeaders(res);
+    res.status(404).json({ ok: false, error: 'not-found' });
 });
 exports.integrationBookingPaymentVerify = functions.https.onRequest(async (req, res) => {
     setIntegrationResponseHeaders(res);
