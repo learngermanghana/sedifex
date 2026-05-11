@@ -3533,7 +3533,8 @@ async function upsertBookingCustomerProfile(options) {
     const { storeId, customerName, customerPhone, customerEmail, bookingId } = options;
     const normalizedPhone = normalizePhoneValue(customerPhone);
     const normalizedEmail = normalizeIdentityValue(customerEmail);
-    if (!normalizedPhone && !normalizedEmail) {
+    const normalizedName = toTrimmedStringOrNull(customerName);
+    if (!normalizedPhone && !normalizedEmail && !normalizedName) {
         return;
     }
     const customerLookupSnapshots = await Promise.all([
@@ -3553,10 +3554,18 @@ async function upsertBookingCustomerProfile(options) {
                 .limit(1)
                 .get()
             : Promise.resolve(null),
+        normalizedName
+            ? firestore_1.defaultDb
+                .collection('customers')
+                .where('storeId', '==', storeId)
+                .where('name', '==', normalizedName)
+                .limit(1)
+                .get()
+            : Promise.resolve(null),
     ]);
-    const existingCustomerDoc = customerLookupSnapshots[0]?.docs?.[0] ?? customerLookupSnapshots[1]?.docs?.[0] ?? null;
+    const existingCustomerDoc = customerLookupSnapshots[0]?.docs?.[0] ?? customerLookupSnapshots[1]?.docs?.[0] ?? customerLookupSnapshots[2]?.docs?.[0] ?? null;
     const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
-    const nameToPersist = customerName ?? customerEmail ?? customerPhone ?? 'Booking customer';
+    const nameToPersist = normalizedName ?? customerEmail ?? customerPhone ?? 'Booking customer';
     if (existingCustomerDoc) {
         const existingData = (existingCustomerDoc.data() ?? {});
         const updates = {
