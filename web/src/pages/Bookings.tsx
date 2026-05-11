@@ -603,16 +603,7 @@ export default function Bookings() {
                           <td>{booking.paymentAmount ?? booking.depositAmount ?? '—'}</td>
                           <td>
                             <div className="bookings-page__row-actions">
-                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">View</Link>
-                              <details className="bookings-page__more-menu">
-                                <summary>⋯ More</summary>
-                                <div className="bookings-page__more-menu-list">
-                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handleDeleteBooking(booking.id)}>Delete</button>
-                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'refund')}>Refund</button>
-                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'reject')}>Reject payment</button>
-                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'resend_sync')}>Save latest update</button>
-                                </div>
-                              </details>
+                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">Edit</Link>
                             </div>
                           </td>
                         </tr>
