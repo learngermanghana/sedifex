@@ -546,6 +546,31 @@
   }
 }
 
+
+.sell-page__workspace-tabs {
+  margin: 0 0 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sell-page__workspace-tab {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sell-page__workspace-tab.is-active {
+  border-color: #4338ca;
+  background: #eef2ff;
+  color: #312e81;
+}
+
 .sell-page__grid {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;

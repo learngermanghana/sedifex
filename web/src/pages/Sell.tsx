@@ -1738,6 +1738,18 @@ export default function Sell() {
         </div>
       </header>
 
+      <nav className="sell-page__workspace-tabs" aria-label="Sales workspace pages">
+        <Link to="/sell" className="sell-page__workspace-tab is-active" aria-current="page">
+          Sell
+        </Link>
+        <Link to="/close-day" className="sell-page__workspace-tab">
+          Close day
+        </Link>
+        <Link to="/finance" className="sell-page__workspace-tab">
+          Invoice
+        </Link>
+      </nav>
+
       {reachedDailySalesLimit && (
         <p className="products__message products__message--error" role="alert">
           You have hit your daily sales limit ({dailySalesLimit} sales/day). Upgrade your plan to
