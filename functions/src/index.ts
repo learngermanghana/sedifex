@@ -6171,12 +6171,21 @@ export const integrationOrderStatus = functions.https.onRequest(async (req, res)
 export const integrationBookingPaymentVerify = functions.https.onRequest(async (req, res) => {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method-not-allowed' })
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
   const authContext = await validateIntegrationTokenOrReply(req, res, { allowedMethods: ['POST'] })
-  if (!authContext?.storeId) return res.status(400).json({ error: 'missing-store-id' })
+  if (!authContext?.storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
   const payload = toPlainObject(req.body)
   const bookingId = toTrimmedStringOrNull(payload.bookingId)
-  if (!bookingId) return res.status(400).json({ error: 'missing-booking-id' })
+  if (!bookingId) {
+    res.status(400).json({ error: 'missing-booking-id' })
+    return
+  }
   const action = toTrimmedStringOrNull(payload.action)?.toLowerCase() ?? 'confirm'
   const verifiedBy = toTrimmedStringOrNull(payload.verifiedBy) ?? 'integration_admin'
   const paymentAmount = toFiniteNumberOrNull(payload.paymentAmount)
@@ -6206,7 +6215,7 @@ export const integrationBookingPaymentVerify = functions.https.onRequest(async (
   }
   await db.collection('stores').doc(authContext.storeId).collection('integrationBookings').doc(bookingId).set(update, { merge: true })
   const bookingSnap = await db.collection('stores').doc(authContext.storeId).collection('integrationBookings').doc(bookingId).get()
-  return res.status(200).json({ ok: true, booking: mapIntegrationBookingDoc(bookingSnap) })
+  res.status(200).json({ ok: true, booking: mapIntegrationBookingDoc(bookingSnap) })
 })
 
 export const integrationGallery = functions.https.onRequest(async (req, res) => {
