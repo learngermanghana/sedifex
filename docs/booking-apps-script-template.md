@@ -17,28 +17,20 @@ Use this template when you want to:
 The script auto-creates and maintains the full header row via `ensureHeaders_()`.
 
 
-## Source-of-truth flow (recommended)
+## Is a checkout-only Next.js endpoint enough?
 
-Sedifex should remain the **single source of truth** for booking state.
+Short answer: **No**. A server route that only creates checkout links in Sedifex will **not** write rows into this Sheet by itself.
 
-1. Website receives booking request and starts checkout.
-2. Website confirms payment outcome and updates booking/payment status in **Sedifex**.
-3. Sedifex (or Sedifex-managed middleware) sends webhook events to this Apps Script `doPost` endpoint.
-4. This Sheet mirrors Sedifex state (create/update/cancel/reschedule), and messaging automation runs from the mirrored row.
+To make rows appear in `Bookings`, your website/backend must also send a webhook POST to the Apps Script Web App URL (the `doPost` in this template), with at least:
 
-### Important clarification
+- `customerName` (or `customer_name`)
+- one contact: `customerEmail` or `customerPhone`
+- `bookingDate` + `bookingTime` (or snake_case equivalents)
+- optional but recommended: `bookingId`/`booking_id` for reliable updates
 
-A checkout-only Next.js endpoint is not enough to populate `Bookings` on its own.
+If you only call `/integration/checkout/create`, payment links can succeed while the Sheet remains unchanged.
 
-The required follow-up is: once payment/booking state is updated in Sedifex, **Sedifex (or Sedifex-managed middleware)** sends the webhook event to this Apps Script URL.
-
-So your target architecture is correct:
-- website handles capture + payment confirmation,
-- website updates Sedifex,
-- Sedifex remains canonical state,
-- Sedifex syncs each store sheet by calling `doPost` on state changes (including cancel/reschedule).
-
-### Minimal Sedifex-to-Apps Script payload
+### Minimal payload example for sheet sync
 
 ```json
 {
@@ -48,49 +40,11 @@ So your target architecture is correct:
   "bookingDate": "2026-05-11",
   "bookingTime": "14:00",
   "serviceName": "Airport Pickup",
-  "bookingStatus": "booked",
-  "paymentStatus": "confirmed",
-  "paymentConfirmed": true,
-  "eventType": "updated",
-  "source": "sedifex_booking"
+  "paymentMethod": "paystack_checkout",
+  "paymentConfirmed": false,
+  "source": "website_booking_form"
 }
 ```
-
-
-## Recommended next updates (production hardening)
-
-1. **Event idempotency key**
-   - Include `eventId` (or `deliveryId`) from Sedifex on every webhook.
-   - Store processed IDs in a lightweight cache/sheet and skip duplicates.
-   - Prevents double row updates when retries happen.
-
-2. **Webhook signature verification**
-   - In addition to shared secret, verify a request signature (HMAC) when available.
-   - Reject payloads whose signature does not match the raw body.
-
-3. **Explicit retry contract**
-   - Sedifex sender should retry on non-2xx with exponential backoff.
-   - Keep `doPost` responses machine-readable (`ok`, `error`, `eventId`).
-
-4. **Store routing safety**
-   - Enforce `storeId` presence and verify it maps to the expected spreadsheet/script deployment.
-   - Avoid cross-store writes if one endpoint URL is accidentally reused.
-
-5. **Schema versioning**
-   - Add `mappingVersion` or `schemaVersion` in payload.
-   - Use defaults in Apps Script for unknown/new fields to remain backward compatible.
-
-6. **Operational observability**
-   - Keep `_sync_logs`, and add columns for `eventType`, `bookingId`, `storeId`, `errorCode`.
-   - Add daily summary check for failed sync attempts.
-
-7. **Cancellation/reschedule assertions**
-   - Add safeguards so cancel/reschedule transitions are always written before email side-effects.
-   - Log both old/new appointment values for traceability.
-
-8. **Backfill/replay utility**
-   - Keep a small script or endpoint to replay Sedifex booking events for a date range.
-   - Useful when onboarding new stores or recovering from outages.
 
 ## Apps Script code
 
