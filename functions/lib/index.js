@@ -36,8 +36,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = void 0;
+exports.emitBookingWebhooks = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -2273,6 +2273,63 @@ exports.revokeWebhookEndpoint = functions.https.onCall(async (data, context) => 
     await firestore_1.defaultDb.collection('integrationAuditLogs').add({
         storeId,
         action: 'webhook.revoked',
+        actorUid: uid,
+        targetId: endpointId,
+        createdAt: timestamp,
+    });
+    return { ok: true, endpointId };
+});
+exports.activateWebhookEndpoint = functions.https.onCall(async (data, context) => {
+    assertOwnerAccess(context);
+    const uid = context.auth.uid;
+    const storeId = await resolveStaffStoreId(uid);
+    await verifyOwnerForStore(uid, storeId);
+    const endpointId = normalizeWebhookEndpointId(data?.endpointId);
+    const endpointRef = firestore_1.defaultDb.collection('webhookEndpoints').doc(endpointId);
+    const endpointSnapshot = await endpointRef.get();
+    if (!endpointSnapshot.exists) {
+        throw new functions.https.HttpsError('not-found', 'Webhook endpoint not found.');
+    }
+    const endpointData = (endpointSnapshot.data() ?? {});
+    if (endpointData.storeId !== storeId) {
+        throw new functions.https.HttpsError('permission-denied', 'Endpoint does not belong to this store.');
+    }
+    const timestamp = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    await endpointRef.set({
+        status: 'active',
+        revokedAt: null,
+        revokedBy: null,
+        updatedAt: timestamp,
+    }, { merge: true });
+    await firestore_1.defaultDb.collection('integrationAuditLogs').add({
+        storeId,
+        action: 'webhook.activated',
+        actorUid: uid,
+        targetId: endpointId,
+        createdAt: timestamp,
+    });
+    return { ok: true, endpointId };
+});
+exports.deleteWebhookEndpoint = functions.https.onCall(async (data, context) => {
+    assertAuthenticated(context);
+    const uid = context.auth.uid;
+    const storeId = await resolveStaffStoreId(uid);
+    await verifyOwnerForStore(uid, storeId);
+    const endpointId = normalizeWebhookEndpointId(data?.endpointId);
+    const endpointRef = firestore_1.defaultDb.collection('webhookEndpoints').doc(endpointId);
+    const endpointSnapshot = await endpointRef.get();
+    if (!endpointSnapshot.exists) {
+        throw new functions.https.HttpsError('not-found', 'Webhook endpoint not found.');
+    }
+    const endpointData = (endpointSnapshot.data() ?? {});
+    if (endpointData.storeId !== storeId) {
+        throw new functions.https.HttpsError('permission-denied', 'Endpoint does not belong to this store.');
+    }
+    const timestamp = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    await endpointRef.delete();
+    await firestore_1.defaultDb.collection('integrationAuditLogs').add({
+        storeId,
+        action: 'webhook.deleted',
         actorUid: uid,
         targetId: endpointId,
         createdAt: timestamp,
