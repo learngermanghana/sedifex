@@ -602,3 +602,39 @@ Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
 - Validate webhook signature and timestamp tolerance.
 - Force-test retry path by returning `500` once from webhook receiver.
 - Validate reconciliation export includes `reference`, amounts, and final status.
+
+## Booking + Payment state model (service bookings)
+
+Sedifex now tracks **independent** booking and payment states:
+- `bookingStatus`: `booked | cancelled | rescheduled`
+- `paymentCollectionMode`: `online_checkout | manual_transfer | momo_manual | cash | free | unknown`
+- `paymentStatus`: `not_required | pending | checkout_created | awaiting_verification | partial | confirmed | failed | expired | rejected | refunded`
+- `customerPaymentClaim`: `not_claimed | claimed_paid | claimed_partial | not_paid`
+
+### Security rules
+- Website/public booking submissions are **never** allowed to self-set `paymentStatus=confirmed`.
+- A customer claim like “I paid” is stored as `customerPaymentClaim=claimed_paid` and `paymentStatus=awaiting_verification`.
+- Checkout `returnUrl` only means redirect completed; it is **not** payment proof.
+- Authoritative payment truth is from webhook confirmation and/or `GET /integration/orders/:reference`.
+
+### Service checkout linkage
+`POST /integration/checkout/create` supports `orderType=service` and metadata (`bookingId`, `clientOrderId`). Sedifex stores and reconciles: `bookingId`, `reference`, `sedifexOrderId`, `clientOrderId`.
+
+### Manual verification
+Use `POST /integration/booking/payment/verify` from trusted server/admin flows:
+- `action=confirm` -> sets `paymentStatus=confirmed` (or `partial` when outstanding remains)
+- `action=partial` -> sets `paymentStatus=partial`
+- `action=reject` -> sets `paymentStatus=rejected`
+
+### Flat Apps Script payload additions
+Apps Script webhook targets continue receiving **flat payloads** and now include:
+`bookingStatus`, `paymentCollectionMode`, `paymentStatus`, `customerPaymentClaim`, `paymentReference`, `manualPaymentReference`, `sedifexOrderId`, `clientOrderId`, `paymentConfirmedAt`, `paymentVerifiedAt`, `depositAmount`, `paymentAmount`, `amountOutstanding`, etc.
+
+### Example Apps Script payloads
+
+```json
+{"eventType":"payment_pending","bookingStatus":"booked","paymentCollectionMode":"online_checkout","paymentStatus":"pending"}
+{"eventType":"payment_awaiting_verification","bookingStatus":"booked","paymentCollectionMode":"manual_transfer","paymentStatus":"awaiting_verification","customerPaymentClaim":"claimed_paid"}
+{"eventType":"payment_confirmed","bookingStatus":"booked","paymentCollectionMode":"online_checkout","paymentStatus":"confirmed"}
+{"eventType":"payment_partial","bookingStatus":"booked","paymentCollectionMode":"manual_transfer","paymentStatus":"partial","depositAmount":50,"paymentAmount":100,"amountOutstanding":50}
+```
