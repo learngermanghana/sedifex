@@ -540,6 +540,28 @@ Success response:
   "updatedAt": "2026-05-10T12:51:10Z"
 }
 ```
+### POST /integration/webhooks/payment-status` (Sedifex outbound webhook)
+For website bookings using Sedifex checkout,  standardize it like this:
+
+When booking is first created:
+
+bookingStatus = "booked"
+paymentCollectionMode = "online_checkout"
+paymentStatus = "checkout_created" or pending
+
+After customer lands on return URL:
+
+do not mark paid yet
+
+After Sedifex receives confirmed webhook:
+
+paymentStatus = "confirmed"
+paymentConfirmedAt = now
+store reference, sedifexOrderId, clientOrderId  . the return url make sure it works and lets us know the trwam has their data. YOu can proviode whatsapp or email for furhter enquries
+
+rename that pre-checkout sedifexOrderId variable to bookingId , do not pretend you have a real sedifexOrderId until checkout returns one
+
+Patch the website-to-Sedifex booking creation path to write syncStatus: 'pending' and syncRequestedAt when it creates/updates integrationBookings docs.
 
 ### `POST /integration/webhooks/payment-status` (Sedifex outbound webhook)
 
