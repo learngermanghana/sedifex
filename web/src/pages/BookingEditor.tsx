@@ -209,6 +209,35 @@ export default function BookingEditor() {
     }
   }
 
+  async function handleConfirmPayment() {
+    if (!storeId || isCreateMode) return
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      const now = Timestamp.now()
+      await setDoc(
+        doc(db, 'stores', storeId, 'integrationBookings', bookingId),
+        {
+          paymentStatus: 'confirmed',
+          paymentConfirmedAt: now,
+          paymentVerifiedAt: now,
+          paymentVerifiedBy: 'staff_admin',
+          syncStatus: 'pending',
+          syncRequestedAt: now,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
+      navigate('/bookings')
+    } catch (error) {
+      console.error('[booking-editor] Failed to confirm payment', error)
+      setErrorMessage('Unable to confirm payment right now.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <main className="page booking-editor-page">
       <section className="card booking-editor-page__card stack gap-3">
@@ -259,6 +288,16 @@ export default function BookingEditor() {
               <button type="submit" className="button button--primary" disabled={saving}>
                 {saving ? 'Saving…' : 'Save and sync'}
               </button>
+              {!isCreateMode && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={saving}
+                  onClick={() => void handleConfirmPayment()}
+                >
+                  {saving ? 'Saving…' : 'Confirm payment'}
+                </button>
+              )}
             </div>
           </form>
         )}
