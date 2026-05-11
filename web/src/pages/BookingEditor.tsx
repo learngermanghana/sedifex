@@ -189,6 +189,8 @@ export default function BookingEditor() {
             phone: form.phone.trim(),
             email: form.email.trim(),
           },
+          bookingId: targetId,
+          booking_id: targetId,
           source: isCreateMode ? 'manual' : 'manual-edit',
           syncStatus: 'pending',
           syncRequestedAt: Timestamp.now(),
