@@ -569,10 +569,9 @@ export default function Bookings() {
                         <th>Service</th>
                         <th>Customer</th>
                         <th>Qty</th>
-                        <th>Status</th>
+                        <th>Booking</th>
                         <th>Payment</th>
-                        <th>Audit</th>
-                        <th>Notes</th>
+                        <th>Amount</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
@@ -596,52 +595,23 @@ export default function Bookings() {
                             </span>
                           </td>
                           <td>
-                            <div className="stack gap-1">
-                              <div><strong>Booking:</strong> {statusLabel(booking.status)}</div>
-                              <div><strong>Payment:</strong> {paymentStatusLabel(booking.paymentStatus)}</div>
-                              <div><strong>Amount:</strong> {booking.paymentAmount ?? booking.depositAmount ?? '—'}</div>
-                            </div>
+                            <span className={`bookings-page__status bookings-page__status--payment-${booking.paymentStatus}`}>
+                              {paymentStatusLabel(booking.paymentStatus)}
+                            </span>
                           </td>
+                          <td>{booking.paymentAmount ?? booking.depositAmount ?? '—'}</td>
                           <td>
-                            <div className="stack gap-1">
-                              <div><strong>Payment ref:</strong> {booking.paymentReference ?? '—'}</div>
-                              <div><strong>Sedifex order id:</strong> {booking.sedifexOrderId ?? '—'}</div>
-                              <div><strong>Client order id:</strong> {booking.clientOrderId ?? '—'}</div>
-                              <div><strong>Confirmed at:</strong> {formatDate(booking.paymentConfirmedAt)}</div>
-                              <div><strong>Verified at:</strong> {formatDate(booking.paymentVerifiedAt)}</div>
-                              <div><strong>Verified by:</strong> {booking.paymentVerifiedBy ?? '—'}</div>
-                            </div>
-                          </td>
-                          <td>{booking.notes ?? '—'}</td>
-                          <td>
-                            <div className="bookings-page__actions">
-                              {(STATUS_ACTIONS[booking.status] ?? []).map(action => (
-                                <button
-                                  key={action.nextStatus}
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  disabled={updatingBookingId === booking.id}
-                                  onClick={() => void handleStatusUpdate(booking.id, action.nextStatus)}
-                                >
-                                  {action.label}
-                                </button>
-                              ))}
-                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">
-                                Edit
-                              </Link>
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                disabled={updatingBookingId === booking.id}
-                                onClick={() => void handleDeleteBooking(booking.id)}
-                              >
-                                Delete
-                              </button>
-                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'confirm')}>Confirm payment</button>
-                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'partial')}>Mark partial</button>
-                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'reject')}>Reject payment</button>
-                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'refund')}>Refund</button>
-                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'resend_sync')}>Resend sync to sheet</button>
+                            <div className="bookings-page__row-actions">
+                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">View</Link>
+                              <details className="bookings-page__more-menu">
+                                <summary>⋯ More</summary>
+                                <div className="bookings-page__more-menu-list">
+                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handleDeleteBooking(booking.id)}>Delete</button>
+                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'refund')}>Refund</button>
+                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'reject')}>Reject payment</button>
+                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'resend_sync')}>Resend sync</button>
+                                </div>
+                              </details>
                             </div>
                           </td>
                         </tr>
