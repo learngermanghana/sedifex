@@ -6013,7 +6013,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res) 
   })
 })
 
-export const integrationCheckoutCreate = functions.https.onRequest(async (req, res) => {
+async function handleIntegrationCheckoutCreate(req: functions.Request, res: functions.Response<any>) {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
   if (req.method === 'OPTIONS') {
@@ -6122,9 +6122,11 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     authorizationUrl: responseJson?.data?.authorization_url ?? null,
     expiresAt: null,
   })
-})
+}
 
-export const integrationOrderStatus = functions.https.onRequest(async (req, res) => {
+export const integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate)
+
+async function handleIntegrationOrderStatus(req: functions.Request, res: functions.Response<any>) {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
   if (req.method !== 'GET') {
@@ -6166,6 +6168,24 @@ export const integrationOrderStatus = functions.https.onRequest(async (req, res)
     currency: data.currency ?? null,
     updatedAt: normalizeTimestampIso(data.updatedAt),
   })
+}
+
+export const integrationOrderStatus = functions.https.onRequest(handleIntegrationOrderStatus)
+
+export const integration = functions.https.onRequest(async (req, res) => {
+  const path = req.path.replace(/^\/+/, '')
+
+  if (path === 'checkout/create') {
+    await handleIntegrationCheckoutCreate(req, res)
+    return
+  }
+  if (path.startsWith('orders/')) {
+    await handleIntegrationOrderStatus(req, res)
+    return
+  }
+
+  setIntegrationResponseHeaders(res)
+  res.status(404).json({ ok: false, error: 'not-found' })
 })
 
 export const integrationBookingPaymentVerify = functions.https.onRequest(async (req, res) => {
