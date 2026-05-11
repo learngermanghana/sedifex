@@ -16,6 +16,82 @@ Use this template when you want to:
 
 The script auto-creates and maintains the full header row via `ensureHeaders_()`.
 
+
+## Source-of-truth flow (recommended)
+
+Sedifex should remain the **single source of truth** for booking state.
+
+1. Website receives booking request and starts checkout.
+2. Website confirms payment outcome and updates booking/payment status in **Sedifex**.
+3. Sedifex (or Sedifex-managed middleware) sends webhook events to this Apps Script `doPost` endpoint.
+4. This Sheet mirrors Sedifex state (create/update/cancel/reschedule), and messaging automation runs from the mirrored row.
+
+### Important clarification
+
+A checkout-only Next.js endpoint is not enough to populate `Bookings` on its own.
+
+The required follow-up is: once payment/booking state is updated in Sedifex, **Sedifex (or Sedifex-managed middleware)** sends the webhook event to this Apps Script URL.
+
+So your target architecture is correct:
+- website handles capture + payment confirmation,
+- website updates Sedifex,
+- Sedifex remains canonical state,
+- Sedifex syncs each store sheet by calling `doPost` on state changes (including cancel/reschedule).
+
+### Minimal Sedifex-to-Apps Script payload
+
+```json
+{
+  "bookingId": "booking_123",
+  "customerName": "Jane Doe",
+  "customerEmail": "jane@example.com",
+  "bookingDate": "2026-05-11",
+  "bookingTime": "14:00",
+  "serviceName": "Airport Pickup",
+  "bookingStatus": "booked",
+  "paymentStatus": "confirmed",
+  "paymentConfirmed": true,
+  "eventType": "updated",
+  "source": "sedifex_booking"
+}
+```
+
+
+## Recommended next updates (production hardening)
+
+1. **Event idempotency key**
+   - Include `eventId` (or `deliveryId`) from Sedifex on every webhook.
+   - Store processed IDs in a lightweight cache/sheet and skip duplicates.
+   - Prevents double row updates when retries happen.
+
+2. **Webhook signature verification**
+   - In addition to shared secret, verify a request signature (HMAC) when available.
+   - Reject payloads whose signature does not match the raw body.
+
+3. **Explicit retry contract**
+   - Sedifex sender should retry on non-2xx with exponential backoff.
+   - Keep `doPost` responses machine-readable (`ok`, `error`, `eventId`).
+
+4. **Store routing safety**
+   - Enforce `storeId` presence and verify it maps to the expected spreadsheet/script deployment.
+   - Avoid cross-store writes if one endpoint URL is accidentally reused.
+
+5. **Schema versioning**
+   - Add `mappingVersion` or `schemaVersion` in payload.
+   - Use defaults in Apps Script for unknown/new fields to remain backward compatible.
+
+6. **Operational observability**
+   - Keep `_sync_logs`, and add columns for `eventType`, `bookingId`, `storeId`, `errorCode`.
+   - Add daily summary check for failed sync attempts.
+
+7. **Cancellation/reschedule assertions**
+   - Add safeguards so cancel/reschedule transitions are always written before email side-effects.
+   - Log both old/new appointment values for traceability.
+
+8. **Backfill/replay utility**
+   - Keep a small script or endpoint to replay Sedifex booking events for a date range.
+   - Useful when onboarding new stores or recovering from outages.
+
 ## Apps Script code
 
 ```javascript
@@ -107,14 +183,21 @@ function doPost(e) {
     if (CONFIG.requireSecret) {
       const expected =
         PropertiesService.getScriptProperties().getProperty(CONFIG.secretProperty) || '';
-      const got = getHeader_(e, 'x-webhook-secret');
+      const got = getWebhookSecret_(e);
       if (!expected || got !== expected) {
+        logSyncAttempt_('unauthorized', {
+          hasExpectedSecret: Boolean(expected),
+          hasProvidedSecret: Boolean(got),
+        });
         return json_(401, { ok: false, error: 'unauthorized' });
       }
     }
 
     const body = parseJsonBody_(e);
-    if (!body) return json_(400, { ok: false, error: 'invalid-json-body' });
+    if (!body) {
+      logSyncAttempt_('invalid-json-body', null);
+      return json_(400, { ok: false, error: 'invalid-json-body' });
+    }
 
     const p = normalizePayload_(body);
 
@@ -165,6 +248,7 @@ function doPost(e) {
 
       p.updated_at = nowIso;
       writeRow_(sheet, row, p);
+      logSyncAttempt_('updated', { row: row, bookingId: p.booking_id || '' });
 
       handleStateEmails_(sheet, row, p, old);
 
@@ -190,6 +274,7 @@ function doPost(e) {
     writeRow_(sheet, sheet.getLastRow() + 1, p);
 
     const createdRow = sheet.getLastRow();
+    logSyncAttempt_('created', { row: createdRow, bookingId: p.booking_id || '' });
     handleStateEmails_(sheet, createdRow, p, null);
 
     return json_(201, {
@@ -931,6 +1016,42 @@ function getHeader_(e, keyLower) {
   }
 
   return '';
+}
+
+
+function getWebhookSecret_(e) {
+  const fromHeader = getHeader_(e, 'x-webhook-secret');
+  if (fromHeader) return fromHeader;
+
+  const fromParam =
+    e && e.parameter && typeof e.parameter.webhookSecret !== 'undefined'
+      ? String(e.parameter.webhookSecret || '')
+      : '';
+  if (fromParam) return fromParam;
+
+  const body = parseJsonBody_(e);
+  if (body && typeof body.webhookSecret !== 'undefined') {
+    return String(body.webhookSecret || '');
+  }
+
+  return '';
+}
+
+function logSyncAttempt_(status, meta) {
+  try {
+    const sheet = getOrCreateSheet_('_sync_logs');
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, 3).setValues([['timestamp', 'status', 'meta_json']]);
+    }
+
+    sheet.appendRow([
+      new Date().toISOString(),
+      status || 'unknown',
+      meta ? JSON.stringify(meta) : '',
+    ]);
+  } catch (_) {
+    // no-op: never block booking writes because logging failed
+  }
 }
 
 function combineDateTimeInTz_(dateStr, timeStr, tz) {

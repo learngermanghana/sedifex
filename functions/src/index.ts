@@ -4375,16 +4375,38 @@ function resolveBookingAndPaymentStateFromPublicPayload(payload: Record<string, 
   const paymentCollectionModeRaw =
     toTrimmedStringOrNull(payload.paymentCollectionMode) ?? toTrimmedStringOrNull(payload.paymentMode) ?? 'unknown'
   const paymentCollectionMode = paymentCollectionModeRaw.toLowerCase()
-  const saysPaid = toFiniteNumber(payload.paid, NaN) === 1 || toTrimmedStringOrNull(payload.customerSaysPaid) === 'true' || toTrimmedStringOrNull(payload.hasPaid) === 'true' || toTrimmedStringOrNull(payload.paid) === 'true'
+  const normalizedPaymentStatus = toTrimmedStringOrNull(payload.paymentStatus)?.toLowerCase()
+  const paymentConfirmedRaw = payload.paymentConfirmed
+  const paymentConfirmed =
+    paymentConfirmedRaw === true ||
+    toTrimmedStringOrNull(paymentConfirmedRaw) === 'true' ||
+    toFiniteNumber(paymentConfirmedRaw, NaN) === 1
+  const saysPaid =
+    paymentConfirmed ||
+    normalizedPaymentStatus === 'confirmed' ||
+    toFiniteNumber(payload.paid, NaN) === 1 ||
+    toTrimmedStringOrNull(payload.customerSaysPaid) === 'true' ||
+    toTrimmedStringOrNull(payload.hasPaid) === 'true' ||
+    toTrimmedStringOrNull(payload.paid) === 'true'
   const saysPartial =
-    toTrimmedStringOrNull(payload.isPartialPayment) === 'true' || toTrimmedStringOrNull(payload.customerPaymentClaim) === 'claimed_partial'
+    normalizedPaymentStatus === 'partial' ||
+    toTrimmedStringOrNull(payload.isPartialPayment) === 'true' ||
+    toTrimmedStringOrNull(payload.customerPaymentClaim) === 'claimed_partial'
   const saysNotPaid =
-    toTrimmedStringOrNull(payload.customerSaysPaid) === 'false' || toTrimmedStringOrNull(payload.hasPaid) === 'false' || toTrimmedStringOrNull(payload.paid) === 'false'
+    normalizedPaymentStatus === 'pending' ||
+    normalizedPaymentStatus === 'not_paid' ||
+    toTrimmedStringOrNull(payload.customerSaysPaid) === 'false' ||
+    toTrimmedStringOrNull(payload.hasPaid) === 'false' ||
+    toTrimmedStringOrNull(payload.paid) === 'false'
 
   const customerPaymentClaim = saysPartial ? 'claimed_partial' : saysPaid ? 'claimed_paid' : saysNotPaid ? 'not_paid' : 'not_claimed'
   let paymentStatus = 'pending'
   if (paymentCollectionMode === 'free') {
     paymentStatus = 'not_required'
+  } else if (normalizedPaymentStatus === 'confirmed' || paymentConfirmed) {
+    paymentStatus = 'confirmed'
+  } else if (normalizedPaymentStatus === 'awaiting_verification') {
+    paymentStatus = 'awaiting_verification'
   } else if (paymentCollectionMode === 'manual_transfer' || paymentCollectionMode === 'momo_manual' || paymentCollectionMode === 'cash') {
     paymentStatus = saysPaid || saysPartial ? 'awaiting_verification' : 'pending'
   } else if (paymentCollectionMode === 'online_checkout') {
