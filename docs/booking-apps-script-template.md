@@ -16,6 +16,36 @@ Use this template when you want to:
 
 The script auto-creates and maintains the full header row via `ensureHeaders_()`.
 
+
+## Is a checkout-only Next.js endpoint enough?
+
+Short answer: **No**. A server route that only creates checkout links in Sedifex will **not** write rows into this Sheet by itself.
+
+To make rows appear in `Bookings`, your website/backend must also send a webhook POST to the Apps Script Web App URL (the `doPost` in this template), with at least:
+
+- `customerName` (or `customer_name`)
+- one contact: `customerEmail` or `customerPhone`
+- `bookingDate` + `bookingTime` (or snake_case equivalents)
+- optional but recommended: `bookingId`/`booking_id` for reliable updates
+
+If you only call `/integration/checkout/create`, payment links can succeed while the Sheet remains unchanged.
+
+### Minimal payload example for sheet sync
+
+```json
+{
+  "bookingId": "booking_123",
+  "customerName": "Jane Doe",
+  "customerEmail": "jane@example.com",
+  "bookingDate": "2026-05-11",
+  "bookingTime": "14:00",
+  "serviceName": "Airport Pickup",
+  "paymentMethod": "paystack_checkout",
+  "paymentConfirmed": false,
+  "source": "website_booking_form"
+}
+```
+
 ## Apps Script code
 
 ```javascript
@@ -107,14 +137,21 @@ function doPost(e) {
     if (CONFIG.requireSecret) {
       const expected =
         PropertiesService.getScriptProperties().getProperty(CONFIG.secretProperty) || '';
-      const got = getHeader_(e, 'x-webhook-secret');
+      const got = getWebhookSecret_(e);
       if (!expected || got !== expected) {
+        logSyncAttempt_('unauthorized', {
+          hasExpectedSecret: Boolean(expected),
+          hasProvidedSecret: Boolean(got),
+        });
         return json_(401, { ok: false, error: 'unauthorized' });
       }
     }
 
     const body = parseJsonBody_(e);
-    if (!body) return json_(400, { ok: false, error: 'invalid-json-body' });
+    if (!body) {
+      logSyncAttempt_('invalid-json-body', null);
+      return json_(400, { ok: false, error: 'invalid-json-body' });
+    }
 
     const p = normalizePayload_(body);
 
@@ -165,6 +202,7 @@ function doPost(e) {
 
       p.updated_at = nowIso;
       writeRow_(sheet, row, p);
+      logSyncAttempt_('updated', { row: row, bookingId: p.booking_id || '' });
 
       handleStateEmails_(sheet, row, p, old);
 
@@ -190,6 +228,7 @@ function doPost(e) {
     writeRow_(sheet, sheet.getLastRow() + 1, p);
 
     const createdRow = sheet.getLastRow();
+    logSyncAttempt_('created', { row: createdRow, bookingId: p.booking_id || '' });
     handleStateEmails_(sheet, createdRow, p, null);
 
     return json_(201, {
@@ -931,6 +970,42 @@ function getHeader_(e, keyLower) {
   }
 
   return '';
+}
+
+
+function getWebhookSecret_(e) {
+  const fromHeader = getHeader_(e, 'x-webhook-secret');
+  if (fromHeader) return fromHeader;
+
+  const fromParam =
+    e && e.parameter && typeof e.parameter.webhookSecret !== 'undefined'
+      ? String(e.parameter.webhookSecret || '')
+      : '';
+  if (fromParam) return fromParam;
+
+  const body = parseJsonBody_(e);
+  if (body && typeof body.webhookSecret !== 'undefined') {
+    return String(body.webhookSecret || '');
+  }
+
+  return '';
+}
+
+function logSyncAttempt_(status, meta) {
+  try {
+    const sheet = getOrCreateSheet_('_sync_logs');
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, 3).setValues([['timestamp', 'status', 'meta_json']]);
+    }
+
+    sheet.appendRow([
+      new Date().toISOString(),
+      status || 'unknown',
+      meta ? JSON.stringify(meta) : '',
+    ]);
+  } catch (_) {
+    // no-op: never block booking writes because logging failed
+  }
 }
 
 function combineDateTimeInTz_(dateStr, timeStr, tz) {
