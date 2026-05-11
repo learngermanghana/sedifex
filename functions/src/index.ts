@@ -4438,6 +4438,61 @@ function mapIntegrationBookingDoc(
   }
 }
 
+function buildAppsScriptBookingPayload(options: {
+  storeId: string
+  bookingId: string
+  eventType: string
+  afterData: Record<string, unknown> | null
+}) {
+  const after = options.afterData ?? {}
+  const customer = toPlainObject(after.customer)
+  const attributes = toPlainObject(after.attributes)
+  const payment = toPlainObject(after.payment)
+  const normalizedStatus = toTrimmedStringOrNull(after.status)?.toLowerCase() ?? null
+  const bookingStatus =
+    normalizedStatus === 'pending' || normalizedStatus === 'cancelled' || normalizedStatus === 'checked_in'
+      ? normalizedStatus
+      : 'confirmed'
+
+  return {
+    bookingId: options.bookingId,
+    storeId: options.storeId,
+    eventType: options.eventType,
+    status: bookingStatus,
+    customerName: toTrimmedStringOrNull(customer.name) ?? toTrimmedStringOrNull(after.name) ?? '',
+    customerPhone: toTrimmedStringOrNull(customer.phone) ?? toTrimmedStringOrNull(after.phone) ?? '',
+    customerEmail: toTrimmedStringOrNull(customer.email) ?? toTrimmedStringOrNull(after.email) ?? '',
+    serviceId: toTrimmedStringOrNull(after.serviceId) ?? '',
+    serviceName: toTrimmedStringOrNull(after.serviceName) ?? '',
+    slotId: toTrimmedStringOrNull(after.slotId) ?? '',
+    bookingDate: toTrimmedStringOrNull(after.date) ?? '',
+    bookingTime: toTrimmedStringOrNull(after.time) ?? '',
+    quantity: Math.max(1, Math.floor(toFiniteNumber(after.quantity, 1))),
+    notes: toTrimmedStringOrNull(after.notes) ?? '',
+    paymentMethod:
+      toTrimmedStringOrNull(after.paymentMethod) ?? toTrimmedStringOrNull(payment.method) ?? toTrimmedStringOrNull(attributes.paymentMethod) ?? '',
+    paymentAmount:
+      typeof after.paymentAmount === 'number'
+        ? after.paymentAmount
+        : typeof payment.amount === 'number'
+          ? payment.amount
+          : toTrimmedStringOrNull(after.paymentAmount) ?? toTrimmedStringOrNull(attributes.paymentAmount) ?? '',
+    depositAmount:
+      typeof after.depositAmount === 'number'
+        ? after.depositAmount
+        : typeof payment.depositAmount === 'number'
+          ? payment.depositAmount
+          : toTrimmedStringOrNull(after.depositAmount) ?? toTrimmedStringOrNull(attributes.depositAmount) ?? '',
+    branchLocationId: toTrimmedStringOrNull(after.branchLocationId) ?? '',
+    branchLocationName: toTrimmedStringOrNull(after.branchLocationName) ?? '',
+    eventLocation: toTrimmedStringOrNull(after.eventLocation) ?? '',
+    customerStayLocation: toTrimmedStringOrNull(after.customerStayLocation) ?? '',
+    preferredBranch: toTrimmedStringOrNull(after.preferredBranch) ?? '',
+    preferredContactMethod: toTrimmedStringOrNull(after.preferredContactMethod) ?? '',
+    source: toTrimmedStringOrNull(after.source) ?? 'sedifex_booking',
+  }
+}
+
 function normalizeIdentityValue(value: string | null): string | null {
   if (!value) return null
   return value.trim().toLowerCase()
@@ -7263,7 +7318,12 @@ export const emitProductWebhooks = functions.firestore
           return { endpointId: endpointDoc.id, ok: false, statusCode: null, error: 'missing config' }
         }
 
-        const signature = computeWebhookSignature(secret, payload)
+        const isGoogleAppsScriptEndpoint = /^https:\/\/script\.google\.com\/macros\//i.test(url)
+        const bodyObject = isGoogleAppsScriptEndpoint
+          ? buildAppsScriptBookingPayload({ storeId, bookingId, eventType, afterData })
+          : payloadObject
+        const body = JSON.stringify(bodyObject)
+        const signature = computeWebhookSignature(secret, body)
 
         try {
           const response = await fetch(url, {
@@ -7274,7 +7334,7 @@ export const emitProductWebhooks = functions.firestore
               'x-sedifex-event': eventType,
               'x-sedifex-event-id': `evt_${context.eventId}`,
             },
-            body: payload,
+            body,
           })
 
           return {
@@ -7377,7 +7437,12 @@ export const emitBookingWebhooks = functions.firestore
           return { endpointId: endpointDoc.id, ok: false, statusCode: null, error: 'missing config' }
         }
 
-        const signature = computeWebhookSignature(secret, payload)
+        const isGoogleAppsScriptEndpoint = /^https:\/\/script\.google\.com\/macros\//i.test(url)
+        const bodyObject = isGoogleAppsScriptEndpoint
+          ? buildAppsScriptBookingPayload({ storeId, bookingId, eventType, afterData })
+          : payloadObject
+        const body = JSON.stringify(bodyObject)
+        const signature = computeWebhookSignature(secret, body)
 
         try {
           const response = await fetch(url, {
@@ -7388,7 +7453,7 @@ export const emitBookingWebhooks = functions.firestore
               'x-sedifex-event': eventType,
               'x-sedifex-event-id': `evt_${context.eventId}`,
             },
-            body: payload,
+            body,
           })
 
           return {
