@@ -4525,6 +4525,8 @@ function buildAppsScriptBookingPayload(options: {
   afterData: Record<string, unknown> | null
 }) {
   const after = options.afterData ?? {}
+  const stableBookingId =
+    toTrimmedStringOrNull(after.bookingId) ?? toTrimmedStringOrNull(after.booking_id) ?? options.bookingId
   const customer = toPlainObject(after.customer)
   const attributes = toPlainObject(after.attributes)
   const payment = toPlainObject(after.payment)
@@ -4535,7 +4537,8 @@ function buildAppsScriptBookingPayload(options: {
       : 'confirmed'
 
   return {
-    bookingId: options.bookingId,
+    bookingId: stableBookingId,
+    booking_id: stableBookingId,
     storeId: options.storeId,
     eventType: options.eventType,
     status: bookingStatus,
