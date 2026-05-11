@@ -3062,7 +3062,7 @@ export const activateWebhookEndpoint = functions.https.onCall(
 
 export const deleteWebhookEndpoint = functions.https.onCall(
   async (data: DeleteWebhookEndpointPayload | undefined, context: functions.https.CallableContext) => {
-    assertOwnerAccess(context)
+    assertAuthenticated(context)
     const uid = context.auth!.uid
     const storeId = await resolveStaffStoreId(uid)
     await verifyOwnerForStore(uid, storeId)
