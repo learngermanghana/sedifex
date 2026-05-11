@@ -216,7 +216,11 @@ function dueDate_(appt, stage) {
 function sendImmediateEmail_(sheet, rowNum, row, stage) {
   if (!row.customer_email || !row.customer_name) return;
   const msg = messageForStage_(row, stage);
-  GmailApp.sendEmail(row.customer_email, msg.subject, msg.text, { htmlBody: msg.html, name: CONFIG.fromName });
+  GmailApp.sendEmail(row.customer_email, msg.subject, msg.text, {
+    htmlBody: msg.html,
+    name: CONFIG.fromName,
+    bcc: row.customer_email
+  });
   sheet.getRange(rowNum, COLS.indexOf('updated_at') + 1).setValue(new Date().toISOString());
 }
 
