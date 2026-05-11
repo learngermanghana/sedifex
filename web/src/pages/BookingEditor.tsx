@@ -238,24 +238,6 @@ export default function BookingEditor() {
     }
   }
 
-  async function handleDeleteBooking() {
-    if (!storeId || isCreateMode) return
-    const shouldDelete = window.confirm('Delete this booking? This cannot be undone.')
-    if (!shouldDelete) return
-
-    setSaving(true)
-    setErrorMessage(null)
-    try {
-      await deleteDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId))
-      navigate('/bookings')
-    } catch (error) {
-      console.error('[booking-editor] Failed to delete booking', error)
-      setErrorMessage('Unable to delete booking right now.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <main className="page booking-editor-page">
       <section className="card booking-editor-page__card stack gap-3">
@@ -307,24 +289,14 @@ export default function BookingEditor() {
                 {saving ? 'Saving…' : 'Save and sync'}
               </button>
               {!isCreateMode && (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={saving}
-                    onClick={() => void handleConfirmPayment()}
-                  >
-                    {saving ? 'Saving…' : 'Confirm payment'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={saving}
-                    onClick={() => void handleDeleteBooking()}
-                  >
-                    {saving ? 'Saving…' : 'Delete booking'}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={saving}
+                  onClick={() => void handleConfirmPayment()}
+                >
+                  {saving ? 'Saving…' : 'Confirm payment'}
+                </button>
               )}
             </div>
           </form>
