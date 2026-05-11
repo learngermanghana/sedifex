@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { Timestamp, deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './BookingEditor.css'
