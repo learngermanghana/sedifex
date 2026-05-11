@@ -47,6 +47,39 @@ function stringValue(value: unknown): string {
   return ''
 }
 
+
+function normalizeDateInput(value: unknown): string {
+  const raw = stringValue(value).trim()
+  if (!raw) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toISOString().slice(0, 10)
+}
+
+function normalizeTimeInput(value: unknown): string {
+  const raw = stringValue(value).trim()
+  if (!raw) return ''
+  const compact = raw.replace(/\s+/g, '').toLowerCase()
+  const ampm = compact.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)$/)
+  if (ampm) {
+    const hour12 = Number.parseInt(ampm[1], 10)
+    const minute = Number.parseInt(ampm[2] ?? '0', 10)
+    if (hour12 >= 1 && hour12 <= 12 && minute >= 0 && minute <= 59) {
+      const hour24 = hour12 % 12 + (ampm[3] === 'pm' ? 12 : 0)
+      return `${String(hour24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    }
+  }
+  const hhmm = compact.match(/^(\d{1,2}):(\d{2})$/)
+  if (hhmm) {
+    const hour = Number.parseInt(hhmm[1], 10)
+    const minute = Number.parseInt(hhmm[2], 10)
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    }
+  }
+  return ''
+}
 export default function BookingEditor() {
   const { storeId } = useActiveStore()
   const { bookingId = 'new' } = useParams()
@@ -84,8 +117,8 @@ export default function BookingEditor() {
           email: stringValue(data.email || data.customerEmail),
           serviceName: stringValue(data.serviceName || data.internalServiceName),
           serviceId: stringValue(data.serviceId),
-          bookingDate: stringValue(data.bookingDate || data.date),
-          bookingTime: stringValue(data.bookingTime || data.time),
+          bookingDate: normalizeDateInput(data.bookingDate || data.date),
+          bookingTime: normalizeTimeInput(data.bookingTime || data.time),
           preferredBranch: stringValue(data.preferredBranch || data.branchName),
           preferredContactMethod: stringValue(data.preferredContactMethod || data.contactMethod),
           status: stringValue(data.status) || 'confirmed',
@@ -139,10 +172,10 @@ export default function BookingEditor() {
           email: form.email.trim(),
           serviceName: form.serviceName.trim(),
           serviceId: form.serviceId.trim(),
-          date: form.bookingDate,
-          bookingDate: form.bookingDate,
-          time: form.bookingTime,
-          bookingTime: form.bookingTime,
+          date: normalizeDateInput(form.bookingDate),
+          bookingDate: normalizeDateInput(form.bookingDate),
+          time: normalizeTimeInput(form.bookingTime),
+          bookingTime: normalizeTimeInput(form.bookingTime),
           preferredBranch: form.preferredBranch.trim(),
           preferredContactMethod: form.preferredContactMethod.trim(),
           status: form.status.trim() || 'confirmed',
