@@ -80,7 +80,12 @@
 }
 
 .documents-generator__item .form__hint {
-  color: var(--color-text-secondary);
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+.documents-generator__item .input {
+  color: #0f172a;
   font-weight: 600;
 }
 
@@ -101,6 +106,15 @@
   justify-content: space-between;
 }
 
+
+.documents-generator__summary .card__title {
+  color: #f8fafc;
+}
+
+.documents-generator__summary .card__subtitle {
+  color: #e2e8f0;
+}
+
 .documents-generator__totals {
   display: grid;
   gap: 8px;
@@ -115,7 +129,8 @@
 }
 
 .documents-generator__totals .form__hint {
-  color: #cbd5e1;
+  color: #e2e8f0;
+  font-weight: 600;
 }
 
 .documents-generator__actions {
