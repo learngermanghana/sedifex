@@ -6150,6 +6150,26 @@ async function handleIntegrationCheckoutCreate(req: functions.https.Request, res
         },
         { merge: true },
       )
+      await db
+        .collection('stores')
+        .doc(authContext.storeId)
+        .collection('integrationOrders')
+        .doc(reference)
+        .set(
+          {
+            bookingId: bookingRef.id,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+    } else {
+      console.warn('[integrationCheckoutCreate] service order could not be linked to booking', {
+        storeId: authContext.storeId,
+        reference,
+        sedifexOrderId,
+        metadataBookingId,
+        clientOrderId,
+      })
     }
   }
 
@@ -9295,29 +9315,59 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
         )
         const orderSnap = await orderRef.get()
         const orderData = (orderSnap.data() ?? {}) as Record<string, unknown>
+        const bookingsCol = db.collection('stores').doc(storeId).collection('integrationBookings')
+        let bookingRef: admin.firestore.DocumentReference | null = null
+
         const bookingId = toTrimmedStringOrNull(orderData.bookingId)
         if (bookingId) {
-          await db
-            .collection('stores')
-            .doc(storeId)
-            .collection('integrationBookings')
-            .doc(bookingId)
-            .set(
-              {
-                paymentCollectionMode: 'online_checkout',
-                paymentStatus: 'confirmed',
-                paymentConfirmedAt:
-                  typeof data.paid_at === 'string'
-                    ? admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
-                    : admin.firestore.FieldValue.serverTimestamp(),
-                paymentReference: reference,
-                sedifexOrderId,
-                clientOrderId,
-                bookingStatus: 'booked',
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              },
-              { merge: true },
-            )
+          bookingRef = bookingsCol.doc(bookingId)
+        } else if (clientOrderId) {
+          const snap = await bookingsCol.where('clientOrderId', '==', clientOrderId).limit(1).get()
+          if (!snap.empty) bookingRef = snap.docs[0].ref
+        } else if (sedifexOrderId) {
+          const snap = await bookingsCol.where('sedifexOrderId', '==', sedifexOrderId).limit(1).get()
+          if (!snap.empty) bookingRef = snap.docs[0].ref
+        } else {
+          const snap = await bookingsCol.where('paymentReference', '==', reference).limit(1).get()
+          if (!snap.empty) bookingRef = snap.docs[0].ref
+        }
+
+        if (bookingRef) {
+          await bookingRef.set(
+            {
+              paymentCollectionMode: 'online_checkout',
+              paymentStatus: 'confirmed',
+              paymentConfirmedAt:
+                typeof data.paid_at === 'string'
+                  ? admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
+                  : admin.firestore.FieldValue.serverTimestamp(),
+              paymentVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+              paymentVerifiedBy: 'paystack_webhook',
+              paymentReference: reference,
+              sedifexOrderId,
+              clientOrderId,
+              bookingStatus: 'booked',
+              syncStatus: 'pending',
+              syncRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
+
+          await orderRef.set(
+            {
+              bookingId: bookingRef.id,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
+        } else {
+          console.warn('[paystack] confirmed order could not be linked to booking', {
+            storeId,
+            reference,
+            sedifexOrderId,
+            clientOrderId,
+          })
         }
       }
     }

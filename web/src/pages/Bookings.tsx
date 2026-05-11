@@ -39,12 +39,19 @@ type BookingRecord = {
   paymentScreenshotReady: boolean | null
   noRefundAccepted: boolean | null
   status: string
+  paymentStatus: string
   quantity: number
   customerName: string | null
   customerPhone: string | null
   customerEmail: string | null
   notes: string | null
   createdAt: Date | null
+  paymentReference: string | null
+  sedifexOrderId: string | null
+  clientOrderId: string | null
+  paymentConfirmedAt: Date | null
+  paymentVerifiedAt: Date | null
+  paymentVerifiedBy: string | null
 }
 
 type ServiceRecord = {
@@ -82,6 +89,15 @@ function normalizeStatus(rawStatus: unknown): string {
 function statusLabel(status: string): string {
   if (!status) return 'Unknown'
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function paymentStatusLabel(status: string): string {
+  if (!status) return 'Unknown'
+  return status
+    .split('_')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 function dateToTimestamp(date: string, useDayEnd = false): Timestamp {
@@ -169,6 +185,14 @@ export default function Bookings() {
     const internalServiceName = pickString(data, ['serviceName', 'serviceNoteName', 'internalServiceName'])
     const paymentScreenshotReady = pickBoolean(data, ['paymentScreenshotReady'])
     const noRefundAccepted = pickBoolean(data, ['noRefundAccepted', 'agreeNoRefundPolicy'])
+    const paymentConfirmedAtValue =
+      data.paymentConfirmedAt && typeof data.paymentConfirmedAt === 'object' && typeof (data.paymentConfirmedAt as Timestamp).toDate === 'function'
+        ? (data.paymentConfirmedAt as Timestamp).toDate()
+        : null
+    const paymentVerifiedAtValue =
+      data.paymentVerifiedAt && typeof data.paymentVerifiedAt === 'object' && typeof (data.paymentVerifiedAt as Timestamp).toDate === 'function'
+        ? (data.paymentVerifiedAt as Timestamp).toDate()
+        : null
 
     return {
       id: docSnap.id,
@@ -190,6 +214,7 @@ export default function Bookings() {
       paymentScreenshotReady,
       noRefundAccepted,
       status: normalizeStatus(data.status),
+      paymentStatus: normalizeStatus(data.paymentStatus ?? 'pending'),
       quantity:
         typeof data.quantity === 'number' && Number.isFinite(data.quantity)
           ? Math.max(1, Math.floor(data.quantity))
@@ -202,6 +227,12 @@ export default function Bookings() {
         typeof customer.email === 'string' && customer.email.trim() ? customer.email.trim() : null,
       notes: typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : null,
       createdAt: createdAtValue,
+      paymentReference: pickString(data, ['paymentReference', 'manualPaymentReference']),
+      sedifexOrderId: pickString(data, ['sedifexOrderId']),
+      clientOrderId: pickString(data, ['clientOrderId']),
+      paymentConfirmedAt: paymentConfirmedAtValue,
+      paymentVerifiedAt: paymentVerifiedAtValue,
+      paymentVerifiedBy: pickString(data, ['paymentVerifiedBy']),
     } satisfies BookingRecord
   }, [])
 
@@ -378,6 +409,69 @@ export default function Bookings() {
     [storeId],
   )
 
+  const handlePaymentOverride = useCallback(
+    async (bookingId: string, action: 'confirm' | 'partial' | 'reject' | 'refund' | 'resend_sync') => {
+      if (!storeId) return
+      setUpdatingBookingId(bookingId)
+      setErrorMessage(null)
+      try {
+        const now = Timestamp.now()
+        const updates: Record<string, unknown> = {
+          updatedAt: now,
+          syncStatus: 'pending',
+          syncRequestedAt: now,
+        }
+        if (action === 'resend_sync') {
+          updates.syncReason = 'manual_resend'
+        } else {
+          updates.paymentVerifiedAt = now
+          updates.paymentVerifiedBy = 'staff_admin'
+          if (action === 'reject') {
+            updates.paymentStatus = 'rejected'
+            updates.paymentRejectedAt = now
+          } else if (action === 'partial') {
+            updates.paymentStatus = 'partial'
+          } else if (action === 'refund') {
+            updates.paymentStatus = 'refunded'
+          } else {
+            updates.paymentStatus = 'confirmed'
+            updates.paymentConfirmedAt = now
+          }
+        }
+
+        await updateDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), updates)
+        setBookings(previous =>
+          previous.map(booking =>
+            booking.id === bookingId
+              ? {
+                  ...booking,
+                  paymentStatus:
+                    action === 'confirm'
+                      ? 'confirmed'
+                      : action === 'partial'
+                        ? 'partial'
+                        : action === 'reject'
+                          ? 'rejected'
+                          : action === 'refund'
+                            ? 'refunded'
+                            : booking.paymentStatus,
+                  paymentConfirmedAt: action === 'confirm' ? new Date() : booking.paymentConfirmedAt,
+                  paymentVerifiedAt: action === 'resend_sync' ? booking.paymentVerifiedAt : new Date(),
+                  paymentVerifiedBy: action === 'resend_sync' ? booking.paymentVerifiedBy : 'staff_admin',
+                }
+              : booking,
+          ),
+        )
+      } catch (error) {
+        console.error('[bookings] Failed to override payment', error)
+        setErrorMessage('Payment override failed. Please retry.')
+      } finally {
+        setUpdatingBookingId(null)
+      }
+    },
+    [storeId],
+  )
+
 
   const filteredBookings = useMemo(() => {
     const queryText = searchTerm.trim().toLowerCase()
@@ -476,7 +570,8 @@ export default function Bookings() {
                         <th>Customer</th>
                         <th>Qty</th>
                         <th>Status</th>
-                        <th>Amount</th>
+                        <th>Payment</th>
+                        <th>Audit</th>
                         <th>Notes</th>
                         <th>Actions</th>
                       </tr>
@@ -500,7 +595,23 @@ export default function Bookings() {
                               {statusLabel(booking.status)}
                             </span>
                           </td>
-                          <td>{booking.paymentAmount ?? booking.depositAmount ?? '—'}</td>
+                          <td>
+                            <div className="stack gap-1">
+                              <div><strong>Booking:</strong> {statusLabel(booking.status)}</div>
+                              <div><strong>Payment:</strong> {paymentStatusLabel(booking.paymentStatus)}</div>
+                              <div><strong>Amount:</strong> {booking.paymentAmount ?? booking.depositAmount ?? '—'}</div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="stack gap-1">
+                              <div><strong>Payment ref:</strong> {booking.paymentReference ?? '—'}</div>
+                              <div><strong>Sedifex order id:</strong> {booking.sedifexOrderId ?? '—'}</div>
+                              <div><strong>Client order id:</strong> {booking.clientOrderId ?? '—'}</div>
+                              <div><strong>Confirmed at:</strong> {formatDate(booking.paymentConfirmedAt)}</div>
+                              <div><strong>Verified at:</strong> {formatDate(booking.paymentVerifiedAt)}</div>
+                              <div><strong>Verified by:</strong> {booking.paymentVerifiedBy ?? '—'}</div>
+                            </div>
+                          </td>
                           <td>{booking.notes ?? '—'}</td>
                           <td>
                             <div className="bookings-page__actions">
@@ -526,6 +637,11 @@ export default function Bookings() {
                               >
                                 Delete
                               </button>
+                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'confirm')}>Confirm payment</button>
+                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'partial')}>Mark partial</button>
+                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'reject')}>Reject payment</button>
+                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'refund')}>Refund</button>
+                              <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'resend_sync')}>Resend sync to sheet</button>
                             </div>
                           </td>
                         </tr>
