@@ -157,7 +157,6 @@ export default function Bookings() {
   const [hasNextPage, setHasNextPage] = useState(false)
   const [pageNumber, setPageNumber] = useState(1)
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null)
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
 
   const hydrateBooking = useCallback((docSnap: QueryDocumentSnapshot<DocumentData>, serviceMap: Map<string, string>) => {
     const data = docSnap.data() as Record<string, unknown>
@@ -485,10 +484,6 @@ export default function Bookings() {
   }, [bookings, searchTerm])
 
   const confirmedCount = useMemo(() => bookings.filter(booking => booking.status === 'confirmed').length, [bookings])
-  const selectedBooking = useMemo(
-    () => filteredBookings.find(booking => booking.id === selectedBookingId) ?? null,
-    [filteredBookings, selectedBookingId],
-  )
 
   return (
     <main className="page bookings-page">
@@ -608,14 +603,14 @@ export default function Bookings() {
                           <td>{booking.paymentAmount ?? booking.depositAmount ?? '—'}</td>
                           <td>
                             <div className="bookings-page__row-actions">
-                              <button className="btn btn-secondary" type="button" onClick={() => setSelectedBookingId(booking.id)}>View</button>
+                              <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">View</Link>
                               <details className="bookings-page__more-menu">
                                 <summary>⋯ More</summary>
                                 <div className="bookings-page__more-menu-list">
                                   <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handleDeleteBooking(booking.id)}>Delete</button>
                                   <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'refund')}>Refund</button>
                                   <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'reject')}>Reject payment</button>
-                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'resend_sync')}>Resend sync</button>
+                                  <button className="btn btn-secondary" type="button" disabled={updatingBookingId === booking.id} onClick={() => void handlePaymentOverride(booking.id, 'resend_sync')}>Save latest update</button>
                                 </div>
                               </details>
                             </div>
@@ -625,66 +620,6 @@ export default function Bookings() {
                     </tbody>
                   </table>
                 </div>
-                {selectedBooking && (
-                  <aside className="bookings-page__drawer">
-                    <div className="bookings-page__drawer-header">
-                      <h3>Booking details</h3>
-                      <button className="btn btn-secondary" type="button" onClick={() => setSelectedBookingId(null)}>Close</button>
-                    </div>
-                    <div className="bookings-page__drawer-grid">
-                      <section className="card stack gap-1">
-                        <h4>Booking details</h4>
-                        <p><strong>Customer:</strong> {selectedBooking.customerName ?? selectedBooking.bookingName ?? '—'}</p>
-                        <p><strong>Phone:</strong> {selectedBooking.customerPhone ?? selectedBooking.bookingPhone ?? '—'}</p>
-                        <p><strong>Email:</strong> {selectedBooking.customerEmail ?? selectedBooking.bookingEmail ?? '—'}</p>
-                        <p><strong>Service:</strong> {selectedBooking.serviceName || selectedBooking.serviceId}</p>
-                        <p><strong>Date:</strong> {selectedBooking.bookingDate ?? '—'}</p>
-                        <p><strong>Time:</strong> {selectedBooking.bookingTime ?? '—'}</p>
-                        <p><strong>Notes:</strong> {selectedBooking.notes ?? '—'}</p>
-                      </section>
-                      <section className="card stack gap-1">
-                        <h4>Payment</h4>
-                        <p><strong>Status:</strong> <span className={`bookings-page__status bookings-page__status--payment-${selectedBooking.paymentStatus}`}>{paymentStatusLabel(selectedBooking.paymentStatus)}</span></p>
-                        <p><strong>Amount:</strong> {selectedBooking.paymentAmount ?? selectedBooking.depositAmount ?? '—'}</p>
-                        <p><strong>Payment ref:</strong> {selectedBooking.paymentReference ?? '—'}</p>
-                        <p><strong>Sedifex order id:</strong> {selectedBooking.sedifexOrderId ?? '—'}</p>
-                        <p><strong>Client order id:</strong> {selectedBooking.clientOrderId ?? '—'}</p>
-                      </section>
-                      <section className="card stack gap-1">
-                        <h4>Audit</h4>
-                        <p><strong>Confirmed at:</strong> {formatDate(selectedBooking.paymentConfirmedAt)}</p>
-                        <p><strong>Verified at:</strong> {formatDate(selectedBooking.paymentVerifiedAt)}</p>
-                        <p><strong>Verified by:</strong> {selectedBooking.paymentVerifiedBy ?? '—'}</p>
-                      </section>
-                      <section className="card stack gap-2">
-                        <h4>Actions</h4>
-                        <div className="bookings-page__actions-group">
-                          <h5>Booking actions</h5>
-                          <div className="bookings-page__actions">
-                            {(STATUS_ACTIONS[selectedBooking.status] ?? []).map(action => (
-                              <button key={action.nextStatus} className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handleStatusUpdate(selectedBooking.id, action.nextStatus)}>{action.label}</button>
-                            ))}
-                            <Link to={`/bookings/${selectedBooking.id}`} className="btn btn-secondary">Edit</Link>
-                            <button className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handleDeleteBooking(selectedBooking.id)}>Delete</button>
-                          </div>
-                        </div>
-                        <div className="bookings-page__actions-group">
-                          <h5>Payment actions</h5>
-                          <div className="bookings-page__actions">
-                            <button className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handlePaymentOverride(selectedBooking.id, 'confirm')}>Confirm payment</button>
-                            <button className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handlePaymentOverride(selectedBooking.id, 'partial')}>Mark partial</button>
-                            <button className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handlePaymentOverride(selectedBooking.id, 'reject')}>Reject payment</button>
-                            <button className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handlePaymentOverride(selectedBooking.id, 'refund')}>Refund</button>
-                          </div>
-                        </div>
-                        <div className="bookings-page__actions-group">
-                          <h5>Sync</h5>
-                          <button className="btn btn-secondary" type="button" disabled={updatingBookingId === selectedBooking.id} onClick={() => void handlePaymentOverride(selectedBooking.id, 'resend_sync')}>Resend sync to sheet</button>
-                        </div>
-                      </section>
-                    </div>
-                  </aside>
-                )}
                 </div>
                 <div className="bookings-page__pagination">
                   <button className="btn btn-secondary" type="button" disabled={pageNumber <= 1} onClick={handlePreviousPage}>
