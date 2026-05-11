@@ -17,25 +17,20 @@ Use this template when you want to:
 The script auto-creates and maintains the full header row via `ensureHeaders_()`.
 
 
-## Source-of-truth flow (recommended)
+## Is a checkout-only Next.js endpoint enough?
 
-Sedifex should remain the **single source of truth** for booking state.
+Short answer: **No**. A server route that only creates checkout links in Sedifex will **not** write rows into this Sheet by itself.
 
-1. Website receives booking request and starts checkout.
-2. Website confirms payment outcome and updates booking/payment status in **Sedifex**.
-3. Sedifex (or Sedifex-managed middleware) sends webhook events to this Apps Script `doPost` endpoint.
-4. This Sheet mirrors Sedifex state (create/update/cancel/reschedule), and messaging automation runs from the mirrored row.
+To make rows appear in `Bookings`, your website/backend must also send a webhook POST to the Apps Script Web App URL (the `doPost` in this template), with at least:
 
-### Important clarification
+- `customerName` (or `customer_name`)
+- one contact: `customerEmail` or `customerPhone`
+- `bookingDate` + `bookingTime` (or snake_case equivalents)
+- optional but recommended: `bookingId`/`booking_id` for reliable updates
 
-A checkout-only Next.js endpoint is not enough to populate `Bookings` unless Sedifex (or your middleware) later posts the booking event to this Apps Script URL.
+If you only call `/integration/checkout/create`, payment links can succeed while the Sheet remains unchanged.
 
-So your target architecture is correct:
-- website handles capture + payment confirmation,
-- Sedifex stores canonical booking state,
-- Sedifex syncs each store sheet by calling `doPost` on state changes.
-
-### Minimal Sedifex-to-Apps Script payload
+### Minimal payload example for sheet sync
 
 ```json
 {
@@ -45,11 +40,9 @@ So your target architecture is correct:
   "bookingDate": "2026-05-11",
   "bookingTime": "14:00",
   "serviceName": "Airport Pickup",
-  "bookingStatus": "booked",
-  "paymentStatus": "confirmed",
-  "paymentConfirmed": true,
-  "eventType": "updated",
-  "source": "sedifex_booking"
+  "paymentMethod": "paystack_checkout",
+  "paymentConfirmed": false,
+  "source": "website_booking_form"
 }
 ```
 
