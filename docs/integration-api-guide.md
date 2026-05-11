@@ -594,6 +594,78 @@ Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
 7. Partner website updates local order status and storefront UI.
 8. If webhook is delayed, partner polls `GET /integration/orders/:reference`.
 
+### Service booking integration flow
+
+Use this exact flow when the website is selling **services** (`orderType: "service"`).
+
+**Step 1: Create the booking**
+
+`POST /v1IntegrationBookings?storeId=store_123`
+
+```json
+{
+  "serviceId": "svc_travel_001",
+  "customer": {
+    "name": "Ada Mensah",
+    "phone": "+233201234567",
+    "email": "ada@example.com"
+  },
+  "bookingDate": "2026-08-01",
+  "bookingTime": "10:00 AM",
+  "notes": "Schengen support",
+  "paymentMethod": "paystack",
+  "paymentAmount": 250,
+  "attributes": {
+    "source": "website_booking_form"
+  }
+}
+```
+
+Store the returned `bookingId`.
+
+**Step 2: Create hosted checkout**
+
+`POST /integration/checkout/create`
+
+```json
+{
+  "storeId": "store_123",
+  "clientOrderId": "BOOKING-bk_001",
+  "orderType": "service",
+  "currency": "GHS",
+  "amount": 250,
+  "customer": {
+    "email": "ada@example.com",
+    "phone": "+233201234567",
+    "name": "Ada Mensah"
+  },
+  "returnUrl": "https://clientsite.com/payment/return",
+  "metadata": {
+    "bookingId": "bk_001",
+    "channel": "client-website"
+  }
+}
+```
+
+Redirect the customer to the returned `authorizationUrl`.
+
+**Step 3: Confirm final status**
+
+Do **not** trust browser return alone. Confirm with:
+
+- Sedifex payment webhook (`POST /integration/webhooks/payment-status` delivery), or
+- `GET /integration/orders/:reference`
+
+**Step 4: Update website UI**
+
+Render booking/payment state from Sedifex values:
+
+- `pending`
+- `awaiting_verification`
+- `partial`
+- `confirmed`
+- `cancelled`
+
 ### Security and go-live checklist
 
 - Keep Sedifex API key server-side only (never in browser code).
