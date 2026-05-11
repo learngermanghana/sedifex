@@ -4585,7 +4585,9 @@ async function upsertBookingCustomerProfile(options: {
   const normalizedPhone = normalizePhoneValue(customerPhone)
   const normalizedEmail = normalizeIdentityValue(customerEmail)
 
-  if (!normalizedPhone && !normalizedEmail) {
+  const normalizedName = toTrimmedStringOrNull(customerName)
+
+  if (!normalizedPhone && !normalizedEmail && !normalizedName) {
     return
   }
 
@@ -4606,22 +4608,33 @@ async function upsertBookingCustomerProfile(options: {
           .limit(1)
           .get()
       : Promise.resolve(null),
+    normalizedName
+      ? db
+          .collection('customers')
+          .where('storeId', '==', storeId)
+          .where('name', '==', normalizedName)
+          .limit(1)
+          .get()
+      : Promise.resolve(null),
   ])
 
   const existingCustomerDoc =
-    customerLookupSnapshots[0]?.docs?.[0] ?? customerLookupSnapshots[1]?.docs?.[0] ?? null
+    customerLookupSnapshots[0]?.docs?.[0] ?? customerLookupSnapshots[1]?.docs?.[0] ?? customerLookupSnapshots[2]?.docs?.[0] ?? null
 
   const now = admin.firestore.FieldValue.serverTimestamp()
-  const nameToPersist = customerName ?? customerEmail ?? customerPhone ?? 'Booking customer'
+  const nameToPersist = normalizedName ?? customerEmail ?? customerPhone ?? 'Booking customer'
 
   if (existingCustomerDoc) {
     const existingData = (existingCustomerDoc.data() ?? {}) as Record<string, unknown>
+    const lastBookingId = toTrimmedStringOrNull(existingData.lastBookingId)
     const updates: Record<string, unknown> = {
       updatedAt: now,
       lastBookingId: bookingId,
       lastBookingAt: now,
       lastBookingSource: 'integrationBooking',
-      bookingCount: admin.firestore.FieldValue.increment(1),
+    }
+    if (lastBookingId !== bookingId) {
+      updates.bookingCount = admin.firestore.FieldValue.increment(1)
     }
     if (!toTrimmedStringOrNull(existingData.name) && customerName) {
       updates.name = customerName
@@ -7580,6 +7593,34 @@ export const emitProductWebhooks = functions.firestore
         }),
       ),
     )
+  })
+
+
+export const syncIntegrationBookingCustomers = functions.firestore
+  .document('stores/{storeId}/integrationBookings/{bookingId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return
+
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : ''
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : ''
+    if (!storeId || !bookingId) return
+
+    const afterData = (change.after.data() ?? {}) as Record<string, unknown>
+    const customer = toPlainObject(afterData.customer)
+    const customerName =
+      toTrimmedStringOrNull(customer.name) ?? toTrimmedStringOrNull(afterData.name) ?? null
+    const customerPhone =
+      toTrimmedStringOrNull(customer.phone) ?? toTrimmedStringOrNull(afterData.phone) ?? null
+    const customerEmail =
+      toTrimmedStringOrNull(customer.email) ?? toTrimmedStringOrNull(afterData.email) ?? null
+
+    await upsertBookingCustomerProfile({
+      storeId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      bookingId,
+    })
   })
 
 export const emitBookingWebhooks = functions.firestore
