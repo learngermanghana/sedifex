@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { Timestamp, deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './BookingEditor.css'
@@ -209,6 +209,53 @@ export default function BookingEditor() {
     }
   }
 
+  async function handleConfirmPayment() {
+    if (!storeId || isCreateMode) return
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      const now = Timestamp.now()
+      await setDoc(
+        doc(db, 'stores', storeId, 'integrationBookings', bookingId),
+        {
+          paymentStatus: 'confirmed',
+          paymentConfirmedAt: now,
+          paymentVerifiedAt: now,
+          paymentVerifiedBy: 'staff_admin',
+          syncStatus: 'pending',
+          syncRequestedAt: now,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
+      navigate('/bookings')
+    } catch (error) {
+      console.error('[booking-editor] Failed to confirm payment', error)
+      setErrorMessage('Unable to confirm payment right now.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeleteBooking() {
+    if (!storeId || isCreateMode) return
+    const shouldDelete = window.confirm('Delete this booking? This cannot be undone.')
+    if (!shouldDelete) return
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      await deleteDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId))
+      navigate('/bookings')
+    } catch (error) {
+      console.error('[booking-editor] Failed to delete booking', error)
+      setErrorMessage('Unable to delete booking right now.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <main className="page booking-editor-page">
       <section className="card booking-editor-page__card stack gap-3">
@@ -259,6 +306,26 @@ export default function BookingEditor() {
               <button type="submit" className="button button--primary" disabled={saving}>
                 {saving ? 'Saving…' : 'Save and sync'}
               </button>
+              {!isCreateMode && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={saving}
+                    onClick={() => void handleConfirmPayment()}
+                  >
+                    {saving ? 'Saving…' : 'Confirm payment'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={saving}
+                    onClick={() => void handleDeleteBooking()}
+                  >
+                    {saving ? 'Saving…' : 'Delete booking'}
+                  </button>
+                </>
+              )}
             </div>
           </form>
         )}
