@@ -84,7 +84,8 @@ const CONFIG = {
   statusValues: {
     sent: 'SENT',
     skipped: 'SKIPPED',
-    error: 'ERROR'
+    error: 'ERROR',
+    queued: 'QUEUED'
   }
 };
 
@@ -232,17 +233,9 @@ function doPost(e) {
 
     const mailQuotaRemaining = MailApp.getRemainingDailyQuota();
 
-    if (recipients.length > mailQuotaRemaining) {
-      return jsonOutput({
-        ok: false,
-        error: 'gmail quota too low for this request',
-        quotaRemaining: mailQuotaRemaining,
-        requested: recipients.length
-      });
-    }
-
     let attempted = 0;
     let sent = 0;
+    let queuedForRetry = 0;
     let skipped = 0;
     const errors = [];
     const rowUpdates = [];
@@ -257,6 +250,18 @@ function doPost(e) {
           rowUpdates.push({
             rowIndex: recipient.rowIndex,
             status: CONFIG.statusValues.skipped,
+            lastSentAt: ''
+          });
+        }
+        return;
+      }
+
+      if (attempted >= mailQuotaRemaining) {
+        queuedForRetry += 1;
+        if (recipient.rowIndex && statusCol !== undefined) {
+          rowUpdates.push({
+            rowIndex: recipient.rowIndex,
+            status: CONFIG.statusValues.queued,
             lastSentAt: ''
           });
         }
@@ -317,6 +322,8 @@ function doPost(e) {
       attempted: attempted,
       sent: sent,
       failed: attempted - sent,
+      queuedForRetry: queuedForRetry,
+      quotaRemainingBeforeSend: mailQuotaRemaining,
       skipped: skipped,
       timestamp: new Date().toISOString()
     });
@@ -327,6 +334,8 @@ function doPost(e) {
       attempted: attempted,
       sent: sent,
       failed: attempted - sent,
+      queuedForRetry: queuedForRetry,
+      quotaRemainingBeforeSend: mailQuotaRemaining,
       skipped: skipped,
       errors: errors,
       quotaRemainingAfterSend: MailApp.getRemainingDailyQuota()
@@ -536,4 +545,5 @@ function escapeRegex_(text) {
 ## Important notes
 - Keep customer records in Sedifex only (avoid duplicate manual entry).
 - Google sending quotas apply.
+- Recipients marked `QUEUED` are deferred and will send on the next script run (for example, a scheduled trigger or a manual rerun).
 - Rotate shared tokens when ownership/staff changes.

@@ -23,12 +23,24 @@ function doPost(e) {
     const html = payload.html || ''
     const recipients = Array.isArray(payload.recipients) ? payload.recipients : []
 
+    const quotaRemaining = MailApp.getRemainingDailyQuota()
     let sent = 0
+    let queued = 0
+    let attempted = 0
     const failures = []
+    const queuedRecipients = []
 
     recipients.forEach((row) => {
       const email = (row?.email || '').toString().trim()
       if (!email) return
+
+      // 3) Queue overflow once we hit Gmail daily quota
+      if (attempted >= quotaRemaining) {
+        queued += 1
+        queuedRecipients.push({ email, status: 'queued_for_next_run_quota_reached' })
+        return
+      }
+      attempted += 1
 
       try {
         MailApp.sendEmail({
@@ -44,29 +56,32 @@ function doPost(e) {
       }
     })
 
-    // 3) Optional logging in a tab named "send_logs"
-    logSendResult(campaignId, sent, failures.length)
+    // 4) Optional logging in a tab named "send_logs"
+    logSendResult(campaignId, sent, failures.length, queued)
 
     return jsonResponse({
       ok: true,
       campaignId,
-      attempted: recipients.length,
+      attempted,
       sent,
+      queued,
+      queuedRecipients,
       failed: failures.length,
       failures,
+      quotaRemainingBeforeSend: quotaRemaining,
     })
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err) }, 500)
   }
 }
 
-function logSendResult(campaignId, sent, failed) {
+function logSendResult(campaignId, sent, failed, queued) {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
   const sheet = ss.getSheetByName('send_logs') || ss.insertSheet('send_logs')
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['timestamp', 'campaignId', 'sent', 'failed'])
+    sheet.appendRow(['timestamp', 'campaignId', 'sent', 'failed', 'queued'])
   }
-  sheet.appendRow([new Date().toISOString(), campaignId, sent, failed])
+  sheet.appendRow([new Date().toISOString(), campaignId, sent, failed, queued])
 }
 
 function jsonResponse(data, statusCode) {
