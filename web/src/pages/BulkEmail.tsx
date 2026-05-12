@@ -6,6 +6,7 @@ import PageSection from '../layout/PageSection'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useWorkspaceIdentity } from '../hooks/useWorkspaceIdentity'
+import { requestAiAdvisor } from '../api/aiAdvisor'
 
 type Customer = {
   id: string
@@ -195,6 +196,76 @@ export default function BulkEmail() {
 
   const clearSelection = () => setSelectedIds(new Set())
 
+
+  const [isAiGenerating, setIsAiGenerating] = useState(false)
+  const [aiError, setAiError] = useState('')
+
+  const generateEmailWithAi = async () => {
+    if (!storeId) {
+      setAiError('Workspace is missing. Refresh and try again.')
+      return
+    }
+    const prompt = [
+      'Write a conversion-focused bulk email campaign for a retail store.',
+      `Store name: ${fromName.trim() || 'Sedifex Campaign'}.`,
+      `Subject idea: ${subject.trim() || 'Weekend promotion for loyal customers'}.`,
+      'Return the response in this exact format:',
+      'SUBJECT: <subject line>',
+      'BODY_TEXT: <plain text email body>',
+      'BODY_HTML: <responsive HTML email body using inline styles and clear CTA button>',
+    ].join('\n')
+
+    setIsAiGenerating(true)
+    setAiError('')
+    try {
+      const result = await requestAiAdvisor({ question: prompt, storeId })
+      const advice = result.advice || ''
+      const subjectMatch = advice.match(/SUBJECT:\s*([\s\S]*?)(?:\nBODY_TEXT:|$)/i)
+      const textMatch = advice.match(/BODY_TEXT:\s*([\s\S]*?)(?:\nBODY_HTML:|$)/i)
+      const htmlMatch = advice.match(/BODY_HTML:\s*([\s\S]*)$/i)
+
+      if (subjectMatch?.[1]?.trim()) setSubject(subjectMatch[1].trim())
+      if (htmlMatch?.[1]?.trim()) {
+        setHtml(htmlMatch[1].trim())
+      } else if (textMatch?.[1]?.trim()) {
+        setHtml(textMatch[1].trim())
+      } else {
+        setHtml(advice.trim())
+      }
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Unable to generate with AI right now.')
+    } finally {
+      setIsAiGenerating(false)
+    }
+  }
+
+  const convertToHtmlWithAi = async () => {
+    const message = html.trim()
+    if (!message) {
+      setAiError('Add plain text content first, then convert to HTML.')
+      return
+    }
+    if (!storeId) {
+      setAiError('Workspace is missing. Refresh and try again.')
+      return
+    }
+
+    setIsAiGenerating(true)
+    setAiError('')
+    try {
+      const result = await requestAiAdvisor({
+        question: `Convert this bulk email into clean HTML for email clients. Keep meaning unchanged, use inline styles, and return only HTML.\n\n${message}`,
+        storeId,
+      })
+      const cleanedHtml = result.advice.trim().replace(/^```html\s*/i, '').replace(/```$/, '').trim()
+      setHtml(cleanedHtml)
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Unable to convert to HTML right now.')
+    } finally {
+      setIsAiGenerating(false)
+    }
+  }
+
   const handleSend = async () => {
     setSendStatus('')
     setSendError('')
@@ -306,6 +377,15 @@ export default function BulkEmail() {
               placeholder="Big weekend offer for loyal customers"
             />
           </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="button button--ghost" onClick={() => void generateEmailWithAi()} disabled={isAiGenerating || isSending}>
+              {isAiGenerating ? 'Generating…' : 'Generate with OpenAI'}
+            </button>
+            <button type="button" className="button button--ghost" onClick={() => void convertToHtmlWithAi()} disabled={isAiGenerating || isSending}>
+              {isAiGenerating ? 'Converting…' : 'Convert message to HTML with AI'}
+            </button>
+          </div>
+
           <label style={{ display: 'grid', gap: 6 }}>
             <span>Email content (HTML or plain text)</span>
             <textarea
@@ -379,6 +459,7 @@ export default function BulkEmail() {
           </Link>
         </div>
 
+        {aiError ? <p style={{ margin: 0, color: 'var(--danger, #b3261e)' }}>{aiError}</p> : null}
         {sendStatus ? <p style={{ margin: 0, color: 'var(--success, #137333)' }}>{sendStatus}</p> : null}
         {sendError ? <p style={{ margin: 0, color: 'var(--danger, #b3261e)' }}>{sendError}</p> : null}
         {sendResult ? (

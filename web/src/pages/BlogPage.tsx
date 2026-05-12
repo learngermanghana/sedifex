@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { requestAiAdvisor } from '../api/aiAdvisor'
 import { uploadProductImage } from '../api/productImageUpload'
 
 type BlogPost = {
@@ -73,6 +74,39 @@ export default function BlogPage() {
   useEffect(() => {
     void loadPosts()
   }, [storeId])
+
+
+  const [isAiGenerating, setIsAiGenerating] = useState(false)
+
+  async function generateBlogWithAi() {
+    if (!storeId) return
+    setIsAiGenerating(true)
+    setMessage(null)
+    try {
+      const prompt = [
+        'Write a high quality blog post for a retail store website.',
+        `Working title: ${title.trim() || 'New Arrivals and Offers'}.`,
+        'Return this format exactly:',
+        'TITLE: <post title>',
+        'CONTENT: <blog post body with paragraphs>',
+      ].join('\n')
+      const result = await requestAiAdvisor({ question: prompt, storeId })
+      const advice = result.advice || ''
+      const titleMatch = advice.match(/TITLE:\s*([\s\S]*?)(?:\nCONTENT:|$)/i)
+      const contentMatch = advice.match(/CONTENT:\s*([\s\S]*)$/i)
+      if (titleMatch?.[1]?.trim()) setTitle(titleMatch[1].trim())
+      if (contentMatch?.[1]?.trim()) {
+        setContent(contentMatch[1].trim())
+      } else {
+        setContent(advice.trim())
+      }
+      setMessage('AI draft generated. Review before saving.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not generate blog draft.')
+    } finally {
+      setIsAiGenerating(false)
+    }
+  }
 
   async function onImageUpload(file: File) {
     const url = await uploadProductImage(file, { storagePath: 'blog-images' })
@@ -144,6 +178,11 @@ export default function BlogPage() {
             <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && void onImageUpload(e.target.files[0])} />
           </label>
           {imageUrl ? <img src={imageUrl} alt="Cover" style={{ maxWidth: 260, borderRadius: 8 }} /> : null}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
+              {isAiGenerating ? 'Generating…' : 'Generate with OpenAI'}
+            </button>
+          </div>
           <label className="stack">
             <span>Text</span>
             <textarea value={content} onChange={e => setContent(e.target.value)} rows={8} required />
