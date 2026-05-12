@@ -1354,7 +1354,7 @@ const PRICING_PLANS = [
       'Up to 10 sales per day',
       'Buy SMS credits anytime (separate from plan)',
       'Customer display and QR pricing',
-      'Products can publish to buy.sedifex.com',
+      'Products can publish to sedifexmarket.com',
     ],
     cta: {
       type: 'button' as const,
