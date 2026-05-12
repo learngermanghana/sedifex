@@ -69,6 +69,7 @@ export default function BlogPage() {
   const { storeId } = useActiveStore()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [metaTitle, setMetaTitle] = useState('')
   const [metaDescription, setMetaDescription] = useState('')
   const [publishAt, setPublishAt] = useState('')
   const [status, setStatus] = useState<'draft' | 'published' | 'scheduled'>('draft')
@@ -80,6 +81,7 @@ export default function BlogPage() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [selectedCatalogItemId, setSelectedCatalogItemId] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [dailyShareEnabled, setDailyShareEnabled] = useState(false)
 
   const publicFeedUrl = useMemo(() => (storeId ? `/api/public-blog?storeId=${encodeURIComponent(storeId)}` : ''), [storeId])
@@ -199,10 +201,19 @@ export default function BlogPage() {
       const advice = result.advice || ''
       const titleMatch = advice.match(/TITLE:\s*([\s\S]*?)(?:\nCONTENT:|$)/i)
       const contentMatch = advice.match(/CONTENT:\s*([\s\S]*)$/i)
-      if (titleMatch?.[1]?.trim()) setTitle(titleMatch[1].trim())
-      if (contentMatch?.[1]?.trim()) setContent(contentMatch[1].trim())
-      else setContent(advice.trim())
-      setMessage('AI draft generated. Review before saving.')
+      const nextTitle = titleMatch?.[1]?.trim() || title.trim()
+      const nextContent = contentMatch?.[1]?.trim() || advice.trim()
+      if (nextTitle) setTitle(nextTitle)
+      if (nextContent) setContent(nextContent)
+
+      if (!metaTitle.trim()) setMetaTitle(nextTitle || title.trim())
+      if (!metaDescription.trim()) {
+        const firstParagraph = nextContent.split(/\n\s*\n/)[0] || nextContent
+        const compact = firstParagraph.replace(/\s+/g, ' ').trim()
+        setMetaDescription(compact.slice(0, 155))
+      }
+
+      setMessage('AI draft generated. Empty metadata fields were auto-filled. Review before saving.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not generate blog draft.')
     } finally {
@@ -223,8 +234,8 @@ export default function BlogPage() {
         slug,
         excerpt: null,
         content: content.trim(),
-        metaTitle: null,
-        metaDescription: metaDescription.trim() || null,
+        metaTitle: metaTitle.trim() || title.trim() || null,
+        metaDescription: metaDescription.trim() || content.trim().replace(/\s+/g, ' ').slice(0, 155) || null,
         canonicalUrl: null,
         ogImage: null,
         tags: [],
@@ -241,6 +252,7 @@ export default function BlogPage() {
 
       setTitle('')
       setContent('')
+      setMetaTitle('')
       setMetaDescription('')
       setPublishAt('')
       setStatus('draft')
@@ -259,6 +271,7 @@ export default function BlogPage() {
     setEditingPostId(post.id)
     setTitle(post.title)
     setContent(post.content)
+    setMetaTitle(post.metaTitle ?? '')
     setMetaDescription(post.metaDescription ?? '')
     setPublishAt(post.publishAt ?? '')
     setStatus(post.status === 'archived' ? 'draft' : post.status)
@@ -296,15 +309,22 @@ export default function BlogPage() {
                 onChange={event => {
                   const file = event.currentTarget.files?.[0]
                   if (!file) return
+                  setUploadStatus(`Upload started: ${file.name}`)
                   const reader = new FileReader()
                   reader.onload = () => {
-                    if (typeof reader.result === 'string') setImageUrl(reader.result)
+                    if (typeof reader.result === 'string') {
+                      setImageUrl(reader.result)
+                      setUploadStatus(`Upload completed: ${file.name}`)
+                    }
                   }
+                  reader.onerror = () => setUploadStatus(`Upload failed: ${file.name}`)
                   reader.readAsDataURL(file)
                 }}
               />
               Browse for image upload
             </label>
+            {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
+            {imageUrl ? <img className="blog-page__image-preview" src={imageUrl} alt="Selected upload preview" /> : null}
             {publicFeedUrl ? (
               <aside className="card blog-page__feed">
                 <strong>Public feed</strong>
@@ -356,6 +376,11 @@ export default function BlogPage() {
                   rows={18}
                   required
                 />
+              </label>
+
+              <label className="stack">
+                <span>Meta title</span>
+                <input value={metaTitle} onChange={e => setMetaTitle(e.target.value)} maxLength={120} />
               </label>
 
               <label className="stack">
