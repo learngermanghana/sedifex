@@ -519,6 +519,127 @@ Persist all three IDs together for reconciliation and support:
 
 For service bookings, include your booking identifier in `clientOrderId` (or in `metadata.bookingId`) so customer support can reconcile website bookings to Sedifex records.
 
+## 9) Checkout pricing + fulfillment contract (Website ↔ Sedifex)
+
+Use this section when wiring storefront checkout so Sedifex remains the source of truth for totals.
+
+### MVP decisions (current)
+
+- Refunds are out of scope for this version.
+- Paystack processing fee is recovered from the customer by adding `processing_fee_to_add` at checkout.
+- Delivery fee is conditional:
+  - `PICKUP` → no delivery fee.
+  - `DELIVERY` → delivery fee is calculated and added as a separate charge.
+- Tax is read from inventory/service item configuration where set.
+
+### Canonical checkout fields (use these exact names)
+
+- `fulfillment_type` (`PICKUP` | `DELIVERY`)
+- `subtotal`
+- `tax_total`
+- `delivery_fee`
+- `pre_processing_total`
+- `processing_fee_to_add`
+- `final_total`
+- `pricing_snapshot`
+- `payment_reference`
+- `payment_status`
+- `order_status`
+
+All monetary fields must be integers in minor units (for example, NGN kobo).
+
+### Required endpoint sequence
+
+1. `POST /checkout/preview`
+   - Website sends cart, fulfillment choice, and delivery context.
+   - Sedifex calculates and returns full pricing breakdown.
+2. `POST /checkout/create`
+   - Sedifex recalculates server-side, stores immutable `pricing_snapshot`, and initializes Paystack with `final_total`.
+3. `POST /payments/paystack/webhook`
+   - Sedifex verifies signature/reference/amount and marks order paid.
+4. `GET /orders/{order_id}`
+   - Website fetches latest order/payment status for confirmation page.
+
+### Request/response reference
+
+`POST /checkout/preview` request:
+
+```json
+{
+  "merchant_id": "m_123",
+  "currency": "NGN",
+  "fulfillment_type": "PICKUP",
+  "delivery_address_id": null,
+  "items": [
+    { "type": "PRODUCT", "item_id": "p_1", "qty": 2 },
+    { "type": "SERVICE", "item_id": "s_7", "qty": 1 }
+  ]
+}
+```
+
+`POST /checkout/preview` response:
+
+```json
+{
+  "pricing_version": "2026-05-12-v1",
+  "subtotal": 2500000,
+  "tax_total": 187500,
+  "delivery_fee": 0,
+  "pre_processing_total": 2687500,
+  "processing_fee_to_add": 45000,
+  "final_total": 2732500,
+  "breakdown": [
+    { "code": "SUBTOTAL", "amount": 2500000 },
+    { "code": "TAX", "amount": 187500 },
+    { "code": "DELIVERY", "amount": 0 },
+    { "code": "PROCESSING_FEE", "amount": 45000 }
+  ]
+}
+```
+
+### Calculation order (authoritative)
+
+1. Resolve line prices and quantities → `subtotal`.
+2. Apply item tax rules from inventory/services → `tax_total`.
+3. Apply fulfillment:
+   - `PICKUP` → `delivery_fee = 0`.
+   - `DELIVERY` → compute delivery fee from configured rules.
+4. Compute:
+   - `pre_processing_total = subtotal + tax_total + delivery_fee`
+5. Compute processor recovery:
+   - `processing_fee_to_add = estimate_processing_fee(pre_processing_total)`
+6. Compute:
+   - `final_total = pre_processing_total + processing_fee_to_add`
+
+Sedifex must recompute these values on `checkout/create`; website-provided totals are never trusted.
+
+### Website rendering rules
+
+- Always render values returned from Sedifex (no client-side fee math).
+- Show delivery line only when `fulfillment_type = DELIVERY`.
+- Always show processing fee line when `processing_fee_to_add > 0`.
+- Re-run preview when cart, fulfillment type, or delivery address changes.
+
+### Validation and error contract
+
+- `DELIVERY_ADDRESS_REQUIRED` when delivery is selected without required address fields.
+- `INVALID_FULFILLMENT_TYPE` for unsupported fulfillment values.
+- `PRICE_CHANGED_REVIEW_CART` when catalog prices changed between preview and create.
+- `PAYMENT_AMOUNT_MISMATCH` when webhook paid amount differs from stored `final_total`.
+
+### Implementation checklist for integration teams
+
+1. Store merchant config (`storeId`, API key, contract version).
+2. Build server-side adapter for preview/create/order-status calls.
+3. Add checkout UI toggle for pickup vs delivery.
+4. Bind UI totals to Sedifex response fields (`subtotal`, `tax_total`, `delivery_fee`, `processing_fee_to_add`, `final_total`).
+5. Persist IDs for reconciliation:
+   - `payment_reference`
+   - `sedifexOrderId`
+   - `clientOrderId`
+6. Handle webhook-driven paid state before showing final success.
+7. Log `x-sedifex-request-id` on failures for support.
+
 ### `POST /integration/checkout/create` (authenticated)
 
 Purpose: client website server asks Sedifex to create a hosted checkout session.
