@@ -63,6 +63,9 @@ Use row 1 as headers:
  * Optional Script Properties:
  *   STORE_NAME = Glittering Med Spa
  *   DEFAULT_FROM_NAME = Glittering Med Spa
+ *   STORE_INSTAGRAM_URL = https://instagram.com/glitteringmedspa
+ *   STORE_FACEBOOK_URL = https://facebook.com/glitteringmedspa
+ *   STORE_TIKTOK_URL = https://tiktok.com/@glitteringmedspa
  *   RECIPIENTS_TAB_NAME = Recipients
  *   ENABLE_CAMPAIGN_DEDUPE = true
  *   MAX_EMAILS_PER_REQUEST = 200
@@ -72,6 +75,11 @@ const CONFIG = {
   defaultSheetTabName: 'Recipients',
   defaultStoreName: 'Glittering Med Spa',
   defaultFromName: 'Glittering Med Spa',
+  defaultSocialUrls: {
+    instagram: 'https://instagram.com/glitteringmedspa',
+    facebook: 'https://facebook.com/glitteringmedspa',
+    tiktok: 'https://tiktok.com/@glitteringmedspa'
+  },
   enableCampaignDedupeByDefault: true,
   defaultMaxEmailsPerRequest: 200,
   headers: {
@@ -271,11 +279,14 @@ function doPost(e) {
       attempted += 1;
 
       try {
-        const personalizedHtml = applyTemplate_(htmlTemplate, {
+        const personalizedHtml = applyTemplate_(appendBrandFooter_(htmlTemplate), {
           name: name || 'Valued Customer',
           email: email,
           store_name: getStoreName(),
-          first_name: extractFirstName_(name)
+          first_name: extractFirstName_(name),
+          instagram_url: getSocialUrl_('STORE_INSTAGRAM_URL', CONFIG.defaultSocialUrls.instagram),
+          facebook_url: getSocialUrl_('STORE_FACEBOOK_URL', CONFIG.defaultSocialUrls.facebook),
+          tiktok_url: getSocialUrl_('STORE_TIKTOK_URL', CONFIG.defaultSocialUrls.tiktok)
         });
 
         MailApp.sendEmail({
@@ -398,6 +409,11 @@ function getDefaultFromName_() {
   );
 }
 
+function getSocialUrl_(propertyKey, fallbackValue) {
+  const value = safeString_(PropertiesService.getScriptProperties().getProperty(propertyKey)).trim();
+  return value || fallbackValue;
+}
+
 function getBooleanProperty_(key, defaultValue) {
   const raw = PropertiesService.getScriptProperties().getProperty(key);
   if (raw === null || raw === '') return defaultValue;
@@ -474,6 +490,26 @@ function applyTemplate_(html, data) {
   });
 
   return output;
+}
+
+function appendBrandFooter_(html) {
+  const content = safeString_(html);
+  if (content.indexOf('{{instagram_url}}') !== -1 ||
+      content.indexOf('{{facebook_url}}') !== -1 ||
+      content.indexOf('{{tiktok_url}}') !== -1) {
+    return content;
+  }
+
+  return content + [
+    '',
+    '<hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;">',
+    '<p style="margin:0 0 8px;font-size:14px;color:#6b7280;">Connect with us:</p>',
+    '<p style="margin:0;font-size:14px;">',
+    '  <a href="{{instagram_url}}" style="color:#111827;text-decoration:none;margin-right:12px;">Instagram</a>',
+    '  <a href="{{facebook_url}}" style="color:#111827;text-decoration:none;margin-right:12px;">Facebook</a>',
+    '  <a href="{{tiktok_url}}" style="color:#111827;text-decoration:none;">TikTok</a>',
+    '</p>'
+  ].join('\n');
 }
 
 function applyRowUpdates_(sheet, rowUpdates, statusCol, lastSentAtCol) {
