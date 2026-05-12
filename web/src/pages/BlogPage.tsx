@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import './BlogPage.css'
 import {
   addDoc,
   collection,
@@ -31,6 +32,17 @@ type BlogPost = {
   linkUrl: string | null
   imageUrl: string | null
   status: 'draft' | 'published' | 'scheduled' | 'archived'
+  updatedAt: string | null
+}
+
+
+function formatPastedContent(value: string): string {
+  return value
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map(block => block.split('\n').map(line => line.trim()).filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 function makeSlug(value: string): string {
@@ -79,6 +91,7 @@ export default function BlogPage() {
           linkUrl: typeof data.linkUrl === 'string' ? data.linkUrl : null,
           imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
           status: data.status === 'published' || data.status === 'scheduled' || data.status === 'archived' ? data.status : 'draft',
+          updatedAt: typeof data.updatedAt?.toDate === 'function' ? data.updatedAt.toDate().toLocaleString() : null,
         }
       }),
     )
@@ -185,62 +198,113 @@ export default function BlogPage() {
 
   return (
     <main className="page">
-      <section className="card stack" style={{ maxWidth: 880, margin: '0 auto' }}>
-        <h1>Store Blog</h1>
-        <p>Create and publish blog posts with a cleaner editor.</p>
-        <form className="stack" onSubmit={onSubmit}>
-          <label className="stack">
-            <span>Title</span>
-            <input value={title} onChange={e => setTitle(e.target.value)} required minLength={5} />
-          </label>
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
-              {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
-            </button>
+      <section className="blog-page">
+        <header className="card blog-page__header">
+          <div className="blog-page__title">
+            <h1>Blog</h1>
+            <p>Write updates and publish polished posts for your public audience.</p>
           </div>
-
-          <label className="stack">
-            <span>Post content</span>
-            <textarea value={content} onChange={e => setContent(e.target.value)} rows={16} required />
-          </label>
-
-          <label className="stack">
-            <span>Meta description</span>
-            <textarea value={metaDescription} onChange={e => setMetaDescription(e.target.value)} rows={3} maxLength={320} />
-          </label>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <label className="stack"><span>Publish at</span><input type="datetime-local" value={publishAt} onChange={e => setPublishAt(e.target.value)} /></label>
-            <label className="stack">
-              <span>Status</span>
-              <select value={status} onChange={e => setStatus(e.target.value as 'draft' | 'published' | 'scheduled')}>
-                <option value="draft">Draft</option>
-                <option value="published">Publish now</option>
-                <option value="scheduled">Scheduled</option>
-              </select>
-            </label>
+          <div className="blog-page__top-actions">
+            <button type="button" onClick={() => setEditingPostId(null)}>{editingPostId ? 'New post' : 'New post'}</button>
           </div>
+        </header>
 
-          <button type="submit" disabled={saving || !storeId}>{saving ? 'Saving…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
-        </form>
-        {message ? <p>{message}</p> : null}
-        {publicFeedUrl ? <p>Public feed: <code>{publicFeedUrl}</code></p> : null}
+        <div className="blog-page__content">
+          <article className="card blog-page__editor">
+            <form className="blog-page__editor-form" onSubmit={onSubmit}>
+              <label className="stack">
+                <span>Title</span>
+                <input value={title} onChange={e => setTitle(e.target.value)} required minLength={5} />
+              </label>
 
-        <h2>Posts</h2>
-        <ul className="stack">
-          {posts.map(post => (
-            <li key={post.id} className="card" style={{ padding: 12 }}>
-              <strong>{post.title}</strong> — {post.status} {post.slug ? <code>/{post.slug}</code> : null}
-              <div>
-                {post.status !== 'published' ? <button onClick={() => void publishPost(post.id)}>Publish</button> : null}
-                <button onClick={() => editPost(post)}>Edit</button>
-                <button onClick={() => void archivePost(post.id)}>Archive</button>
-                <button onClick={() => void permanentlyDeletePost(post.id)}>Delete</button>
+              <div className="blog-page__toolbar">
+                <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
+                  {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
+                </button>
               </div>
-            </li>
-          ))}
-        </ul>
+
+              <label className="stack">
+                <span>Post content</span>
+                <textarea
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  onPaste={event => {
+                    const pasted = event.clipboardData.getData('text')
+                    if (!pasted) return
+                    event.preventDefault()
+                    const formatted = formatPastedContent(pasted)
+                    const el = event.currentTarget
+                    const next = `${content.slice(0, el.selectionStart)}${formatted}${content.slice(el.selectionEnd)}`
+                    setContent(next)
+                  }}
+                  rows={14}
+                  required
+                />
+              </label>
+
+              <label className="stack">
+                <span>Meta description</span>
+                <textarea value={metaDescription} onChange={e => setMetaDescription(e.target.value)} rows={3} maxLength={320} />
+              </label>
+
+              <div className="blog-page__meta-grid">
+                <label className="stack"><span>Publish at</span><input type="datetime-local" value={publishAt} onChange={e => setPublishAt(e.target.value)} /></label>
+                <label className="stack">
+                  <span>Status</span>
+                  <select value={status} onChange={e => setStatus(e.target.value as 'draft' | 'published' | 'scheduled')}>
+                    <option value="draft">Draft</option>
+                    <option value="published">Publish now</option>
+                    <option value="scheduled">Scheduled</option>
+                  </select>
+                </label>
+              </div>
+
+              <button type="submit" disabled={saving || !storeId}>{saving ? 'Saving…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
+            </form>
+            {message ? <p>{message}</p> : null}
+          </article>
+
+          {publicFeedUrl ? (
+            <aside className="card blog-page__feed">
+              <strong>Public feed</strong>
+              <p style={{ margin: '4px 0 0', color: '#64748b' }}>Endpoint</p>
+              <code>{publicFeedUrl}</code>
+              <div className="blog-page__feed-actions">
+                <button type="button" className="button button--ghost" onClick={() => void navigator.clipboard.writeText(publicFeedUrl)}>Copy</button>
+                <button type="button" className="button button--ghost" onClick={() => window.open(publicFeedUrl, '_blank', 'noopener,noreferrer')}>Open</button>
+              </div>
+            </aside>
+          ) : null}
+        </div>
+
+        <section className="card blog-page__posts">
+          <div className="blog-page__searchbar">
+            <h2 style={{ margin: 0 }}>Posts</h2>
+            <input placeholder="Search and filters coming soon" disabled />
+          </div>
+          <ul className="blog-page__list">
+            {posts.map(post => (
+              <li key={post.id} className="blog-post-item">
+                <div className="blog-post-item__top">
+                  <div>
+                    <h3 className="blog-post-item__title">{post.title}</h3>
+                    <div className="blog-post-item__meta">
+                      <span className="blog-status-badge" data-status={post.status}>{post.status}</span>
+                      {post.slug ? <span className="blog-post-item__slug">/{post.slug}</span> : null}
+                      {post.updatedAt ? <span>Updated {post.updatedAt}</span> : null}
+                    </div>
+                  </div>
+                  <div className="blog-post-item__actions">
+                    {post.status !== 'published' ? <button className="button button--ghost" onClick={() => void publishPost(post.id)}>Publish</button> : null}
+                    <button onClick={() => editPost(post)}>Edit</button>
+                    <button className="button button--ghost" onClick={() => void archivePost(post.id)}>Archive</button>
+                    <button className="button button--ghost button--danger-subtle" onClick={() => void permanentlyDeletePost(post.id)}>Delete</button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       </section>
     </main>
   )
