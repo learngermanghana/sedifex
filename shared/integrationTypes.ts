@@ -1,4 +1,4 @@
-export type IntegrationContractVersion = '2026-04-13'
+export type IntegrationContractVersion = '2026-05-12'
 
 export interface IntegrationProduct {
   id: string
@@ -117,4 +117,44 @@ export interface CreateIntegrationBookingRequest {
 
 export interface CreateIntegrationBookingResponse {
   booking: IntegrationBooking | null
+}
+
+
+export type CheckoutFulfillmentType = 'PICKUP' | 'DELIVERY'
+
+export interface CheckoutPreviewItemRequest {
+  type: 'PRODUCT' | 'SERVICE'
+  item_id: string
+  qty: number
+}
+
+export interface CheckoutPreviewRequest {
+  merchant_id: string
+  currency: string
+  fulfillment_type: CheckoutFulfillmentType
+  delivery_address_id: string | null
+  items: CheckoutPreviewItemRequest[]
+}
+
+export interface CheckoutPreviewBreakdownLine {
+  code: 'SUBTOTAL' | 'TAX' | 'DELIVERY' | 'PROCESSING_FEE'
+  amount: number
+}
+
+export interface CheckoutPreviewResponse {
+  pricing_version: string
+  subtotal: number
+  tax_total: number
+  delivery_fee: number
+  pre_processing_total: number
+  processing_fee_to_add: number
+  final_total: number
+  breakdown: CheckoutPreviewBreakdownLine[]
+}
+
+export interface IntegrationOrderPricingSnapshot {
+  pricing_snapshot: CheckoutPreviewResponse
+  payment_reference: string | null
+  payment_status: string
+  order_status: string
 }
