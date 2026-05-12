@@ -144,6 +144,59 @@ Query parameters:
 2. **Public website without secret storage:** `GET /integrationPublicCatalog?slug=<promoSlug>` (or `storeId`).
 3. In both cases, render from `publicProducts` and `publicServices` directly.
 
+
+### `GET /api/public-blog?storeId=<storeId>[&slug=<postSlug>]` (public, no API key)
+
+Use this endpoint when a store wants its website to **pull published blog posts** from Sedifex.
+
+- `storeId` is required.
+- `slug` is optional. If provided, Sedifex filters to one post slug.
+- Returns only posts with `status = "published"`.
+
+Example list response:
+
+```json
+{
+  "items": [
+    {
+      "id": "post_123",
+      "title": "How to choose the right product",
+      "slug": "how-to-choose-the-right-product",
+      "content": "<p>...</p>",
+      "linkUrl": "https://example.com/more-details",
+      "imageUrl": "https://storage.googleapis.com/.../blog-image.jpg",
+      "publishedAt": "2026-05-12T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### Blog pull integration steps (website)
+
+1. Save the store's `storeId` in your website backend config.
+2. Fetch posts server-side:
+   - `GET ${SEDIFEX_SITE_BASE_URL}/api/public-blog?storeId=<storeId>`
+3. Cache response for 30-120 seconds to reduce repeated fetches.
+4. Render list cards (title, image, excerpt from content) and optionally deep-link by slug.
+5. For one post page, call:
+   - `GET ${SEDIFEX_SITE_BASE_URL}/api/public-blog?storeId=<storeId>&slug=<postSlug>`
+
+#### Minimal Node/Next.js server example
+
+```ts
+const base = process.env.SEDIFEX_SITE_BASE_URL ?? 'https://www.sedifex.com'
+const storeId = process.env.SEDIFEX_STORE_ID ?? ''
+
+const res = await fetch(`${base}/api/public-blog?storeId=${encodeURIComponent(storeId)}`, {
+  // next.js cache hint (optional)
+  next: { revalidate: 60 },
+})
+
+if (!res.ok) throw new Error(`Blog pull failed: ${res.status}`)
+const payload = await res.json()
+const items = Array.isArray(payload.items) ? payload.items : []
+```
+
 ### `GET /v1IntegrationPromo?storeId=<storeId>` (authenticated) or `?slug=<promoSlug>` (public)
 
 ```json
