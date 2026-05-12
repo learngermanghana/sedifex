@@ -37,6 +37,7 @@ import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
 import IntegrationEmailSettings from './pages/IntegrationEmailSettings'
 import IntegrationGoogleBusinessSettings from './pages/IntegrationGoogleBusinessSettings'
+import BlogPage from './pages/BlogPage'
 
 // ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
@@ -51,6 +52,7 @@ import ReturnPolicyPage from './pages/legal/ReturnPolicyPage'
 import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
 import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
 import BulkEmailGoogleSheetsPage from './pages/docs/BulkEmailGoogleSheetsPage'
+import PublicBlogPage from './pages/PublicBlogPage'
 
 import { ToastProvider } from './components/ToastProvider'
 
@@ -64,6 +66,7 @@ const router = createBrowserRouter([
   { path: '/display', element: <CustomerDisplay /> },
   { path: '/join-customers/:inviteId', element: <PublicCustomerIntake /> },
   { path: '/join-customers/:inviteId/:mode', element: <PublicCustomerIntake /> },
+  { path: '/public-blog/:storeId', element: <PublicBlogPage /> },
 
   {
     path: '/',
@@ -108,6 +111,7 @@ const router = createBrowserRouter([
           { path: 'social-media', element: <SocialMediaPage /> },
           { path: 'merchant-feed', element: <Navigate to="/social-media" replace /> },
           { path: 'support', element: <Support /> },
+          { path: 'blog', element: <BlogPage /> },
           { path: 'settings/integrations/booking-mapping', element: <BookingMappingSettings /> },
           { path: 'settings/integrations/website', element: <IntegrationWebsiteSettings /> },
           { path: 'settings/integrations/bookings', element: <IntegrationBookingsSettings /> },
