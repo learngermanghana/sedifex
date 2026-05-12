@@ -31,7 +31,6 @@ import PricingPage from './pages/PricingPage'
 import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
 import PublicPageSettings from './pages/PublicPageSettings'
-import SocialMediaPage from './pages/SocialMediaPage'
 import BookingMappingSettings from './pages/BookingMappingSettings'
 import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
@@ -95,12 +94,14 @@ const router = createBrowserRouter([
           { path: 'logi', element: <Logi /> },
 
           // Finance
-          { path: 'finance', element: <DocumentsGenerator /> },
-          { path: 'finance/documents', element: <Navigate to="/finance" replace /> },
+          { path: 'sell/invoice', element: <DocumentsGenerator /> },
+          { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
+          { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
           { path: 'expenses', element: <Expenses /> },
 
           // Close day
-          { path: 'close-day', element: <CloseDay /> },
+          { path: 'sell/close-day', element: <CloseDay /> },
+          { path: 'close-day', element: <Navigate to="/sell/close-day" replace /> },
 
           // Other authenticated pages
           { path: 'onboarding', element: <Onboarding /> },
@@ -108,8 +109,7 @@ const router = createBrowserRouter([
           { path: 'account', element: <AccountOverview /> },
           { path: 'account/overview', element: <AccountOverview /> },
           { path: 'public-page', element: <PublicPageSettings /> },
-          { path: 'social-media', element: <SocialMediaPage /> },
-          { path: 'merchant-feed', element: <Navigate to="/social-media" replace /> },
+          { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
           { path: 'support', element: <Support /> },
           { path: 'blog', element: <BlogPage /> },
           { path: 'settings/integrations/booking-mapping', element: <BookingMappingSettings /> },
