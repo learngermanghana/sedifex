@@ -77,6 +77,7 @@ export default function BlogPage() {
   const [isAiGenerating, setIsAiGenerating] = useState(false)
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [selectedCatalogItemId, setSelectedCatalogItemId] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
 
   const publicFeedUrl = useMemo(() => (storeId ? `/api/public-blog?storeId=${encodeURIComponent(storeId)}` : ''), [storeId])
 
@@ -202,7 +203,7 @@ export default function BlogPage() {
         tags: [],
         publishAt: publishAt ? new Date(publishAt) : null,
         linkUrl: null,
-        imageUrl: null,
+        imageUrl,
         status,
         publishedAt: status === 'published' ? serverTimestamp() : null,
         updatedAt: serverTimestamp(),
@@ -216,6 +217,7 @@ export default function BlogPage() {
       setMetaDescription('')
       setPublishAt('')
       setStatus('draft')
+      setImageUrl(null)
       setEditingPostId(null)
       setMessage(editingPostId ? 'Post updated.' : 'Post saved.')
       await loadPosts()
@@ -233,6 +235,7 @@ export default function BlogPage() {
     setMetaDescription(post.metaDescription ?? '')
     setPublishAt(post.publishAt ?? '')
     setStatus(post.status === 'archived' ? 'draft' : post.status)
+    setImageUrl(post.imageUrl)
   }
 
   async function archivePost(postId: string) {
@@ -259,7 +262,22 @@ export default function BlogPage() {
             <p>Write updates and publish polished posts for your public audience.</p>
           </div>
           <div className="blog-page__top-actions">
-            <button type="button" onClick={() => setEditingPostId(null)}>{editingPostId ? 'New post' : 'New post'}</button>
+            <label className="blog-page__image-upload">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = () => {
+                    if (typeof reader.result === 'string') setImageUrl(reader.result)
+                  }
+                  reader.readAsDataURL(file)
+                }}
+              />
+              Browse for image upload
+            </label>
             {publicFeedUrl ? (
               <aside className="card blog-page__feed">
                 <strong>Public feed</strong>
