@@ -36,6 +36,7 @@
 .blog-page__editor-form { display: grid; gap: 12px; }
 .blog-page__toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .blog-page__toolbar--actions { justify-content: flex-start; }
+.blog-page__toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; color: #334155; }
 .blog-page__editor-form .stack { display: grid; gap: 6px; }
 .blog-page__editor-form textarea { width: 100%; min-height: 180px; resize: both; }
 .blog-page__feed code { font-size: 12px; color: #334155; }
