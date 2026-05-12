@@ -84,3 +84,6 @@
   .blog-page__top-actions { width: 100%; align-items: stretch; flex-direction: column; }
   .blog-page__feed { width: 100%; }
 }
+
+.blog-page__upload-status { margin: 0; font-size: 13px; color: #334155; }
+.blog-page__image-preview { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #cbd5e1; }
