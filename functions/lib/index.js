@@ -36,8 +36,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.enrichProductDataAfterSave = exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationBookingPaymentVerify = exports.integration = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.emitBookingWebhooks = exports.emitProductWebhooks = void 0;
+exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationBookingPaymentVerify = exports.integration = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
+exports.publishDailyFeaturedProductBlogPost = exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.syncPendingIntegrationBookingToAppsScript = exports.emitBookingWebhooks = exports.syncIntegrationBookingCustomers = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -76,6 +76,13 @@ const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID';
  * ==========================================================================*/
 let openAiConfigWarned = false;
 let integrationApiKeyWarned = false;
+function hashString(value) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+    }
+    return Math.abs(hash);
+}
 function getOpenAiConfig() {
     const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || '';
     const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
@@ -3351,13 +3358,35 @@ function resolveBookingAndPaymentStateFromPublicPayload(payload) {
     const bookingStatus = 'booked';
     const paymentCollectionModeRaw = toTrimmedStringOrNull(payload.paymentCollectionMode) ?? toTrimmedStringOrNull(payload.paymentMode) ?? 'unknown';
     const paymentCollectionMode = paymentCollectionModeRaw.toLowerCase();
-    const saysPaid = toFiniteNumber(payload.paid, NaN) === 1 || toTrimmedStringOrNull(payload.customerSaysPaid) === 'true' || toTrimmedStringOrNull(payload.hasPaid) === 'true' || toTrimmedStringOrNull(payload.paid) === 'true';
-    const saysPartial = toTrimmedStringOrNull(payload.isPartialPayment) === 'true' || toTrimmedStringOrNull(payload.customerPaymentClaim) === 'claimed_partial';
-    const saysNotPaid = toTrimmedStringOrNull(payload.customerSaysPaid) === 'false' || toTrimmedStringOrNull(payload.hasPaid) === 'false' || toTrimmedStringOrNull(payload.paid) === 'false';
+    const normalizedPaymentStatus = toTrimmedStringOrNull(payload.paymentStatus)?.toLowerCase();
+    const paymentConfirmedRaw = payload.paymentConfirmed;
+    const paymentConfirmed = paymentConfirmedRaw === true ||
+        toTrimmedStringOrNull(paymentConfirmedRaw) === 'true' ||
+        toFiniteNumber(paymentConfirmedRaw, NaN) === 1;
+    const saysPaid = paymentConfirmed ||
+        normalizedPaymentStatus === 'confirmed' ||
+        toFiniteNumber(payload.paid, NaN) === 1 ||
+        toTrimmedStringOrNull(payload.customerSaysPaid) === 'true' ||
+        toTrimmedStringOrNull(payload.hasPaid) === 'true' ||
+        toTrimmedStringOrNull(payload.paid) === 'true';
+    const saysPartial = normalizedPaymentStatus === 'partial' ||
+        toTrimmedStringOrNull(payload.isPartialPayment) === 'true' ||
+        toTrimmedStringOrNull(payload.customerPaymentClaim) === 'claimed_partial';
+    const saysNotPaid = normalizedPaymentStatus === 'pending' ||
+        normalizedPaymentStatus === 'not_paid' ||
+        toTrimmedStringOrNull(payload.customerSaysPaid) === 'false' ||
+        toTrimmedStringOrNull(payload.hasPaid) === 'false' ||
+        toTrimmedStringOrNull(payload.paid) === 'false';
     const customerPaymentClaim = saysPartial ? 'claimed_partial' : saysPaid ? 'claimed_paid' : saysNotPaid ? 'not_paid' : 'not_claimed';
     let paymentStatus = 'pending';
     if (paymentCollectionMode === 'free') {
         paymentStatus = 'not_required';
+    }
+    else if (normalizedPaymentStatus === 'confirmed' || paymentConfirmed) {
+        paymentStatus = 'confirmed';
+    }
+    else if (normalizedPaymentStatus === 'awaiting_verification') {
+        paymentStatus = 'awaiting_verification';
     }
     else if (paymentCollectionMode === 'manual_transfer' || paymentCollectionMode === 'momo_manual' || paymentCollectionMode === 'cash') {
         paymentStatus = saysPaid || saysPartial ? 'awaiting_verification' : 'pending';
@@ -3464,6 +3493,7 @@ function mapIntegrationBookingDoc(docSnap) {
 }
 function buildAppsScriptBookingPayload(options) {
     const after = options.afterData ?? {};
+    const stableBookingId = toTrimmedStringOrNull(after.bookingId) ?? toTrimmedStringOrNull(after.booking_id) ?? options.bookingId;
     const customer = toPlainObject(after.customer);
     const attributes = toPlainObject(after.attributes);
     const payment = toPlainObject(after.payment);
@@ -3472,7 +3502,8 @@ function buildAppsScriptBookingPayload(options) {
         ? normalizedStatus
         : 'confirmed';
     return {
-        bookingId: options.bookingId,
+        bookingId: stableBookingId,
+        booking_id: stableBookingId,
         storeId: options.storeId,
         eventType: options.eventType,
         status: bookingStatus,
@@ -3568,13 +3599,16 @@ async function upsertBookingCustomerProfile(options) {
     const nameToPersist = normalizedName ?? customerEmail ?? customerPhone ?? 'Booking customer';
     if (existingCustomerDoc) {
         const existingData = (existingCustomerDoc.data() ?? {});
+        const lastBookingId = toTrimmedStringOrNull(existingData.lastBookingId);
         const updates = {
             updatedAt: now,
             lastBookingId: bookingId,
             lastBookingAt: now,
             lastBookingSource: 'integrationBooking',
-            bookingCount: firestore_1.admin.firestore.FieldValue.increment(1),
         };
+        if (lastBookingId !== bookingId) {
+            updates.bookingCount = firestore_1.admin.firestore.FieldValue.increment(1);
+        }
         if (!toTrimmedStringOrNull(existingData.name) && customerName) {
             updates.name = customerName;
         }
@@ -4692,6 +4726,8 @@ exports.v1IntegrationBookings = functions.https.onRequest(async (req, res) => {
             mappingVersion: bookingConfig.mappingVersion,
             columns: sheetColumns,
         },
+        syncStatus: 'pending',
+        syncRequestedAt: now,
         source: 'website',
         createdAt: now,
         updatedAt: now,
@@ -4861,8 +4897,28 @@ async function handleIntegrationCheckoutCreate(req, res) {
                 paymentReference: reference,
                 sedifexOrderId,
                 clientOrderId: clientOrderId ?? null,
+                syncStatus: 'pending',
+                syncRequestedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
+            await firestore_1.defaultDb
+                .collection('stores')
+                .doc(authContext.storeId)
+                .collection('integrationOrders')
+                .doc(reference)
+                .set({
+                bookingId: bookingRef.id,
+                updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+        }
+        else {
+            console.warn('[integrationCheckoutCreate] service order could not be linked to booking', {
+                storeId: authContext.storeId,
+                reference,
+                sedifexOrderId,
+                metadataBookingId,
+                clientOrderId,
+            });
         }
     }
     res.status(200).json({
@@ -4874,6 +4930,73 @@ async function handleIntegrationCheckoutCreate(req, res) {
     });
 }
 exports.integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate);
+async function handleIntegrationCheckoutPreview(req, res) {
+    setIntegrationResponseHeaders(res);
+    if (!validateIntegrationContractVersionOrReply(req, res))
+        return;
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'method-not-allowed' });
+        return;
+    }
+    const authContext = await validateIntegrationTokenOrReply(req, res, { allowedMethods: ['POST'] });
+    if (!authContext?.storeId) {
+        res.status(400).json({ error: 'missing-store-id' });
+        return;
+    }
+    const payload = toPlainObject(req.body);
+    const merchantId = toTrimmedStringOrNull(payload.merchant_id);
+    const currency = toTrimmedStringOrNull(payload.currency) ?? 'GHS';
+    const fulfillmentTypeRaw = toTrimmedStringOrNull(payload.fulfillment_type);
+    const fulfillmentType = fulfillmentTypeRaw === 'DELIVERY' ? 'DELIVERY' : fulfillmentTypeRaw === 'PICKUP' ? 'PICKUP' : null;
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    if (!merchantId || !fulfillmentType || !items.length) {
+        res.status(400).json({ error: 'invalid-request', message: 'merchant_id, fulfillment_type, and items are required' });
+        return;
+    }
+    let subtotal = 0;
+    for (const rawItem of items) {
+        const item = toPlainObject(rawItem);
+        const itemId = toTrimmedStringOrNull(item.item_id);
+        const qty = Math.max(0, Math.floor(toFiniteNumber(item.qty, 0)));
+        if (!itemId || qty <= 0)
+            continue;
+        const snap = await firestore_1.defaultDb.collection('products').doc(itemId).get();
+        if (!snap.exists)
+            continue;
+        const data = toPlainObject(snap.data());
+        const priceMajor = toFiniteNumberOrNull(data.price);
+        if (priceMajor === null || priceMajor < 0)
+            continue;
+        const priceMinor = Math.round(priceMajor * 100);
+        subtotal += priceMinor * qty;
+    }
+    const taxTotal = 0;
+    const deliveryFee = fulfillmentType === 'DELIVERY' ? 0 : 0;
+    const preProcessingTotal = subtotal + taxTotal + deliveryFee;
+    const processingFeeToAdd = preProcessingTotal > 0 ? 450 : 0;
+    const finalTotal = preProcessingTotal + processingFeeToAdd;
+    res.status(200).json({
+        pricing_version: '2026-05-12-v1',
+        currency,
+        subtotal,
+        tax_total: taxTotal,
+        delivery_fee: deliveryFee,
+        pre_processing_total: preProcessingTotal,
+        processing_fee_to_add: processingFeeToAdd,
+        final_total: finalTotal,
+        breakdown: [
+            { code: 'SUBTOTAL', amount: subtotal },
+            { code: 'TAX', amount: taxTotal },
+            { code: 'DELIVERY', amount: deliveryFee },
+            { code: 'PROCESSING_FEE', amount: processingFeeToAdd },
+        ],
+    });
+}
+exports.integrationCheckoutPreview = functions.https.onRequest(handleIntegrationCheckoutPreview);
 async function handleIntegrationOrderStatus(req, res) {
     setIntegrationResponseHeaders(res);
     if (!validateIntegrationContractVersionOrReply(req, res))
@@ -4922,6 +5045,10 @@ exports.integration = functions.https.onRequest(async (req, res) => {
     const path = req.path.replace(/^\/+/, '');
     if (path === 'checkout/create') {
         await handleIntegrationCheckoutCreate(req, res);
+        return;
+    }
+    if (path === 'checkout/preview') {
+        await handleIntegrationCheckoutPreview(req, res);
         return;
     }
     if (path.startsWith('orders/')) {
@@ -6162,6 +6289,28 @@ exports.emitProductWebhooks = functions.firestore
         createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
     })));
 });
+exports.syncIntegrationBookingCustomers = functions.firestore
+    .document('stores/{storeId}/integrationBookings/{bookingId}')
+    .onWrite(async (change, context) => {
+    if (!change.after.exists)
+        return;
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : '';
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : '';
+    if (!storeId || !bookingId)
+        return;
+    const afterData = (change.after.data() ?? {});
+    const customer = toPlainObject(afterData.customer);
+    const customerName = toTrimmedStringOrNull(customer.name) ?? toTrimmedStringOrNull(afterData.name) ?? null;
+    const customerPhone = toTrimmedStringOrNull(customer.phone) ?? toTrimmedStringOrNull(afterData.phone) ?? null;
+    const customerEmail = toTrimmedStringOrNull(customer.email) ?? toTrimmedStringOrNull(afterData.email) ?? null;
+    await upsertBookingCustomerProfile({
+        storeId,
+        customerName,
+        customerPhone,
+        customerEmail,
+        bookingId,
+    });
+});
 exports.emitBookingWebhooks = functions.firestore
     .document('stores/{storeId}/integrationBookings/{bookingId}')
     .onWrite(async (change, context) => {
@@ -6287,6 +6436,79 @@ exports.emitBookingWebhooks = functions.firestore
         error: result.error,
         createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
     })));
+});
+exports.syncPendingIntegrationBookingToAppsScript = functions.firestore
+    .document('stores/{storeId}/integrationBookings/{bookingId}')
+    .onWrite(async (change, context) => {
+    if (!change.after.exists)
+        return;
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : '';
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : '';
+    if (!storeId || !bookingId)
+        return;
+    const afterData = (change.after.data() ?? {});
+    const syncStatus = toTrimmedStringOrNull(afterData.syncStatus)?.toLowerCase() ?? '';
+    if (syncStatus !== 'pending')
+        return;
+    const endpointSnapshot = await firestore_1.defaultDb
+        .collection('webhookEndpoints')
+        .where('storeId', '==', storeId)
+        .where('status', '==', 'active')
+        .get();
+    const appsScriptEndpoints = endpointSnapshot.docs.filter(docSnap => {
+        const endpoint = docSnap.data();
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : '';
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret.trim() : '';
+        return Boolean(url && secret && /^https:\/\/script\.google\.com\/macros\//i.test(url));
+    });
+    if (appsScriptEndpoints.length === 0) {
+        await change.after.ref.set({
+            syncStatus: 'failed',
+            syncLastAttemptAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+            syncError: 'no-active-apps-script-endpoint',
+        }, { merge: true });
+        return;
+    }
+    const bodyObject = buildAppsScriptBookingPayload({
+        storeId,
+        bookingId,
+        eventType: 'booking.updated',
+        afterData,
+    });
+    const body = JSON.stringify(bodyObject);
+    let firstError = null;
+    for (const endpointDoc of appsScriptEndpoints) {
+        const endpoint = endpointDoc.data();
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : '';
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : '';
+        const signature = computeWebhookSignature(secret, body);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-sedifex-signature': signature,
+                    'x-sedifex-event': 'booking.updated',
+                    'x-sedifex-event-id': `evt_${context.eventId}`,
+                },
+                body,
+            });
+            if (!response.ok) {
+                firstError = firstError ?? `endpoint ${endpointDoc.id} returned ${response.status}`;
+            }
+        }
+        catch (error) {
+            firstError = firstError ?? (error instanceof Error ? error.message : 'unknown error');
+        }
+    }
+    const existingAttempts = Math.max(0, Math.floor(toFiniteNumber(afterData.syncAttempts, 0)));
+    await change.after.ref.set({
+        syncStatus: firstError ? 'failed' : 'synced',
+        syncError: firstError,
+        syncAttempts: existingAttempts + 1,
+        syncLastAttemptAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+        syncLastSuccessAt: firstError ? null : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
 });
 exports.emitIntegrationOrderWebhooks = functions.firestore
     .document('stores/{storeId}/integrationOrders/{reference}')
@@ -7385,25 +7607,56 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
                 }, { merge: true });
                 const orderSnap = await orderRef.get();
                 const orderData = (orderSnap.data() ?? {});
+                const bookingsCol = firestore_1.defaultDb.collection('stores').doc(storeId).collection('integrationBookings');
+                let bookingRef = null;
                 const bookingId = toTrimmedStringOrNull(orderData.bookingId);
                 if (bookingId) {
-                    await firestore_1.defaultDb
-                        .collection('stores')
-                        .doc(storeId)
-                        .collection('integrationBookings')
-                        .doc(bookingId)
-                        .set({
+                    bookingRef = bookingsCol.doc(bookingId);
+                }
+                else if (clientOrderId) {
+                    const snap = await bookingsCol.where('clientOrderId', '==', clientOrderId).limit(1).get();
+                    if (!snap.empty)
+                        bookingRef = snap.docs[0].ref;
+                }
+                else if (sedifexOrderId) {
+                    const snap = await bookingsCol.where('sedifexOrderId', '==', sedifexOrderId).limit(1).get();
+                    if (!snap.empty)
+                        bookingRef = snap.docs[0].ref;
+                }
+                else {
+                    const snap = await bookingsCol.where('paymentReference', '==', reference).limit(1).get();
+                    if (!snap.empty)
+                        bookingRef = snap.docs[0].ref;
+                }
+                if (bookingRef) {
+                    await bookingRef.set({
                         paymentCollectionMode: 'online_checkout',
                         paymentStatus: 'confirmed',
                         paymentConfirmedAt: typeof data.paid_at === 'string'
                             ? firestore_1.admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
                             : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                        paymentVerifiedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                        paymentVerifiedBy: 'paystack_webhook',
                         paymentReference: reference,
                         sedifexOrderId,
                         clientOrderId,
                         bookingStatus: 'booked',
+                        syncStatus: 'pending',
+                        syncRequestedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                         updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                     }, { merge: true });
+                    await orderRef.set({
+                        bookingId: bookingRef.id,
+                        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+                }
+                else {
+                    console.warn('[paystack] confirmed order could not be linked to booking', {
+                        storeId,
+                        reference,
+                        sedifexOrderId,
+                        clientOrderId,
+                    });
                 }
             }
         }
@@ -7422,3 +7675,62 @@ exports.__testing = {
     normalizeBookingDateForSheet,
     normalizeBookingTimeForSheet,
 };
+exports.publishDailyFeaturedProductBlogPost = functions.pubsub
+    .schedule('every day 09:00')
+    .timeZone('Etc/UTC')
+    .onRun(async () => {
+    const settingsSnap = await firestore_1.defaultDb
+        .collection('storeSettings')
+        .where('blogAutomation.dailyProductShareEnabled', '==', true)
+        .get();
+    const runDate = new Date().toISOString().slice(0, 10);
+    for (const settingsDoc of settingsSnap.docs) {
+        const storeId = settingsDoc.id;
+        const productsSnap = await firestore_1.defaultDb
+            .collection('products')
+            .where('storeId', '==', storeId)
+            .orderBy('name', 'asc')
+            .limit(200)
+            .get();
+        if (productsSnap.empty)
+            continue;
+        const alreadyPublishedSnap = await firestore_1.defaultDb
+            .collection('blogPosts')
+            .where('storeId', '==', storeId)
+            .where('source', '==', 'daily-product-share')
+            .where('sourceDate', '==', runDate)
+            .limit(1)
+            .get();
+        if (!alreadyPublishedSnap.empty)
+            continue;
+        const productDocs = productsSnap.docs;
+        const selectedProductDoc = productDocs[hashString(`${storeId}:${runDate}`) % productDocs.length];
+        const productData = (selectedProductDoc.data() ?? {});
+        const productName = typeof productData.name === 'string' && productData.name.trim() ? productData.name.trim() : 'Featured Product';
+        const productDescription = typeof productData.description === 'string' ? productData.description.trim() : '';
+        const safeSlug = productName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+        await firestore_1.defaultDb.collection('blogPosts').add({
+            storeId,
+            title: `Featured today: ${productName}`,
+            slug: `featured-${runDate}-${safeSlug}`.slice(0, 120),
+            excerpt: productDescription
+                ? productDescription.slice(0, 180)
+                : `Discover today's featured item from our catalog: ${productName}.`,
+            content: productDescription
+                ? `${productName}\n\n${productDescription}\n\nVisit our store today to buy or learn more.`
+                : `${productName}\n\nThis is today's featured item from our catalog. Visit our store today to learn more.`,
+            status: 'published',
+            publishAt: null,
+            publishedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+            source: 'daily-product-share',
+            sourceDate: runDate,
+            productId: selectedProductDoc.id,
+        });
+    }
+    return null;
+});

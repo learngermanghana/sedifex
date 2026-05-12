@@ -6196,6 +6196,78 @@ async function handleIntegrationCheckoutCreate(req: functions.https.Request, res
 
 export const integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate)
 
+async function handleIntegrationCheckoutPreview(req: functions.https.Request, res: functions.Response<any>) {
+  setIntegrationResponseHeaders(res)
+  if (!validateIntegrationContractVersionOrReply(req, res)) return
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+
+  const authContext = await validateIntegrationTokenOrReply(req, res, { allowedMethods: ['POST'] })
+  if (!authContext?.storeId) {
+    res.status(400).json({ error: 'missing-store-id' })
+    return
+  }
+
+  const payload = toPlainObject(req.body)
+  const merchantId = toTrimmedStringOrNull(payload.merchant_id)
+  const currency = toTrimmedStringOrNull(payload.currency) ?? 'GHS'
+  const fulfillmentTypeRaw = toTrimmedStringOrNull(payload.fulfillment_type)
+  const fulfillmentType = fulfillmentTypeRaw === 'DELIVERY' ? 'DELIVERY' : fulfillmentTypeRaw === 'PICKUP' ? 'PICKUP' : null
+  const items = Array.isArray(payload.items) ? payload.items : []
+
+  if (!merchantId || !fulfillmentType || !items.length) {
+    res.status(400).json({ error: 'invalid-request', message: 'merchant_id, fulfillment_type, and items are required' })
+    return
+  }
+
+  let subtotal = 0
+  for (const rawItem of items) {
+    const item = toPlainObject(rawItem)
+    const itemId = toTrimmedStringOrNull(item.item_id)
+    const qty = Math.max(0, Math.floor(toFiniteNumber(item.qty, 0)))
+    if (!itemId || qty <= 0) continue
+    const snap = await db.collection('products').doc(itemId).get()
+    if (!snap.exists) continue
+    const data = toPlainObject(snap.data())
+    const priceMajor = toFiniteNumberOrNull(data.price)
+    if (priceMajor === null || priceMajor < 0) continue
+    const priceMinor = Math.round(priceMajor * 100)
+    subtotal += priceMinor * qty
+  }
+
+  const taxTotal = 0
+  const deliveryFee = fulfillmentType === 'DELIVERY' ? 0 : 0
+  const preProcessingTotal = subtotal + taxTotal + deliveryFee
+  const processingFeeToAdd = preProcessingTotal > 0 ? 450 : 0
+  const finalTotal = preProcessingTotal + processingFeeToAdd
+
+  res.status(200).json({
+    pricing_version: '2026-05-12-v1',
+    currency,
+    subtotal,
+    tax_total: taxTotal,
+    delivery_fee: deliveryFee,
+    pre_processing_total: preProcessingTotal,
+    processing_fee_to_add: processingFeeToAdd,
+    final_total: finalTotal,
+    breakdown: [
+      { code: 'SUBTOTAL', amount: subtotal },
+      { code: 'TAX', amount: taxTotal },
+      { code: 'DELIVERY', amount: deliveryFee },
+      { code: 'PROCESSING_FEE', amount: processingFeeToAdd },
+    ],
+  })
+}
+
+export const integrationCheckoutPreview = functions.https.onRequest(handleIntegrationCheckoutPreview)
+
+
 async function handleIntegrationOrderStatus(req: functions.https.Request, res: functions.Response<any>) {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
@@ -6247,6 +6319,10 @@ export const integration = functions.https.onRequest(async (req, res) => {
 
   if (path === 'checkout/create') {
     await handleIntegrationCheckoutCreate(req, res)
+    return
+  }
+  if (path === 'checkout/preview') {
+    await handleIntegrationCheckoutPreview(req, res)
     return
   }
   if (path.startsWith('orders/')) {
