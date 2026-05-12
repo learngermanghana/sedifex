@@ -17,6 +17,15 @@ import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { requestAiAdvisor } from '../api/aiAdvisor'
 
+
+type CatalogItem = {
+  id: string
+  name: string
+  itemType: 'product' | 'service'
+  price: number | null
+  description: string | null
+}
+
 type BlogPost = {
   id: string
   title: string
@@ -66,6 +75,8 @@ export default function BlogPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [isAiGenerating, setIsAiGenerating] = useState(false)
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+  const [selectedCatalogItemId, setSelectedCatalogItemId] = useState('')
 
   const publicFeedUrl = useMemo(() => (storeId ? `/api/public-blog?storeId=${encodeURIComponent(storeId)}` : ''), [storeId])
 
@@ -101,14 +112,57 @@ export default function BlogPage() {
     void loadPosts()
   }, [storeId])
 
+  useEffect(() => {
+    async function loadCatalogItems() {
+      if (!storeId) {
+        setCatalogItems([])
+        setSelectedCatalogItemId('')
+        return
+      }
+      const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('name', 'asc'), limit(200))
+      const snap = await getDocs(q)
+      const rows: CatalogItem[] = snap.docs.map(docSnap => {
+        const data = docSnap.data() as Record<string, unknown>
+        return {
+          id: docSnap.id,
+          name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Untitled item',
+          itemType: data.itemType === 'service' ? 'service' : 'product',
+          price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
+          description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+        }
+      })
+      setCatalogItems(rows)
+      setSelectedCatalogItemId(current => (current && rows.some(item => item.id === current) ? current : ''))
+    }
+
+    void loadCatalogItems()
+  }, [storeId])
+
+  const selectedCatalogItem = useMemo(
+    () => catalogItems.find(item => item.id === selectedCatalogItemId) ?? null,
+    [catalogItems, selectedCatalogItemId],
+  )
+
   async function generateBlogWithAi() {
     if (!storeId) return
     setIsAiGenerating(true)
     setMessage(null)
     try {
+      const itemContext = selectedCatalogItem
+        ? [
+            `Featured ${selectedCatalogItem.itemType}: ${selectedCatalogItem.name}.`,
+            selectedCatalogItem.price != null ? `Price: GHS ${selectedCatalogItem.price.toFixed(2)}.` : null,
+            selectedCatalogItem.description ? `Details: ${selectedCatalogItem.description}.` : null,
+            'Use this item naturally in the post.',
+          ]
+            .filter(Boolean)
+            .join(' ')
+        : null
+
       const prompt = [
         'Write a clear blog post for a retail store website in simple language.',
         `Working title: ${title.trim() || 'New Arrivals and Offers'}.`,
+        itemContext,
         'Return this format exactly:',
         'TITLE: <post title>',
         'CONTENT: <blog post body with paragraphs>',
@@ -206,6 +260,17 @@ export default function BlogPage() {
           </div>
           <div className="blog-page__top-actions">
             <button type="button" onClick={() => setEditingPostId(null)}>{editingPostId ? 'New post' : 'New post'}</button>
+            {publicFeedUrl ? (
+              <aside className="card blog-page__feed">
+                <strong>Public feed</strong>
+                <p style={{ margin: '4px 0 0', color: '#64748b' }}>Endpoint</p>
+                <code>{publicFeedUrl}</code>
+                <div className="blog-page__feed-actions">
+                  <button type="button" className="button button--ghost" onClick={() => void navigator.clipboard.writeText(publicFeedUrl)}>Copy</button>
+                  <button type="button" className="button button--ghost" onClick={() => window.open(publicFeedUrl, '_blank', 'noopener,noreferrer')}>Open</button>
+                </div>
+              </aside>
+            ) : null}
           </div>
         </header>
 
@@ -217,11 +282,17 @@ export default function BlogPage() {
                 <input value={title} onChange={e => setTitle(e.target.value)} required minLength={5} />
               </label>
 
-              <div className="blog-page__toolbar">
-                <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
-                  {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
-                </button>
-              </div>
+              <label className="stack">
+                <span>Featured product or service (optional)</span>
+                <select value={selectedCatalogItemId} onChange={e => setSelectedCatalogItemId(e.target.value)}>
+                  <option value="">Select from your products/services</option>
+                  {catalogItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.itemType})
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="stack">
                 <span>Post content</span>
@@ -237,7 +308,7 @@ export default function BlogPage() {
                     const next = `${content.slice(0, el.selectionStart)}${formatted}${content.slice(el.selectionEnd)}`
                     setContent(next)
                   }}
-                  rows={14}
+                  rows={18}
                   required
                 />
               </label>
@@ -259,22 +330,15 @@ export default function BlogPage() {
                 </label>
               </div>
 
-              <button type="submit" disabled={saving || !storeId}>{saving ? 'Saving…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
+              <div className="blog-page__toolbar blog-page__toolbar--actions">
+                <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
+                  {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
+                </button>
+                <button type="submit" disabled={saving || !storeId}>{saving ? 'Saving…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
+              </div>
             </form>
             {message ? <p>{message}</p> : null}
           </article>
-
-          {publicFeedUrl ? (
-            <aside className="card blog-page__feed">
-              <strong>Public feed</strong>
-              <p style={{ margin: '4px 0 0', color: '#64748b' }}>Endpoint</p>
-              <code>{publicFeedUrl}</code>
-              <div className="blog-page__feed-actions">
-                <button type="button" className="button button--ghost" onClick={() => void navigator.clipboard.writeText(publicFeedUrl)}>Copy</button>
-                <button type="button" className="button button--ghost" onClick={() => window.open(publicFeedUrl, '_blank', 'noopener,noreferrer')}>Open</button>
-              </div>
-            </aside>
-          ) : null}
         </div>
 
         <section className="card blog-page__posts">
