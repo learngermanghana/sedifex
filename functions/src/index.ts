@@ -6086,9 +6086,24 @@ async function handleIntegrationCheckoutCreate(req: functions.https.Request, res
   const metadataInput = typeof payload.metadata === 'object' && payload.metadata ? (payload.metadata as Record<string, unknown>) : {}
   const metadataBookingId = toTrimmedStringOrNull(metadataInput.bookingId)
   const currency = toTrimmedStringOrNull(payload.currency) ?? 'GHS'
+  const fulfillmentTypeRaw = toTrimmedStringOrNull(payload.fulfillment_type)
+  const fulfillmentType = fulfillmentTypeRaw === 'DELIVERY' ? 'DELIVERY' : 'PICKUP'
+  const checkoutItems = Array.isArray(payload.items) ? payload.items : []
   const returnUrl = toTrimmedStringOrNull(payload.returnUrl)
-  if (!email || !Number.isFinite(amount) || amount <= 0) {
-    res.status(400).json({ error: 'invalid-request', message: 'customer.email and amount are required' })
+  if (!email) {
+    res.status(400).json({ error: 'invalid-request', message: 'customer.email is required' })
+    return
+  }
+
+  const pricing = await calculateIntegrationCharges({
+    storeId: authContext.storeId,
+    currency,
+    fulfillmentType,
+    items: checkoutItems,
+  })
+  const amountMajor = pricing.finalTotal / 100
+  if (pricing.finalTotal <= 0 && (!Number.isFinite(amount) || amount <= 0)) {
+    res.status(400).json({ error: 'invalid-request', message: 'a valid checkout total could not be computed' })
     return
   }
 
@@ -6112,7 +6127,7 @@ async function handleIntegrationCheckoutCreate(req: functions.https.Request, res
     },
     body: JSON.stringify({
       email,
-      amount: Math.round(amount * 100),
+      amount: pricing.finalTotal > 0 ? pricing.finalTotal : Math.round(amount * 100),
       currency,
       reference,
       callback_url: returnUrl ?? undefined,
@@ -6132,8 +6147,20 @@ async function handleIntegrationCheckoutCreate(req: functions.https.Request, res
     clientOrderId,
     orderType: metadata.orderType,
     bookingId: metadataBookingId,
-    amount,
+    amount: pricing.finalTotal > 0 ? amountMajor : amount,
     currency,
+    pricingSnapshot: {
+      pricing_version: pricing.pricingVersion,
+      currency: pricing.currency,
+      subtotal: pricing.subtotal,
+      tax_total: pricing.taxTotal,
+      delivery_fee: pricing.deliveryFee,
+      pre_processing_total: pricing.preProcessingTotal,
+      processing_fee_to_add: pricing.processingFeeToAdd,
+      final_total: pricing.finalTotal,
+      breakdown: pricing.breakdown,
+      items: pricing.resolvedItems,
+    },
     paymentStatus: 'pending',
     orderStatus: 'pending',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -6196,6 +6223,97 @@ async function handleIntegrationCheckoutCreate(req: functions.https.Request, res
 
 export const integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate)
 
+type IntegrationCheckoutItemResolved = {
+  itemId: string
+  itemType: 'product' | 'service' | 'booking'
+  name: string
+  qty: number
+  unitPriceMinor: number
+  lineSubtotalMinor: number
+  taxRate: number
+  lineTaxMinor: number
+}
+
+type IntegrationPricingResult = {
+  pricingVersion: string
+  currency: string
+  subtotal: number
+  taxTotal: number
+  deliveryFee: number
+  preProcessingTotal: number
+  processingFeeToAdd: number
+  finalTotal: number
+  breakdown: Array<{ code: string; amount: number }>
+  resolvedItems: IntegrationCheckoutItemResolved[]
+}
+
+function estimateProcessingFee(amountMinor: number) {
+  if (!Number.isFinite(amountMinor) || amountMinor <= 0) return 0
+  return Math.round((amountMinor * 0.015) + 100)
+}
+
+async function calculateIntegrationCharges(input: {
+  storeId: string
+  currency: string
+  fulfillmentType: 'DELIVERY' | 'PICKUP'
+  items: unknown[]
+}) : Promise<IntegrationPricingResult> {
+  const storeSnap = await db.collection('stores').doc(input.storeId).get()
+  const store = toPlainObject(storeSnap.data())
+  const inventoryConfig = toPlainObject(store.inventoryConfig)
+  const defaultTaxRate = Math.max(0, toFiniteNumber(inventoryConfig.defaultTaxRate, toFiniteNumber(store.taxRate, 0)))
+  const deliveryRuleFlatFee = Math.max(0, Math.round(toFiniteNumber(inventoryConfig.deliveryFlatFeeMinor, 0)))
+
+  const resolvedItems: IntegrationCheckoutItemResolved[] = []
+  for (const rawItem of input.items) {
+    const item = toPlainObject(rawItem)
+    const itemId = toTrimmedStringOrNull(item.item_id)
+    const itemTypeRaw = toTrimmedStringOrNull(item.item_type)
+    const itemType: 'product' | 'service' | 'booking' =
+      itemTypeRaw === 'service' || itemTypeRaw === 'booking' ? itemTypeRaw : 'product'
+    const qty = Math.max(0, Math.floor(toFiniteNumber(item.qty, 0)))
+    if (!itemId || qty <= 0) continue
+
+    const snap = await db.collection('products').doc(itemId).get()
+    if (!snap.exists) continue
+    const data = toPlainObject(snap.data())
+    const name = toTrimmedStringOrNull(data.name) ?? itemId
+    const priceMajor = toFiniteNumberOrNull(data.price)
+    if (priceMajor === null || priceMajor < 0) continue
+
+    const unitPriceMinor = Math.round(priceMajor * 100)
+    const lineSubtotalMinor = unitPriceMinor * qty
+    const taxRate = Math.max(0, toFiniteNumber(data.taxRate, defaultTaxRate))
+    const lineTaxMinor = Math.round(lineSubtotalMinor * taxRate)
+    resolvedItems.push({ itemId, itemType, name, qty, unitPriceMinor, lineSubtotalMinor, taxRate, lineTaxMinor })
+  }
+
+  const subtotal = resolvedItems.reduce((sum, line) => sum + line.lineSubtotalMinor, 0)
+  const taxTotal = resolvedItems.reduce((sum, line) => sum + line.lineTaxMinor, 0)
+  const deliveryFee = input.fulfillmentType === 'DELIVERY' ? deliveryRuleFlatFee : 0
+  const preProcessingTotal = subtotal + taxTotal + deliveryFee
+  const processingFeeToAdd = estimateProcessingFee(preProcessingTotal)
+  const finalTotal = preProcessingTotal + processingFeeToAdd
+
+  return {
+    pricingVersion: '2026-05-12-v2',
+    currency: input.currency,
+    subtotal,
+    taxTotal,
+    deliveryFee,
+    preProcessingTotal,
+    processingFeeToAdd,
+    finalTotal,
+    breakdown: [
+      { code: 'SUBTOTAL', amount: subtotal },
+      { code: 'TAX', amount: taxTotal },
+      { code: 'DELIVERY', amount: deliveryFee },
+      { code: 'PROCESSING_FEE', amount: processingFeeToAdd },
+    ],
+    resolvedItems,
+  }
+}
+
 async function handleIntegrationCheckoutPreview(req: functions.https.Request, res: functions.Response<any>) {
   setIntegrationResponseHeaders(res)
   if (!validateIntegrationContractVersionOrReply(req, res)) return
@@ -6226,42 +6344,24 @@ async function handleIntegrationCheckoutPreview(req: functions.https.Request, re
     return
   }
 
-  let subtotal = 0
-  for (const rawItem of items) {
-    const item = toPlainObject(rawItem)
-    const itemId = toTrimmedStringOrNull(item.item_id)
-    const qty = Math.max(0, Math.floor(toFiniteNumber(item.qty, 0)))
-    if (!itemId || qty <= 0) continue
-    const snap = await db.collection('products').doc(itemId).get()
-    if (!snap.exists) continue
-    const data = toPlainObject(snap.data())
-    const priceMajor = toFiniteNumberOrNull(data.price)
-    if (priceMajor === null || priceMajor < 0) continue
-    const priceMinor = Math.round(priceMajor * 100)
-    subtotal += priceMinor * qty
-  }
-
-  const taxTotal = 0
-  const deliveryFee = fulfillmentType === 'DELIVERY' ? 0 : 0
-  const preProcessingTotal = subtotal + taxTotal + deliveryFee
-  const processingFeeToAdd = preProcessingTotal > 0 ? 450 : 0
-  const finalTotal = preProcessingTotal + processingFeeToAdd
+  const pricing = await calculateIntegrationCharges({
+    storeId: authContext.storeId,
+    currency,
+    fulfillmentType,
+    items,
+  })
 
   res.status(200).json({
-    pricing_version: '2026-05-12-v1',
-    currency,
-    subtotal,
-    tax_total: taxTotal,
-    delivery_fee: deliveryFee,
-    pre_processing_total: preProcessingTotal,
-    processing_fee_to_add: processingFeeToAdd,
-    final_total: finalTotal,
-    breakdown: [
-      { code: 'SUBTOTAL', amount: subtotal },
-      { code: 'TAX', amount: taxTotal },
-      { code: 'DELIVERY', amount: deliveryFee },
-      { code: 'PROCESSING_FEE', amount: processingFeeToAdd },
-    ],
+    pricing_version: pricing.pricingVersion,
+    currency: pricing.currency,
+    subtotal: pricing.subtotal,
+    tax_total: pricing.taxTotal,
+    delivery_fee: pricing.deliveryFee,
+    pre_processing_total: pricing.preProcessingTotal,
+    processing_fee_to_add: pricing.processingFeeToAdd,
+    final_total: pricing.finalTotal,
+    breakdown: pricing.breakdown,
+    items: pricing.resolvedItems,
   })
 }
 
@@ -9384,6 +9484,30 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
 
       if (reference) {
         const orderRef = db.collection('stores').doc(storeId).collection('integrationOrders').doc(reference)
+        const orderSnap = await orderRef.get()
+        const orderData = (orderSnap.data() ?? {}) as Record<string, unknown>
+        const expectedAmountMinor = Math.round(toFiniteNumber(orderData.amount, 0) * 100)
+        const paidAmountMinor = Math.round(toFiniteNumber(data.amount, 0))
+        if (expectedAmountMinor > 0 && paidAmountMinor > 0 && expectedAmountMinor !== paidAmountMinor) {
+          console.warn('[paystack] amount mismatch for integration order', {
+            storeId,
+            reference,
+            expectedAmountMinor,
+            paidAmountMinor,
+          })
+          await orderRef.set(
+            {
+              paymentStatus: 'verification_failed',
+              verificationError: 'amount_mismatch',
+              expectedAmountMinor,
+              paidAmountMinor,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
+          res.status(200).send('ok')
+          return
+        }
         await orderRef.set(
           {
             reference,
@@ -9401,8 +9525,23 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
           },
           { merge: true },
         )
-        const orderSnap = await orderRef.get()
-        const orderData = (orderSnap.data() ?? {}) as Record<string, unknown>
+        await db.collection('stores').doc(storeId).collection('settlementEntries').doc(reference).set(
+          {
+            reference,
+            storeId,
+            provider: 'paystack',
+            status: 'paid',
+            grossAmountMinor: paidAmountMinor || null,
+            currency: typeof data.currency === 'string' ? data.currency : null,
+            paidAt:
+              typeof data.paid_at === 'string'
+                ? admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
+                : admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
         const bookingsCol = db.collection('stores').doc(storeId).collection('integrationBookings')
         let bookingRef: admin.firestore.DocumentReference | null = null
 
