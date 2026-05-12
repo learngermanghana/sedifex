@@ -1742,10 +1742,10 @@ export default function Sell() {
         <Link to="/sell" className="sell-page__workspace-tab is-active" aria-current="page">
           Sell
         </Link>
-        <Link to="/close-day" className="sell-page__workspace-tab">
+        <Link to="/sell/close-day" className="sell-page__workspace-tab">
           Close day
         </Link>
-        <Link to="/finance" className="sell-page__workspace-tab">
+        <Link to="/sell/invoice" className="sell-page__workspace-tab">
           Invoice
         </Link>
       </nav>
