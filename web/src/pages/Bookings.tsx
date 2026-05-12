@@ -604,6 +604,14 @@ export default function Bookings() {
                           <td>
                             <div className="bookings-page__row-actions">
                               <Link to={`/bookings/${booking.id}`} className="btn btn-secondary">Edit</Link>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => void handleDeleteBooking(booking.id)}
+                                disabled={updatingBookingId === booking.id}
+                              >
+                                {updatingBookingId === booking.id ? 'Deleting…' : 'Delete'}
+                              </button>
                             </div>
                           </td>
                         </tr>
