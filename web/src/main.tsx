@@ -66,6 +66,7 @@ const router = createBrowserRouter([
   { path: '/join-customers/:inviteId', element: <PublicCustomerIntake /> },
   { path: '/join-customers/:inviteId/:mode', element: <PublicCustomerIntake /> },
   { path: '/public-blog/:storeId', element: <PublicBlogPage /> },
+  { path: '/public-blog/:storeId/:slug', element: <PublicBlogPage /> },
 
   {
     path: '/',
