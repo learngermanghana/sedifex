@@ -26,6 +26,7 @@ type CatalogItem = {
   itemType: 'product' | 'service'
   price: number | null
   description: string | null
+  imageUrl: string | null
 }
 
 type BlogPost = {
@@ -159,6 +160,12 @@ export default function BlogPage() {
           itemType: data.itemType === 'service' ? 'service' : 'product',
           price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
           description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+          imageUrl:
+            typeof data.imageUrl === 'string' && data.imageUrl.trim()
+              ? data.imageUrl.trim()
+              : Array.isArray(data.imageUrls)
+                ? (data.imageUrls.find((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)?.trim() ?? null)
+                : null,
         }
       })
       setCatalogItems(rows)
@@ -172,6 +179,17 @@ export default function BlogPage() {
     () => catalogItems.find(item => item.id === selectedCatalogItemId) ?? null,
     [catalogItems, selectedCatalogItemId],
   )
+
+
+  useEffect(() => {
+    if (!selectedCatalogItem) return
+    if (selectedCatalogItem.imageUrl) {
+      setImageUrl(selectedCatalogItem.imageUrl)
+      setUploadStatus(`Using ${selectedCatalogItem.name} image for this post.`)
+      return
+    }
+    setUploadStatus(`${selectedCatalogItem.name} has no product image yet.`)
+  }, [selectedCatalogItem])
 
   async function generateBlogWithAi() {
     if (!storeId) return
@@ -321,7 +339,7 @@ export default function BlogPage() {
                   reader.readAsDataURL(file)
                 }}
               />
-              Browse for image upload
+              Upload custom image (optional override)
             </label>
             {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
             {imageUrl ? <img className="blog-page__image-preview" src={imageUrl} alt="Selected upload preview" /> : null}
