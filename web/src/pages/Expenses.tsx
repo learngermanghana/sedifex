@@ -17,22 +17,29 @@ type Expense = {
   id: string
   storeId: string
   amount: number
+  type: 'expense' | 'donation'
   category: string
   description: string
   date: string // yyyy-mm-dd
   createdAt?: unknown
 }
 
-const CATEGORIES = [
-  'Rent',
-  'Salaries & wages',
-  'Utilities',
-  'Supplies',
-  'Transport',
-  'Marketing',
-  'Loan repayment',
-  'Miscellaneous',
-] as const
+const ENTRY_TYPES = ['expense', 'donation'] as const
+type EntryType = (typeof ENTRY_TYPES)[number]
+
+const CATEGORY_OPTIONS: Record<EntryType, readonly string[]> = {
+  expense: [
+    'Rent',
+    'Salaries & wages',
+    'Utilities',
+    'Supplies',
+    'Transport',
+    'Marketing',
+    'Loan repayment',
+    'Miscellaneous',
+  ],
+  donation: ['Cash donation', 'Food support', 'Goods support', 'Event support', 'Other'],
+}
 
 type ExpensesProps = {
   embedded?: boolean
@@ -43,7 +50,8 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
   const user = useAuthUser()
 
   const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState<string>(CATEGORIES[0])
+  const [type, setType] = useState<EntryType>('expense')
+  const [category, setCategory] = useState<string>(CATEGORY_OPTIONS.expense[0])
   const [description, setDescription] = useState('')
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [isSaving, setIsSaving] = useState(false)
@@ -53,6 +61,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
   const activityActor = user?.displayName || user?.email || 'Team member'
 
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [recordFilter, setRecordFilter] = useState<'all' | EntryType>('all')
 
   function currentMonthKey(dateValue: Date) {
     const year = dateValue.getFullYear()
@@ -81,6 +90,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
           id: docSnap.id,
           storeId: data.storeId,
           amount: Number(data.amount) || 0,
+          type: data.type === 'donation' ? 'donation' : 'expense',
           category: data.category || 'Uncategorized',
           description: data.description || '',
           date: data.date || '',
@@ -105,6 +115,25 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
     () => expenses.reduce((sum, exp) => sum + exp.amount, 0),
     [expenses],
   )
+
+  const totalDonations = useMemo(
+    () =>
+      expenses
+        .filter(exp => exp.type === 'donation')
+        .reduce((sum, exp) => sum + exp.amount, 0),
+    [expenses],
+  )
+
+  const totalExpenses = useMemo(
+    () =>
+      expenses.filter(exp => exp.type === 'expense').reduce((sum, exp) => sum + exp.amount, 0),
+    [expenses],
+  )
+
+  const visibleRecords = useMemo(() => {
+    if (recordFilter === 'all') return expenses
+    return expenses.filter(exp => exp.type === recordFilter)
+  }, [expenses, recordFilter])
 
   const isFormValid =
     !!storeId &&
@@ -152,6 +181,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
     try {
       await addDoc(collection(db, 'expenses'), {
         storeId,
+        type,
         amount: Number(amount),
         category,
         description: description.trim(),
@@ -165,9 +195,13 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
       // clear form (keep date & category to make multiple entries easier)
       setAmount('')
       setDescription('')
+      const nextDefaultCategory = CATEGORY_OPTIONS[type][0]
+      setCategory(nextDefaultCategory)
 
       // show success message
-      setSuccess('Expense saved. You can see it in the history below.')
+      setSuccess(
+        `${type === 'donation' ? 'Donation' : 'Expense'} saved. You can see it in the history below.`,
+      )
     } catch (err) {
       console.error('[expenses] Failed to save expense', err)
       setError('We could not save this expense. Please try again.')
@@ -180,10 +214,11 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
   const content = (
     <>
       {/* Entry form */}
-      <section className="card" aria-label="Add expense">
-        <h3 className="card__title">Add expense</h3>
+      <section className="card" aria-label="Add record">
+        <h3 className="card__title">Add record</h3>
         <p className="card__subtitle">
-          Capture expenses for this Sedifex workspace. Amounts are stored in your POS currency.
+          Capture expenses and donations for this Sedifex workspace. Amounts are stored in your
+          POS currency.
         </p>
 
         {!storeId && (
@@ -210,6 +245,23 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
           style={{ display: 'grid', gap: 12, maxWidth: 480 }}
         >
           <div className="form__field">
+            <label htmlFor="expense-type">Type</label>
+            <select
+              id="expense-type"
+              value={type}
+              onChange={e => {
+                const nextType = e.target.value as EntryType
+                setType(nextType)
+                setCategory(CATEGORY_OPTIONS[nextType][0])
+              }}
+            >
+              <option value="expense">Expense</option>
+              <option value="donation">Donation</option>
+            </select>
+            <p className="form__hint">Choose whether this is a business cost or a donation.</p>
+          </div>
+
+          <div className="form__field">
             <label htmlFor="expense-amount">Amount</label>
             <input
               id="expense-amount"
@@ -220,7 +272,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
               onChange={e => setAmount(e.target.value)}
               required
             />
-            <p className="form__hint">Enter the total cost for this expense.</p>
+            <p className="form__hint">Enter the total value for this record.</p>
           </div>
 
           <div className="form__field">
@@ -230,7 +282,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
               value={category}
               onChange={e => setCategory(e.target.value)}
             >
-              {CATEGORIES.map(cat => (
+              {CATEGORY_OPTIONS[type].map(cat => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
@@ -266,7 +318,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
             className="button button--primary"
             disabled={!isFormValid || isSaving}
           >
-            {isSaving ? 'Saving…' : 'Save expense'}
+            {isSaving ? 'Saving…' : 'Save record'}
           </button>
         </form>
       </section>
@@ -275,7 +327,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
       <section className="card" style={{ marginTop: 24 }}>
         <div className="page__header" style={{ padding: 0, marginBottom: 12 }}>
           <div>
-            <h3 className="card__title">Expense history</h3>
+            <h3 className="card__title">Record history</h3>
             <p className="card__subtitle">
               This list updates in real time for your current workspace.
             </p>
@@ -285,15 +337,45 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
               This month: <strong>GHS {totalMonthly.toFixed(2)}</strong>
             </p>
             <p className="card__subtitle">
+              Expenses: <strong>GHS {totalExpenses.toFixed(2)}</strong>
+            </p>
+            <p className="card__subtitle">
+              Donations: <strong>GHS {totalDonations.toFixed(2)}</strong>
+            </p>
+            <p className="card__subtitle">
               All time: <strong>GHS {totalAllTime.toFixed(2)}</strong>
             </p>
           </div>
         </div>
 
-        {expenses.length === 0 ? (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            className={`button ${recordFilter === 'all' ? 'button--primary' : ''}`}
+            onClick={() => setRecordFilter('all')}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            className={`button ${recordFilter === 'expense' ? 'button--primary' : ''}`}
+            onClick={() => setRecordFilter('expense')}
+          >
+            Expenses
+          </button>
+          <button
+            type="button"
+            className={`button ${recordFilter === 'donation' ? 'button--primary' : ''}`}
+            onClick={() => setRecordFilter('donation')}
+          >
+            Donations
+          </button>
+        </div>
+
+        {visibleRecords.length === 0 ? (
           <div className="empty-state">
-            <h4 className="empty-state__title">No expenses yet</h4>
-            <p>Add your first expense above to start tracking store costs.</p>
+            <h4 className="empty-state__title">No records yet</h4>
+            <p>Add your first expense or donation above to start tracking cash flow.</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -301,15 +383,17 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
               <thead>
                 <tr>
                   <th>Date</th>
+                  <th>Type</th>
                   <th>Category</th>
                   <th>Description</th>
                   <th className="sell-page__numeric">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {expenses.map(exp => (
+                {visibleRecords.map(exp => (
                   <tr key={exp.id}>
                     <td>{exp.date}</td>
+                    <td>{exp.type === 'donation' ? 'Donation' : 'Expense'}</td>
                     <td>{exp.category}</td>
                     <td>{exp.description || '—'}</td>
                     <td className="sell-page__numeric">
@@ -327,10 +411,10 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
 
   if (embedded) {
     return (
-      <section className="card" style={{ marginTop: 24 }} aria-label="Expenses">
+      <section className="card" style={{ marginTop: 24 }} aria-label="Business records">
         <div className="page__header" style={{ padding: 0, marginBottom: 12 }}>
           <div>
-            <h3 className="card__title">Expenses</h3>
+            <h3 className="card__title">Business records</h3>
             <p className="card__subtitle">
               Add and review expenses here without leaving Finance.
             </p>
@@ -345,9 +429,10 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
     <div className="page">
       <header className="page__header">
         <div>
-          <h2 className="page__title">Expenses</h2>
+          <h2 className="page__title">Business records</h2>
           <p className="page__subtitle">
-            Record rent, salaries, utilities, and other store costs so you can see real profit.
+            Record rent, salaries, utilities, donations, and other entries to keep your store
+            audit-ready.
           </p>
         </div>
       </header>
