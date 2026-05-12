@@ -241,9 +241,7 @@ export default function RefundPage() {
             <strong>Email:</strong> info@sedifex.com
           </li>
           <li>
-            <strong>Address:</strong> Kofo Abayomi Street 101233, Victoria
-            Island, Lagos, Nigeria (West Africa hub) or Riverside Drive 00100,
-            Nairobi, Kenya (East Africa hub)
+            <strong>Address:</strong> Kwamisa street, Awoshie, Ghana
           </li>
           <li>
             <strong>Owner:</strong> Learn Language Education Academy
