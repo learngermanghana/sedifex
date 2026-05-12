@@ -203,6 +203,14 @@ const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID'
 let openAiConfigWarned = false
 let integrationApiKeyWarned = false
 
+function hashString(value: string): number {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0
+  }
+  return Math.abs(hash)
+}
+
 function getOpenAiConfig() {
   const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
   const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini'
@@ -9391,3 +9399,66 @@ export const __testing = {
   normalizeBookingDateForSheet,
   normalizeBookingTimeForSheet,
 }
+
+export const publishDailyFeaturedProductBlogPost = functions.pubsub
+  .schedule('every day 09:00')
+  .timeZone('Etc/UTC')
+  .onRun(async () => {
+    const settingsSnap = await db
+      .collection('storeSettings')
+      .where('blogAutomation.dailyProductShareEnabled', '==', true)
+      .get()
+    const runDate = new Date().toISOString().slice(0, 10)
+
+    for (const settingsDoc of settingsSnap.docs) {
+      const storeId = settingsDoc.id
+      const productsSnap = await db
+        .collection('products')
+        .where('storeId', '==', storeId)
+        .orderBy('name', 'asc')
+        .limit(200)
+        .get()
+      if (productsSnap.empty) continue
+
+      const alreadyPublishedSnap = await db
+        .collection('blogPosts')
+        .where('storeId', '==', storeId)
+        .where('source', '==', 'daily-product-share')
+        .where('sourceDate', '==', runDate)
+        .limit(1)
+        .get()
+      if (!alreadyPublishedSnap.empty) continue
+
+      const productDocs = productsSnap.docs
+      const selectedProductDoc = productDocs[hashString(`${storeId}:${runDate}`) % productDocs.length]
+      const productData = (selectedProductDoc.data() ?? {}) as Record<string, unknown>
+      const productName =
+        typeof productData.name === 'string' && productData.name.trim() ? productData.name.trim() : 'Featured Product'
+      const productDescription = typeof productData.description === 'string' ? productData.description.trim() : ''
+      const safeSlug = productName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+
+      await db.collection('blogPosts').add({
+        storeId,
+        title: `Featured today: ${productName}`,
+        slug: `featured-${runDate}-${safeSlug}`.slice(0, 120),
+        excerpt: productDescription
+          ? productDescription.slice(0, 180)
+          : `Discover today's featured item from our catalog: ${productName}.`,
+        content: productDescription
+          ? `${productName}\n\n${productDescription}\n\nVisit our store today to buy or learn more.`
+          : `${productName}\n\nThis is today's featured item from our catalog. Visit our store today to learn more.`,
+        status: 'published',
+        publishAt: null,
+        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        source: 'daily-product-share',
+        sourceDate: runDate,
+        productId: selectedProductDoc.id,
+      })
+    }
+    return null
+  })

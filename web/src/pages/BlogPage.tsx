@@ -5,11 +5,13 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore'
@@ -78,6 +80,7 @@ export default function BlogPage() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [selectedCatalogItemId, setSelectedCatalogItemId] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [dailyShareEnabled, setDailyShareEnabled] = useState(false)
 
   const publicFeedUrl = useMemo(() => (storeId ? `/api/public-blog?storeId=${encodeURIComponent(storeId)}` : ''), [storeId])
 
@@ -112,6 +115,30 @@ export default function BlogPage() {
   useEffect(() => {
     void loadPosts()
   }, [storeId])
+
+  useEffect(() => {
+    async function loadAutomationSettings() {
+      if (!storeId) {
+        setDailyShareEnabled(false)
+        return
+      }
+      const settingsSnap = await getDoc(doc(db, 'storeSettings', storeId))
+      const data = settingsSnap.data() as Record<string, unknown> | undefined
+      const blogAutomation = (data?.blogAutomation ?? {}) as Record<string, unknown>
+      setDailyShareEnabled(blogAutomation.dailyProductShareEnabled === true)
+    }
+    void loadAutomationSettings()
+  }, [storeId])
+
+  async function saveDailyShareSetting() {
+    if (!storeId) return
+    await setDoc(
+      doc(db, 'storeSettings', storeId),
+      { blogAutomation: { dailyProductShareEnabled: dailyShareEnabled, updatedAt: serverTimestamp() } },
+      { merge: true },
+    )
+    setMessage('Daily featured product sharing preference saved.')
+  }
 
   useEffect(() => {
     async function loadCatalogItems() {
@@ -349,6 +376,13 @@ export default function BlogPage() {
               </div>
 
               <div className="blog-page__toolbar blog-page__toolbar--actions">
+                <label className="blog-page__toggle">
+                  <input type="checkbox" checked={dailyShareEnabled} onChange={e => setDailyShareEnabled(e.target.checked)} />
+                  <span>Auto-publish one product daily (opt-in)</span>
+                </label>
+                <button type="button" className="button button--ghost" onClick={() => void saveDailyShareSetting()} disabled={!storeId || saving}>
+                  Save daily share setting
+                </button>
                 <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
                   {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
                 </button>
