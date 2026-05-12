@@ -37,7 +37,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationBookingPaymentVerify = exports.integration = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.publishDailyFeaturedProductBlogPost = exports.__testing = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.syncPendingIntegrationBookingToAppsScript = exports.emitBookingWebhooks = exports.syncIntegrationBookingCustomers = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = void 0;
+exports.publishDailyFeaturedProductBlogPost = exports.__testing = exports.v1Engagement = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.syncPendingIntegrationBookingToAppsScript = exports.emitBookingWebhooks = exports.syncIntegrationBookingCustomers = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -4829,9 +4829,23 @@ async function handleIntegrationCheckoutCreate(req, res) {
     const metadataInput = typeof payload.metadata === 'object' && payload.metadata ? payload.metadata : {};
     const metadataBookingId = toTrimmedStringOrNull(metadataInput.bookingId);
     const currency = toTrimmedStringOrNull(payload.currency) ?? 'GHS';
+    const fulfillmentTypeRaw = toTrimmedStringOrNull(payload.fulfillment_type);
+    const fulfillmentType = fulfillmentTypeRaw === 'DELIVERY' ? 'DELIVERY' : 'PICKUP';
+    const checkoutItems = Array.isArray(payload.items) ? payload.items : [];
     const returnUrl = toTrimmedStringOrNull(payload.returnUrl);
-    if (!email || !Number.isFinite(amount) || amount <= 0) {
-        res.status(400).json({ error: 'invalid-request', message: 'customer.email and amount are required' });
+    if (!email) {
+        res.status(400).json({ error: 'invalid-request', message: 'customer.email is required' });
+        return;
+    }
+    const pricing = await calculateIntegrationCharges({
+        storeId: authContext.storeId,
+        currency,
+        fulfillmentType,
+        items: checkoutItems,
+    });
+    const amountMajor = pricing.finalTotal / 100;
+    if (pricing.finalTotal <= 0 && (!Number.isFinite(amount) || amount <= 0)) {
+        res.status(400).json({ error: 'invalid-request', message: 'a valid checkout total could not be computed' });
         return;
     }
     const paystackConfig = ensurePaystackConfig();
@@ -4853,7 +4867,7 @@ async function handleIntegrationCheckoutCreate(req, res) {
         },
         body: JSON.stringify({
             email,
-            amount: Math.round(amount * 100),
+            amount: pricing.finalTotal > 0 ? pricing.finalTotal : Math.round(amount * 100),
             currency,
             reference,
             callback_url: returnUrl ?? undefined,
@@ -4872,8 +4886,20 @@ async function handleIntegrationCheckoutCreate(req, res) {
         clientOrderId,
         orderType: metadata.orderType,
         bookingId: metadataBookingId,
-        amount,
+        amount: pricing.finalTotal > 0 ? amountMajor : amount,
         currency,
+        pricingSnapshot: {
+            pricing_version: pricing.pricingVersion,
+            currency: pricing.currency,
+            subtotal: pricing.subtotal,
+            tax_total: pricing.taxTotal,
+            delivery_fee: pricing.deliveryFee,
+            pre_processing_total: pricing.preProcessingTotal,
+            processing_fee_to_add: pricing.processingFeeToAdd,
+            final_total: pricing.finalTotal,
+            breakdown: pricing.breakdown,
+            items: pricing.resolvedItems,
+        },
         paymentStatus: 'pending',
         orderStatus: 'pending',
         createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
@@ -4930,6 +4956,64 @@ async function handleIntegrationCheckoutCreate(req, res) {
     });
 }
 exports.integrationCheckoutCreate = functions.https.onRequest(handleIntegrationCheckoutCreate);
+function estimateProcessingFee(amountMinor) {
+    if (!Number.isFinite(amountMinor) || amountMinor <= 0)
+        return 0;
+    return Math.round((amountMinor * 0.015) + 100);
+}
+async function calculateIntegrationCharges(input) {
+    const storeSnap = await firestore_1.defaultDb.collection('stores').doc(input.storeId).get();
+    const store = toPlainObject(storeSnap.data());
+    const inventoryConfig = toPlainObject(store.inventoryConfig);
+    const defaultTaxRate = Math.max(0, toFiniteNumber(inventoryConfig.defaultTaxRate, toFiniteNumber(store.taxRate, 0)));
+    const deliveryRuleFlatFee = Math.max(0, Math.round(toFiniteNumber(inventoryConfig.deliveryFlatFeeMinor, 0)));
+    const resolvedItems = [];
+    for (const rawItem of input.items) {
+        const item = toPlainObject(rawItem);
+        const itemId = toTrimmedStringOrNull(item.item_id);
+        const itemTypeRaw = toTrimmedStringOrNull(item.item_type);
+        const itemType = itemTypeRaw === 'service' || itemTypeRaw === 'booking' ? itemTypeRaw : 'product';
+        const qty = Math.max(0, Math.floor(toFiniteNumber(item.qty, 0)));
+        if (!itemId || qty <= 0)
+            continue;
+        const snap = await firestore_1.defaultDb.collection('products').doc(itemId).get();
+        if (!snap.exists)
+            continue;
+        const data = toPlainObject(snap.data());
+        const name = toTrimmedStringOrNull(data.name) ?? itemId;
+        const priceMajor = toFiniteNumberOrNull(data.price);
+        if (priceMajor === null || priceMajor < 0)
+            continue;
+        const unitPriceMinor = Math.round(priceMajor * 100);
+        const lineSubtotalMinor = unitPriceMinor * qty;
+        const taxRate = Math.max(0, toFiniteNumber(data.taxRate, defaultTaxRate));
+        const lineTaxMinor = Math.round(lineSubtotalMinor * taxRate);
+        resolvedItems.push({ itemId, itemType, name, qty, unitPriceMinor, lineSubtotalMinor, taxRate, lineTaxMinor });
+    }
+    const subtotal = resolvedItems.reduce((sum, line) => sum + line.lineSubtotalMinor, 0);
+    const taxTotal = resolvedItems.reduce((sum, line) => sum + line.lineTaxMinor, 0);
+    const deliveryFee = input.fulfillmentType === 'DELIVERY' ? deliveryRuleFlatFee : 0;
+    const preProcessingTotal = subtotal + taxTotal + deliveryFee;
+    const processingFeeToAdd = estimateProcessingFee(preProcessingTotal);
+    const finalTotal = preProcessingTotal + processingFeeToAdd;
+    return {
+        pricingVersion: '2026-05-12-v2',
+        currency: input.currency,
+        subtotal,
+        taxTotal,
+        deliveryFee,
+        preProcessingTotal,
+        processingFeeToAdd,
+        finalTotal,
+        breakdown: [
+            { code: 'SUBTOTAL', amount: subtotal },
+            { code: 'TAX', amount: taxTotal },
+            { code: 'DELIVERY', amount: deliveryFee },
+            { code: 'PROCESSING_FEE', amount: processingFeeToAdd },
+        ],
+        resolvedItems,
+    };
+}
 async function handleIntegrationCheckoutPreview(req, res) {
     setIntegrationResponseHeaders(res);
     if (!validateIntegrationContractVersionOrReply(req, res))
@@ -4957,43 +5041,23 @@ async function handleIntegrationCheckoutPreview(req, res) {
         res.status(400).json({ error: 'invalid-request', message: 'merchant_id, fulfillment_type, and items are required' });
         return;
     }
-    let subtotal = 0;
-    for (const rawItem of items) {
-        const item = toPlainObject(rawItem);
-        const itemId = toTrimmedStringOrNull(item.item_id);
-        const qty = Math.max(0, Math.floor(toFiniteNumber(item.qty, 0)));
-        if (!itemId || qty <= 0)
-            continue;
-        const snap = await firestore_1.defaultDb.collection('products').doc(itemId).get();
-        if (!snap.exists)
-            continue;
-        const data = toPlainObject(snap.data());
-        const priceMajor = toFiniteNumberOrNull(data.price);
-        if (priceMajor === null || priceMajor < 0)
-            continue;
-        const priceMinor = Math.round(priceMajor * 100);
-        subtotal += priceMinor * qty;
-    }
-    const taxTotal = 0;
-    const deliveryFee = fulfillmentType === 'DELIVERY' ? 0 : 0;
-    const preProcessingTotal = subtotal + taxTotal + deliveryFee;
-    const processingFeeToAdd = preProcessingTotal > 0 ? 450 : 0;
-    const finalTotal = preProcessingTotal + processingFeeToAdd;
-    res.status(200).json({
-        pricing_version: '2026-05-12-v1',
+    const pricing = await calculateIntegrationCharges({
+        storeId: authContext.storeId,
         currency,
-        subtotal,
-        tax_total: taxTotal,
-        delivery_fee: deliveryFee,
-        pre_processing_total: preProcessingTotal,
-        processing_fee_to_add: processingFeeToAdd,
-        final_total: finalTotal,
-        breakdown: [
-            { code: 'SUBTOTAL', amount: subtotal },
-            { code: 'TAX', amount: taxTotal },
-            { code: 'DELIVERY', amount: deliveryFee },
-            { code: 'PROCESSING_FEE', amount: processingFeeToAdd },
-        ],
+        fulfillmentType,
+        items,
+    });
+    res.status(200).json({
+        pricing_version: pricing.pricingVersion,
+        currency: pricing.currency,
+        subtotal: pricing.subtotal,
+        tax_total: pricing.taxTotal,
+        delivery_fee: pricing.deliveryFee,
+        pre_processing_total: pricing.preProcessingTotal,
+        processing_fee_to_add: pricing.processingFeeToAdd,
+        final_total: pricing.finalTotal,
+        breakdown: pricing.breakdown,
+        items: pricing.resolvedItems,
     });
 }
 exports.integrationCheckoutPreview = functions.https.onRequest(handleIntegrationCheckoutPreview);
@@ -7592,6 +7656,27 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
             }, { merge: true });
             if (reference) {
                 const orderRef = firestore_1.defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference);
+                const orderSnap = await orderRef.get();
+                const orderData = (orderSnap.data() ?? {});
+                const expectedAmountMinor = Math.round(toFiniteNumber(orderData.amount, 0) * 100);
+                const paidAmountMinor = Math.round(toFiniteNumber(data.amount, 0));
+                if (expectedAmountMinor > 0 && paidAmountMinor > 0 && expectedAmountMinor !== paidAmountMinor) {
+                    console.warn('[paystack] amount mismatch for integration order', {
+                        storeId,
+                        reference,
+                        expectedAmountMinor,
+                        paidAmountMinor,
+                    });
+                    await orderRef.set({
+                        paymentStatus: 'verification_failed',
+                        verificationError: 'amount_mismatch',
+                        expectedAmountMinor,
+                        paidAmountMinor,
+                        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+                    res.status(200).send('ok');
+                    return;
+                }
                 await orderRef.set({
                     reference,
                     storeId,
@@ -7605,8 +7690,19 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
                         : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                     updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                 }, { merge: true });
-                const orderSnap = await orderRef.get();
-                const orderData = (orderSnap.data() ?? {});
+                await firestore_1.defaultDb.collection('stores').doc(storeId).collection('settlementEntries').doc(reference).set({
+                    reference,
+                    storeId,
+                    provider: 'paystack',
+                    status: 'paid',
+                    grossAmountMinor: paidAmountMinor || null,
+                    currency: typeof data.currency === 'string' ? data.currency : null,
+                    paidAt: typeof data.paid_at === 'string'
+                        ? firestore_1.admin.firestore.Timestamp.fromDate(new Date(data.paid_at))
+                        : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
                 const bookingsCol = firestore_1.defaultDb.collection('stores').doc(storeId).collection('integrationBookings');
                 let bookingRef = null;
                 const bookingId = toTrimmedStringOrNull(orderData.bookingId);
@@ -7665,6 +7761,152 @@ exports.handlePaystackWebhook = functions.https.onRequest(async (req, res) => {
     catch (error) {
         console.error('[paystack] webhook handling error', error);
         res.status(500).send('error');
+    }
+});
+function buildCanonicalProductKey(storeId, sourceProductId) {
+    return `${storeId}:${sourceProductId}`;
+}
+async function resolveFromPublicProduct(publicProductId) {
+    const normalizedId = toTrimmedStringOrNull(publicProductId);
+    if (!normalizedId)
+        return null;
+    for (const collectionName of ['publicProducts', 'publicServices']) {
+        const snap = await firestore_1.defaultDb.collection(collectionName).doc(normalizedId).get();
+        if (!snap.exists)
+            continue;
+        const data = (snap.data() ?? {});
+        const storeId = toTrimmedStringOrNull(data.storeId);
+        const sourceProductId = toTrimmedStringOrNull(data.sourceProductId) ?? normalizedId;
+        if (!storeId || !sourceProductId)
+            continue;
+        return { storeId, sourceProductId, canonicalProductKey: buildCanonicalProductKey(storeId, sourceProductId) };
+    }
+    return null;
+}
+async function resolveFromStoreProduct(storeId, productId) {
+    const normalizedStoreId = toTrimmedStringOrNull(storeId);
+    const normalizedProductId = toTrimmedStringOrNull(productId);
+    if (!normalizedStoreId || !normalizedProductId)
+        return null;
+    return {
+        storeId: normalizedStoreId,
+        sourceProductId: normalizedProductId,
+        canonicalProductKey: buildCanonicalProductKey(normalizedStoreId, normalizedProductId),
+    };
+}
+async function requireUserAuth(req) {
+    const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+    if (!authHeader.startsWith('Bearer ')) {
+        throw new Error('missing-user-auth');
+    }
+    const token = authHeader.slice(7).trim();
+    if (!token)
+        throw new Error('missing-user-auth');
+    const decoded = await firestore_1.admin.auth().verifyIdToken(token);
+    return { userId: decoded.uid, displayName: typeof decoded.name === 'string' ? decoded.name : null };
+}
+function isAuthorizedServerRequest(req) {
+    const { apiKey } = getIntegrationAuthContext(req);
+    return Boolean(apiKey && apiKey === getIntegrationMasterApiKey());
+}
+exports.v1Engagement = functions.https.onRequest(async (req, res) => {
+    setIntegrationResponseHeaders(res);
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    const path = (req.path || '/').replace(/\/+$/, '') || '/';
+    try {
+        const rawStoreId = typeof req.body?.storeId === 'string' ? req.body.storeId : typeof req.query.storeId === 'string' ? req.query.storeId : '';
+        const rawSourceProductId = typeof req.body?.sourceProductId === 'string' ? req.body.sourceProductId : typeof req.query.sourceProductId === 'string' ? req.query.sourceProductId : '';
+        const rawPublicProductId = typeof req.body?.publicProductId === 'string' ? req.body.publicProductId : typeof req.query.publicProductId === 'string' ? req.query.publicProductId : '';
+        const resolvedIdentity = (rawStoreId && rawSourceProductId ? await resolveFromStoreProduct(rawStoreId, rawSourceProductId) : null) ??
+            (rawPublicProductId ? await resolveFromPublicProduct(rawPublicProductId) : null);
+        if (path === '/resolve' && req.method === 'POST') {
+            if (!resolvedIdentity) {
+                res.status(400).json({ error: 'unable-to-resolve-product' });
+                return;
+            }
+            res.status(200).json(resolvedIdentity);
+            return;
+        }
+        if (!resolvedIdentity) {
+            res.status(400).json({ error: 'missing-product-identity' });
+            return;
+        }
+        if (path === '/summary' && req.method === 'GET') {
+            const threadSnap = await firestore_1.defaultDb.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).get();
+            res.status(200).json(threadSnap.exists ? threadSnap.data() : { ...resolvedIdentity, commentsCount: 0, favoritesCount: 0 });
+            return;
+        }
+        if (path === '/comments' && req.method === 'POST') {
+            const auth = await requireUserAuth(req);
+            if (auth.userId && !isAuthorizedServerRequest(req) && resolvedIdentity.storeId !== toTrimmedStringOrNull(req.body?.storeId ?? req.query.storeId)) {
+                res.status(403).json({ error: 'store-tenant-mismatch' });
+                return;
+            }
+            const commentRef = firestore_1.defaultDb.collection('engagement_comments').doc();
+            const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+            await commentRef.set({
+                ...resolvedIdentity,
+                body: toTrimmedStringOrNull(req.body?.body),
+                rating: typeof req.body?.rating === 'number' ? req.body.rating : null,
+                authorUserId: auth.userId,
+                authorDisplayName: auth.displayName,
+                originPlatform: req.body?.originPlatform ?? 'sedifexmarket',
+                status: 'pending',
+                visibility: req.body?.visibility === 'store_only' ? 'store_only' : 'public',
+                createdAt: now,
+                updatedAt: now,
+            });
+            await firestore_1.defaultDb.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).set({ ...resolvedIdentity, commentsCount: firestore_1.admin.firestore.FieldValue.increment(1), lastActivityAt: now, createdAt: now, updatedAt: now }, { merge: true });
+            await firestore_1.defaultDb.collection('engagement_events').add({ eventType: 'comment.created', eventId: crypto.randomUUID(), occurredAt: now, ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' });
+            res.status(201).json({ id: commentRef.id });
+            return;
+        }
+        if (path === '/comments' && req.method === 'GET') {
+            const snap = await firestore_1.defaultDb.collection('engagement_comments').where('canonicalProductKey', '==', resolvedIdentity.canonicalProductKey).limit(100).get();
+            res.status(200).json({ comments: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+            return;
+        }
+        if (path.startsWith('/comments/') && req.method === 'PATCH') {
+            if (!isAuthorizedServerRequest(req)) {
+                res.status(401).json({ error: 'admin-auth-required' });
+                return;
+            }
+            const id = path.split('/')[2];
+            await firestore_1.defaultDb.collection('engagement_comments').doc(id).set({ status: req.body?.status, visibility: req.body?.visibility, updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+            await firestore_1.defaultDb.collection('engagement_events').add({ eventType: 'moderation.changed', eventId: crypto.randomUUID(), occurredAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(), ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' });
+            res.status(200).json({ ok: true });
+            return;
+        }
+        if (path === '/favorites' && req.method === 'POST') {
+            const auth = await requireUserAuth(req);
+            const favoriteId = `${resolvedIdentity.canonicalProductKey}_${auth.userId}`;
+            const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+            await firestore_1.defaultDb.collection('engagement_favorites').doc(favoriteId).set({ ...resolvedIdentity, userId: auth.userId, originPlatform: req.body?.originPlatform ?? 'sedifexmarket', createdAt: now });
+            await firestore_1.defaultDb.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).set({ ...resolvedIdentity, favoritesCount: firestore_1.admin.firestore.FieldValue.increment(1), lastActivityAt: now, createdAt: now, updatedAt: now }, { merge: true });
+            await firestore_1.defaultDb.collection('engagement_events').add({ eventType: 'favorite.changed', eventId: crypto.randomUUID(), occurredAt: now, ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' });
+            res.status(201).json({ id: favoriteId });
+            return;
+        }
+        if (path === '/favorites' && req.method === 'DELETE') {
+            const auth = await requireUserAuth(req);
+            const favoriteId = `${resolvedIdentity.canonicalProductKey}_${auth.userId}`;
+            await firestore_1.defaultDb.collection('engagement_favorites').doc(favoriteId).delete();
+            const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+            await firestore_1.defaultDb.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).set({ ...resolvedIdentity, favoritesCount: firestore_1.admin.firestore.FieldValue.increment(-1), lastActivityAt: now, updatedAt: now }, { merge: true });
+            await firestore_1.defaultDb.collection('engagement_events').add({ eventType: 'favorite.changed', eventId: crypto.randomUUID(), occurredAt: now, ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' });
+            res.status(200).json({ ok: true });
+            return;
+        }
+        res.status(404).json({ error: 'not-found' });
+        return;
+    }
+    catch (error) {
+        console.error('[v1Engagement] request failed', error);
+        res.status(500).json({ error: 'engagement-request-failed' });
+        return;
     }
 });
 exports.__testing = {
