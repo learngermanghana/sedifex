@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
+  getDocs,
   collection,
   onSnapshot,
   query,
@@ -20,9 +21,11 @@ type Expense = {
   type: 'expense' | 'donation'
   category: string
   description: string
+  name: string
   date: string // yyyy-mm-dd
   createdAt?: unknown
 }
+type CustomerOption = { id: string; name: string }
 
 const ENTRY_TYPES = ['expense', 'donation'] as const
 type EntryType = (typeof ENTRY_TYPES)[number]
@@ -53,6 +56,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
   const [type, setType] = useState<EntryType>('expense')
   const [category, setCategory] = useState<string>(CATEGORY_OPTIONS.expense[0])
   const [description, setDescription] = useState('')
+  const [name, setName] = useState('')
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +65,8 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
   const activityActor = user?.displayName || user?.email || 'Team member'
 
   const [expenses, setExpenses] = useState<Expense[]>([])
-  const [recordFilter, setRecordFilter] = useState<'all' | EntryType>('all')
+  const [recordFilter, setRecordFilter] = useState<'all' | EntryType | 'data'>('all')
+  const [customers, setCustomers] = useState<CustomerOption[]>([])
 
   function currentMonthKey(dateValue: Date) {
     const year = dateValue.getFullYear()
@@ -93,6 +98,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
           type: data.type === 'donation' ? 'donation' : 'expense',
           category: data.category || 'Uncategorized',
           description: data.description || '',
+          name: data.name || '',
           date: data.date || '',
           createdAt: data.createdAt,
         }
@@ -101,6 +107,28 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
     })
 
     return unsubscribe
+  }, [storeId])
+
+  useEffect(() => {
+    async function loadCustomers() {
+      if (!storeId) {
+        setCustomers([])
+        return
+      }
+      const snap = await getDocs(query(collection(db, 'customers'), where('storeId', '==', storeId)))
+      const rows = snap.docs
+        .map(docSnap => {
+          const data = docSnap.data() as any
+          const customerName = String(data.displayName || data.name || '').trim()
+          return customerName ? { id: docSnap.id, name: customerName } : null
+        })
+        .filter((row): row is CustomerOption => !!row)
+      setCustomers(rows)
+    }
+    loadCustomers().catch(err => {
+      console.warn('[expenses] Failed to load customers', err)
+      setCustomers([])
+    })
   }, [storeId])
 
   const totalMonthly = useMemo(() => {
@@ -142,6 +170,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
     Number(amount) > 0 &&
     date.trim() !== '' &&
     category.trim() !== ''
+    && name.trim() !== ''
 
   async function logExpenseActivity(amountValue: number) {
     if (!storeId) return
@@ -185,6 +214,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
         amount: Number(amount),
         category,
         description: description.trim(),
+        name: name.trim(),
         date,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
@@ -195,6 +225,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
       // clear form (keep date & category to make multiple entries easier)
       setAmount('')
       setDescription('')
+      setName('')
       const nextDefaultCategory = CATEGORY_OPTIONS[type][0]
       setCategory(nextDefaultCategory)
 
@@ -273,6 +304,25 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
               required
             />
             <p className="form__hint">Enter the total value for this record.</p>
+          </div>
+
+          <div className="form__field">
+            <label htmlFor="expense-name">Name</label>
+            <input
+              id="expense-name"
+              type="text"
+              list="expense-customer-names"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Select customer or type a name"
+              required
+            />
+            <datalist id="expense-customer-names">
+              {customers.map(customer => (
+                <option key={customer.id} value={customer.name} />
+              ))}
+            </datalist>
+            <p className="form__hint">Use an existing customer name or type a new name manually.</p>
           </div>
 
           <div className="form__field">
@@ -370,9 +420,84 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
           >
             Donations
           </button>
+          <button
+            type="button"
+            className={`button ${recordFilter === 'data' ? 'button--primary' : ''}`}
+            onClick={() => setRecordFilter('data')}
+          >
+            Data
+          </button>
         </div>
 
-        {visibleRecords.length === 0 ? (
+        {recordFilter === 'data' ? (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                const header = ['date', 'type', 'name', 'category', 'description', 'amount']
+                const rows = expenses.map(exp => [
+                  exp.date,
+                  exp.type,
+                  exp.name || '',
+                  exp.category,
+                  (exp.description || '').replaceAll('"', '""'),
+                  exp.amount.toFixed(2),
+                ])
+                const csv = [header, ...rows]
+                  .map(cols => cols.map(col => `"${String(col)}"`).join(','))
+                  .join('\n')
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                const url = URL.createObjectURL(blob)
+                const link = document.createElement('a')
+                link.href = url
+                link.download = 'expenses.csv'
+                link.click()
+                URL.revokeObjectURL(url)
+              }}
+            >
+              Download CSV
+            </button>
+            <label className="button" style={{ cursor: 'pointer' }}>
+              Import CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: 'none' }}
+                onChange={async e => {
+                  const file = e.target.files?.[0]
+                  if (!file || !storeId || !user) return
+                  const text = await file.text()
+                  const [headerLine, ...lines] = text.split(/\r?\n/).filter(Boolean)
+                  const headers = headerLine.split(',').map(v => v.replace(/^"|"$/g, '').trim())
+                  const idx = {
+                    date: headers.indexOf('date'),
+                    type: headers.indexOf('type'),
+                    name: headers.indexOf('name'),
+                    category: headers.indexOf('category'),
+                    description: headers.indexOf('description'),
+                    amount: headers.indexOf('amount'),
+                  }
+                  for (const line of lines) {
+                    const cols = line.split(',').map(v => v.replace(/^"|"$/g, '').replaceAll('""', '"'))
+                    const importedType = cols[idx.type] === 'donation' ? 'donation' : 'expense'
+                    await addDoc(collection(db, 'expenses'), {
+                      storeId,
+                      type: importedType,
+                      amount: Number(cols[idx.amount]) || 0,
+                      category: cols[idx.category] || 'Uncategorized',
+                      description: cols[idx.description] || '',
+                      name: cols[idx.name] || '',
+                      date: cols[idx.date] || new Date().toISOString().slice(0, 10),
+                      createdAt: serverTimestamp(),
+                      createdBy: user.uid,
+                    })
+                  }
+                }}
+              />
+            </label>
+          </div>
+        ) : visibleRecords.length === 0 ? (
           <div className="empty-state">
             <h4 className="empty-state__title">No records yet</h4>
             <p>Add your first expense or donation above to start tracking cash flow.</p>
@@ -385,6 +510,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
                   <th>Date</th>
                   <th>Type</th>
                   <th>Category</th>
+                  <th>Name</th>
                   <th>Description</th>
                   <th className="sell-page__numeric">Amount</th>
                 </tr>
@@ -395,6 +521,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
                     <td>{exp.date}</td>
                     <td>{exp.type === 'donation' ? 'Donation' : 'Expense'}</td>
                     <td>{exp.category}</td>
+                    <td>{exp.name || '—'}</td>
                     <td>{exp.description || '—'}</td>
                     <td className="sell-page__numeric">
                       GHS {exp.amount.toFixed(2)}
