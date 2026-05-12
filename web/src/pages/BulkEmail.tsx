@@ -379,7 +379,7 @@ export default function BulkEmail() {
           </label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="button button--ghost" onClick={() => void generateEmailWithAi()} disabled={isAiGenerating || isSending}>
-              {isAiGenerating ? 'Generating…' : 'Generate with OpenAI'}
+              {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
             </button>
             <button type="button" className="button button--ghost" onClick={() => void convertToHtmlWithAi()} disabled={isAiGenerating || isSending}>
               {isAiGenerating ? 'Converting…' : 'Convert message to HTML with AI'}
