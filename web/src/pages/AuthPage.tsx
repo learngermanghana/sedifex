@@ -744,7 +744,7 @@ export default function AuthPage() {
             <div>
               <h1 className="app__title">Sedifex</h1>
               <p className="app__tagline">
-                Sell faster. <span className="app__highlight">Count smarter.</span>
+                Run the business. <span className="app__highlight">Grow the brand.</span>
               </p>
               <p className="app__trial-note">
                 Start with a free 14-day trial—no payment required until you’re ready.
@@ -1262,20 +1262,20 @@ export default function AuthPage() {
         <article className="info-card">
           <h3>About Sedifex</h3>
           <p>
-            Sedifex is the smart AI inventory system for modern small businesses. We unite
-            store execution, warehouse visibility, and merchandising insights so every
+            Sedifex is the all-in-one business operating system for modern small businesses. We unite
+            sales, bookings, customer communication, and online presence so every
             location can act on the same live source of truth.
           </p>
           <p>
-            Connect your POS, ecommerce, and supplier systems in minutes to orchestrate
-            the entire product journey—from forecast to fulfillment—with less manual work,
-            fewer stockouts, and smarter AI-driven decisions.
+            Connect your POS, website, social publishing, and campaign workflows in minutes to run
+            daily operations and growth from one place—with less manual work, better
+            customer follow-up, and smarter AI-driven decisions.
           </p>
           <footer>
             <ul className="info-card__list">
-              <li>Real-time inventory that syncs every channel and warehouse</li>
-              <li>Automated replenishment playbooks driven by store performance</li>
-              <li>Count inventory without freezing your whole warehouse.</li>
+              <li>Unified POS, inventory, bookings, and customer records</li>
+              <li>Bulk email/SMS, social posting, and blog-ready marketing workflows</li>
+              <li>Website integrations that keep products and updates in sync.</li>
             </ul>
           </footer>
         </article>
