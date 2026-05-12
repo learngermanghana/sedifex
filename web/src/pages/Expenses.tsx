@@ -272,7 +272,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
               onChange={e => setAmount(e.target.value)}
               required
             />
-            <p className="form__hint">Enter the total cost for this expense.</p>
+            <p className="form__hint">Enter the total value for this record.</p>
           </div>
 
           <div className="form__field">
@@ -318,7 +318,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
             className="button button--primary"
             disabled={!isFormValid || isSaving}
           >
-            {isSaving ? 'Saving…' : 'Save expense'}
+            {isSaving ? 'Saving…' : 'Save record'}
           </button>
         </form>
       </section>
@@ -411,7 +411,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
 
   if (embedded) {
     return (
-      <section className="card" style={{ marginTop: 24 }} aria-label="Expenses">
+      <section className="card" style={{ marginTop: 24 }} aria-label="Business records">
         <div className="page__header" style={{ padding: 0, marginBottom: 12 }}>
           <div>
             <h3 className="card__title">Business records</h3>
@@ -429,7 +429,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
     <div className="page">
       <header className="page__header">
         <div>
-          <h2 className="page__title">Expenses</h2>
+          <h2 className="page__title">Business records</h2>
           <p className="page__subtitle">
             Record rent, salaries, utilities, donations, and other entries to keep your store
             audit-ready.
