@@ -94,6 +94,10 @@ const COLS = [
   'branch_location_id',
   'branch_location_name',
   'event_location',
+  'meeting_mode',
+  'meeting_link',
+  'zoom_join_url',
+  'zoom_contact',
   'customer_stay_location',
   'attributes_json',
   'source',
@@ -277,6 +281,9 @@ function processScheduledMessages() {
     if (!row.reminder_1d_sent_at) {
       sendStageIfDue_(sheet, rowNum, row, appt, 'reminder_1d');
     }
+    if (!row.thank_you_sent_at) {
+      sendStageIfDue_(sheet, rowNum, row, appt, 'thank_you_1d_after');
+    }
   });
 }
 
@@ -319,11 +326,9 @@ function handleStateEmails_(sheet, rowNum, row, oldRow) {
 function sendStageIfDue_(sheet, rowNum, row, appt, stage) {
   const due = dueDate_(appt, stage);
   const now = new Date();
-  const withinWindow =
-    now.getTime() >= due.getTime() &&
-    now.getTime() <= due.getTime() + CONFIG.sendWindowMinutes * 60000;
+  const isDue = now.getTime() >= due.getTime();
 
-  if (!withinWindow) return;
+  if (!isDue) return;
 
   sendImmediateEmail_(sheet, rowNum, row, stage);
 
@@ -333,6 +338,7 @@ function sendStageIfDue_(sheet, rowNum, row, appt, stage) {
     reminder_3d: 'reminder_3d_sent_at',
     reminder_2d: 'reminder_2d_sent_at',
     reminder_1d: 'reminder_1d_sent_at',
+    thank_you_1d_after: 'thank_you_sent_at',
   };
 
   if (stageToCol[stage]) {
@@ -351,6 +357,7 @@ function dueDate_(appt, stage) {
   if (stage === 'reminder_3d') d.setDate(d.getDate() - 3);
   if (stage === 'reminder_2d') d.setDate(d.getDate() - 2);
   if (stage === 'reminder_1d') d.setDate(d.getDate() - 1);
+  if (stage === 'thank_you_1d_after') d.setDate(d.getDate() + 1);
   return d;
 }
 
@@ -393,6 +400,7 @@ function subjectForStage_(stage) {
     reminder_3d: 'Reminder: your booking is in 3 days',
     reminder_2d: 'Reminder: your booking is in 2 days',
     reminder_1d: 'Reminder: your booking is tomorrow',
+    thank_you_1d_after: 'Thank you for meeting with us',
   };
 
   return subjectMap[stage] || 'Booking update';
@@ -434,6 +442,9 @@ function textForStage_(row, stage) {
     lines.push(`Hi ${n}, your booking for ${service} has been rescheduled to ${when}.`);
   } else if (stage === 'update') {
     lines.push(`Hi ${n}, your booking details were updated for ${service} on ${when}.`);
+  } else if (stage === 'thank_you_1d_after') {
+    lines.push(`Hi ${n}, thank you for meeting with us for ${service} on ${when}.`);
+    lines.push('We would love your feedback and look forward to serving you again.');
   } else {
     lines.push(`Hi ${n}, this is a reminder for ${service} on ${when}.`);
   }
@@ -483,6 +494,10 @@ function htmlForStage_(row, stage) {
     intro = `<p>Hi ${n}, your booking has been rescheduled to <b>${when}</b>.</p>`;
   } else if (stage === 'update') {
     intro = `<p>Hi ${n}, your booking details were updated.</p>`;
+  } else if (stage === 'thank_you_1d_after') {
+    intro =
+      `<p>Hi ${n}, thank you for meeting with us for <b>${service}</b> on ` +
+      `<b>${when}</b>.</p><p>We would love your feedback and look forward to serving you again.</p>`;
   } else {
     intro = `<p>Hi ${n}, this is your reminder for <b>${service}</b> on <b>${when}</b>.</p>`;
   }
@@ -534,11 +549,18 @@ function renderEmailLayout_(options) {
 }
 
 function renderAppointmentSummary_(row) {
+  const meetingMode = isOnlineMeeting_(row) ? 'Online meeting' : '';
+  const zoomContact = isOnlineMeeting_(row)
+    ? row.zoom_join_url || row.zoom_contact || row.meeting_link || ''
+    : '';
+
   const items = [
     ['Service', row.service_name],
     ['Date & time', formatAppt_(row.appointment_iso)],
     ['Quantity', row.quantity],
     ['Location', row.branch_location_name || row.event_location || row.customer_stay_location],
+    ['Meeting mode', meetingMode],
+    ['Zoom contact', zoomContact],
     ['Notes', row.notes],
   ].filter(function (x) {
     return str_(x[1]);
@@ -594,6 +616,12 @@ function renderAppointmentSummaryText_(row) {
         (row.branch_location_name || row.event_location || row.customer_stay_location)
     );
   }
+  const meetingMode = isOnlineMeeting_(row) ? 'Online meeting' : '';
+  const joinLink = row.zoom_join_url || row.meeting_link || '';
+  const zoomContact = row.zoom_contact || '';
+  if (meetingMode) chunks.push('Meeting mode: ' + meetingMode);
+  if (joinLink) chunks.push('Join link: ' + joinLink);
+  if (zoomContact) chunks.push('Zoom contact: ' + zoomContact);
   if (row.notes) chunks.push('Notes: ' + row.notes);
   return chunks.join('\n');
 }
@@ -610,6 +638,21 @@ function renderPaymentSummaryText_(row) {
     parts.push('Reference: ' + (row.payment_reference || row.manual_payment_reference));
   }
   return parts.join('\n');
+}
+
+function isOnlineMeeting_(row) {
+  const mode = str_(row.meeting_mode || '').toLowerCase();
+  if (mode) {
+    return ['online', 'virtual', 'remote', 'video', 'zoom', 'google_meet', 'meet'].indexOf(mode) >= 0;
+  }
+
+  const location = str_(row.event_location || row.branch_location_name || '').toLowerCase();
+  return (
+    location.indexOf('online') >= 0 ||
+    location.indexOf('virtual') >= 0 ||
+    location.indexOf('zoom') >= 0 ||
+    location.indexOf('meet.google.com') >= 0
+  );
 }
 
 function renderContactBlock_(branding) {
@@ -744,6 +787,10 @@ function normalizePayload_(body) {
     branch_location_id: str_(body.branchLocationId || body.branch_location_id),
     branch_location_name: str_(body.branchLocationName || body.branch_location_name),
     event_location: str_(body.eventLocation || body.event_location),
+    meeting_mode: str_(body.meetingMode || body.meeting_mode || attrs.meetingMode || attrs.meeting_mode),
+    meeting_link: str_(body.meetingLink || body.meeting_link || attrs.meetingLink || attrs.meeting_link),
+    zoom_join_url: str_(body.zoomJoinUrl || body.zoom_join_url || attrs.zoomJoinUrl || attrs.zoom_join_url),
+    zoom_contact: str_(body.zoomContact || body.zoom_contact || attrs.zoomContact || attrs.zoom_contact),
     customer_stay_location: str_(body.customerStayLocation || body.customer_stay_location),
     attributes_json: JSON.stringify(attrs || {}),
     source: str_(body.source || attrs.source || 'sedifex_booking'),
@@ -779,7 +826,7 @@ function normalizePayload_(body) {
     last_error: '',
     next_action_at: '',
     last_notified_appointment_iso: '',
-    notification_version: 1,
+    notification_version: 2,
   };
 }
 
