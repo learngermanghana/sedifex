@@ -9606,6 +9606,166 @@ export const handlePaystackWebhook = functions.https.onRequest(async (req, res) 
   }
 })
 
+type EngagementResolvedIdentity = {
+  storeId: string
+  sourceProductId: string
+  canonicalProductKey: string
+}
+
+function buildCanonicalProductKey(storeId: string, sourceProductId: string): string {
+  return `${storeId}:${sourceProductId}`
+}
+
+async function resolveFromPublicProduct(publicProductId: string): Promise<EngagementResolvedIdentity | null> {
+  const normalizedId = toTrimmedStringOrNull(publicProductId)
+  if (!normalizedId) return null
+  for (const collectionName of ['publicProducts', 'publicServices']) {
+    const snap = await db.collection(collectionName).doc(normalizedId).get()
+    if (!snap.exists) continue
+    const data = (snap.data() ?? {}) as Record<string, unknown>
+    const storeId = toTrimmedStringOrNull(data.storeId)
+    const sourceProductId = toTrimmedStringOrNull(data.sourceProductId) ?? normalizedId
+    if (!storeId || !sourceProductId) continue
+    return { storeId, sourceProductId, canonicalProductKey: buildCanonicalProductKey(storeId, sourceProductId) }
+  }
+  return null
+}
+
+async function resolveFromStoreProduct(storeId: string, productId: string): Promise<EngagementResolvedIdentity | null> {
+  const normalizedStoreId = toTrimmedStringOrNull(storeId)
+  const normalizedProductId = toTrimmedStringOrNull(productId)
+  if (!normalizedStoreId || !normalizedProductId) return null
+  return {
+    storeId: normalizedStoreId,
+    sourceProductId: normalizedProductId,
+    canonicalProductKey: buildCanonicalProductKey(normalizedStoreId, normalizedProductId),
+  }
+}
+
+async function requireUserAuth(req: functions.https.Request): Promise<{ userId: string; displayName: string | null }> {
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : ''
+  if (!authHeader.startsWith('Bearer ')) {
+    throw new Error('missing-user-auth')
+  }
+  const token = authHeader.slice(7).trim()
+  if (!token) throw new Error('missing-user-auth')
+  const decoded = await admin.auth().verifyIdToken(token)
+  return { userId: decoded.uid, displayName: typeof decoded.name === 'string' ? decoded.name : null }
+}
+
+function isAuthorizedServerRequest(req: functions.https.Request): boolean {
+  const { apiKey } = getIntegrationAuthContext(req)
+  return Boolean(apiKey && apiKey === getIntegrationMasterApiKey())
+}
+
+export const v1Engagement = functions.https.onRequest(async (req, res) => {
+  setIntegrationResponseHeaders(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  const path = (req.path || '/').replace(/\/+$/, '') || '/'
+  try {
+    const rawStoreId = typeof req.body?.storeId === 'string' ? req.body.storeId : typeof req.query.storeId === 'string' ? req.query.storeId : ''
+    const rawSourceProductId = typeof req.body?.sourceProductId === 'string' ? req.body.sourceProductId : typeof req.query.sourceProductId === 'string' ? req.query.sourceProductId : ''
+    const rawPublicProductId = typeof req.body?.publicProductId === 'string' ? req.body.publicProductId : typeof req.query.publicProductId === 'string' ? req.query.publicProductId : ''
+    const resolvedIdentity =
+      (rawStoreId && rawSourceProductId ? await resolveFromStoreProduct(rawStoreId, rawSourceProductId) : null) ??
+      (rawPublicProductId ? await resolveFromPublicProduct(rawPublicProductId) : null)
+
+    if (path === '/resolve' && req.method === 'POST') {
+      if (!resolvedIdentity) {
+        res.status(400).json({ error: 'unable-to-resolve-product' })
+        return
+      }
+      res.status(200).json(resolvedIdentity)
+      return
+    }
+    if (!resolvedIdentity) {
+      res.status(400).json({ error: 'missing-product-identity' })
+      return
+    }
+
+    if (path === '/summary' && req.method === 'GET') {
+      const threadSnap = await db.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).get()
+      res.status(200).json(threadSnap.exists ? threadSnap.data() : { ...resolvedIdentity, commentsCount: 0, favoritesCount: 0 })
+      return
+    }
+
+    if (path === '/comments' && req.method === 'POST') {
+      const auth = await requireUserAuth(req)
+      if (auth.userId && !isAuthorizedServerRequest(req) && resolvedIdentity.storeId !== toTrimmedStringOrNull(req.body?.storeId ?? req.query.storeId)) {
+        res.status(403).json({ error: 'store-tenant-mismatch' })
+        return
+      }
+      const commentRef = db.collection('engagement_comments').doc()
+      const now = admin.firestore.FieldValue.serverTimestamp()
+      await commentRef.set({
+        ...resolvedIdentity,
+        body: toTrimmedStringOrNull(req.body?.body),
+        rating: typeof req.body?.rating === 'number' ? req.body.rating : null,
+        authorUserId: auth.userId,
+        authorDisplayName: auth.displayName,
+        originPlatform: req.body?.originPlatform ?? 'sedifexmarket',
+        status: 'pending',
+        visibility: req.body?.visibility === 'store_only' ? 'store_only' : 'public',
+        createdAt: now,
+        updatedAt: now,
+      })
+      await db.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).set({ ...resolvedIdentity, commentsCount: admin.firestore.FieldValue.increment(1), lastActivityAt: now, createdAt: now, updatedAt: now }, { merge: true })
+      await db.collection('engagement_events').add({ eventType: 'comment.created', eventId: crypto.randomUUID(), occurredAt: now, ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' })
+      res.status(201).json({ id: commentRef.id })
+      return
+    }
+
+    if (path === '/comments' && req.method === 'GET') {
+      const snap = await db.collection('engagement_comments').where('canonicalProductKey', '==', resolvedIdentity.canonicalProductKey).limit(100).get()
+      res.status(200).json({ comments: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) })
+      return
+    }
+
+    if (path.startsWith('/comments/') && req.method === 'PATCH') {
+      if (!isAuthorizedServerRequest(req)) {
+        res.status(401).json({ error: 'admin-auth-required' })
+        return
+      }
+      const id = path.split('/')[2]
+      await db.collection('engagement_comments').doc(id).set({ status: req.body?.status, visibility: req.body?.visibility, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      await db.collection('engagement_events').add({ eventType: 'moderation.changed', eventId: crypto.randomUUID(), occurredAt: admin.firestore.FieldValue.serverTimestamp(), ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' })
+      res.status(200).json({ ok: true })
+      return
+    }
+
+    if (path === '/favorites' && req.method === 'POST') {
+      const auth = await requireUserAuth(req)
+      const favoriteId = `${resolvedIdentity.canonicalProductKey}_${auth.userId}`
+      const now = admin.firestore.FieldValue.serverTimestamp()
+      await db.collection('engagement_favorites').doc(favoriteId).set({ ...resolvedIdentity, userId: auth.userId, originPlatform: req.body?.originPlatform ?? 'sedifexmarket', createdAt: now })
+      await db.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).set({ ...resolvedIdentity, favoritesCount: admin.firestore.FieldValue.increment(1), lastActivityAt: now, createdAt: now, updatedAt: now }, { merge: true })
+      await db.collection('engagement_events').add({ eventType: 'favorite.changed', eventId: crypto.randomUUID(), occurredAt: now, ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' })
+      res.status(201).json({ id: favoriteId })
+      return
+    }
+
+    if (path === '/favorites' && req.method === 'DELETE') {
+      const auth = await requireUserAuth(req)
+      const favoriteId = `${resolvedIdentity.canonicalProductKey}_${auth.userId}`
+      await db.collection('engagement_favorites').doc(favoriteId).delete()
+      const now = admin.firestore.FieldValue.serverTimestamp()
+      await db.collection('engagement_threads').doc(resolvedIdentity.canonicalProductKey).set({ ...resolvedIdentity, favoritesCount: admin.firestore.FieldValue.increment(-1), lastActivityAt: now, updatedAt: now }, { merge: true })
+      await db.collection('engagement_events').add({ eventType: 'favorite.changed', eventId: crypto.randomUUID(), occurredAt: now, ...resolvedIdentity, platformOrigin: req.body?.originPlatform ?? 'sedifexmarket' })
+      res.status(200).json({ ok: true })
+      return
+    }
+    res.status(404).json({ error: 'not-found' })
+    return
+  } catch (error) {
+    console.error('[v1Engagement] request failed', error)
+    res.status(500).json({ error: 'engagement-request-failed' })
+    return
+  }
+})
+
 export const __testing = {
   canonicalizeBookingKey,
   buildBookingValueLookup,
