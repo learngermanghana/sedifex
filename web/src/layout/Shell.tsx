@@ -118,6 +118,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (hasTrialEnded) {
       return [
         {
+          to: '/blog',
+          label: 'Blog',
+          roles: [role],
+        },
+        {
           to: '/account',
           label: 'Account',
           end: true,
