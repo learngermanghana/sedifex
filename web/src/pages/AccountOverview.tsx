@@ -393,7 +393,28 @@ type AccountTab =
   | 'data-controls'
 type PublicPageTab = 'overview' | 'promo' | 'gallery'
 type PromoGalleryTab = 'upload' | 'view'
-type IntegrationTab = 'keys' | 'booking' | 'webhooks' | 'email' | 'tests'
+type IntegrationTab = 'keys' | 'booking' | 'webhooks' | 'email' | 'google' | 'tests'
+type GoogleBusinessStatus = {
+  connected: boolean
+  hasRequiredScope: boolean
+}
+
+async function postJson<T>(url: string, token: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  })
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
+  if (!response.ok) {
+    const message = typeof payload.error === 'string' ? payload.error : `request-failed:${response.status}`
+    throw new Error(message)
+  }
+  return payload as T
+}
 
 export default function AccountOverview({
   headingLevel = 'h1',
@@ -494,6 +515,9 @@ export default function AccountOverview({
   const [bulkEmailSharedToken, setBulkEmailSharedToken] = useState('')
   const [bulkEmailFromName, setBulkEmailFromName] = useState('')
   const [isSavingBulkEmailIntegration, setIsSavingBulkEmailIntegration] = useState(false)
+  const [googleBusinessStatus, setGoogleBusinessStatus] = useState<GoogleBusinessStatus | null>(null)
+  const [checkingGoogleBusiness, setCheckingGoogleBusiness] = useState(false)
+  const [connectingGoogleBusiness, setConnectingGoogleBusiness] = useState(false)
   const isPromotionsView = viewMode === 'promotions'
 
   const activeMembership = useMemo(() => {
@@ -502,6 +526,12 @@ export default function AccountOverview({
   }, [memberships, storeId])
 
   const isOwner = activeMembership?.role === 'owner'
+  const googleBusinessConnectionLabel = useMemo(() => {
+    if (!googleBusinessStatus) return 'Unknown'
+    if (googleBusinessStatus.connected && googleBusinessStatus.hasRequiredScope) return 'Connected'
+    if (googleBusinessStatus.connected && !googleBusinessStatus.hasRequiredScope) return 'Connected (scope missing)'
+    return 'Not connected'
+  }, [googleBusinessStatus])
   const pendingMembers = useMemo(
     () => roster.filter(member => member.status === 'pending'),
     [roster],
@@ -1644,6 +1674,43 @@ export default function AccountOverview({
     }
   }
 
+  async function handleCheckGoogleBusinessStatus() {
+    if (!user || !storeId) return
+    try {
+      setCheckingGoogleBusiness(true)
+      const token = await user.getIdToken()
+      const response = await postJson<{ integrations?: { business?: GoogleBusinessStatus } }>('/api/google/status', token, {
+        storeId,
+        integrations: ['business'],
+      })
+      const business = response.integrations?.business
+      setGoogleBusinessStatus(business ?? { connected: false, hasRequiredScope: false })
+    } catch (error) {
+      console.error('[google-business] status check failed', error)
+      publish({ tone: 'error', message: 'Unable to check Google Business connection.' })
+    } finally {
+      setCheckingGoogleBusiness(false)
+    }
+  }
+
+  async function handleConnectGoogleBusiness() {
+    if (!user || !storeId) return
+    try {
+      setConnectingGoogleBusiness(true)
+      const token = await user.getIdToken()
+      const response = await postJson<{ url: string }>('/api/google/oauth-start', token, {
+        storeId,
+        integrations: ['business'],
+      })
+      if (!response.url) throw new Error('missing-oauth-url')
+      window.location.assign(response.url)
+    } catch (error) {
+      console.error('[google-business] oauth start failed', error)
+      publish({ tone: 'error', message: 'Unable to start Google Business connection.' })
+      setConnectingGoogleBusiness(false)
+    }
+  }
+
   async function handleTestSedifexProducts() {
     try {
       const listStoreProducts = httpsCallable(functions, 'listStoreProducts')
@@ -2161,7 +2228,7 @@ export default function AccountOverview({
           <div className="account-overview__section-header">
             <h2 id="account-overview-integrations">{isFocusedIntegrationView ? "Integration settings" : "Website integrations"}</h2>
             <p className="account-overview__subtitle">
-              Manage integration settings for website, bookings, email, and webhooks.
+              Manage integration settings for website, bookings, email, webhooks, and Google Business.
             </p>
             <p className="account-overview__hint">
               Need Google Business OAuth? Open
@@ -2201,6 +2268,13 @@ export default function AccountOverview({
                 onClick={() => setIntegrationTab('email')}
               >
                 Email delivery
+              </button>
+              <button
+                type="button"
+                className={`account-overview__tab ${visibleIntegrationTab === 'google' ? 'is-active' : ''}`}
+                onClick={() => setIntegrationTab('google')}
+              >
+                Google Business
               </button>
               <button
                 type="button"
@@ -2502,6 +2576,32 @@ export default function AccountOverview({
                     disabled={isSavingBulkEmailIntegration}
                   >
                     {isSavingBulkEmailIntegration ? 'Saving…' : 'Save email integration'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {visibleIntegrationTab === 'google' && (
+              <div className="account-overview__website-sync-keys">
+                <p className="account-overview__hint">Google Business Profile integration</p>
+                <p className="account-overview__hint">
+                  <strong>Connection status:</strong> {googleBusinessConnectionLabel}
+                </p>
+                <div className="account-overview__website-sync-actions">
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={() => void handleCheckGoogleBusinessStatus()}
+                    disabled={!user || !storeId || storeLoading || checkingGoogleBusiness || connectingGoogleBusiness}
+                  >
+                    {checkingGoogleBusiness ? 'Checking…' : 'Check connection'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => void handleConnectGoogleBusiness()}
+                    disabled={!user || !storeId || storeLoading || connectingGoogleBusiness}
+                  >
+                    {connectingGoogleBusiness ? 'Redirecting…' : 'Connect Google Business'}
                   </button>
                 </div>
               </div>
