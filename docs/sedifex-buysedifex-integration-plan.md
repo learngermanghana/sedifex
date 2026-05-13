@@ -20,7 +20,6 @@ This maps directly to already-available Sedifex endpoints and product webhooks.
 - `GET /integrationProducts?storeId=<storeId>`
 - `GET /integrationCustomers?storeId=<storeId>` (if customer import/sync is needed)
 - `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
-- `GET /integrationTikTokVideos?storeId=<storeId>`
 
 Headers:
 

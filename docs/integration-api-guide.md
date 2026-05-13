@@ -338,37 +338,7 @@ const items = Array.isArray(payload.items) ? payload.items : []
 }
 ```
 
-### `GET /integrationTikTokVideos?storeId=<storeId>` (authenticated)
-
-- Returns published TikTok videos sorted by `sortOrder asc`, then recency.
-- Useful for `/integrationTikTokVideos` embeds.
-
-```json
-{
-  "storeId": "store_123",
-  "videos": [
-    {
-      "id": "tt_1",
-      "videoId": "7390000000000000000",
-      "embedUrl": "https://www.tiktok.com/embed/v2/7390000000000000000",
-      "permalink": "https://www.tiktok.com/@store/video/7390000000000000000",
-      "caption": "New arrivals this week",
-      "thumbnailUrl": "https://...",
-      "duration": 24,
-      "viewCount": 1200,
-      "likeCount": 220,
-      "commentCount": 12,
-      "shareCount": 7,
-      "sortOrder": 1,
-      "publishedAt": "2026-04-12T12:00:00.000Z",
-      "createdAt": "2026-04-12T12:00:00.000Z",
-      "updatedAt": "2026-04-13T08:00:00.000Z"
-    }
-  ]
-}
-```
-
-## 3.1) Integration page steps for `/integrationGallery`, `/integrationCustomers`, `/integrationTopSelling`, `/integrationTikTokVideos`
+## 3.1) Integration page steps for `/integrationGallery`, `/integrationCustomers`, `/integrationTopSelling`
 
 Use this sequence when wiring those integration pages/widgets in external websites:
 
@@ -381,7 +351,6 @@ Use this sequence when wiring those integration pages/widgets in external websit
    - `/integrationGallery`
    - `/integrationCustomers`
    - `/integrationTopSelling?days=30&limit=10` (adjust as needed)
-   - `/integrationTikTokVideos`
 4. Normalize and cache:
    - Gallery/videos: preserve `sortOrder`; filter to published records only.
    - Customers/top-selling: dedupe by `id`/`productId`; sort by latest `updatedAt`/`lastSoldAt`.
