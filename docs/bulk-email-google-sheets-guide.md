@@ -49,7 +49,7 @@ Use row 1 as headers:
 
 ```javascript
 /***************************************
- * Glittering Med Spa - Sedifex Bulk Email Web App
+ *  Sedifex Bulk Email Web App
  * -----------------------------------------------
  * Sheet tab required:
  *   Recipients
@@ -61,20 +61,20 @@ Use row 1 as headers:
  *   SEDIFEX_SHARED_TOKEN = your shared secret
  *
  * Optional Script Properties:
- *   STORE_NAME = Glittering Med Spa
- *   DEFAULT_FROM_NAME = Glittering Med Spa
- *   STORE_INSTAGRAM_URL = https://instagram.com/glitteringmedspa
- *   STORE_FACEBOOK_URL = https://facebook.com/glitteringmedspa
- *   STORE_TIKTOK_URL = https://tiktok.com/@glitteringmedspa
+ *   STORE_NAME = Your-Name
+ *   DEFAULT_FROM_NAME = Yourname
+ *   STORE_INSTAGRAM_URL = https://instagram.com/yoururl
+ *   STORE_FACEBOOK_URL = https://facebook.com/yoururl
+ *   STORE_TIKTOK_URL = https://tiktok.com/yoururl
  *   RECIPIENTS_TAB_NAME = Recipients
  *   ENABLE_CAMPAIGN_DEDUPE = true
- *   MAX_EMAILS_PER_REQUEST = 200
+ *   MAX_EMAILS_PER_REQUEST = 100
  ***************************************/
 
 const CONFIG = {
   defaultSheetTabName: 'Recipients',
-  defaultStoreName: 'Glittering Med Spa',
-  defaultFromName: 'Glittering Med Spa',
+  defaultStoreName: 'Your-Name',
+  defaultFromName: 'Your Name',
   defaultSocialUrls: {
     instagram: 'https://instagram.com/glitteringmedspa',
     facebook: 'https://facebook.com/glitteringmedspa',
@@ -104,7 +104,7 @@ const CONFIG = {
 function doGet() {
   return jsonOutput({
     ok: true,
-    service: 'Glittering Med Spa Bulk Email Web App',
+    service: ' Bulk Email Web App',
     store: getStoreName(),
     version: '1.0.0',
     timestamp: new Date().toISOString()
