@@ -8079,6 +8079,69 @@ export const syncPendingIntegrationBookingToAppsScript = functions.firestore
     )
   })
 
+
+export const syncDeletedIntegrationBookingToAppsScript = functions.firestore
+  .document('stores/{storeId}/integrationBookingDeletes/{bookingId}')
+  .onCreate(async (snap, context) => {
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : ''
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : ''
+    if (!storeId || !bookingId) return
+
+    const endpointSnapshot = await db
+      .collection('webhookEndpoints')
+      .where('storeId', '==', storeId)
+      .where('status', '==', 'active')
+      .get()
+
+    const appsScriptEndpoints = endpointSnapshot.docs.filter(docSnap => {
+      const endpoint = docSnap.data() as Record<string, unknown>
+      const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
+      const secret = typeof endpoint.secret === 'string' ? endpoint.secret.trim() : ''
+      return Boolean(url && secret && /^https:\/\/script\.google\.com\/macros\//i.test(url))
+    })
+
+    if (appsScriptEndpoints.length === 0) return
+
+    const bodyObject = buildAppsScriptBookingPayload({
+      storeId,
+      bookingId,
+      eventType: 'booking.cancelled',
+      afterData: { status: 'cancelled', bookingId },
+    })
+    const body = JSON.stringify(bodyObject)
+
+    await Promise.all(
+      appsScriptEndpoints.map(async endpointDoc => {
+        const endpoint = endpointDoc.data() as Record<string, unknown>
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : ''
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : ''
+        const signature = computeWebhookSignature(secret, body)
+
+        try {
+          await fetch(url, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-sedifex-signature': signature,
+              'x-sedifex-event': 'booking.cancelled',
+              'x-sedifex-event-id': `evt_${context.eventId}`,
+            },
+            body,
+          })
+        } catch (error) {
+          console.error('[bookings] Failed to sync deleted booking to Apps Script', {
+            storeId,
+            bookingId,
+            endpointId: endpointDoc.id,
+            error: error instanceof Error ? error.message : 'unknown error',
+          })
+        }
+      }),
+    )
+
+    await snap.ref.set({ syncedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+  })
+
 export const emitIntegrationOrderWebhooks = functions.firestore
   .document('stores/{storeId}/integrationOrders/{reference}')
   .onWrite(async (change, context) => {

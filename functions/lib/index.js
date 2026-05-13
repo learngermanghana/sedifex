@@ -37,7 +37,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncPublicProducts = exports.integrationTopSelling = exports.integrationCustomers = exports.integrationGoogleMerchantFeed = exports.integrationPublicCatalog = exports.integrationTikTokVideos = exports.integrationGallery = exports.integrationBookingPaymentVerify = exports.integration = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.v1IntegrationPromo = exports.integrationPromo = exports.v1IntegrationProducts = exports.integrationProducts = exports.v1Products = exports.tiktokOAuthCallback = exports.startTikTokConnect = exports.deleteWebhookEndpoint = exports.activateWebhookEndpoint = exports.revokeWebhookEndpoint = exports.upsertWebhookEndpoint = exports.listWebhookEndpoints = exports.rotateIntegrationApiKey = exports.revokeIntegrationApiKey = exports.createIntegrationApiKey = exports.listIntegrationApiKeys = exports.listStoreProducts = exports.logPaymentReminder = exports.logReceiptShareAttempt = exports.logReceiptShare = exports.commitSale = exports.acceptStoreMasterInvite = exports.createStoreMasterInviteLink = exports.manageStaffAccount = exports.generateSocialPost = exports.generateAiAdvice = exports.resolveStoreAccess = exports.initializeStore = exports.handleUserCreate = exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.checkSignupUnlock = void 0;
-exports.publishDailyFeaturedProductBlogPost = exports.__testing = exports.v1Engagement = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.syncPendingIntegrationBookingToAppsScript = exports.emitBookingWebhooks = exports.syncIntegrationBookingCustomers = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = void 0;
+exports.publishDailyFeaturedProductBlogPost = exports.__testing = exports.v1Engagement = exports.handlePaystackWebhook = exports.createBulkCreditsCheckout = exports.cancelPaystackSubscription = exports.createCheckout = exports.createPaystackCheckout = exports.sendBulkEmail = exports.sendBulkMessage = exports.emitIntegrationOrderWebhooks = exports.syncDeletedIntegrationBookingToAppsScript = exports.syncPendingIntegrationBookingToAppsScript = exports.emitBookingWebhooks = exports.syncIntegrationBookingCustomers = exports.emitProductWebhooks = exports.enrichProductDataAfterSave = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
@@ -6573,6 +6573,61 @@ exports.syncPendingIntegrationBookingToAppsScript = functions.firestore
         syncLastAttemptAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
         syncLastSuccessAt: firstError ? null : firestore_1.admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+});
+exports.syncDeletedIntegrationBookingToAppsScript = functions.firestore
+    .document('stores/{storeId}/integrationBookingDeletes/{bookingId}')
+    .onCreate(async (snap, context) => {
+    const storeId = typeof context.params.storeId === 'string' ? context.params.storeId.trim() : '';
+    const bookingId = typeof context.params.bookingId === 'string' ? context.params.bookingId.trim() : '';
+    if (!storeId || !bookingId)
+        return;
+    const endpointSnapshot = await firestore_1.defaultDb
+        .collection('webhookEndpoints')
+        .where('storeId', '==', storeId)
+        .where('status', '==', 'active')
+        .get();
+    const appsScriptEndpoints = endpointSnapshot.docs.filter(docSnap => {
+        const endpoint = docSnap.data();
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : '';
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret.trim() : '';
+        return Boolean(url && secret && /^https:\/\/script\.google\.com\/macros\//i.test(url));
+    });
+    if (appsScriptEndpoints.length === 0)
+        return;
+    const bodyObject = buildAppsScriptBookingPayload({
+        storeId,
+        bookingId,
+        eventType: 'booking.cancelled',
+        afterData: { status: 'cancelled', bookingId },
+    });
+    const body = JSON.stringify(bodyObject);
+    await Promise.all(appsScriptEndpoints.map(async (endpointDoc) => {
+        const endpoint = endpointDoc.data();
+        const url = typeof endpoint.url === 'string' ? endpoint.url.trim() : '';
+        const secret = typeof endpoint.secret === 'string' ? endpoint.secret : '';
+        const signature = computeWebhookSignature(secret, body);
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-sedifex-signature': signature,
+                    'x-sedifex-event': 'booking.cancelled',
+                    'x-sedifex-event-id': `evt_${context.eventId}`,
+                },
+                body,
+            });
+        }
+        catch (error) {
+            console.error('[bookings] Failed to sync deleted booking to Apps Script', {
+                storeId,
+                bookingId,
+                endpointId: endpointDoc.id,
+                error: error instanceof Error ? error.message : 'unknown error',
+            });
+        }
+    }));
+    await snap.ref.set({ syncedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
 });
 exports.emitIntegrationOrderWebhooks = functions.firestore
     .document('stores/{storeId}/integrationOrders/{reference}')
