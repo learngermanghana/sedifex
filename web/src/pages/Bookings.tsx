@@ -506,9 +506,14 @@ export default function Bookings() {
             If you prefer, your team can also add bookings manually using <strong>Add booking</strong>.
             When a booking includes a phone number or email, Sedifex automatically links it to the customer profile to keep history complete and avoid duplicates.
           </p>
-          <Link to="/bookings/new" className="btn btn-secondary">
-            Add booking
-          </Link>
+          <div className="bookings-page__row-actions">
+            <Link to="/bookings/new" className="btn btn-secondary">
+              Add booking
+            </Link>
+            <Link to="/bookings/availability" className="btn btn-secondary">
+              Manage availability
+            </Link>
+          </div>
         </header>
 
         <div className="bookings-page__filters">

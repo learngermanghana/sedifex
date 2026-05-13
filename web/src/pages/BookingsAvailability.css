@@ -1,0 +1,16 @@
+.availability-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.availability-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.availability-page__row-actions,
+.availability-page__actions {
+  display: flex;
+  gap: 8px;
+}
