@@ -89,6 +89,8 @@ function pickStoreCity(storeData) {
 
 function buildStorePublicMeta(storeData) {
   const promoSlug = toTrimmedStringOrNull(storeData.promoSlug)
+  const publication = normalizePublicationFields(data, { fallbackCreatedAt: existingDocData?.createdAt, fallbackUpdatedAt: existingDocData?.updatedAt })
+
   return {
     storeName: toTrimmedStringOrNull(storeData.displayName) || toTrimmedStringOrNull(storeData.name),
     storeCity: pickStoreCity(storeData),
@@ -150,6 +152,46 @@ function resolvePublishedAtValue(data) {
   return admin.firestore.FieldValue.serverTimestamp()
 }
 
+
+function normalizePublicationFields(data, options = {}) {
+  const isPublishedValue = data.isPublished
+  if (isPublishedValue !== true && isPublishedValue !== false) {
+    return { updates: {}, removeUnpublishedAt: false, repairedPublishedProduct: false }
+  }
+
+  if (isPublishedValue === true) {
+    const hasUnpublishedAt = data.unpublishedAt !== undefined && data.unpublishedAt !== null
+    return {
+      updates: {
+        isPublished: true,
+        publishedAt: resolvePublishedAtValue({
+          publishedAt: data.publishedAt,
+          createdAt: data.createdAt ?? options.fallbackCreatedAt,
+          sourceUpdatedAt: data.updatedAt ?? options.fallbackUpdatedAt,
+          updatedAt: data.updatedAt ?? options.fallbackUpdatedAt,
+        }),
+      },
+      removeUnpublishedAt: hasUnpublishedAt,
+      repairedPublishedProduct: hasUnpublishedAt,
+    }
+  }
+
+  return {
+    updates: {
+      isPublished: false,
+      unpublishedAt: hasPublishedAt(data.unpublishedAt)
+        ? data.unpublishedAt
+        : hasPublishedAt(data.updatedAt)
+          ? data.updatedAt
+          : hasPublishedAt(data.createdAt)
+            ? data.createdAt
+            : admin.firestore.FieldValue.serverTimestamp(),
+    },
+    removeUnpublishedAt: false,
+    repairedPublishedProduct: false,
+  }
+}
+
 function normalizeCategory(value) {
   if (typeof value !== 'string') return null
   const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
@@ -167,6 +209,8 @@ function toPublicProduct(productDoc, storeMetaByStoreId, existingDocData = null)
   }
 
   const category = normalizeCategory(data.category)
+
+  const publication = normalizePublicationFields(data, { fallbackCreatedAt: existingDocData?.createdAt, fallbackUpdatedAt: existingDocData?.updatedAt })
 
   return {
     sourceProductId: productDoc.id,
@@ -195,9 +239,10 @@ function toPublicProduct(productDoc, storeMetaByStoreId, existingDocData = null)
         : data.itemType === 'made_to_order'
           ? 'made_to_order'
           : 'product',
-    isPublished: data.isPublished !== false,
+    isPublished: data.isPublished === true,
     ...extractProductImageSet(data),
-    publishedAt: resolvePublishedAtValue(existingDocData || data),
+    publishedAt: data.isPublished === true ? publication.updates.publishedAt : null,
+    unpublishedAt: data.isPublished === false ? publication.updates.unpublishedAt : null,
     createdAt: data.createdAt ?? existingDocData?.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
     sourceUpdatedAt: data.updatedAt ?? null,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -348,22 +393,32 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
 
   const summary = {
     storeId,
-    publishedProducts: productsSnapshot.size,
-    existingPublicProducts: publicProductsSnapshot.size,
-    existingPublicServices: publicServicesSnapshot.size,
-    missingTarget: 0,
-    wrongCollectionRepaired: 0,
-    duplicateTargetRepaired: 0,
-    metadataRepairs: 0,
-    orphanPublicDocsRemoved: 0,
-    sourceMetadataRepairs: 0,
-    outOfSyncDetected: 0,
+    scannedProducts: productsSnapshot.size,
+    repairedPublishedProducts: 0,
+    removedExpiredUnpublishedAt: 0,
+    publicProductsWritten: 0,
+    publicServicesWritten: 0,
+    skippedUnpublished: 0,
+    errors: 0,
   }
 
   const batchState = { batch: db.batch(), writes: 0 }
 
   for (const productDoc of productsSnapshot.docs) {
     const productData = productDoc.data() || {}
+    const sourcePublication = normalizePublicationFields(productData)
+    const sourceUpdates = {}
+    if (Object.keys(sourcePublication.updates).length) Object.assign(sourceUpdates, sourcePublication.updates)
+    if (sourcePublication.removeUnpublishedAt) {
+      sourceUpdates.unpublishedAt = admin.firestore.FieldValue.delete()
+      summary.removedExpiredUnpublishedAt += 1
+    }
+    if (Object.keys(sourceUpdates).length) {
+      queueSet(batchState, productDoc.ref, sourceUpdates, { merge: true })
+      summary.repairedPublishedProducts += 1
+      Object.assign(productData, sourcePublication.updates)
+      if (sourcePublication.removeUnpublishedAt) delete productData.unpublishedAt
+    }
     const expectedCollection = resolvePublicCatalogCollectionName(productData.itemType)
     const expectedRef = db.collection(expectedCollection).doc(productDoc.id)
     const oppositeRef =
@@ -379,22 +434,19 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
       : publicServicesById.get(productDoc.id) || null
 
     if (!existingExpected) {
-      summary.missingTarget += 1
-      summary.outOfSyncDetected += 1
       const payload = toPublicProduct(productDoc, storeMetaByStoreId)
       if (payload) {
         queueSet(batchState, expectedRef, payload, { merge: true })
+        if (expectedCollection === 'publicServices') summary.publicServicesWritten += 1
+        else summary.publicProductsWritten += 1
       }
     }
 
     if (existingOpposite) {
-      summary.wrongCollectionRepaired += 1
-      summary.outOfSyncDetected += 1
       queueDelete(batchState, oppositeRef)
     }
 
     if (existingExpected && existingOpposite) {
-      summary.duplicateTargetRepaired += 1
     }
 
     const normalizedSourceCategory = normalizeCategory(productData.category)
@@ -403,7 +455,6 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
     const needsSourceUpdatedAt = !isFirestoreTimestampLike(productData.updatedAt) && !hasPublishedAt(productData.updatedAt)
 
     if (needsSourceCategoryRepair || needsSourcePublishedAt || needsSourceUpdatedAt) {
-      summary.sourceMetadataRepairs += 1
       queueSet(batchState, productDoc.ref, {
         category: normalizedSourceCategory,
         publishedAt: needsSourcePublishedAt ? resolvePublishedAtValue(productData) : productData.publishedAt,
@@ -418,7 +469,6 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
       const needsPublishedAtRepair = !hasPublishedAt(expectedData.publishedAt)
       const needsUpdatedAtRepair = !isFirestoreTimestampLike(expectedData.updatedAt) && !hasPublishedAt(expectedData.updatedAt)
       if (needsCategoryRepair || needsPublishedAtRepair || needsUpdatedAtRepair) {
-        summary.metadataRepairs += 1
         queueSet(batchState, expectedRef, {
           category: normalizedCategory,
           publishedAt: needsPublishedAtRepair ? resolvePublishedAtValue(expectedData) : expectedData.publishedAt,
@@ -432,8 +482,6 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
 
   for (const publicDoc of [...publicProductsSnapshot.docs, ...publicServicesSnapshot.docs]) {
     if (publishedIds.has(publicDoc.id)) continue
-    summary.orphanPublicDocsRemoved += 1
-    summary.outOfSyncDetected += 1
     queueDelete(batchState, publicDoc.ref)
     await maybeFlushBatch(batchState)
   }
@@ -491,9 +539,9 @@ async function runReconciliation(targetStoreId) {
     const summary = await reconcileStore(storeId, storeMetaByStoreId)
     summaries.push(summary)
     console.log(
-      `[reconcile] store=${summary.storeId} published=${summary.publishedProducts} missingTarget=${summary.missingTarget} ` +
-      `wrongCollectionRepaired=${summary.wrongCollectionRepaired} metadataRepairs=${summary.metadataRepairs} ` +
-      `sourceMetadataRepairs=${summary.sourceMetadataRepairs} orphanRemoved=${summary.orphanPublicDocsRemoved} outOfSyncDetected=${summary.outOfSyncDetected}`,
+      `[reconcile] store=${summary.storeId} scannedProducts=${summary.scannedProducts} repairedPublishedProducts=${summary.repairedPublishedProducts} ` +
+      `removedExpiredUnpublishedAt=${summary.removedExpiredUnpublishedAt} publicProductsWritten=${summary.publicProductsWritten} ` +
+      `publicServicesWritten=${summary.publicServicesWritten} skippedUnpublished=${summary.skippedUnpublished} errors=${summary.errors}`,
     )
   }
 
