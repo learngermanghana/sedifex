@@ -207,14 +207,28 @@ export default function BlogPage() {
             .join(' ')
         : null
 
+      const recentTitles = posts
+        .slice(0, 8)
+        .map(post => post.title.trim())
+        .filter(Boolean)
+      const strategy = [
+        'Do not keep repeating "new arrivals" unless the user explicitly asks for it.',
+        'Pick one fresh angle such as: how-to/use tips, customer story, seasonal advice, bundle offer, product comparison, FAQ, or behind-the-scenes.',
+        'Make the title specific and different from recent titles.',
+      ].join(' ')
+
       const prompt = [
         'Write a clear blog post for a retail store website in simple language.',
-        `Working title: ${title.trim() || 'New Arrivals and Offers'}.`,
+        `Working title: ${title.trim() || 'Helpful Product Spotlight and Tips'}.`,
+        strategy,
+        recentTitles.length ? `Recent titles to avoid repeating: ${recentTitles.join(' | ')}` : null,
         itemContext,
         'Return this format exactly:',
         'TITLE: <post title>',
         'CONTENT: <blog post body with paragraphs>',
-      ].join('\n')
+      ]
+        .filter(Boolean)
+        .join('\n')
       const result = await requestAiAdvisor({ question: prompt, storeId })
       const advice = result.advice || ''
       const titleMatch = advice.match(/TITLE:\s*([\s\S]*?)(?:\nCONTENT:|$)/i)
