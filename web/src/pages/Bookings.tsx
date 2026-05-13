@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  setDoc,
   getDocs,
   limit,
   orderBy,
@@ -396,7 +397,17 @@ export default function Bookings() {
       setErrorMessage(null)
 
       try {
-        await deleteDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId))
+        const bookingRef = doc(db, 'stores', storeId, 'integrationBookings', bookingId)
+        await setDoc(
+          doc(db, 'stores', storeId, 'integrationBookingDeletes', bookingId),
+          {
+            bookingId,
+            storeId,
+            deletedAt: Timestamp.now(),
+          },
+          { merge: true },
+        )
+        await deleteDoc(bookingRef)
 
         setBookings(previous => previous.filter(booking => booking.id !== bookingId))
       } catch (error) {
