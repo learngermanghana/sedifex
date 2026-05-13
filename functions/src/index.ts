@@ -6,6 +6,7 @@ import { admin, defaultDb as db } from './firestore'
 import { normalizePhoneE164, normalizePhoneForWhatsApp } from './phone'
 import { normalizePublicSlugValue } from './utils/publicSlug'
 import type { ProductReadModel } from './types/product'
+import { normalizeCatalogPublicationFields, resolvePublicationTimestampCandidate } from './catalogPublication'
 export { checkSignupUnlock } from './paystack'
 export {
   googleAdsOAuthStart,
@@ -7422,26 +7423,6 @@ function isFirestoreTimestampLike(value: unknown): boolean {
   )
 }
 
-function resolvePublicProductPublishedAt(
-  source: Record<string, unknown>,
-  existing: Record<string, unknown> | null,
-): admin.firestore.FieldValue | unknown {
-  const candidates = [
-    source.publishedAt,
-    existing?.publishedAt,
-    source.createdAt,
-    source.updatedAt,
-    existing?.createdAt,
-    existing?.updatedAt,
-  ]
-  for (const candidate of candidates) {
-    if (isFirestoreTimestampLike(candidate) || typeof candidate === 'string') {
-      return candidate
-    }
-  }
-  return admin.firestore.FieldValue.serverTimestamp()
-}
-
 function toPublicProductPayload(
   productId: string,
   source: Record<string, unknown>,
@@ -7454,13 +7435,10 @@ function toPublicProductPayload(
     return null
   }
   const isPublished = source.isPublished === true
-  const unpublishedAt =
-    isPublished
-      ? null
-      : source.unpublishedAt ??
-        existing?.unpublishedAt ??
-        source.updatedAt ??
-        admin.firestore.FieldValue.serverTimestamp()
+  const publication = normalizeCatalogPublicationFields(source, {
+    fallbackCreatedAt: existing?.createdAt,
+    fallbackUpdatedAt: existing?.updatedAt,
+  })
 
   return {
     sourceProductId: productId,
@@ -7493,8 +7471,8 @@ function toPublicProductPayload(
     searchTokens: buildSearchTokens(source),
     namePrefix: buildNamePrefix(source),
     ...extractProductImageSet(source),
-    publishedAt: isPublished ? resolvePublicProductPublishedAt(source, existing) : null,
-    unpublishedAt,
+    publishedAt: isPublished ? publication.updates.publishedAt ?? resolvePublicationTimestampCandidate(source.createdAt, existing?.createdAt) : null,
+    unpublishedAt: isPublished ? null : publication.updates.unpublishedAt ?? existing?.unpublishedAt ?? admin.firestore.FieldValue.serverTimestamp(),
     createdAt: source.createdAt ?? existing?.createdAt ?? admin.firestore.FieldValue.serverTimestamp(),
     sourceUpdatedAt: source.updatedAt ?? null,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -7601,6 +7579,19 @@ export const syncPublicProducts = functions.firestore
     }
 
     const sourceData = afterData ?? {}
+    const normalizedPublication = normalizeCatalogPublicationFields(sourceData, {
+      fallbackCreatedAt: sourceData.createdAt,
+      fallbackUpdatedAt: sourceData.updatedAt,
+    })
+    if (Object.keys(normalizedPublication.updates).length || normalizedPublication.removeUnpublishedAt) {
+      const sourceUpdates: Record<string, unknown> = { ...normalizedPublication.updates }
+      if (normalizedPublication.removeUnpublishedAt) {
+        sourceUpdates.unpublishedAt = admin.firestore.FieldValue.delete()
+      }
+      await change.after.ref.set(sourceUpdates, { merge: true })
+      Object.assign(sourceData, normalizedPublication.updates)
+      if (normalizedPublication.removeUnpublishedAt) delete sourceData.unpublishedAt
+    }
     const destinationCollectionName = resolvePublicCatalogCollectionName(sourceData.itemType)
     const destinationRef = db.collection(destinationCollectionName).doc(productId)
     const oppositeRef = destinationCollectionName === 'publicServices' ? publicProductRef : publicServiceRef

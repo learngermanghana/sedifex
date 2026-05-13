@@ -45,6 +45,7 @@ const params_1 = require("firebase-functions/params");
 const firestore_1 = require("./firestore");
 const phone_1 = require("./phone");
 const publicSlug_1 = require("./utils/publicSlug");
+const catalogPublication_1 = require("./catalogPublication");
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
 var googleAds_1 = require("./googleAds");
@@ -5998,22 +5999,6 @@ function isFirestoreTimestampLike(value) {
             'toDate' in value &&
             typeof value.toDate === 'function'));
 }
-function resolvePublicProductPublishedAt(source, existing) {
-    const candidates = [
-        source.publishedAt,
-        existing?.publishedAt,
-        source.createdAt,
-        source.updatedAt,
-        existing?.createdAt,
-        existing?.updatedAt,
-    ];
-    for (const candidate of candidates) {
-        if (isFirestoreTimestampLike(candidate) || typeof candidate === 'string') {
-            return candidate;
-        }
-    }
-    return firestore_1.admin.firestore.FieldValue.serverTimestamp();
-}
 function toPublicProductPayload(productId, source, existing, storeMeta) {
     const storeId = typeof source.storeId === 'string' ? source.storeId.trim() : '';
     const name = normalizeProductName(source.name);
@@ -6021,12 +6006,10 @@ function toPublicProductPayload(productId, source, existing, storeMeta) {
         return null;
     }
     const isPublished = source.isPublished === true;
-    const unpublishedAt = isPublished
-        ? null
-        : source.unpublishedAt ??
-            existing?.unpublishedAt ??
-            source.updatedAt ??
-            firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    const publication = (0, catalogPublication_1.normalizeCatalogPublicationFields)(source, {
+        fallbackCreatedAt: existing?.createdAt,
+        fallbackUpdatedAt: existing?.updatedAt,
+    });
     return {
         sourceProductId: productId,
         storeId,
@@ -6057,8 +6040,8 @@ function toPublicProductPayload(productId, source, existing, storeMeta) {
         searchTokens: buildSearchTokens(source),
         namePrefix: buildNamePrefix(source),
         ...extractProductImageSet(source),
-        publishedAt: isPublished ? resolvePublicProductPublishedAt(source, existing) : null,
-        unpublishedAt,
+        publishedAt: isPublished ? publication.updates.publishedAt ?? (0, catalogPublication_1.resolvePublicationTimestampCandidate)(source.createdAt, existing?.createdAt) : null,
+        unpublishedAt: isPublished ? null : publication.updates.unpublishedAt ?? existing?.unpublishedAt ?? firestore_1.admin.firestore.FieldValue.serverTimestamp(),
         createdAt: source.createdAt ?? existing?.createdAt ?? firestore_1.admin.firestore.FieldValue.serverTimestamp(),
         sourceUpdatedAt: source.updatedAt ?? null,
         updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
@@ -6151,6 +6134,20 @@ exports.syncPublicProducts = functions.firestore
         return;
     }
     const sourceData = afterData ?? {};
+    const normalizedPublication = (0, catalogPublication_1.normalizeCatalogPublicationFields)(sourceData, {
+        fallbackCreatedAt: sourceData.createdAt,
+        fallbackUpdatedAt: sourceData.updatedAt,
+    });
+    if (Object.keys(normalizedPublication.updates).length || normalizedPublication.removeUnpublishedAt) {
+        const sourceUpdates = { ...normalizedPublication.updates };
+        if (normalizedPublication.removeUnpublishedAt) {
+            sourceUpdates.unpublishedAt = firestore_1.admin.firestore.FieldValue.delete();
+        }
+        await change.after.ref.set(sourceUpdates, { merge: true });
+        Object.assign(sourceData, normalizedPublication.updates);
+        if (normalizedPublication.removeUnpublishedAt)
+            delete sourceData.unpublishedAt;
+    }
     const destinationCollectionName = resolvePublicCatalogCollectionName(sourceData.itemType);
     const destinationRef = firestore_1.defaultDb.collection(destinationCollectionName).doc(productId);
     const oppositeRef = destinationCollectionName === 'publicServices' ? publicProductRef : publicServiceRef;
