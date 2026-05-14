@@ -19,9 +19,9 @@ body.shell--menu-open {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(15, 23, 42, 0.94);
   backdrop-filter: saturate(180%) blur(12px);
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
 }
 
 .shell__header-inner {
@@ -138,12 +138,12 @@ body.shell--menu-open {
 .shell__logo {
   font-size: 24px;
   font-weight: 800;
-  color: #4338ca;
+  color: #a5b4fc;
 }
 
 .shell__tagline {
   font-size: 13px;
-  color: #64748b;
+  color: #cbd5e1;
   font-weight: 500;
 }
 
@@ -165,7 +165,7 @@ body.shell--menu-open {
 .shell__nav-search-label {
   font-size: 12px;
   font-weight: 700;
-  color: #475569;
+  color: #334155;
 }
 
 .shell__nav-search-input {
@@ -181,7 +181,7 @@ body.shell--menu-open {
   padding: 8px 12px;
   border-radius: 10px;
   font-size: 13px;
-  color: #475569;
+  color: #334155;
   background: #f8fafc;
   border: 1px dashed #cbd5e1;
 }
@@ -216,7 +216,7 @@ body.shell--menu-open {
   border-radius: 16px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.45);
+  box-shadow: 0 16px 36px -26px rgba(15, 23, 42, 0.48);
 }
 
 .shell__workspace-pill {
@@ -259,8 +259,8 @@ body.shell--menu-open {
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  color: #4338ca;
-  background-color: #eef2ff;
+  color: #334155;
+  background-color: #f1f5f9;
   border: 1px solid transparent;
   box-shadow: none;
   transition: all 0.2s ease;
@@ -268,8 +268,10 @@ body.shell--menu-open {
 }
 
 .shell__nav-link:is(:hover, :focus-visible) {
-  border-color: rgba(67, 56, 202, 0.25);
-  box-shadow: 0 6px 18px rgba(67, 56, 202, 0.1);
+  color: #1e293b;
+  background-color: #e2e8f0;
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 }
 
 .shell__nav-link.is-active {
@@ -315,7 +317,7 @@ body.shell--menu-open {
 .shell__store-label {
   font-size: 12px;
   font-weight: 700;
-  color: #475569;
+  color: #334155;
 }
 
 .shell__store-select {
@@ -336,7 +338,7 @@ body.shell--menu-open {
 .shell__store-link-hint {
   margin: 0;
   font-size: 12px;
-  color: #475569;
+  color: #334155;
 }
 
 .shell__resume-banner {
@@ -371,7 +373,7 @@ body.shell--menu-open {
 
 .shell__account-email {
   font-size: 13px;
-  color: #4338ca;
+  color: #1e1b4b;
   font-weight: 600;
   min-width: 0;
   overflow: hidden;
@@ -411,12 +413,17 @@ body.shell--menu-open {
   color: #0f172a;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid #cbd5f5;
+  border: 1px solid #cbd5e1;
   background: #ffffff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 
+
+.shell input::placeholder,
+.shell textarea::placeholder {
+  color: #64748b;
+}
 .shell label {
   color: #0f172a;
 }
@@ -425,7 +432,7 @@ body.shell--menu-open {
 .shell select:focus,
 .shell textarea:focus {
   border-color: #4338ca;
-  box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+  box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.2);
   outline: none;
 }
 
@@ -574,7 +581,7 @@ body.shell--menu-open {
 
   .shell__tagline {
     font-size: 12px;
-    color: #475569;
+    color: #334155;
     flex: 1;
   }
 
