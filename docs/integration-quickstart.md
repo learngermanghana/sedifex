@@ -81,13 +81,13 @@ Promo gallery data fields (stores/{storeId}/promoGallery/{itemId})
 
     updatedAt
 
-## Sedifex Market / BuySedifex
+## Scope note
 
-If you are integrating the dedicated Sedifex market frontend (`buysedifex` repo), follow the cross-repo communication plan in:
+This quickstart is for store/partner integrations only.
 
-- `docs/sedifex-buysedifex-integration-plan.md`
+SedifexMarket and public-product catalog guidance has been moved to a dedicated document:
 
-It defines a pull + webhook model, contract versioning, reliability, and rollout sequencing so both repos can ship independently without API drift.
+- `docs/sedifexmarket-public-product-guide.md`
 
 ## Prerequisites
 
