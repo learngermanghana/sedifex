@@ -12,6 +12,7 @@ export type NavItem = {
   end?: boolean
   parentTarget?: string
   rolesAllowed: NavRole[]
+  requiredPermissions?: string[]
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -87,6 +88,7 @@ export type CustomNavItem = {
   target: string
   roles_allowed: NavRole[]
   sort_order: number
+  required_permissions?: string[]
 }
 
 export type NavigationSettings = {
@@ -97,6 +99,12 @@ export type NavigationSettings = {
   customNavItems?: CustomNavItem[]
 }
 
+export type NavigationResolverInput = {
+  role: NavRole
+  workspaceProfile: NavigationSettings
+  permissions?: string[]
+}
+
 function toShellNavItem(item: NavItem): NavItem {
   return {
     ...item,
@@ -104,21 +112,32 @@ function toShellNavItem(item: NavItem): NavItem {
   }
 }
 
-export function resolveNavItems(role: NavRole, settings: NavigationSettings): NavItem[] {
+function hasPermissions(requiredPermissions: string[] | undefined, grantedPermissions: Set<string> | null) {
+  if (!requiredPermissions || requiredPermissions.length === 0) return true
+  if (!grantedPermissions) return false
+  return requiredPermissions.every(permission => grantedPermissions.has(permission))
+}
+
+export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
+  const { role, workspaceProfile } = input
   const aliasLabels =
-    settings.labelPolicy === 'industry_aliases' ? INDUSTRY_LABELS[settings.industry] : {}
+    workspaceProfile.labelPolicy === 'industry_aliases' ? INDUSTRY_LABELS[workspaceProfile.industry] : {}
 
   const enabledModules =
-    settings.enabledModules && settings.enabledModules.length > 0
-      ? new Set(settings.enabledModules)
+    workspaceProfile.enabledModules && workspaceProfile.enabledModules.length > 0
+      ? new Set(workspaceProfile.enabledModules)
       : null
+
+  const grantedPermissions = input.permissions && input.permissions.length > 0
+    ? new Set(input.permissions)
+    : null
 
   const baseItems = NAV_ITEMS.filter(item => {
     if (!item.rolesAllowed.includes(role)) return false
-    if (!enabledModules) return true
-    return enabledModules.has(item.id)
+    if (enabledModules && !enabledModules.has(item.id)) return false
+    return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {
-    const customLabel = settings.customLabels?.[item.target]?.trim()
+    const customLabel = workspaceProfile.customLabels?.[item.target]?.trim()
     const aliasLabel = aliasLabels[item.target]
     return toShellNavItem({
       ...item,
@@ -126,10 +145,11 @@ export function resolveNavItems(role: NavRole, settings: NavigationSettings): Na
     })
   })
 
-  const customItems = (settings.customNavItems ?? []).filter(item => {
+  const customItems = (workspaceProfile.customNavItems ?? []).filter(item => {
     if (!item.roles_allowed.includes(role)) return false
     if (!item.label.trim() || !item.target.trim()) return false
-    return ['module', 'internal', 'external'].includes(item.type)
+    if (!['module', 'internal', 'external'].includes(item.type)) return false
+    return hasPermissions(item.required_permissions, grantedPermissions)
   }).map<NavItem>(item => ({
     id: item.id,
     label: item.label.trim(),
@@ -137,8 +157,16 @@ export function resolveNavItems(role: NavRole, settings: NavigationSettings): Na
     target: item.target.trim(),
     rolesAllowed: item.roles_allowed,
     sortOrder: item.sort_order,
+    requiredPermissions: item.required_permissions,
     end: false,
   }))
 
   return [...baseItems, ...customItems].sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+export function resolveNavItems(role: NavRole, settings: NavigationSettings): NavItem[] {
+  return resolveNavigation({
+    role,
+    workspaceProfile: settings,
+  })
 }
