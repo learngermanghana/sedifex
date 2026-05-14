@@ -74,7 +74,7 @@ type CreditsPackage = {
   price: number
   label: string
 }
-type BulkMessagingTab = 'metrics' | 'send' | 'buy'
+type BulkMessagingTab = 'send' | 'buy'
 type MessageTemplate = {
   id: string
   title: string
@@ -518,17 +518,6 @@ export default function BulkMessaging() {
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'metrics'}
-          className={`button button--ghost bulk-messaging-page__tab${
-            activeTab === 'metrics' ? ' is-active' : ''
-          }`}
-          onClick={() => setActiveTab('metrics')}
-        >
-          Metrics
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={activeTab === 'send'}
           className={`button button--ghost bulk-messaging-page__tab${
             activeTab === 'send' ? ' is-active' : ''
@@ -549,54 +538,6 @@ export default function BulkMessaging() {
           Buy credits
         </button>
       </div>
-
-      {activeTab === 'metrics' ? (
-        <section className="bulk-messaging-page__summary" role="tabpanel">
-          <div className="card bulk-messaging-page__summary-card">
-            <p className="bulk-messaging-page__summary-label">Audience selected</p>
-            <p className="bulk-messaging-page__summary-value">{selectedCustomers.length}</p>
-            <p className="bulk-messaging-page__summary-meta">
-              {selectableCustomers.length} with a phone number
-            </p>
-          </div>
-          <div className="card bulk-messaging-page__summary-card">
-            <p className="bulk-messaging-page__summary-label">Channel</p>
-            <p className="bulk-messaging-page__summary-value">SMS</p>
-            <p className="bulk-messaging-page__summary-meta">
-              Messages will send via Hubtel from your verified sender
-            </p>
-          </div>
-          <div className="card bulk-messaging-page__summary-card">
-            <p className="bulk-messaging-page__summary-label">Message length</p>
-            <p className="bulk-messaging-page__summary-value">{messageLength}</p>
-            <p className="bulk-messaging-page__summary-meta">{`${messageSegments} SMS segment(s)`}</p>
-          </div>
-          <div className="card bulk-messaging-page__summary-card bulk-messaging-page__summary-card--credits">
-            <p className="bulk-messaging-page__summary-label">SMS credits</p>
-            <p className="bulk-messaging-page__summary-value">
-              {creditLoading ? 'Loading…' : creditBalance}
-            </p>
-            <div className="bulk-messaging-page__summary-meta bulk-messaging-page__credits-meta">
-              <span>
-                {creditLoading
-                  ? 'Checking available credits'
-                  : creditsNeeded > 0
-                  ? `${formatNumber(creditsNeeded)} credits required (${formatNumber(
-                      selectableCustomers.length,
-                    )} recipient(s) × ${messageSegments} segment(s) × ${CREDITS_PER_SMS} credits)`
-                  : 'Select recipients to see required credits'}
-              </span>
-              <button
-                type="button"
-                className="button button--ghost button--small"
-                onClick={() => setActiveTab('buy')}
-              >
-                Buy credits
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       {activeTab === 'send' ? (
         <div className="bulk-messaging-page__grid" role="tabpanel">

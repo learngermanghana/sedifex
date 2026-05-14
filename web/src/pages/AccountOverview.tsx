@@ -2343,6 +2343,11 @@ export default function AccountOverview({
               <code>{storeId}</code>
               . You can find it in <strong>Account overview → Workspace details</strong>.
             </p>
+            <p className="account-overview__hint">
+              Public blog feed endpoint:
+              {' '}
+              <code>/api/public-blog?storeId={storeId}</code>
+            </p>
             {profile && (
               <div className="account-overview__website-sync-keys">
                 <p className="account-overview__hint"><strong>Catalog sync health</strong></p>
