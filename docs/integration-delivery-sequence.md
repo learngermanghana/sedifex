@@ -25,6 +25,22 @@ Move away from shared user credentials and give each integration a dedicated API
 - Revoked keys fail authentication immediately.
 - Rotation path is documented and verified in staging.
 
+### Product rollout checklist (ship gate)
+Use this list in product docs and release runbooks before broad partner rollout:
+- **Permissions model defined:** who can create/revoke/rotate/view keys (owner/admin/staff), including least-privilege defaults.
+- **Expiration defaults set:** default key lifetime, no-expiry policy (if allowed), and warning cadence before expiry.
+- **Revoke SLA published:** target and observed propagation time from revoke action to failed authentication.
+- **Rotation overlap window documented:** exact overlap duration, recommended cutover sequence, and failure fallback path.
+- **Audit log visibility confirmed:** where logs are visible in UI/API, which fields are captured, retention policy, and support access path.
+
+### UI polish checklist (API key management)
+- Clear primary actions (`Create key`, `Rotate`, `Revoke`) with destructive-action confirmation for revoke.
+- Inline helper text for one-time secret reveal + explicit copy/download affordance.
+- Expiration badge states (`Active`, `Expiring soon`, `Expired`, `Revoked`) with consistent color semantics.
+- Last-used timestamp shown in local timezone with relative tooltip (for quick support triage).
+- Rotation wizard includes overlap-window summary and post-rotation verification step.
+- Empty-state guidance that links directly to quickstart docs for partner onboarding.
+
 ---
 
 ## 2) Ship WordPress plugin MVP
