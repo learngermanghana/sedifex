@@ -120,15 +120,21 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (hasTrialEnded) {
       return [
         {
-          to: '/blog',
+          id: 'blog',
+          type: 'module',
+          target: '/blog',
+          sortOrder: 10,
           label: 'Blog',
-          roles: [role],
+          rolesAllowed: [role],
         },
         {
-          to: '/account',
+          id: 'account',
+          type: 'module',
+          target: '/account',
+          sortOrder: 20,
           label: 'Account',
           end: true,
-          roles: [role],
+          rolesAllowed: [role],
         },
       ]
     }
@@ -139,10 +145,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const navTree = useMemo(
     () =>
       navItems
-        .filter(item => !item.parentTo)
+        .filter(item => !item.parentTarget)
         .map(item => ({
           item,
-          children: navItems.filter(child => child.parentTo === item.to),
+          children: navItems.filter(child => child.parentTarget === item.target),
         })),
     [navItems],
   )
@@ -281,8 +287,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
     const isAllowed = navItems.some(
       item =>
-        location.pathname === item.to ||
-        location.pathname.startsWith(`${item.to}/`),
+        location.pathname === item.target ||
+        location.pathname.startsWith(`${item.target}/`),
     )
 
     if (!isAllowed) {
@@ -420,10 +426,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
         {filteredNavItems.map(item => (
           <NavLink
-            key={item.to}
-            to={item.to}
+            key={item.id}
+            to={item.target}
             end={item.end}
-            className={({ isActive }) => navLinkClass(isActive, Boolean(item.parentTo))}
+            className={({ isActive }) => navLinkClass(isActive, Boolean(item.parentTarget))}
           >
             {item.label}
           </NavLink>
