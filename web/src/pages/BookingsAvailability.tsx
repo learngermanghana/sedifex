@@ -30,7 +30,9 @@ export default function BookingsAvailability() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [serviceMode, setServiceMode] = useState<'catalog' | 'manual'>('catalog')
   const [serviceId, setServiceId] = useState('')
+  const [manualServiceName, setManualServiceName] = useState('')
   const [startAt, setStartAt] = useState(toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)))
   const [endAt, setEndAt] = useState(toLocalInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000)))
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
@@ -50,6 +52,15 @@ export default function BookingsAvailability() {
         if (nameCandidate) map.set(serviceDoc.id, nameCandidate.trim())
       })
     }
+    const productSnapshot = await getDocs(collection(db, 'stores', activeStoreId, 'products'))
+    productSnapshot.forEach(productDoc => {
+      const data = productDoc.data() as Record<string, unknown>
+      const nameCandidate = [data.name, data.title, data.productName].find(
+        value => typeof value === 'string' && value.trim(),
+      ) as string | undefined
+      if (nameCandidate) map.set(productDoc.id, nameCandidate.trim())
+    })
+
     const nextServices = Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((left, right) => left.name.localeCompare(right.name))
@@ -71,7 +82,10 @@ export default function BookingsAvailability() {
         return {
           id: slotDoc.id,
           serviceId: normalizedServiceId,
-          serviceName: serviceLookup.get(normalizedServiceId) ?? normalizedServiceId,
+          serviceName:
+            (typeof data.serviceName === 'string' && data.serviceName.trim()) ||
+            serviceLookup.get(normalizedServiceId) ||
+            normalizedServiceId,
           startAt: start,
           endAt: end,
           timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'UTC',
@@ -121,8 +135,17 @@ export default function BookingsAvailability() {
       setErrorMessage('End date/time must be after start date/time.')
       return
     }
-    if (!serviceId) {
-      setErrorMessage('Choose a service first.')
+    const manualName = manualServiceName.trim()
+    const selectedName = serviceMap.get(serviceId)?.trim() ?? ''
+    const resolvedServiceName = serviceMode === 'manual' ? manualName : selectedName
+    const resolvedServiceId = serviceMode === 'manual' ? `manual:${manualName.toLowerCase().replace(/\s+/g, '-')}` : serviceId
+
+    if (!resolvedServiceName) {
+      setErrorMessage(serviceMode === 'manual' ? 'Enter a service or product name.' : 'Choose a service or product first.')
+      return
+    }
+    if (serviceMode === 'catalog' && !serviceId) {
+      setErrorMessage('Choose a service or product first.')
       return
     }
 
@@ -131,7 +154,8 @@ export default function BookingsAvailability() {
     try {
       await addDoc(collection(db, 'stores', storeId, 'integrationAvailabilitySlots'), {
         storeId,
-        serviceId,
+        serviceId: resolvedServiceId,
+        serviceName: resolvedServiceName,
         startAt: Timestamp.fromDate(startDate),
         endAt: Timestamp.fromDate(endDate),
         timezone,
@@ -148,7 +172,7 @@ export default function BookingsAvailability() {
     } finally {
       setSaving(false)
     }
-  }, [capacity, endAt, loadSlots, serviceId, serviceMap, startAt, storeId, timezone])
+  }, [capacity, endAt, loadSlots, manualServiceName, serviceId, serviceMap, serviceMode, startAt, storeId, timezone])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -189,7 +213,12 @@ export default function BookingsAvailability() {
         </header>
 
         <form className="availability-form" onSubmit={handleCreateSlot}>
-          <label><span>Service</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
+          <label><span>Service source</span><select value={serviceMode} onChange={event => setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog')}><option value="catalog">Select existing service/product</option><option value="manual">Manual input</option></select></label>
+          {serviceMode === 'catalog' ? (
+            <label><span>Service or product</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
+          ) : (
+            <label><span>Service or product name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>
+          )}
           <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
