@@ -17,6 +17,8 @@ export type StorePreferences = {
     enabledModules: string[]
     customLabels: Partial<Record<string, string>>
     customNavItems: CustomNavItem[]
+    showCustomizationBanner?: boolean
+    requiresIndustryReview?: boolean
   }
 }
 
@@ -36,6 +38,7 @@ const DEFAULT_PREFERENCES: StorePreferences = {
 }
 
 function mergePreferences(raw: Record<string, unknown> | undefined | null): StorePreferences {
+  const navigation = (raw?.navigation as Record<string, unknown> | undefined) ?? undefined
   const productDefaults: ProductDefaults = {
     defaultItemType:
       raw?.productDefaults &&
@@ -54,23 +57,32 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
   }
 
   const allowedIndustries: Industry[] = ['shop', 'travel', 'ngo', 'school']
-  const industry =
-    raw?.navigation &&
-    typeof (raw.navigation as any).industry === 'string' &&
-    allowedIndustries.includes((raw.navigation as any).industry)
-      ? ((raw.navigation as any).industry as Industry)
-      : DEFAULT_PREFERENCES.navigation.industry
+  const explicitIndustry =
+    navigation &&
+    typeof navigation.industry === 'string' &&
+    allowedIndustries.includes(navigation.industry as Industry)
+      ? (navigation.industry as Industry)
+      : null
+
+  const usage = (navigation?.usage as Record<string, unknown> | undefined) ?? {}
+  const sellUsage = typeof usage.sell === 'number' ? usage.sell : 0
+  const itemsUsage = typeof usage.items === 'number' ? usage.items : 0
+  const bookingsUsage = typeof usage.bookings === 'number' ? usage.bookings : 0
+  const isSellHeavy = sellUsage >= 20 || itemsUsage >= 20
+  const isBookingsHeavy = bookingsUsage >= 20 && !isSellHeavy
+  const inferredIndustry: Industry = isSellHeavy ? 'shop' : 'shop'
+  const industry = explicitIndustry ?? inferredIndustry
 
   const labelPolicy =
-    raw?.navigation &&
-    typeof (raw.navigation as any).labelPolicy === 'string' &&
-    ['shared', 'industry_aliases'].includes((raw.navigation as any).labelPolicy)
-      ? ((raw.navigation as any).labelPolicy as NavigationLabelPolicy)
+    navigation &&
+    typeof navigation.labelPolicy === 'string' &&
+    ['shared', 'industry_aliases'].includes(navigation.labelPolicy)
+      ? (navigation.labelPolicy as NavigationLabelPolicy)
       : DEFAULT_PREFERENCES.navigation.labelPolicy
 
   const customLabels =
-    raw?.navigation && typeof (raw.navigation as any).customLabels === 'object'
-      ? (Object.entries((raw.navigation as any).customLabels as Record<string, unknown>).reduce(
+    navigation && typeof navigation.customLabels === 'object'
+      ? (Object.entries(navigation.customLabels as Record<string, unknown>).reduce(
           (acc, [key, value]) => {
             if (typeof value === 'string') {
               const trimmed = value.trim()
@@ -84,16 +96,21 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
 
 
   const enabledModules =
-    raw?.navigation && Array.isArray((raw.navigation as any).enabled_modules)
-      ? ((raw.navigation as any).enabled_modules as unknown[]).reduce<string[]>((acc, value) => {
+    navigation && Array.isArray(navigation.enabled_modules)
+      ? (navigation.enabled_modules as unknown[]).reduce<string[]>((acc, value) => {
+          if (typeof value === 'string' && value.trim()) acc.push(value.trim())
+          return acc
+        }, [])
+      : navigation && Array.isArray(navigation.visible_modules)
+      ? (navigation.visible_modules as unknown[]).reduce<string[]>((acc, value) => {
           if (typeof value === 'string' && value.trim()) acc.push(value.trim())
           return acc
         }, [])
       : INDUSTRY_ENABLED_MODULE_PRESETS[industry]
 
   const customNavItems =
-    raw?.navigation && Array.isArray((raw.navigation as any).custom_nav_items)
-      ? ((raw.navigation as any).custom_nav_items as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
+    navigation && Array.isArray(navigation.custom_nav_items)
+      ? (navigation.custom_nav_items as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
           const id = typeof item.id === 'string' ? item.id.trim() : ''
           const label = typeof item.label === 'string' ? item.label.trim() : ''
           const type = item.type
@@ -120,7 +137,15 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
 
   return {
     productDefaults,
-    navigation: { industry, labelPolicy, enabledModules, customLabels, customNavItems },
+    navigation: {
+      industry,
+      labelPolicy,
+      enabledModules,
+      customLabels,
+      customNavItems,
+      showCustomizationBanner: explicitIndustry == null,
+      requiresIndustryReview: isBookingsHeavy && explicitIndustry == null,
+    },
   }
 
 }

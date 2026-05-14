@@ -656,6 +656,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             )}
+            {preferences.navigation.showCustomizationBanner && (
+              <div className="shell__resume-banner" role="status" aria-live="polite">
+                <span>Your navigation can now be customized.</span>
+                {preferences.navigation.requiresIndustryReview && (
+                  <span> We detected heavy bookings usage; industry profile review is recommended.</span>
+                )}
+              </div>
+            )}
             <div className="shell__content-inner">{children}</div>
           </section>
         </div>
