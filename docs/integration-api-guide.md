@@ -122,27 +122,10 @@ Query parameters:
 
 `publicProducts` and `publicServices` are convenience buckets derived from `itemType` so storefronts can render physical products and services in separate sections without extra client-side sorting.
 
-### `GET /integrationPublicCatalog?storeId=<storeId>` or `?slug=<promoSlug>` (public, no API key)
-
-- Use this endpoint when external/public sites cannot securely store integration API keys.
-- The response also includes `products`, `publicProducts`, and `publicServices`.
-- `publicProducts` = non-service items; `publicServices` = service items.
-- If precomputed public collections are empty, Sedifex falls back to reading from `products` for the store.
-
-```json
-{
-  "storeId": "store_123",
-  "products": [],
-  "publicProducts": [],
-  "publicServices": []
-}
-```
-
 #### Which endpoint should other websites use?
 
 1. **Server-to-server (recommended):** `GET /v1IntegrationProducts?storeId=<storeId>` with `x-api-key`.
-2. **Public website without secret storage:** `GET /integrationPublicCatalog?slug=<promoSlug>` (or `storeId`).
-3. In both cases, render from `publicProducts` and `publicServices` directly.
+2. Render from `publicProducts` and `publicServices` when you want separate sections for non-service and service items.
 
 
 ### `GET /api/public-blog?storeId=<storeId>[&slug=<postSlug>]` (public, no API key)
@@ -683,28 +666,31 @@ Success response:
   "updatedAt": "2026-05-10T12:51:10Z"
 }
 ```
-### POST /integration/webhooks/payment-status` (Sedifex outbound webhook)
-For website bookings using Sedifex checkout,  standardize it like this:
+### Booking + checkout sequencing notes (service flows)
 
-When booking is first created:
+For website bookings using Sedifex checkout, standardize state transitions like this:
 
-bookingStatus = "booked"
-paymentCollectionMode = "online_checkout"
-paymentStatus = "checkout_created" or pending
+1. **When booking is first created**
+   - `bookingStatus = "booked"`
+   - `paymentCollectionMode = "online_checkout"`
+   - `paymentStatus = "checkout_created"` (or `pending`)
+   - Write `syncStatus: "pending"` and `syncRequestedAt` on create/update of `integrationBookings` docs.
+2. **After customer lands on `returnUrl`**
+   - Do **not** mark payment as confirmed from browser return alone.
+3. **After Sedifex receives confirmed payment webhook**
+   - Set `paymentStatus = "confirmed"`
+   - Set `paymentConfirmedAt = <server_timestamp>`
+   - Store `reference`, `sedifexOrderId`, and `clientOrderId` for reconciliation.
 
-After customer lands on return URL:
+Important naming rule:
 
-do not mark paid yet
+- Before checkout returns an order id, treat the local identifier as `bookingId` (not `sedifexOrderId`).
+- Only persist/use `sedifexOrderId` after `POST /integration/checkout/create` returns it.
 
-After Sedifex receives confirmed webhook:
+Support note:
 
-paymentStatus = "confirmed"
-paymentConfirmedAt = now
-store reference, sedifexOrderId, clientOrderId  . the return url make sure it works and lets us know the trwam has their data. YOu can proviode whatsapp or email for furhter enquries
-
-rename that pre-checkout sedifexOrderId variable to bookingId , do not pretend you have a real sedifexOrderId until checkout returns one
-
-Patch the website-to-Sedifex booking creation path to write syncStatus: 'pending' and syncRequestedAt when it creates/updates integrationBookings docs.
+- Confirm your `returnUrl` is reachable and renders a clear “payment processing/verification” state.
+- For integration help, include your team contact details (for example support email and/or WhatsApp line) in your website support section.
 
 ### `POST /integration/webhooks/payment-status` (Sedifex outbound webhook)
 
@@ -750,7 +736,7 @@ Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
 
 ### Golden path sequence
 
-1. Partner website fetches catalog via `/v1IntegrationProducts` (server-side) or `/integrationPublicCatalog` (public mode).
+1. Partner website fetches catalog via `/v1IntegrationProducts` (server-side).
 2. Buyer selects product/service.
 3. Partner server calls `POST /integration/checkout/create`.
 4. Buyer completes payment on returned Paystack `authorizationUrl`.
@@ -834,7 +820,8 @@ Render booking/payment state from Sedifex values:
 ### Security and go-live checklist
 
 - Keep Sedifex API key server-side only (never in browser code).
-- Persist `reference`, `sedifexOrderId`, and `clientOrderId` before redirecting checkout.
+- Persist `bookingId`, `reference`, and `clientOrderId` before redirecting checkout.
+- Persist `sedifexOrderId` immediately after checkout creation returns successfully.
 - Treat Sedifex webhook events as authoritative final state.
 - Validate webhook signature and timestamp tolerance.
 - Force-test retry path by returning `500` once from webhook receiver.
