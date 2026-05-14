@@ -2,6 +2,8 @@
 
 This guide explains how third-party clients (including Buy Sedifex) should authenticate, call endpoints, cache/deduplicate responses, and migrate safely as the API evolves.
 
+> Canonical contract authority: `docs/integration-contract.md` (mandatory header versioning and anti-path-versioning policy).
+
 ## 1) Authentication and API keys
 
 ### Required integration secrets/config
@@ -31,11 +33,14 @@ SEDIFEX_INTEGRATION_API_KEY=sk_live_xxx
 
 ## 2) Versioning contract
 
+This section is a summary only. The source of truth is `docs/integration-contract.md`.
+
 - Current contract version: `2026-04-13`.
-- Request header: `X-Sedifex-Contract-Version`.
+- Request header: `X-Sedifex-Contract-Version` (**mandatory on every integration request**).
 - Response headers:
   - `x-sedifex-contract-version`
   - `x-sedifex-request-id`
+- Path-based versioning is not allowed for this contract.
 - If versions mismatch, API returns `400`:
 
 ```json

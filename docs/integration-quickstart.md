@@ -89,6 +89,15 @@ SedifexMarket and public-product catalog guidance has been moved to a dedicated 
 
 - `docs/sedifexmarket-public-product-guide.md`
 
+
+## Canonical integration contract (required)
+
+Before setup, review `docs/integration-contract.md`.
+
+- `X-Sedifex-Contract-Version` is mandatory for authenticated integration calls.
+- Do not implement path-based contract versioning in URLs.
+- Treat this contract page as authoritative when this quickstart and other docs differ.
+
 ## Prerequisites
 
 1. Sedifex Firebase project configured (Firestore + Functions).

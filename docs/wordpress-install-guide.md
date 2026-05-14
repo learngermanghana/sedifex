@@ -4,6 +4,10 @@ Use this guide to connect a **WordPress** site to your Sedifex product catalog.
 
 > If you are using **Next.js on Vercel**, use `docs/integration-quickstart.md` instead.
 
+## Canonical contract requirement
+
+This guide depends on `docs/integration-contract.md` as the source of truth for integration versioning and headers.
+
 ## What this setup does
 
 1. Uses one integration key (`SEDIFEX_INTEGRATION_API_KEY` or a store integration key).
@@ -54,12 +58,20 @@ Store these values in WordPress config or plugin settings:
 - `SEDIFEX_STORE_ID`
 - `SEDIFEX_INTEGRATION_API_KEY` (or your store integration key variable)
 
-## Step 5: Validate sync
+## Step 5: Install-time success flow (strict acceptance criteria)
 
-1. Open the page containing `[sedifex_products]`.
-2. Confirm products render by category.
-3. Confirm out-of-stock behavior (`stockCount <= 0`) is handled as expected.
-4. Force a failed fetch and confirm fallback products still render.
+Use the following acceptance gates before calling the install complete:
+
+1. **First sync under 2 minutes:** from plugin activation/config save to first successful product render must be `< 2 minutes`.
+2. **Visible error categories:** admin UI must show categorized failures at minimum for:
+   - authentication/config (`API_KEY_INVALID`, missing store/base URL),
+   - contract/version (`CONTRACT_VERSION_MISMATCH`),
+   - upstream/network (`UPSTREAM_TIMEOUT`, `NETWORK_ERROR`),
+   - data/validation (`INVALID_PAYLOAD`, parsing/shape mismatch).
+3. **Copy diagnostics action:** provide a **Copy diagnostics** button that includes store id, request id (if available), last success/failure timestamp, last error category/code/message, and plugin version.
+4. Open the page containing `[sedifex_products]` and confirm products render by category.
+5. Confirm out-of-stock behavior (`stockCount <= 0`) is handled as expected.
+6. Force a failed fetch and confirm fallback products still render while diagnostics remain copyable.
 
 ## Recommended hardening
 
