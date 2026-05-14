@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { Industry, NavigationLabelPolicy } from '../config/navigation'
+import { CustomNavItem, Industry, NavigationLabelPolicy } from '../config/navigation'
 
 export type ProductDefaults = {
   defaultItemType: 'product' | 'service' | 'made_to_order'
@@ -14,7 +14,9 @@ export type StorePreferences = {
   navigation: {
     industry: Industry
     labelPolicy: NavigationLabelPolicy
+    enabledModules: string[]
     customLabels: Partial<Record<string, string>>
+    customNavItems: CustomNavItem[]
   }
 }
 
@@ -27,7 +29,9 @@ const DEFAULT_PREFERENCES: StorePreferences = {
   navigation: {
     industry: 'shop',
     labelPolicy: 'shared',
+    enabledModules: [],
     customLabels: {},
+    customNavItems: [],
   },
 }
 
@@ -78,7 +82,47 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
         ) as Partial<Record<string, string>>)
       : DEFAULT_PREFERENCES.navigation.customLabels
 
-  return { productDefaults, navigation: { industry, labelPolicy, customLabels } }
+
+  const enabledModules =
+    raw?.navigation && Array.isArray((raw.navigation as any).enabled_modules)
+      ? ((raw.navigation as any).enabled_modules as unknown[]).reduce<string[]>((acc, value) => {
+          if (typeof value === 'string' && value.trim()) acc.push(value.trim())
+          return acc
+        }, [])
+      : DEFAULT_PREFERENCES.navigation.enabledModules
+
+  const customNavItems =
+    raw?.navigation && Array.isArray((raw.navigation as any).custom_nav_items)
+      ? ((raw.navigation as any).custom_nav_items as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
+          const id = typeof item.id === 'string' ? item.id.trim() : ''
+          const label = typeof item.label === 'string' ? item.label.trim() : ''
+          const type = item.type
+          const target = typeof item.target === 'string' ? item.target.trim() : ''
+          const sortOrder = typeof item.sort_order === 'number' ? item.sort_order : 0
+          const rolesAllowed = Array.isArray(item.roles_allowed)
+            ? item.roles_allowed.filter(role => role === 'owner' || role === 'staff')
+            : []
+
+          if (!id || !label || !target || rolesAllowed.length === 0) return acc
+          if (type !== 'module' && type !== 'internal' && type !== 'external') return acc
+
+          acc.push({
+            id,
+            label,
+            type,
+            target,
+            sort_order: sortOrder,
+            roles_allowed: rolesAllowed as Array<'owner' | 'staff'>,
+          })
+          return acc
+        }, [])
+      : DEFAULT_PREFERENCES.navigation.customNavItems
+
+  return {
+    productDefaults,
+    navigation: { industry, labelPolicy, enabledModules, customLabels, customNavItems },
+  }
+
 }
 
 export function useStorePreferences(storeId: string | null) {
