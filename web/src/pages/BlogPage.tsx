@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './BlogPage.css'
 import {
   addDoc,
@@ -84,8 +84,6 @@ export default function BlogPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [dailyShareEnabled, setDailyShareEnabled] = useState(false)
-
-  const publicFeedUrl = useMemo(() => (storeId ? `/api/public-blog?storeId=${encodeURIComponent(storeId)}` : ''), [storeId])
 
   async function loadPosts() {
     if (!storeId) return
@@ -357,17 +355,7 @@ export default function BlogPage() {
             </label>
             {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
             {imageUrl ? <img className="blog-page__image-preview" src={imageUrl} alt="Selected upload preview" /> : null}
-            {publicFeedUrl ? (
-              <aside className="card blog-page__feed">
-                <strong>Public feed</strong>
-                <p style={{ margin: '4px 0 0', color: '#64748b' }}>Endpoint</p>
-                <code>{publicFeedUrl}</code>
-                <div className="blog-page__feed-actions">
-                  <button type="button" className="button button--ghost" onClick={() => void navigator.clipboard.writeText(publicFeedUrl)}>Copy</button>
-                  <button type="button" className="button button--ghost" onClick={() => window.open(publicFeedUrl, '_blank', 'noopener,noreferrer')}>Open</button>
-                </div>
-              </aside>
-            ) : null}
+            {null}
           </div>
         </header>
 

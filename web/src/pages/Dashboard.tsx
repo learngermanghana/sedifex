@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import Sparkline from '../components/Sparkline'
 import { useStoreMetrics } from '../hooks/useStoreMetrics'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useStorePreferences } from '../hooks/useStorePreferences'
 import { db } from '../firebase'
 import {
   collection,
@@ -23,18 +24,6 @@ function formatPercent(value: number) {
   return `${sign}${value.toFixed(1)}%`
 }
 
-function getWeekdayFocusMessage(dayOfWeek: number): string {
-  const messages = [
-    'Sunday reset: review last week and prep inventory for Monday.',
-    'Monday momentum: focus on your top-priority tasks first.',
-    'Tuesday consistency: keep sales and follow-ups moving.',
-    'Wednesday check-in: review progress and adjust your targets.',
-    'Thursday growth push: follow up on customers and promotions.',
-    'Friday finish-strong: clear blockers before the weekend.',
-    'Saturday peak hours: stay close to customers and stock levels.',
-  ]
-  return messages[dayOfWeek] ?? messages[0]
-}
 
 // ---- Snapshot types & helpers ----
 type DashboardSaleItem = {
@@ -334,20 +323,12 @@ export default function Dashboard() {
     rangeDaysLabel,
     showCustomHint,
     metrics,
-    goals,
-    goalMonthLabel,
-    selectedGoalMonth,
-    handleGoalMonthChange,
-    goalFormValues,
-    handleGoalInputChange,
-    handleGoalSubmit,
-    isSavingGoals,
     inventoryAlerts,
     teamCallouts,
     paceNudge,
-    shareProgressReport,
   } = useStoreMetrics()
   const { storeId } = useActiveStore()
+  const { preferences } = useStorePreferences(storeId)
   const [storeDisplayName, setStoreDisplayName] = useState('your workspace')
 
   const [expiringProducts, setExpiringProducts] = useState<ExpiringProduct[]>([])
@@ -751,7 +732,7 @@ export default function Dashboard() {
     revenueMetric && revenueMetric.changePercent !== null && revenueMetric.changePercent !== undefined
       ? formatPercent(revenueMetric.changePercent)
       : '—'
-  const weekdayFocusMessage = getWeekdayFocusMessage(now.getDay())
+  const isNgoDashboard = preferences.navigation.industry === 'ngo'
 
 
 
@@ -760,7 +741,7 @@ export default function Dashboard() {
       <h2 style={{ color: '#4338CA', marginBottom: 8 }}>Dashboard</h2>
       <p style={{ color: '#475569', marginBottom: 24 }}>
         Welcome back, {storeDisplayName}! Choose what you’d like to work on — the most important
-        Sedifex pages are just one tap away. {weekdayFocusMessage}
+        Sedifex pages are just one tap away.
       </p>
 
       <section
@@ -1734,255 +1715,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: '#F1F5F9',
-            borderRadius: 18,
-            border: '1px solid #E2E8F0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 16,
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <div>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: '#0F172A',
-                }}
-              >
-                Monthly goals
-              </h3>
-              <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>
-                Set targets per branch and keep teams aligned on what success looks like.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <label
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  fontSize: 12,
-                  color: '#475569',
-                  minWidth: 140,
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>Month</span>
-                <input
-                  type="month"
-                  value={selectedGoalMonth}
-                  onChange={event => handleGoalMonthChange(event.target.value)}
-                  style={{
-                    borderRadius: 8,
-                    border: '1px solid #CBD5F5',
-                    padding: '6px 10px',
-                    fontSize: 13,
-                    background: '#FFFFFF',
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={shareProgressReport}
-                style={{
-                  background: '#4338CA',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '10px 14px',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  boxShadow: '0 8px 16px rgba(67, 56, 202, 0.28)',
-                }}
-              >
-                Share progress
-              </button>
-            </div>
+        {isNgoDashboard ? (
+          <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 14, padding: 16 }}>
+            <h3 style={{ margin: 0, color: '#065F46', fontSize: 17 }}>NGO-focused view</h3>
+            <p style={{ margin: '8px 0 0', color: '#065F46', fontSize: 13 }}>
+              This dashboard emphasizes communication and outreach activities (SMS, bulk email, and blog publishing), while still surfacing critical inventory alerts like expiring stock.
+            </p>
           </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12,
-            }}
-          >
-            {goals.map(goal => (
-              <article
-                key={goal.title}
-                style={{
-                  background: '#FFFFFF',
-                  borderRadius: 14,
-                  padding: '16px 18px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                  border: '1px solid #E2E8F0',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#64748B',
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.6,
-                  }}
-                >
-                  {goal.title}
-                </div>
-                <div
-                  style={{
-                    fontSize: 26,
-                    fontWeight: 700,
-                    color: '#0F172A',
-                    lineHeight: 1,
-                  }}
-                >
-                  {goal.value}
-                </div>
-                <div style={{ fontSize: 13, color: '#475569' }}>
-                  {goal.target}
-                </div>
-                <div
-                  role="progressbar"
-                  aria-valuenow={Math.round(goal.progress * 100)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  style={{
-                    position: 'relative',
-                    height: 8,
-                    borderRadius: 999,
-                    background: '#E2E8F0',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: `${Math.round(goal.progress * 100)}%`,
-                      background: '#4338CA',
-                    }}
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <form onSubmit={handleGoalSubmit} style={{ display: 'grid', gap: 12 }}>
-            <div
-              style={{
-                display: 'grid',
-                gap: 12,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              }}
-            >
-              <label
-                style={{
-                  display: 'grid',
-                  gap: 6,
-                  fontSize: 13,
-                  color: '#475569',
-                }}
-                htmlFor="goal-revenue"
-              >
-                <span style={{ fontWeight: 600 }}>Revenue goal (GHS)</span>
-                <input
-                  id="goal-revenue"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={goalFormValues.revenueTarget}
-                  onChange={event =>
-                    handleGoalInputChange('revenueTarget', event.target.value)
-                  }
-                  style={{
-                    borderRadius: 8,
-                    border: '1px solid #CBD5F5',
-                    padding: '8px 10px',
-                    fontSize: 14,
-                    background: '#FFFFFF',
-                  }}
-                />
-              </label>
-              <label
-                style={{
-                  display: 'grid',
-                  gap: 6,
-                  fontSize: 13,
-                  color: '#475569',
-                }}
-                htmlFor="goal-customers"
-              >
-                <span style={{ fontWeight: 600 }}>New customers goal</span>
-                <input
-                  id="goal-customers"
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  value={goalFormValues.customerTarget}
-                  onChange={event =>
-                    handleGoalInputChange('customerTarget', event.target.value)
-                  }
-                  style={{
-                    borderRadius: 8,
-                    border: '1px solid #CBD5F5',
-                    padding: '8px 10px',
-                    fontSize: 14,
-                    background: '#FFFFFF',
-                  }}
-                />
-              </label>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={isSavingGoals}
-                style={{
-                  background: '#4338CA',
-                  border: 'none',
-                  borderRadius: 999,
-                  color: '#FFFFFF',
-                  padding: '10px 18px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {isSavingGoals ? 'Saving…' : 'Save goals'}
-              </button>
-              <span style={{ fontSize: 12, color: '#475569' }}>
-                Targets are saved for {goalMonthLabel}. Adjust them anytime to keep your
-                team focused.
-              </span>
-            </div>
-          </form>
-        </div>
+        ) : null}
       </section>
 
       {/* Right-hand side sections */}
