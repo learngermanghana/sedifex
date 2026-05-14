@@ -28,6 +28,7 @@ import { useMemberships, type Membership } from '../hooks/useMemberships'
 import { useToast } from '../components/ToastProvider'
 import { useAuthUser } from '../hooks/useAuthUser'
 import { AccountBillingSection } from '../components/AccountBillingSection'
+import NavigationSettingsSection from '../components/NavigationSettingsSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
 import { buildPromoSlug, normalizePromoSlug } from '../utils/promoSlug'
@@ -38,6 +39,7 @@ import {
   uploadProductImage,
 } from '../api/productImageUpload'
 import './AccountOverview.css'
+import { useStorePreferences } from '../hooks/useStorePreferences'
 
 type StoreProfile = {
   name: string | null
@@ -2025,6 +2027,15 @@ export default function AccountOverview({
               <dd>{formatTimestamp(profile.updatedAt)}</dd>
             </div>
           </dl>
+
+          <NavigationSettingsSection
+            preferences={preferences.navigation}
+            canEdit={isOwner}
+            onSave={async navigation => {
+              await updatePreferences({ navigation })
+              publish({ message: 'Navigation settings updated.', tone: 'success' })
+            }}
+          />
 
           {isOwner && isEditingProfile && (
             <form
