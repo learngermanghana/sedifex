@@ -8,6 +8,7 @@ export type Product = {
   sku: string | null
   barcode: string | null
   price: number | null
+  costPrice?: number | null
   stockCount: number | null
   reorderPoint: number | null
   itemType: ItemType

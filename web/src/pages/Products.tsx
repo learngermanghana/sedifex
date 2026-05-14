@@ -295,6 +295,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
     sku: skuRaw.trim() || null,
     barcode: normalizedBarcode || null,
     price: sanitizeNumber(data.price) ?? null,
+    costPrice: sanitizeNumber(data.costPrice) ?? null,
     stockCount: sanitizeNumber(data.stockCount),
     reorderPoint,
     itemType,
@@ -544,6 +545,7 @@ export default function Products() {
   const [hasManualSkuOverride, setHasManualSkuOverride] = useState(false)
   const [categoryInput, setCategoryInput] = useState(DEFAULT_PRODUCT_CATEGORY)
   const [priceInput, setPriceInput] = useState('')
+  const [costPriceInput, setCostPriceInput] = useState('')
   const [descriptionInput, setDescriptionInput] = useState('')
   const [descriptionTemplate, setDescriptionTemplate] = useState<DescriptionTemplate>('general')
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
@@ -576,6 +578,7 @@ export default function Products() {
   const [editHasManualSkuOverride, setEditHasManualSkuOverride] = useState(false)
   const [editCategoryInput, setEditCategoryInput] = useState('')
   const [editPriceInput, setEditPriceInput] = useState('')
+  const [editCostPriceInput, setEditCostPriceInput] = useState('')
   const [editDescriptionInput, setEditDescriptionInput] = useState('')
   const [editDescriptionTemplate, setEditDescriptionTemplate] =
     useState<DescriptionTemplate>('general')
@@ -1056,6 +1059,7 @@ export default function Products() {
 
     const priceNumber = priceInput ? Number(priceInput) : NaN
     const reorderPointNumber = reorderPointInput ? Number(reorderPointInput) : NaN
+    const costPriceNumber = costPriceInput ? Number(costPriceInput) : NaN
     const openingStockNumber = openingStockInput ? Number(openingStockInput) : NaN
     const taxRateNumber = parseTaxInput(taxRateInput)
     const trimmedDescription = descriptionInput.trim()
@@ -1110,8 +1114,13 @@ export default function Products() {
     }
 
     let finalPrice: number | null = null
+    let finalCostPrice: number | null = null
+    let finalCostPrice: number | null = null
     if (!Number.isNaN(priceNumber) && priceNumber >= 0) {
       finalPrice = Number(priceNumber.toFixed(2)) // 🔹 respect user input (2dp)
+    }
+    if (!Number.isNaN(costPriceNumber) && costPriceNumber >= 0) {
+      finalCostPrice = Number(costPriceNumber.toFixed(2))
     }
 
     const trimmedSku = sku.trim()
@@ -1164,6 +1173,7 @@ export default function Products() {
         category: normalizedCategory,
         description: trimmedDescription || null,
         price: finalPrice,
+        costPrice: finalCostPrice,
         // 🔹 Keep SKU as typed, but also store a normalized barcode field
         sku: isService ? null : trimmedSku || null,
         barcode: isService ? null : normalizeBarcode(trimmedSku) || null,
@@ -1199,6 +1209,7 @@ export default function Products() {
       setHasManualSkuOverride(false)
       setCategoryInput(DEFAULT_PRODUCT_CATEGORY)
       setPriceInput('')
+      setCostPriceInput('')
       setDescriptionInput('')
       setDescriptionTemplate('general')
       setTaxRateInput('')
@@ -1342,6 +1353,11 @@ export default function Products() {
         ? String(product.price)
         : '',
     )
+    setEditCostPriceInput(
+      typeof product.costPrice === 'number' && Number.isFinite(product.costPrice)
+        ? String(product.costPrice)
+        : '',
+    )
     setEditDescriptionInput(product.description ?? '')
     setEditDescriptionTemplate('general')
     setEditTaxRateInput(
@@ -1434,6 +1450,7 @@ export default function Products() {
       ? Number(editReorderPointInput)
       : NaN
     const taxRateNumber = parseTaxInput(editTaxRateInput)
+    const costPriceNumber = editCostPriceInput ? Number(editCostPriceInput) : NaN
     const trimmedDescription = editDescriptionInput.trim()
     const descriptionWordCount = countWords(trimmedDescription)
     const stockNumberRaw =
@@ -1489,6 +1506,9 @@ export default function Products() {
     if (!Number.isNaN(priceNumber) && priceNumber >= 0) {
       finalPrice = Number(priceNumber.toFixed(2))
     }
+    if (!Number.isNaN(costPriceNumber) && costPriceNumber >= 0) {
+      finalCostPrice = Number(costPriceNumber.toFixed(2))
+    }
 
     const finalStock =
       !isStockTracked || stockNumberRaw === null ? null : Math.floor(stockNumberRaw)
@@ -1509,6 +1529,7 @@ export default function Products() {
         sku: isStockTracked ? trimmedSku || null : null,
         barcode: isStockTracked ? normalizeBarcode(trimmedSku) || null : null,
         price: finalPrice,
+        costPrice: finalCostPrice,
         taxRate: taxRateNumber,
         reorderPoint:
           isStockTracked &&
@@ -1770,6 +1791,21 @@ export default function Products() {
               <p className="field__hint">
                 Price is required before you can save. We round it to 2 decimal places.
               </p>
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="add-cost-price">
+                Cost price <span className="field__optional">(optional)</span>
+              </label>
+              <input
+                id="add-cost-price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="How much it costs you"
+                value={costPriceInput}
+                onChange={e => setCostPriceInput(e.target.value)}
+              />
             </div>
 
             <div className="field">
@@ -2513,6 +2549,21 @@ export default function Products() {
                           </>
                         ) : (
                           <p className="products-page__list-value">{formatCurrency(product.price)}</p>
+                        )}
+                      </div>
+
+                      <div className="products-page__list-field">
+                        <label className="field__label">Cost price</label>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={editCostPriceInput}
+                            onChange={event => setEditCostPriceInput(event.target.value)}
+                          />
+                        ) : (
+                          <p className="products-page__list-value">{formatCurrency(product.costPrice)}</p>
                         )}
                       </div>
 
