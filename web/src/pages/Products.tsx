@@ -1502,6 +1502,7 @@ export default function Products() {
     }
 
     let finalPrice: number | null = null
+    let finalCostPrice: number | null = null
     if (!Number.isNaN(priceNumber) && priceNumber >= 0) {
       finalPrice = Number(priceNumber.toFixed(2))
     }

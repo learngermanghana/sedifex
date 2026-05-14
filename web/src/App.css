@@ -1229,10 +1229,36 @@ label {
   color: rgba(148, 163, 184, 0.6);
 }
 
+.form textarea,
+.form select,
+.form input[type="number"],
+.form input[type="date"] {
+  width: 100%;
+  padding: 15px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  font-size: 15px;
+  background: rgba(15, 23, 42, 0.88);
+  color: var(--color-text-primary);
+  transition: border 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  backdrop-filter: blur(8px);
+}
+
+.form textarea::placeholder,
+.form input[type="number"]::placeholder,
+.form input[type="date"]::placeholder {
+  color: rgba(148, 163, 184, 0.78);
+  opacity: 1;
+}
+
 .form input[type="email"]:focus-visible,
 .form input[type="password"]:focus-visible,
 .form input[type="text"]:focus-visible,
-.form input[type="tel"]:focus-visible {
+.form input[type="tel"]:focus-visible,
+.form textarea:focus-visible,
+.form select:focus-visible,
+.form input[type="number"]:focus-visible,
+.form input[type="date"]:focus-visible {
   outline: none;
   border-color: var(--color-border-strong);
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
