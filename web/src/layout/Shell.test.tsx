@@ -12,6 +12,7 @@ const mockUseStoreBilling = vi.fn()
 const mockUseActiveStore = vi.fn()
 const mockUseWorkspaceIdentity = vi.fn()
 const mockUseMemberships = vi.fn()
+const mockUseStorePreferences = vi.fn()
 const mockSetActiveStoreId = vi.fn()
 
 vi.mock('../hooks/useAuthUser', () => ({
@@ -36,6 +37,9 @@ vi.mock('../hooks/useWorkspaceIdentity', () => ({
 
 vi.mock('../hooks/useMemberships', () => ({
   useMemberships: () => mockUseMemberships(),
+}))
+vi.mock('../hooks/useStorePreferences', () => ({
+  useStorePreferences: () => mockUseStorePreferences(),
 }))
 
 vi.mock('../firebase', () => ({
@@ -68,6 +72,7 @@ describe('Shell', () => {
     mockUseActiveStore.mockReset()
     mockUseWorkspaceIdentity.mockReset()
     mockUseMemberships.mockReset()
+    mockUseStorePreferences.mockReset()
     mockSetActiveStoreId.mockReset()
 
     mockUseAuthUser.mockReturnValue({ uid: 'user-123', email: 'owner@example.com' })
@@ -97,6 +102,22 @@ describe('Shell', () => {
         paymentStatus: 'active',
         contractEnd: null,
       },
+    })
+    mockUseStorePreferences.mockReturnValue({
+      preferences: {
+        productDefaults: {
+          defaultItemType: 'product',
+          enableManufacturerFields: false,
+          enableNonInventoryMode: false,
+        },
+        navigation: {
+          industry: 'shop',
+          labelPolicy: 'shared',
+          customLabels: {},
+        },
+      },
+      loading: false,
+      updatePreferences: vi.fn(),
     })
   })
 
@@ -235,5 +256,52 @@ describe('Shell', () => {
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
 
     expect(screen.queryByText('Return to where you left off?')).not.toBeInTheDocument()
+  })
+
+  it('supports industry alias labels in navigation', () => {
+    mockUseStorePreferences.mockReturnValue({
+      preferences: {
+        productDefaults: {
+          defaultItemType: 'product',
+          enableManufacturerFields: false,
+          enableNonInventoryMode: false,
+        },
+        navigation: {
+          industry: 'school',
+          labelPolicy: 'industry_aliases',
+          customLabels: {},
+        },
+      },
+      loading: false,
+      updatePreferences: vi.fn(),
+    })
+    renderShell(['/dashboard'])
+    expect(screen.getByRole('link', { name: 'Students' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Classes' })).toBeInTheDocument()
+  })
+
+  it('prefers custom navigation labels over industry aliases', () => {
+    mockUseStorePreferences.mockReturnValue({
+      preferences: {
+        productDefaults: {
+          defaultItemType: 'product',
+          enableManufacturerFields: false,
+          enableNonInventoryMode: false,
+        },
+        navigation: {
+          industry: 'travel',
+          labelPolicy: 'industry_aliases',
+          customLabels: {
+            '/customers': 'Guests',
+          },
+        },
+      },
+      loading: false,
+      updatePreferences: vi.fn(),
+    })
+
+    renderShell(['/dashboard'])
+    expect(screen.getByRole('link', { name: 'Guests' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Trips' })).toBeInTheDocument()
   })
 })

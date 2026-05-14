@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
+import { Industry, NavigationLabelPolicy } from '../config/navigation'
 
 export type ProductDefaults = {
   defaultItemType: 'product' | 'service' | 'made_to_order'
@@ -10,6 +11,11 @@ export type ProductDefaults = {
 
 export type StorePreferences = {
   productDefaults: ProductDefaults
+  navigation: {
+    industry: Industry
+    labelPolicy: NavigationLabelPolicy
+    customLabels: Partial<Record<string, string>>
+  }
 }
 
 const DEFAULT_PREFERENCES: StorePreferences = {
@@ -17,6 +23,11 @@ const DEFAULT_PREFERENCES: StorePreferences = {
     defaultItemType: 'product',
     enableManufacturerFields: false,
     enableNonInventoryMode: false,
+  },
+  navigation: {
+    industry: 'shop',
+    labelPolicy: 'shared',
+    customLabels: {},
   },
 }
 
@@ -38,7 +49,36 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
       DEFAULT_PREFERENCES.productDefaults.enableNonInventoryMode,
   }
 
-  return { productDefaults }
+  const allowedIndustries: Industry[] = ['shop', 'travel', 'ngo', 'school']
+  const industry =
+    raw?.navigation &&
+    typeof (raw.navigation as any).industry === 'string' &&
+    allowedIndustries.includes((raw.navigation as any).industry)
+      ? ((raw.navigation as any).industry as Industry)
+      : DEFAULT_PREFERENCES.navigation.industry
+
+  const labelPolicy =
+    raw?.navigation &&
+    typeof (raw.navigation as any).labelPolicy === 'string' &&
+    ['shared', 'industry_aliases'].includes((raw.navigation as any).labelPolicy)
+      ? ((raw.navigation as any).labelPolicy as NavigationLabelPolicy)
+      : DEFAULT_PREFERENCES.navigation.labelPolicy
+
+  const customLabels =
+    raw?.navigation && typeof (raw.navigation as any).customLabels === 'object'
+      ? (Object.entries((raw.navigation as any).customLabels as Record<string, unknown>).reduce(
+          (acc, [key, value]) => {
+            if (typeof value === 'string') {
+              const trimmed = value.trim()
+              if (trimmed) acc[key] = trimmed
+            }
+            return acc
+          },
+          {} as Partial<Record<string, string>>,
+        ) as Partial<Record<string, string>>)
+      : DEFAULT_PREFERENCES.navigation.customLabels
+
+  return { productDefaults, navigation: { industry, labelPolicy, customLabels } }
 }
 
 export function useStorePreferences(storeId: string | null) {

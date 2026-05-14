@@ -8,11 +8,12 @@ import { useStoreBilling } from '../hooks/useStoreBilling'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import SupportTicketLauncher from '../components/SupportTicketLauncher'
-import { NAV_ITEMS, NavRole } from '../config/navigation'
+import { NavRole, resolveNavItems } from '../config/navigation'
 import { useWorkspaceIdentity } from '../hooks/useWorkspaceIdentity'
 import './Shell.css'
 import './Workspace.css'
 import { usePwaContext } from '../context/PwaContext'
+import { useStorePreferences } from '../hooks/useStorePreferences'
 
 function navLinkClass(isActive: boolean, isSubItem: boolean) {
   return `shell__nav-link${isSubItem ? ' shell__nav-link--sub' : ''}${isActive ? ' is-active' : ''}`
@@ -90,6 +91,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const { isOnline, isReachable, queue } = connectivity
   const { name: workspaceName, loading: workspaceLoading } = useWorkspaceIdentity()
+  const { preferences } = useStorePreferences(storeId)
 
   const [dismissedOn, setDismissedOn] = useState<string | null>(null)
   const [navSearchQuery, setNavSearchQuery] = useState('')
@@ -131,8 +133,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       ]
     }
 
-    return NAV_ITEMS.filter(item => item.roles.includes(role))
-  }, [hasTrialEnded, role])
+    return resolveNavItems(role, preferences.navigation)
+  }, [hasTrialEnded, role, preferences.navigation])
 
   const navTree = useMemo(
     () =>
