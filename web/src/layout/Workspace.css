@@ -22,15 +22,14 @@
 .page__title {
   margin: 0;
   font-size: clamp(24px, 3vw, 30px);
-  font-weight: 800;
-  line-height: 1.15;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  color: #0f172a;
+  color: #1e293b;
 }
 
 .page__subtitle {
   margin: 4px 0 0;
-  color: #475569;
+  color: #64748b;
   font-size: 15px;
   max-width: 56ch;
 }
@@ -59,12 +58,12 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #0f172a;
+  color: #1e293b;
 }
 
 .card__subtitle {
   margin: 0;
-  color: #475569;
+  color: #64748b;
   font-size: 14px;
 }
 
@@ -81,7 +80,7 @@
 
 .field__hint {
   font-size: 13px;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .button {
@@ -175,11 +174,11 @@
 }
 
 .table thead {
-  background: #e2e8f0;
+  background: #f1f5f9;
   text-transform: uppercase;
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: #475569;
+  color: #64748b;
 }
 
 .table th,
@@ -286,7 +285,7 @@
 .empty-state {
   padding: 48px 24px;
   text-align: center;
-  color: #475569;
+  color: #64748b;
   display: grid;
   gap: 12px;
 }
@@ -295,7 +294,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #0f172a;
+  color: #1e293b;
 }
 
 .feedback {
