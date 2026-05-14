@@ -52,6 +52,7 @@ Provide the fastest path for merchants to embed Sedifex products on WordPress.
 - Plugin settings page for API key + store selection.
 - Product shortcode/block for storefront embedding.
 - Sync health panel (last success, last failure, item count, next retry).
+- Install-time acceptance instrumentation: first sync duration, categorized errors, copy diagnostics export.
 - 30-120 second cache window and manual "Sync now" trigger.
 
 ### Why second
@@ -61,8 +62,10 @@ Provide the fastest path for merchants to embed Sedifex products on WordPress.
 
 ### Exit criteria
 - Non-technical user can install and configure plugin in < 10 minutes.
+- First sync completes in `< 2 minutes` from activation/config save.
 - Product list renders via shortcode/block on a standard theme.
-- Health state clearly indicates success/failure and recovery actions.
+- Health state clearly indicates success/failure and recovery actions with visible error categories.
+- Diagnostics can be copied from UI for support handoff.
 
 ---
 
@@ -79,6 +82,9 @@ Enable event-driven sync for partners who need fresher data than polling.
 - Per-endpoint signing secret and `X-Sedifex-Signature` header.
 - Retry policy with exponential backoff for non-2xx responses.
 - Delivery log view (status, attempts, last response code).
+- Replay tooling: re-deliver any event by `X-Sedifex-Event-Id`.
+- Endpoint health status (active/degraded/failing) surfaced in dashboard.
+- Dead-letter visibility after final retry exhaustion with clear remediation action.
 - Documentation with concrete signature verification examples.
 
 ### Why third
@@ -89,7 +95,8 @@ Enable event-driven sync for partners who need fresher data than polling.
 ### Exit criteria
 - Event payloads match documented schema.
 - Signature verification examples work as copy/paste quickstarts.
-- Failed deliveries are visible and retryable.
+- Failed deliveries are visible and retryable (including dead-letter entries).
+- Partners can trigger replay by event id and confirm endpoint health from dashboard logs.
 
 ---
 

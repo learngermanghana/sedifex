@@ -1,5 +1,7 @@
 # Sedifex Product Webhooks (MVP)
 
+Canonical integration contract: `docs/integration-contract.md`.
+
 Sedifex emits product events to endpoints configured in Firestore `webhookEndpoints` documents (`status = active`).
 
 ## Events
@@ -54,3 +56,23 @@ function verify_sedifex_signature(string $rawBody, string $signatureHeader, stri
 - Reject unsigned requests with `401` or `403`.
 - Log `X-Sedifex-Event-Id` to ensure idempotent processing.
 - Respond with 2xx only after durable processing (or accepted queueing).
+
+
+## Operability requirements (production)
+
+Beyond signature verification and retries, partner operations require:
+
+- **Replay by event ID:** allow re-delivery using `X-Sedifex-Event-Id` from delivery logs.
+- **Endpoint health status:** expose endpoint state (active/degraded/failing) from recent delivery outcomes.
+- **Dead-letter visibility:** show events that exhausted retries, with timestamp, endpoint, last response code/body snippet, and replay action.
+
+### Minimum dashboard log fields
+
+- `eventId`
+- `eventType`
+- `endpointId` + target URL label
+- `attemptCount`
+- `lastResponseCode`
+- `lastAttemptAt`
+- `status` (`delivered`, `retrying`, `dead-letter`)
+- replay action state (`not-replayed`, `replayed`, `replay-succeeded`, `replay-failed`)
