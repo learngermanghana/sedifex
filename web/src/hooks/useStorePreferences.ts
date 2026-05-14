@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { CustomNavItem, Industry, NavigationLabelPolicy } from '../config/navigation'
+import { CustomNavItem, Industry, INDUSTRY_ENABLED_MODULE_PRESETS, NavigationLabelPolicy } from '../config/navigation'
 
 export type ProductDefaults = {
   defaultItemType: 'product' | 'service' | 'made_to_order'
@@ -89,7 +89,7 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
           if (typeof value === 'string' && value.trim()) acc.push(value.trim())
           return acc
         }, [])
-      : DEFAULT_PREFERENCES.navigation.enabledModules
+      : INDUSTRY_ENABLED_MODULE_PRESETS[industry]
 
   const customNavItems =
     raw?.navigation && Array.isArray((raw.navigation as any).custom_nav_items)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveNavigation } from './navigation'
+import { INDUSTRY_ENABLED_MODULE_PRESETS, resolveNavigation } from './navigation'
 
 describe('resolveNavigation', () => {
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
@@ -51,5 +51,40 @@ describe('resolveNavigation', () => {
 
     expect(items.find(item => item.target === '/customers')?.label).toBe('Learners')
     expect(items.find(item => item.target === '/bookings')?.label).toBe('Classes')
+  })
+
+  it('defines the phase 4 enabled module presets by industry', () => {
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toEqual([
+      'dashboard',
+      'products',
+      'sell',
+      'customers',
+      'expenses',
+      'public-page',
+    ])
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toEqual([
+      'dashboard',
+      'bookings',
+      'customers',
+      'bulk-messaging',
+      'bulk-email',
+      'expenses',
+    ])
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.ngo).toEqual([
+      'dashboard',
+      'customers',
+      'bulk-messaging',
+      'bulk-email',
+      'expenses',
+      'public-page',
+    ])
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.school).toEqual([
+      'dashboard',
+      'bookings',
+      'customers',
+      'bulk-messaging',
+      'bulk-email',
+      'expenses',
+    ])
   })
 })

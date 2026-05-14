@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { NAV_ITEMS, type CustomNavItem, type Industry, type NavItemType, type NavRole } from '../config/navigation'
+import { INDUSTRY_ENABLED_MODULE_PRESETS, NAV_ITEMS, type CustomNavItem, type Industry, type NavItemType, type NavRole } from '../config/navigation'
 import type { StorePreferences } from '../hooks/useStorePreferences'
 
 type Props = {
@@ -73,7 +73,14 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
     <div className="account-overview__section-header"><h2 id="account-nav-settings">Navigation settings</h2></div>
     <div className="account-overview__form-grid">
       <label><span>Industry profile</span>
-        <select value={draft.industry} disabled={!canEdit} onChange={e => setDraft(c => ({ ...c, industry: e.target.value as Industry }))}>
+        <select
+          value={draft.industry}
+          disabled={!canEdit}
+          onChange={e => {
+            const industry = e.target.value as Industry
+            setDraft(c => ({ ...c, industry, enabledModules: INDUSTRY_ENABLED_MODULE_PRESETS[industry] }))
+          }}
+        >
           {INDUSTRY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>

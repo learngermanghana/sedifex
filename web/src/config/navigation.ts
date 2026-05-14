@@ -99,6 +99,13 @@ export type NavigationSettings = {
   customNavItems?: CustomNavItem[]
 }
 
+export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
+  shop: ['dashboard', 'products', 'sell', 'customers', 'expenses', 'public-page'],
+  travel: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'expenses'],
+  ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'expenses', 'public-page'],
+  school: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'expenses'],
+}
+
 export type NavigationResolverInput = {
   role: NavRole
   workspaceProfile: NavigationSettings
