@@ -97,6 +97,29 @@ function runTimeFormattingTests(testing) {
   assert.strictEqual(testing.normalizeBookingTimeForSheet(''), null)
 }
 
+function runMerchantTokenLookupTests(testing) {
+  assert.strictEqual(
+    testing.normalizeMerchantIdForEnvSuffix('37mJqg20MjOriggaIaOOuahDsgj1'),
+    '37MJQG20MJORIGGAIAOOUAHDSGJ1',
+  )
+  assert.strictEqual(testing.normalizeMerchantIdForEnvSuffix('store-abc.123'), 'STORE_ABC_123')
+
+  const json = JSON.stringify({
+    rQYE4FQGVZPcUpdptdgeRo5A80G2: 'sdfx_a',
+    '37mJqg20MjOriggaIaOOuahDsgj1': 'sdfx_b',
+  })
+  assert.strictEqual(testing.getMerchantTokenFromJsonMap(json, 'rQYE4FQGVZPcUpdptdgeRo5A80G2'), 'sdfx_a')
+  assert.strictEqual(testing.getMerchantTokenFromJsonMap('not-json', 'merchant'), '')
+
+  process.env.SEDIFEX_MERCHANT_TOKENS_JSON = json
+  process.env.SEDIFEX_MERCHANT_TOKEN_STORE_ABC = 'legacy_token'
+  assert.strictEqual(testing.getMerchantIntegrationToken('37mJqg20MjOriggaIaOOuahDsgj1'), 'sdfx_b')
+  assert.strictEqual(testing.getMerchantIntegrationToken('store-abc'), 'legacy_token')
+
+  delete process.env.SEDIFEX_MERCHANT_TOKENS_JSON
+  delete process.env.SEDIFEX_MERCHANT_TOKEN_STORE_ABC
+}
+
 function run() {
   const module = loadFunctionsModule()
   assert.ok(module.__testing, 'Expected __testing exports')
@@ -106,6 +129,7 @@ function run() {
   runSanitizeTests(module.__testing)
   runDateFormattingTests(module.__testing)
   runTimeFormattingTests(module.__testing)
+  runMerchantTokenLookupTests(module.__testing)
 }
 
 run()
