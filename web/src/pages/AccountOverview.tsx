@@ -432,6 +432,7 @@ export default function AccountOverview({
   } = useMemberships()
   const { publish } = useToast()
   const user = useAuthUser()
+  const { preferences, updatePreferences } = useStorePreferences(storeId)
 
   const [profile, setProfile] = useState<StoreProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
