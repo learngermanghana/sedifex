@@ -54,6 +54,7 @@ import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
 import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
 import BulkEmailGoogleSheetsPage from './pages/docs/BulkEmailGoogleSheetsPage'
 import HowToUseSedifexPage from './pages/docs/HowToUseSedifexPage'
+import DonorWebsiteIntegrationPage from './pages/docs/DonorWebsiteIntegrationPage'
 import PublicBlogPage from './pages/PublicBlogPage'
 
 import { ToastProvider } from './components/ToastProvider'
@@ -102,7 +103,8 @@ const router = createBrowserRouter([
           { path: 'sell/invoice', element: <DocumentsGenerator /> },
           { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
           { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
-          { path: 'expenses', element: <Expenses /> },
+          { path: 'expenses', element: <Navigate to="/donor-management" replace /> },
+          { path: 'donor-management', element: <Expenses /> },
           { path: 'funds-ledger', element: <FundsLedger /> },
 
           // Close day
@@ -137,6 +139,7 @@ const router = createBrowserRouter([
       { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
       { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
       { path: 'docs/how-to-use-sedifex', element: <HowToUseSedifexPage /> },
+      { path: 'docs/donor-website-integration', element: <DonorWebsiteIntegrationPage /> },
 
       // Legal pages
       { path: 'legal/privacy', element: <PrivacyPage /> },
