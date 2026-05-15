@@ -62,6 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
     sortOrder: 90,
   },
   { id: 'public-page', label: 'Public page', type: 'module', target: '/public-page', rolesAllowed: ['owner'], sortOrder: 100 },
+  { id: 'funds-ledger', label: 'Funds ledger', type: 'module', target: '/funds-ledger', rolesAllowed: ['owner', 'staff'], sortOrder: 105 },
   { id: 'account', label: 'Account', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
 ]
 
@@ -102,7 +103,7 @@ export type NavigationSettings = {
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   shop: ['dashboard', 'products', 'sell', 'customers', 'expenses', 'public-page'],
   travel: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'expenses'],
-  ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'expenses', 'public-page'],
+  ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'expenses', 'funds-ledger', 'public-page'],
   school: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'expenses'],
 }
 
