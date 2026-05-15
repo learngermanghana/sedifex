@@ -12,6 +12,7 @@ export type NavItem = {
   end?: boolean
   parentTarget?: string
   rolesAllowed: NavRole[]
+  industries?: Industry[]
   requiredPermissions?: string[]
 }
 
@@ -49,6 +50,15 @@ export const NAV_ITEMS: NavItem[] = [
     target: '/bookings',
     rolesAllowed: ['owner', 'staff'],
     sortOrder: 50,
+  },
+  {
+    id: 'student-registration',
+    label: 'Student registration',
+    type: 'module',
+    target: '/student-registration',
+    rolesAllowed: ['owner', 'staff'],
+    industries: ['school'],
+    sortOrder: 55,
   },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
@@ -104,7 +114,7 @@ export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   shop: ['dashboard', 'products', 'sell', 'customers', 'donor-management', 'public-page'],
   travel: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
   ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  school: ['dashboard', 'bookings', 'student-registration', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
@@ -142,6 +152,7 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
 
   const baseItems = NAV_ITEMS.filter(item => {
     if (!item.rolesAllowed.includes(role)) return false
+    if (item.industries && !item.industries.includes(workspaceProfile.industry)) return false
     if (item.id !== 'account' && enabledModules && !enabledModules.has(item.id)) return false
     return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {
