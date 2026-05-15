@@ -15,7 +15,8 @@
     "backfill-public-products": "node scripts/backfillPublicProducts.js",
     "backfill-public-services": "node scripts/backfillPublicProducts.js",
     "backfill-public-catalog": "node scripts/backfillPublicProducts.js",
-    "backfill-product-normalization": "node scripts/backfillProductNormalization.js"
+    "backfill-product-normalization": "node scripts/backfillProductNormalization.js",
+    "backfill-reporting-aggregates": "node scripts/backfillReportingAggregates.js"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",

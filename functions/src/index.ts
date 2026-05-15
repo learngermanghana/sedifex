@@ -15,6 +15,7 @@ export {
   googleAdsMetricsSync,
 } from './googleAds'
 export * from './googleShopping'
+export * from './reporting'
 export {
   googleBusinessLocations,
   googleBusinessUploadLocationMedia,

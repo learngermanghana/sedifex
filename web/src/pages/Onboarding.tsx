@@ -235,6 +235,9 @@ export default function Onboarding() {
             Let&apos;s confirm your workspace details and walk through your
             contract next steps.
           </p>
+          <p className="page__subtitle">
+            New here? Start with <a href="/docs/how-to-use-sedifex">/docs/how-to-use-sedifex</a> and continue setup from the linked guides.
+          </p>
         </div>
         {hasCompleted && (
           <span

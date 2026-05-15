@@ -38,6 +38,7 @@ export default function App() {
     '/inventory-management-software-ghana',
     '/pricing',
     '/docs',
+    '/how-to-use-sedifex',
     '/legal/privacy',
     '/legal/cookies',
     '/legal/refund',
