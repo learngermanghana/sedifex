@@ -54,10 +54,10 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   {
-    id: 'expenses',
-    label: 'Business records',
+    id: 'donor-management',
+    label: 'Donor management',
     type: 'module',
-    target: '/expenses',
+    target: '/donor-management',
     rolesAllowed: ['owner', 'staff'],
     sortOrder: 90,
   },
@@ -101,10 +101,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'expenses', 'public-page'],
-  travel: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'expenses'],
-  ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'expenses', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'expenses'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
 }
 
 export type NavigationResolverInput = {

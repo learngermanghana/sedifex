@@ -10,7 +10,7 @@ export default function HowToUseSedifexPage() {
       <section>
         <h2>Pick your workspace type</h2>
         <ul>
-          <li><strong>Shop:</strong> Items, Sell, Customers, Business records, Public page.</li>
+          <li><strong>Shop:</strong> Items, Sell, Customers, Donor management, Public page.</li>
           <li><strong>Travel:</strong> Trips, Travelers, messaging, and business records.</li>
           <li><strong>NGO:</strong> Donors, campaigns, communication, and records.</li>
           <li><strong>School:</strong> Classes, students, communication, and records.</li>
@@ -19,8 +19,8 @@ export default function HowToUseSedifexPage() {
 
       <section>
         <h2>Core navigation by role</h2>
-        <p><strong>Owner</strong>: Dashboard, Items/Sell, Customers or industry aliases, Bookings/Trips/Classes, Blog, SMS, Bulk email, Business records, Public page, Account.</p>
-        <p><strong>Staff</strong>: Sell, Customers (or alias), Bookings (or alias), Blog, Business records.</p>
+        <p><strong>Owner</strong>: Dashboard, Items/Sell, Customers or industry aliases, Bookings/Trips/Classes, Blog, SMS, Bulk email, Donor management, Public page, Account.</p>
+        <p><strong>Staff</strong>: Sell, Customers (or alias), Bookings (or alias), Blog, Donor management.</p>
       </section>
 
       <section>
@@ -38,6 +38,7 @@ export default function HowToUseSedifexPage() {
           <li><a href="/docs/integration-quickstart">/docs/integration-quickstart</a></li>
           <li><a href="/docs/wordpress-install-guide">/docs/wordpress-install-guide</a></li>
           <li><a href="/docs/bulk-email-google-sheets-guide">/docs/bulk-email-google-sheets-guide</a></li>
+          <li><a href="/docs/donor-website-integration">/docs/donor-website-integration</a></li>
         </ul>
       </section>
     </DocsPageLayout>
