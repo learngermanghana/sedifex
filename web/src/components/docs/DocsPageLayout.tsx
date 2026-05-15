@@ -15,6 +15,8 @@ export default function DocsPageLayout({ title, subtitle, children }: DocsPageLa
         <nav aria-label="Documentation navigation" className="docs-page__nav">
           <Link to="/account">← Back to account</Link>
           <span>·</span>
+          <Link to="/docs/how-to-use-sedifex">How to use Sedifex</Link>
+          <span>·</span>
           <Link to="/docs/integration-quickstart">Integration quickstart</Link>
           <span>·</span>
           <Link to="/docs/wordpress-install-guide">WordPress install guide</Link>

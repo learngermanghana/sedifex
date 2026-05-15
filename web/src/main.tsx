@@ -52,6 +52,7 @@ import ReturnPolicyPage from './pages/legal/ReturnPolicyPage'
 import IntegrationQuickstartPage from './pages/docs/IntegrationQuickstartPage'
 import WordpressInstallGuidePage from './pages/docs/WordpressInstallGuidePage'
 import BulkEmailGoogleSheetsPage from './pages/docs/BulkEmailGoogleSheetsPage'
+import HowToUseSedifexPage from './pages/docs/HowToUseSedifexPage'
 import PublicBlogPage from './pages/PublicBlogPage'
 
 import { ToastProvider } from './components/ToastProvider'
@@ -133,6 +134,7 @@ const router = createBrowserRouter([
       { path: 'docs/integration-quickstart', element: <IntegrationQuickstartPage /> },
       { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
       { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
+      { path: 'docs/how-to-use-sedifex', element: <HowToUseSedifexPage /> },
 
       // Legal pages
       { path: 'legal/privacy', element: <PrivacyPage /> },
