@@ -41,7 +41,7 @@ type StaffMember = {
 
 type StaffAuditEntry = {
   id: string
-  action: 'invite' | 'reset' | 'deactivate'
+  action: 'invite' | 'reset' | 'deactivate' | 'reactivate' | 'delete'
   outcome: 'success' | 'failure'
   actorEmail: string | null
   targetEmail: string
@@ -73,7 +73,7 @@ function mapMember(docSnap: QueryDocumentSnapshot<DocumentData>): StaffMember {
 
 function mapAudit(docSnap: QueryDocumentSnapshot<DocumentData>): StaffAuditEntry {
   const data = docSnap.data() || {}
-  const action = ['invite', 'reset', 'deactivate'].includes(data.action)
+  const action = ['invite', 'reset', 'deactivate', 'reactivate', 'delete'].includes(data.action)
     ? (data.action as StaffAuditEntry['action'])
     : 'invite'
   const outcome = data.outcome === 'failure' ? 'failure' : 'success'
@@ -96,6 +96,25 @@ function formatDate(value: Date | null) {
   } catch (error) {
     console.warn('[staff] Unable to format date', error)
     return '—'
+  }
+}
+
+
+
+function formatAuditAction(action: StaffAuditEntry['action']) {
+  switch (action) {
+    case 'invite':
+      return 'Staff saved'
+    case 'reset':
+      return 'Password reset'
+    case 'deactivate':
+      return 'Staff deactivated'
+    case 'reactivate':
+      return 'Staff reactivated'
+    case 'delete':
+      return 'Staff deleted'
+    default:
+      return action
   }
 }
 
@@ -530,7 +549,7 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
             <p className="staff-card__eyebrow">Team actions</p>
             <h2 id="staff-actions">Save staff</h2>
             <p className="staff-card__hint">
-              New staff will get an account and team member record automatically.
+              When you save, we create the login account and add this person to your team in one step.
             </p>
           </div>
         </div>
@@ -567,7 +586,7 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
               disabled={!isOwner || inviting}
             >
               <option value="owner">Owner</option>
-              <option value="staff">Staff</option>
+              <option value="staff">Staff access (limited)</option>
             </select>
           </label>
 
@@ -606,23 +625,27 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
             <p className="staff-card__eyebrow">Workspace linking</p>
             <h2 id="workspace-linking">Master invite links</h2>
             <p className="staff-card__hint">
-              Create one link from the mother workspace. Other workspace owners can accept it to become sub-stores.
+              The main (parent) workspace owner should create this link. Then other workspace owners can paste it to connect their workspace as a sub-store.
             </p>
           </div>
         </div>
 
         <div className="staff-card__form">
           <label>
-            <span>Sub-store role after linking</span>
+            <span>Access level for the linked sub-store</span>
             <select
               value={linkRole}
               onChange={event => setLinkRole(event.target.value === 'owner' ? 'owner' : 'staff')}
               disabled={!isOwner || linkCreating}
             >
-              <option value="owner">Admin</option>
-              <option value="staff">Staff</option>
+              <option value="owner">Owner access (full)</option>
+              <option value="staff">Staff access (limited)</option>
             </select>
           </label>
+
+          <p className="staff-card__hint">
+            Owner access gives full control in the parent workspace. Staff access is limited to staff permissions.
+          </p>
 
           <button
             type="button"
@@ -825,7 +848,7 @@ export default function StaffManagement({ headingLevel = 'h1' }: StaffManagement
             audits.map(entry => (
               <div className="staff-table__row" role="row" key={entry.id}>
                 <span role="cell" data-label="When">{formatDate(entry.createdAt)}</span>
-                <span role="cell" data-label="Action">{entry.action}</span>
+                <span role="cell" data-label="Action">{formatAuditAction(entry.action)}</span>
                 <span role="cell" data-label="Target">{entry.targetEmail}</span>
                 <span role="cell" data-label="By">{entry.actorEmail ?? '—'}</span>
                 <span role="cell" data-label="Outcome">
