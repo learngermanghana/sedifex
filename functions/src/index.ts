@@ -3468,7 +3468,16 @@ function getIntegrationAuthContext(req: functions.https.Request) {
       : Array.isArray(apiKeyHeader) && typeof apiKeyHeader[0] === 'string'
         ? apiKeyHeader[0].trim()
         : ''
-  const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : ''
+  const queryStoreId =
+    typeof req.query.storeId === 'string'
+      ? req.query.storeId.trim()
+      : typeof req.query.store_id === 'string'
+        ? req.query.store_id.trim()
+        : ''
+  const headerStoreId = typeof req.headers['x-store-id'] === 'string' ? req.headers['x-store-id'].trim() : ''
+  const payload = toPlainObject(req.body)
+  const bodyMerchantId = toTrimmedStringOrNull(payload.merchant_id) ?? toTrimmedStringOrNull(payload.store_id) ?? ''
+  const storeId = queryStoreId || headerStoreId || bodyMerchantId
   return { apiKey, storeId }
 }
 
