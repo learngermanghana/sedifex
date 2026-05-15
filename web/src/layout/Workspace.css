@@ -350,3 +350,10 @@
     justify-content: space-between;
   }
 }
+
+/* Expenses page contrast adjustments */
+.expenses-page .page__subtitle,
+.expenses-page .card__subtitle,
+.expenses-page .form__hint {
+  color: #334155;
+}

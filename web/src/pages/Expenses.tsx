@@ -538,7 +538,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
 
   if (embedded) {
     return (
-      <section className="card" style={{ marginTop: 24 }} aria-label="Business records">
+      <section className="card expenses-page" style={{ marginTop: 24 }} aria-label="Business records">
         <div className="page__header" style={{ padding: 0, marginBottom: 12 }}>
           <div>
             <h3 className="card__title">Business records</h3>
@@ -553,7 +553,7 @@ export default function Expenses({ embedded = false }: ExpensesProps) {
   }
 
   return (
-    <div className="page">
+    <div className="page expenses-page">
       <header className="page__header">
         <div>
           <h2 className="page__title">Business records</h2>
