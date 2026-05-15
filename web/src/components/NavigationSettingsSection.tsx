@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { INDUSTRY_ENABLED_MODULE_PRESETS, NAV_ITEMS, type CustomNavItem, type Industry, type NavItemType, type NavRole } from '../config/navigation'
+import { INDUSTRY_ENABLED_MODULE_PRESETS, NAV_ITEMS, type CustomNavItem, type Industry, type NavRole } from '../config/navigation'
 import type { StorePreferences } from '../hooks/useStorePreferences'
 
 type Props = {
@@ -17,7 +17,6 @@ const INDUSTRY_OPTIONS: Array<{ value: Industry; label: string }> = [
   { value: 'school', label: 'School' },
 ]
 
-function makeId() { return `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
 function isValidExternalUrl(url: string) {
   try {
     const parsed = new URL(url)
@@ -33,7 +32,6 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ValidationError>(null)
-  const [dragId, setDragId] = useState<string | null>(null)
 
   useEffect(() => {
     setDraft({
@@ -105,27 +103,15 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
         <label key={item.id}><input type="checkbox" disabled={!canEdit} checked={draft.enabledModules.length === 0 || draft.enabledModules.includes(item.id)} onChange={() => toggleModule(item.id)} /> {item.label}</label>
       ))}
     </div>
-    <h3>Custom navigation</h3>
-    <button type="button" className="button button--secondary" disabled={!canEdit} onClick={() => setDraft(c => ({ ...c, customNavItems: [...c.customNavItems, { id: makeId(), label: '', type: 'internal', target: '', roles_allowed: ['owner'], sort_order: c.customNavItems.length + 1 }] }))}>Add item</button>
+    <h3>Custom navigation access</h3>
+    <p className="account-overview__help-text">
+      Only access levels are editable here. Labels, routes, and link types use site defaults.
+    </p>
     <div className="account-overview__custom-nav-list">
-      {draft.customNavItems.map((item) => <div key={item.id} draggable={canEdit} onDragStart={() => setDragId(item.id)} onDragOver={e => e.preventDefault()} onDrop={() => {
-        if (!dragId || dragId === item.id) return
-        setDraft(c => {
-          const items = [...c.customNavItems]
-          const from = items.findIndex(i => i.id === dragId)
-          const to = items.findIndex(i => i.id === item.id)
-          const [moved] = items.splice(from, 1)
-          items.splice(to, 0, moved)
-          return { ...c, customNavItems: items.map((it, idx) => ({ ...it, sort_order: idx + 1 })) }
-        })
-      }}>
-        <input placeholder="Label" value={item.label} disabled={!canEdit} onChange={e => updateItem(item.id, { label: e.target.value })} />
-        <select value={item.type} disabled={!canEdit} onChange={e => updateItem(item.id, { type: e.target.value as NavItemType })}><option value="module">module</option><option value="internal">internal</option><option value="external">external</option></select>
-        <input placeholder={item.type === 'external' ? 'https://example.com' : '/route'} value={item.target} disabled={!canEdit} onChange={e => updateItem(item.id, { target: e.target.value })} />
-        <input placeholder="Icon (optional)" disabled />
+      {draft.customNavItems.map((item) => <div key={item.id}>
+        <strong>{item.label || item.target || 'Custom navigation item'}</strong>
         <label><input type="checkbox" checked={item.roles_allowed.includes('owner')} disabled={!canEdit} onChange={() => updateItem(item.id, { roles_allowed: item.roles_allowed.includes('owner') ? item.roles_allowed.filter(r => r !== 'owner') as NavRole[] : [...item.roles_allowed, 'owner'] })} />Owner</label>
         <label><input type="checkbox" checked={item.roles_allowed.includes('staff')} disabled={!canEdit} onChange={() => updateItem(item.id, { roles_allowed: item.roles_allowed.includes('staff') ? item.roles_allowed.filter(r => r !== 'staff') as NavRole[] : [...item.roles_allowed, 'staff'] })} />Staff</label>
-        <button type="button" className="button button--ghost" disabled={!canEdit} onClick={() => setDraft(c => ({ ...c, customNavItems: c.customNavItems.filter(nav => nav.id !== item.id) }))}>Remove</button>
       </div>)}
     </div>
     {error && <p className="account-overview__error-text">{error}</p>}
