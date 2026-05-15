@@ -3108,6 +3108,36 @@ function getOptionalEnvString(name: string) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeMerchantIdForEnvSuffix(merchantId: string): string {
+  return merchantId.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
+}
+
+function getMerchantTokenFromJsonMap(raw: string, merchantId: string): string {
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return ''
+    const token = (parsed as Record<string, unknown>)[merchantId]
+    return typeof token === 'string' ? token.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+function getMerchantIntegrationToken(merchantId: string): string {
+  const normalizedMerchantId = merchantId.trim()
+  if (!normalizedMerchantId) return ''
+
+  const tokenFromJsonMap = getMerchantTokenFromJsonMap(
+    getOptionalEnvString('SEDIFEX_MERCHANT_TOKENS_JSON'),
+    normalizedMerchantId,
+  )
+  if (tokenFromJsonMap) return tokenFromJsonMap
+
+  const legacyNormalizedKey = `SEDIFEX_MERCHANT_TOKEN_${normalizeMerchantIdForEnvSuffix(normalizedMerchantId)}`
+  return getOptionalEnvString(legacyNormalizedKey)
+}
+
 const TIKTOK_CLIENT_KEY = getOptionalEnvString('TIKTOK_CLIENT_KEY')
 const TIKTOK_CLIENT_SECRET = getOptionalEnvString('TIKTOK_CLIENT_SECRET')
 const TIKTOK_REDIRECT_URI = getOptionalEnvString('TIKTOK_REDIRECT_URI')
@@ -3438,7 +3468,16 @@ function getIntegrationAuthContext(req: functions.https.Request) {
       : Array.isArray(apiKeyHeader) && typeof apiKeyHeader[0] === 'string'
         ? apiKeyHeader[0].trim()
         : ''
-  const storeId = typeof req.query.storeId === 'string' ? req.query.storeId.trim() : ''
+  const queryStoreId =
+    typeof req.query.storeId === 'string'
+      ? req.query.storeId.trim()
+      : typeof req.query.store_id === 'string'
+        ? req.query.store_id.trim()
+        : ''
+  const headerStoreId = typeof req.headers['x-store-id'] === 'string' ? req.headers['x-store-id'].trim() : ''
+  const payload = toPlainObject(req.body)
+  const bodyMerchantId = toTrimmedStringOrNull(payload.merchant_id) ?? toTrimmedStringOrNull(payload.store_id) ?? ''
+  const storeId = queryStoreId || headerStoreId || bodyMerchantId
   return { apiKey, storeId }
 }
 
@@ -4734,6 +4773,11 @@ async function validateIntegrationTokenOrReply(
   if (!storeId) {
     res.status(400).json({ error: 'missing-store-id' })
     return null
+  }
+
+  const merchantIntegrationToken = getMerchantIntegrationToken(storeId)
+  if (merchantIntegrationToken && apiKey === merchantIntegrationToken) {
+    return { storeId, isMasterKey: false }
   }
 
   const tokenHash = hashIntegrationSecret(apiKey)
@@ -9828,6 +9872,9 @@ export const __testing = {
   sanitizeBookingAttributes,
   normalizeBookingDateForSheet,
   normalizeBookingTimeForSheet,
+  normalizeMerchantIdForEnvSuffix,
+  getMerchantTokenFromJsonMap,
+  getMerchantIntegrationToken,
 }
 
 export const publishDailyFeaturedProductBlogPost = functions.pubsub

@@ -54,6 +54,7 @@ Object.defineProperty(exports, "googleAdsOAuthCallback", { enumerable: true, get
 Object.defineProperty(exports, "googleAdsCampaign", { enumerable: true, get: function () { return googleAds_1.googleAdsCampaign; } });
 Object.defineProperty(exports, "googleAdsMetricsSync", { enumerable: true, get: function () { return googleAds_1.googleAdsMetricsSync; } });
 __exportStar(require("./googleShopping"), exports);
+__exportStar(require("./reporting"), exports);
 var googleBusinessProfile_1 = require("./googleBusinessProfile");
 Object.defineProperty(exports, "googleBusinessLocations", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessLocations; } });
 Object.defineProperty(exports, "googleBusinessUploadLocationMedia", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessUploadLocationMedia; } });
@@ -2350,6 +2351,33 @@ exports.deleteWebhookEndpoint = functions.https.onCall(async (data, context) => 
 function getOptionalEnvString(name) {
     const value = process.env[name];
     return typeof value === 'string' ? value.trim() : '';
+}
+function normalizeMerchantIdForEnvSuffix(merchantId) {
+    return merchantId.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+}
+function getMerchantTokenFromJsonMap(raw, merchantId) {
+    if (!raw)
+        return '';
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object')
+            return '';
+        const token = parsed[merchantId];
+        return typeof token === 'string' ? token.trim() : '';
+    }
+    catch {
+        return '';
+    }
+}
+function getMerchantIntegrationToken(merchantId) {
+    const normalizedMerchantId = merchantId.trim();
+    if (!normalizedMerchantId)
+        return '';
+    const tokenFromJsonMap = getMerchantTokenFromJsonMap(getOptionalEnvString('SEDIFEX_MERCHANT_TOKENS_JSON'), normalizedMerchantId);
+    if (tokenFromJsonMap)
+        return tokenFromJsonMap;
+    const legacyNormalizedKey = `SEDIFEX_MERCHANT_TOKEN_${normalizeMerchantIdForEnvSuffix(normalizedMerchantId)}`;
+    return getOptionalEnvString(legacyNormalizedKey);
 }
 const TIKTOK_CLIENT_KEY = getOptionalEnvString('TIKTOK_CLIENT_KEY');
 const TIKTOK_CLIENT_SECRET = getOptionalEnvString('TIKTOK_CLIENT_SECRET');
@@ -7968,6 +7996,9 @@ exports.__testing = {
     sanitizeBookingAttributes,
     normalizeBookingDateForSheet,
     normalizeBookingTimeForSheet,
+    normalizeMerchantIdForEnvSuffix,
+    getMerchantTokenFromJsonMap,
+    getMerchantIntegrationToken,
 };
 exports.publishDailyFeaturedProductBlogPost = functions.pubsub
     .schedule('every day 09:00')
