@@ -95,29 +95,47 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
       : DEFAULT_PREFERENCES.navigation.customLabels
 
 
-  const enabledModules =
+  const enabledModulesSource =
     navigation && Array.isArray(navigation.enabled_modules)
-      ? (navigation.enabled_modules as unknown[]).reduce<string[]>((acc, value) => {
-          if (typeof value === 'string' && value.trim()) acc.push(value.trim())
-          return acc
-        }, [])
+      ? navigation.enabled_modules
+      : navigation && Array.isArray(navigation.enabledModules)
+      ? navigation.enabledModules
       : navigation && Array.isArray(navigation.visible_modules)
-      ? (navigation.visible_modules as unknown[]).reduce<string[]>((acc, value) => {
+      ? navigation.visible_modules
+      : null
+
+  const enabledModules =
+    enabledModulesSource
+      ? (enabledModulesSource as unknown[]).reduce<string[]>((acc, value) => {
           if (typeof value === 'string' && value.trim()) acc.push(value.trim())
           return acc
         }, [])
       : INDUSTRY_ENABLED_MODULE_PRESETS[industry]
 
-  const customNavItems =
+  const customNavItemsSource =
     navigation && Array.isArray(navigation.custom_nav_items)
-      ? (navigation.custom_nav_items as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
+      ? navigation.custom_nav_items
+      : navigation && Array.isArray(navigation.customNavItems)
+      ? navigation.customNavItems
+      : null
+
+  const customNavItems =
+    customNavItemsSource
+      ? (customNavItemsSource as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
           const id = typeof item.id === 'string' ? item.id.trim() : ''
           const label = typeof item.label === 'string' ? item.label.trim() : ''
           const type = item.type
           const target = typeof item.target === 'string' ? item.target.trim() : ''
-          const sortOrder = typeof item.sort_order === 'number' ? item.sort_order : 0
+          const sortOrder =
+            typeof item.sort_order === 'number'
+              ? item.sort_order
+              : typeof item.sortOrder === 'number'
+              ? item.sortOrder
+              : 0
           const rolesAllowed = Array.isArray(item.roles_allowed)
             ? item.roles_allowed.filter(role => role === 'owner' || role === 'staff')
+            : Array.isArray(item.rolesAllowed)
+            ? item.rolesAllowed.filter(role => role === 'owner' || role === 'staff')
             : []
 
           if (!id || !label || !target || rolesAllowed.length === 0) return acc
