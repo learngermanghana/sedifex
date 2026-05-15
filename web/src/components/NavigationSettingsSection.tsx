@@ -108,6 +108,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
       Only access levels are editable here. Labels, routes, and link types use site defaults.
     </p>
     <div className="account-overview__custom-nav-list">
+      {draft.customNavItems.length === 0 ? <p className="account-overview__help-text">No custom navigation links are configured yet.</p> : null}
       {draft.customNavItems.map((item) => <div key={item.id}>
         <strong>{item.label || item.target || 'Custom navigation item'}</strong>
         <label><input type="checkbox" checked={item.roles_allowed.includes('owner')} disabled={!canEdit} onChange={() => updateItem(item.id, { roles_allowed: item.roles_allowed.includes('owner') ? item.roles_allowed.filter(r => r !== 'owner') as NavRole[] : [...item.roles_allowed, 'owner'] })} />Owner</label>

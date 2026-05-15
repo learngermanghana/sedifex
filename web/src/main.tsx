@@ -23,6 +23,7 @@ import StaffManagement from './pages/StaffManagement'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
 import Support from './pages/Support'
 import Expenses from './pages/Expenses'
+import FundsLedger from './pages/FundsLedger'
 import DocumentsGenerator from './pages/DocumentsGenerator'
 import ResetPassword from './pages/ResetPassword'
 import VerifyEmail from './pages/VerifyEmail'
@@ -102,6 +103,7 @@ const router = createBrowserRouter([
           { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
           { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
           { path: 'expenses', element: <Expenses /> },
+          { path: 'funds-ledger', element: <FundsLedger /> },
 
           // Close day
           { path: 'sell/close-day', element: <CloseDay /> },
