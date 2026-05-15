@@ -4775,6 +4775,11 @@ async function validateIntegrationTokenOrReply(
     return null
   }
 
+  const merchantIntegrationToken = getMerchantIntegrationToken(storeId)
+  if (merchantIntegrationToken && apiKey === merchantIntegrationToken) {
+    return { storeId, isMasterKey: false }
+  }
+
   const tokenHash = hashIntegrationSecret(apiKey)
   const keySnapshot = await db
     .collection('integrationApiKeys')
