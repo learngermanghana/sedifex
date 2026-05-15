@@ -7,15 +7,7 @@ import {
   signInWithPopup,
   sendEmailVerification,
 } from 'firebase/auth'
-import {
-  doc,
-  serverTimestamp,
-  setDoc,
-  collection,
-  query,
-  onSnapshot,
-  limit,
-} from 'firebase/firestore'
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { FirebaseError } from 'firebase/app'
 import { Link } from 'react-router-dom'
 import '../App.css'
@@ -34,43 +26,16 @@ import { setOnboardingStatus } from '../utils/onboarding'
 import { normalizeGhanaPhoneE164 } from '../utils/phone'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, type Industry } from '../config/navigation'
 
-const AUTH_VISUAL_IMAGE_URL =
-  'https://raw.githubusercontent.com/learngermanghana/sedifexbiz/main/photos/pexels-olly-3801439.jpg'
+const AUTH_VISUAL_IMAGE_URL = 'https://raw.githubusercontent.com/learngermanghana/sedifexbiz/main/photos/pexels-olly-3801439.jpg'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PASSWORD_MIN_LENGTH = 8
-const MAX_BLOG_POSTS = 3
 
 type AuthMode = 'login' | 'signup'
 type StatusTone = 'idle' | 'loading' | 'success' | 'error'
 type AccountTypeOption = Industry
 
-interface StatusState {
-  tone: StatusTone
-  message: string
-}
-
-interface BlogPost {
-  title: string
-  link: string
-  published: string
-  excerpt: string
-  imageUrl?: string
-}
-
-interface PasswordStrength {
-  isLongEnough: boolean
-  hasUppercase: boolean
-  hasLowercase: boolean
-  hasNumber: boolean
-  hasSymbol: boolean
-}
-
-interface PartnerStoreSnippet {
-  id: string
-  name: string
-  town: string | null
-  country: string | null
-}
+type StatusState = { tone: StatusTone; message: string }
+type PasswordStrength = { isLongEnough: boolean; hasUppercase: boolean; hasLowercase: boolean; hasNumber: boolean; hasSymbol: boolean }
 
 function sanitizePhone(value: string): string {
   return normalizeGhanaPhoneE164(value)
@@ -95,8 +60,7 @@ function getLoginValidationError(email: string, password: string): string | null
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof FirebaseError) {
-    const code = error.code || ''
-    switch (code) {
+    switch (error.code || '') {
       case 'auth/invalid-login-credentials':
       case 'auth/invalid-credential':
       case 'auth/wrong-password':
@@ -119,156 +83,28 @@ function getErrorMessage(error: unknown): string {
       case 'auth/missing-password':
         return 'Enter your password to continue.'
       case 'auth/weak-password':
-        return 'Please choose a stronger password. It must be at least 8 characters and include uppercase, lowercase, number, and symbol.'
-      case 'functions/permission-denied': {
-        const callableMessage =
-          extractCallableErrorMessage(error) ?? INACTIVE_WORKSPACE_MESSAGE
-        return callableMessage
-      }
+        return 'Please choose a stronger password.'
+      case 'functions/permission-denied':
+        return extractCallableErrorMessage(error) ?? INACTIVE_WORKSPACE_MESSAGE
       default:
         return (error as any).message || 'Something went wrong. Please try again.'
     }
   }
-
-  if (error instanceof Error) {
-    return error.message || 'Something went wrong. Please try again.'
-  }
-
-  if (typeof error === 'string') {
-    return error
-  }
-
+  if (error instanceof Error) return error.message || 'Something went wrong. Please try again.'
+  if (typeof error === 'string') return error
   return 'Something went wrong. Please try again.'
 }
 
 function getAuthErrorMessage(error: unknown, mode: AuthMode): string {
-  const baseMessage = getErrorMessage(error)
-  const firebaseCode = error instanceof FirebaseError ? error.code : undefined
-
-  const contextualMessage = (() => {
-    if (mode === 'signup' && baseMessage === 'An account already exists with this email.') {
-      return 'An account already exists with this email. Try logging in instead or use another email to sign up.'
-    }
-
-    if (
-      mode === 'login' &&
-      (firebaseCode === 'auth/invalid-credential' ||
-        firebaseCode === 'auth/invalid-login-credentials' ||
-        firebaseCode === 'auth/wrong-password' ||
-        firebaseCode === 'auth/user-not-found')
-    ) {
-      return 'Incorrect email or password. If you have forgotten your password, please reset it and try again.'
-    }
-
-    return baseMessage
-  })()
-
-  if (contextualMessage && contextualMessage !== 'Something went wrong. Please try again.') {
-    return contextualMessage
+  const message = getErrorMessage(error)
+  if (mode === 'signup' && message === 'An account already exists with this email.') {
+    return 'An account already exists with this email. Try logging in instead or use another email to sign up.'
   }
-
-  return mode === 'login'
-    ? 'We couldn’t sign you in. Confirm your email and password, check your internet connection, or reset your password if you cannot remember it.'
-    : 'We couldn’t create your account. Ensure all details are filled in, your network is stable, and try again. If the issue persists, please contact support.'
-}
-
-function stripHtml(html: string): string {
-  if (!html) return ''
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  return doc.body.textContent?.replace(/\s+/g, ' ').trim() ?? ''
-}
-
-function formatBlogDate(rawDate: string): string {
-  if (!rawDate) return ''
-  const parsed = new Date(rawDate)
-  if (Number.isNaN(parsed.getTime())) return rawDate
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function extractFeedText(element: Element, tagName: string): string {
-  return element.getElementsByTagName(tagName)[0]?.textContent?.trim() ?? ''
-}
-
-function extractFeedLink(element: Element): string {
-  const linkNode = element.getElementsByTagName('link')[0]
-  if (!linkNode) return ''
-  const href = linkNode.getAttribute('href')
-  return (href || linkNode.textContent || '').trim()
-}
-
-function extractFeedDate(element: Element): string {
-  return (
-    extractFeedText(element, 'pubDate') ||
-    extractFeedText(element, 'published') ||
-    extractFeedText(element, 'updated')
-  )
-}
-
-function extractFeedSummary(element: Element): string {
-  return (
-    extractFeedText(element, 'description') ||
-    extractFeedText(element, 'content:encoded') ||
-    extractFeedText(element, 'summary') ||
-    extractFeedText(element, 'content')
-  )
-}
-
-function extractImageFromFeed(item: Element): string | null {
-  const mediaContent = item.getElementsByTagName('media:content')[0]
-  const mediaContentUrl = mediaContent?.getAttribute('url')
-  if (mediaContentUrl) return mediaContentUrl
-
-  const mediaThumbnail = item.getElementsByTagName('media:thumbnail')[0]
-  const mediaThumbnailUrl = mediaThumbnail?.getAttribute('url')
-  if (mediaThumbnailUrl) return mediaThumbnailUrl
-
-  const enclosure = item.getElementsByTagName('enclosure')[0]
-  const enclosureType = enclosure?.getAttribute('type') ?? ''
-  const enclosureUrl = enclosure?.getAttribute('url')
-  if (enclosureUrl && enclosureType.startsWith('image')) return enclosureUrl
-
-  const encodedContent = extractFeedText(item, 'content:encoded')
-  const description = extractFeedText(item, 'description')
-  const content = encodedContent || description
-  if (!content) return null
-
-  const match = content.match(/<img[^>]+src=["']([^"']+)["']/i)
-  return match?.[1] ?? null
-}
-
-function clampExcerpt(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  const truncated = text.slice(0, maxLength)
-  const trimmed = truncated.replace(/\s+\S*$/, '')
-  return `${trimmed}…`
-}
-
-function formatTrialReminder(
-  billing: ResolveStoreAccessResult['billing'],
-): string | null {
-  if (!billing) return null
-  if (billing.status !== 'trial') return null
-  if (billing.paymentStatus === 'active') return null
-
-  const days = billing.trialDaysRemaining
-  if (typeof days === 'number') {
-    if (days <= 0) {
-      return 'Your free trial has ended. Please upgrade to continue.'
-    }
-    const unit = days === 1 ? 'day' : 'days'
-    return `You’re on a free trial — ${days} ${unit} left.`
-  }
-
-  return null
+  return message
 }
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<AuthMode>('login')
+  const [mode, setMode] = useState<AuthMode>('signup')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
@@ -281,231 +117,47 @@ export default function AuthPage() {
   const [address, setAddress] = useState('')
   const [accountType, setAccountType] = useState<AccountTypeOption>('shop')
   const [status, setStatus] = useState<StatusState>({ tone: 'idle', message: '' })
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
-  const [isBlogLoading, setIsBlogLoading] = useState(true)
-  const [blogError, setBlogError] = useState<string | null>(null)
-
-  // random partner stores for the marketing section
-  const [partnerStores, setPartnerStores] = useState<PartnerStoreSnippet[]>([])
-
-  const isLoading = status.tone === 'loading'
   const { publish } = useToast()
 
+  const isLoading = status.tone === 'loading'
   const normalizedEmail = email.trim()
   const normalizedPassword = password.trim()
   const normalizedConfirmPassword = confirmPassword.trim()
-  const normalizedFullName = fullName.trim()
-  const normalizedBusinessName = businessName.trim()
   const normalizedPhone = sanitizePhone(phone)
-  const normalizedCountry = country.trim()
-  const normalizedTown = town.trim()
-  const normalizedAddress = address.trim()
 
   const passwordStrength = evaluatePasswordStrength(normalizedPassword)
-  const passwordChecklist = useMemo(
-    () => [
-      {
-        id: 'length',
-        label: `At least ${PASSWORD_MIN_LENGTH} characters`,
-        passed: passwordStrength.isLongEnough,
-      },
-      {
-        id: 'uppercase',
-        label: 'Includes an uppercase letter',
-        passed: passwordStrength.hasUppercase,
-      },
-      {
-        id: 'lowercase',
-        label: 'Includes a lowercase letter',
-        passed: passwordStrength.hasLowercase,
-      },
-      { id: 'number', label: 'Includes a number', passed: passwordStrength.hasNumber },
-      { id: 'symbol', label: 'Includes a symbol', passed: passwordStrength.hasSymbol },
-    ] as const,
-    [
-      passwordStrength.hasLowercase,
-      passwordStrength.hasNumber,
-      passwordStrength.hasSymbol,
-      passwordStrength.hasUppercase,
-      passwordStrength.isLongEnough,
-    ],
-  )
+  const passwordChecklist = useMemo(() => [
+    { id: 'length', label: `At least ${PASSWORD_MIN_LENGTH} characters`, passed: passwordStrength.isLongEnough },
+    { id: 'uppercase', label: 'Includes an uppercase letter', passed: passwordStrength.hasUppercase },
+    { id: 'lowercase', label: 'Includes a lowercase letter', passed: passwordStrength.hasLowercase },
+    { id: 'number', label: 'Includes a number', passed: passwordStrength.hasNumber },
+    { id: 'symbol', label: 'Includes a symbol', passed: passwordStrength.hasSymbol },
+  ] as const, [passwordStrength])
 
   const doesPasswordMeetAllChecks = passwordChecklist.every(item => item.passed)
-  const doPasswordsMatch = normalizedPassword === normalizedConfirmPassword
   const isSignupFormValid =
-    normalizedEmail.length > 0 &&
+    EMAIL_PATTERN.test(normalizedEmail) &&
     normalizedPassword.length > 0 &&
     doesPasswordMeetAllChecks &&
-    doPasswordsMatch &&
-    normalizedFullName.length > 0 &&
-    normalizedBusinessName.length > 0 &&
+    normalizedPassword === normalizedConfirmPassword &&
+    fullName.trim().length > 0 &&
+    businessName.trim().length > 0 &&
     normalizedPhone.length > 0 &&
-    normalizedCountry.length > 0 &&
-    normalizedTown.length > 0 &&
-    normalizedAddress.length > 0
-
-  const isLoginFormValid =
-    EMAIL_PATTERN.test(normalizedEmail) && normalizedPassword.length > 0
-  const isSubmitDisabled =
-    isLoading || (mode === 'login' ? !isLoginFormValid : !isSignupFormValid)
-
-  const completeLogin = async (nextUser: User) => {
-    await persistSession(nextUser)
-    try {
-      const resolution = await resolveStoreAccess()
-      await persistSession(nextUser, {
-        storeId: resolution.storeId,
-        workspaceSlug: resolution.workspaceSlug,
-        role: resolution.role,
-      })
-      const reminder = formatTrialReminder(resolution.billing)
-      if (reminder) {
-        publish({ tone: 'info', message: reminder })
-      }
-    } catch (error) {
-      console.warn('[auth] Failed to resolve workspace access', error)
-      setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'login') })
-      return false
-    }
-    return true
-  }
+    country.trim().length > 0 &&
+    town.trim().length > 0 &&
+    address.trim().length > 0
+  const isLoginFormValid = EMAIL_PATTERN.test(normalizedEmail) && normalizedPassword.length > 0
+  const isSubmitDisabled = isLoading || (mode === 'login' ? !isLoginFormValid : !isSignupFormValid)
 
   useEffect(() => {
-    document.title = mode === 'login' ? 'Sedifex — Log in' : 'Sedifex — Sign up'
+    document.title = mode === 'login' ? 'Sedifex — Log in' : 'Sedifex — Sign up free'
   }, [mode])
 
   useEffect(() => {
-    if (mode !== 'login') {
-      setIsPasswordVisible(false)
-    }
-  }, [mode])
-
-  useEffect(() => {
-    if (!status.message) return
-    if (status.tone === 'success' || status.tone === 'error') {
+    if (status.message && (status.tone === 'success' || status.tone === 'error')) {
       publish({ tone: status.tone, message: status.message })
     }
   }, [publish, status.message, status.tone])
-
-  // 🔹 Load a handful of stores and pick some at random for the partners section
-  useEffect(() => {
-    const q = query(collection(db, 'stores'), limit(30))
-
-    const unsubscribe = onSnapshot(
-      q,
-      snapshot => {
-        const all: PartnerStoreSnippet[] = snapshot.docs.map(docSnap => {
-          const data = docSnap.data() as any
-          const name =
-            (data.businessName as string) ||
-            (data.name as string) ||
-            'Unnamed store'
-          const town =
-            (typeof data.town === 'string' && data.town) ||
-            (typeof data.city === 'string' && data.city) ||
-            null
-          const country =
-            (typeof data.country === 'string' && data.country) || null
-
-          return {
-            id: docSnap.id,
-            name,
-            town,
-            country,
-          }
-        })
-
-        if (!all.length) {
-          setPartnerStores([])
-          return
-        }
-
-        // simple client-side shuffle & pick 4
-        const shuffled = [...all].sort(() => Math.random() - 0.5)
-        setPartnerStores(shuffled.slice(0, 4))
-      },
-      error => {
-        console.warn('[auth] Failed to load partner stores', error)
-        setPartnerStores([])
-      },
-    )
-
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
-    let isMounted = true
-    const controller = new AbortController()
-
-    const loadBlogPosts = async () => {
-      try {
-        setIsBlogLoading(true)
-        setBlogError(null)
-
-        const response = await fetch('https://blog.sedifex.com/feed.xml', {
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error(`Blog feed request failed: ${response.status}`)
-        }
-
-        const xmlText = await response.text()
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(xmlText, 'application/xml')
-        const errors = doc.getElementsByTagName('parsererror')
-        if (errors.length > 0) {
-          throw new Error('Unable to parse blog feed.')
-        }
-
-        const items = Array.from(doc.getElementsByTagName('item'))
-        const entries = Array.from(doc.getElementsByTagName('entry'))
-        const rawPosts = items.length ? items : entries
-
-        const posts = rawPosts
-          .map(item => {
-            const title = extractFeedText(item, 'title') || 'Sedifex update'
-            const link = extractFeedLink(item)
-            const publishedRaw = extractFeedDate(item)
-            const description = extractFeedSummary(item)
-            const excerpt = clampExcerpt(stripHtml(description), 160)
-
-            return {
-              title,
-              link,
-              published: formatBlogDate(publishedRaw),
-              excerpt,
-              imageUrl: extractImageFromFeed(item) ?? undefined,
-            }
-          })
-          .filter(post => post.link)
-          .slice(0, MAX_BLOG_POSTS)
-
-        if (isMounted) {
-          setBlogPosts(posts)
-        }
-      } catch (error) {
-        const isAbortError =
-          error instanceof DOMException && error.name === 'AbortError'
-        if (!isAbortError && isMounted) {
-          console.warn('Unable to load blog posts:', error)
-          setBlogError('Unable to load the latest blog posts right now.')
-        }
-      } finally {
-        if (isMounted) {
-          setIsBlogLoading(false)
-        }
-      }
-    }
-
-    void loadBlogPosts()
-
-    return () => {
-      isMounted = false
-      controller.abort()
-    }
-  }, [])
 
   function handleModeChange(nextMode: AuthMode) {
     setMode(nextMode)
@@ -519,15 +171,23 @@ export default function AuthPage() {
     setAddress('')
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  const completeLogin = async (nextUser: User) => {
+    await persistSession(nextUser)
+    try {
+      const resolution = await resolveStoreAccess()
+      await persistSession(nextUser, { storeId: resolution.storeId, workspaceSlug: resolution.workspaceSlug, role: resolution.role })
+    } catch (error) {
+      setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'login') })
+      return false
+    }
+    return true
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
     const sanitizedEmail = email.trim()
     const sanitizedPassword = password.trim()
     const sanitizedConfirmPassword = confirmPassword.trim()
-    setEmail(sanitizedEmail)
-    setPassword(sanitizedPassword)
-    if (mode === 'signup') setConfirmPassword(sanitizedConfirmPassword)
-
     const sanitizedPhone = sanitizePhone(phone)
     const sanitizedFullName = fullName.trim()
     const sanitizedBusinessName = businessName.trim()
@@ -535,195 +195,107 @@ export default function AuthPage() {
     const sanitizedTown = town.trim()
     const sanitizedAddress = address.trim()
 
-    const validationError =
-      mode === 'login'
-        ? getLoginValidationError(sanitizedEmail, sanitizedPassword)
-        : null
-
-    if (mode === 'signup') {
-      setPhone(sanitizedPhone)
-      setFullName(sanitizedFullName)
-      setBusinessName(sanitizedBusinessName)
-      setCountry(sanitizedCountry)
-      setTown(sanitizedTown)
-      setAddress(sanitizedAddress)
-
-      if (!doesPasswordMeetAllChecks) {
-        setStatus({
-          tone: 'error',
-          message:
-            'Use a stronger password that is at least 8 characters and includes uppercase, lowercase, number, and symbol.',
-        })
-        return
-      }
-
-      if (sanitizedPassword !== sanitizedConfirmPassword) {
-        setStatus({
-          tone: 'error',
-          message: 'Passwords do not match. Please re-enter them.',
-        })
-        return
-      }
-    }
-
+    const validationError = mode === 'login' ? getLoginValidationError(sanitizedEmail, sanitizedPassword) : null
     if (validationError) {
       setStatus({ tone: 'error', message: validationError })
       return
     }
 
-    setStatus({
-      tone: 'loading',
-      message: mode === 'login' ? 'Signing you in…' : 'Creating your account…',
-    })
+    if (mode === 'signup') {
+      if (!doesPasswordMeetAllChecks) {
+        setStatus({ tone: 'error', message: 'Use a stronger password with uppercase, lowercase, number, and symbol.' })
+        return
+      }
+      if (sanitizedPassword !== sanitizedConfirmPassword) {
+        setStatus({ tone: 'error', message: 'Passwords do not match. Please re-enter them.' })
+        return
+      }
+    }
+
+    setStatus({ tone: 'loading', message: mode === 'login' ? 'Signing you in…' : 'Creating your free account…' })
 
     try {
       if (mode === 'login') {
-        // ---------- LOGIN FLOW ----------
-        const { user: nextUser } = await signInWithEmailAndPassword(
-          auth,
-          sanitizedEmail,
-          sanitizedPassword,
-        )
-        const didCompleteLogin = await completeLogin(nextUser)
-        if (!didCompleteLogin) {
-          return
-        }
+        const { user } = await signInWithEmailAndPassword(auth, sanitizedEmail, sanitizedPassword)
+        const didCompleteLogin = await completeLogin(user)
+        if (!didCompleteLogin) return
       } else {
-        // ---------- SIGNUP FLOW ----------
-        const { user: nextUser } = await createUserWithEmailAndPassword(
-          auth,
-          sanitizedEmail,
-          sanitizedPassword,
-        )
-        await persistSession(nextUser)
+        const { user } = await createUserWithEmailAndPassword(auth, sanitizedEmail, sanitizedPassword)
+        await persistSession(user)
 
         let initializedStoreId: string | undefined
         const signupRoleForWorkspace: SignupRoleOption = 'owner'
 
-        // 1) Initialize workspace (always a new store now)
         try {
-          const initialization = await initializeStore(
-            {
-              phone: sanitizedPhone || null,
-              firstSignupEmail: sanitizedEmail ? sanitizedEmail.toLowerCase() : null,
-              ownerName: sanitizedFullName || null,
-              businessName: sanitizedBusinessName || null,
-              country: sanitizedCountry || null,
-              town: sanitizedTown || null,
-              address: sanitizedAddress || null,
-              signupRole: signupRoleForWorkspace,
-            },
-            null,
-          )
+          const initialization = await initializeStore({
+            phone: sanitizedPhone || null,
+            firstSignupEmail: sanitizedEmail ? sanitizedEmail.toLowerCase() : null,
+            ownerName: sanitizedFullName || null,
+            businessName: sanitizedBusinessName || null,
+            country: sanitizedCountry || null,
+            town: sanitizedTown || null,
+            address: sanitizedAddress || null,
+            signupRole: signupRoleForWorkspace,
+          }, null)
           initializedStoreId = initialization.storeId
         } catch (error) {
-          console.warn('[signup] Failed to initialize workspace', error)
           setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'signup') })
-          await cleanupFailedSignup(nextUser)
+          await cleanupFailedSignup()
           return
         }
 
-        // 2) Resolve access (gets final storeId + role)
         let resolution: ResolveStoreAccessResult
         try {
           resolution = await resolveStoreAccess(initializedStoreId)
         } catch (error) {
-          console.warn('[signup] Failed to resolve workspace access', error)
           setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'signup') })
-          await cleanupFailedSignup(nextUser)
+          await cleanupFailedSignup()
           return
         }
 
-        await persistSession(nextUser, {
+        await persistSession(user, { storeId: resolution.storeId, workspaceSlug: resolution.workspaceSlug, role: resolution.role })
+
+        await setDoc(doc(db, 'customers', user.uid), {
           storeId: resolution.storeId,
-          workspaceSlug: resolution.workspaceSlug,
-          role: resolution.role,
-        })
-        const reminder = formatTrialReminder(resolution.billing)
-        if (reminder) {
-          publish({ tone: 'info', message: reminder })
-        }
+          name: sanitizedBusinessName || sanitizedFullName,
+          displayName: sanitizedFullName,
+          email: sanitizedEmail,
+          phone: sanitizedPhone,
+          businessName: sanitizedBusinessName || null,
+          ownerName: sanitizedFullName,
+          country: sanitizedCountry || null,
+          town: sanitizedTown || null,
+          address: sanitizedAddress || null,
+          status: 'active',
+          role: 'owner',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
 
-        // 3) Upsert customer profile – always owner for self-signup
+        await setDoc(doc(db, 'storeSettings', resolution.storeId), {
+          navigation: {
+            industry: accountType,
+            labelPolicy: 'shared',
+            enabled_modules: INDUSTRY_ENABLED_MODULE_PRESETS[accountType],
+            showCustomizationBanner: false,
+            requiresIndustryReview: false,
+          },
+        }, { merge: true })
+
         try {
-          const preferredDisplayName =
-            sanitizedFullName || nextUser.displayName?.trim() || sanitizedEmail
-          const resolvedBusinessName = sanitizedBusinessName || null
-          const resolvedOwnerName = sanitizedFullName || preferredDisplayName
-          const customerName = resolvedBusinessName || resolvedOwnerName
-
-          await setDoc(
-            doc(db, 'customers', nextUser.uid),
-            {
-              storeId: resolution.storeId,
-              name: customerName,
-              displayName: resolvedOwnerName,
-              email: sanitizedEmail,
-              phone: sanitizedPhone,
-              businessName: resolvedBusinessName,
-              ownerName: resolvedOwnerName,
-              country: sanitizedCountry || null,
-              town: sanitizedTown || null,
-              address: sanitizedAddress || null,
-              status: 'active',
-              role: 'owner',
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          )
+          await user.getIdToken(true)
+          await sendEmailVerification(user, { url: `${window.location.origin}/verify-email`, handleCodeInApp: true })
         } catch (error) {
-          console.warn('[customers] Unable to upsert customer record', error)
+          console.warn('[auth] Verification setup failed', error)
         }
 
-        // 3b) Persist industry/account type so navigation defaults match immediately
-        try {
-          await setDoc(
-            doc(db, 'storeSettings', resolution.storeId),
-            {
-              navigation: {
-                industry: accountType,
-                labelPolicy: 'shared',
-                enabled_modules: INDUSTRY_ENABLED_MODULE_PRESETS[accountType],
-                showCustomizationBanner: false,
-                requiresIndustryReview: false,
-              },
-            },
-            { merge: true },
-          )
-        } catch (error) {
-          console.warn('[storeSettings] Unable to save account type preferences', error)
-        }
-
-        // 4) Refresh ID token for fresh custom claims
-        try {
-          await nextUser.getIdToken(true)
-        } catch (error) {
-          console.warn('[auth] Unable to refresh ID token after signup', error)
-        }
-
-        // 5) Send email verification
-        try {
-          const continueUrl = `${window.location.origin}/verify-email`
-          await sendEmailVerification(nextUser, {
-            url: continueUrl,
-            handleCodeInApp: true,
-          })
-        } catch (error) {
-          console.warn('[auth] Failed to send verification email', error)
-        }
-
-        // 6) Mark onboarding as pending and bounce to login
-        setOnboardingStatus(nextUser.uid, 'pending')
+        setOnboardingStatus(user.uid, 'pending')
         setMode('login')
       }
 
       setStatus({
         tone: 'success',
-        message:
-          mode === 'login'
-            ? 'Welcome back! Redirecting…'
-            : 'Account created! We’ve emailed you a verification link — please confirm your email, then sign in.',
+        message: mode === 'login' ? 'Welcome back! Redirecting…' : 'Free account created. Confirm your email, then sign in.',
       })
       setPassword('')
       setConfirmPassword('')
@@ -734,750 +306,97 @@ export default function AuthPage() {
       setTown('')
       setAddress('')
       setAccountType('shop')
-    } catch (err: unknown) {
-      setStatus({ tone: 'error', message: getAuthErrorMessage(err, mode) })
+    } catch (error) {
+      setStatus({ tone: 'error', message: getAuthErrorMessage(error, mode) })
     }
   }
 
   async function handleGoogleSignIn() {
     if (mode !== 'login' || isLoading) return
-
     setStatus({ tone: 'loading', message: 'Connecting to Google…' })
     try {
       const provider = new GoogleAuthProvider()
       provider.setCustomParameters({ prompt: 'select_account' })
-      const { user: nextUser } = await signInWithPopup(auth, provider)
-      const didCompleteLogin = await completeLogin(nextUser)
+      const { user } = await signInWithPopup(auth, provider)
+      const didCompleteLogin = await completeLogin(user)
       if (!didCompleteLogin) return
-
       setStatus({ tone: 'success', message: 'Welcome back! Redirecting…' })
     } catch (error) {
       setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'login') })
     }
   }
 
-  const appStyle: React.CSSProperties = { minHeight: '100dvh' }
-
   return (
-    <main className="app" style={appStyle}>
+    <main className="app" style={{ minHeight: '100dvh' }}>
       <div className="app__layout">
         <div className="app__card">
           <div className="app__brand">
             <span className="app__logo">Sx</span>
             <div>
               <h1 className="app__title">Sedifex</h1>
-              <p className="app__tagline">
-                Run the business. <span className="app__highlight">Grow the brand.</span>
-              </p>
-              <p className="app__trial-note">
-                Start with a free 14-day trial—no payment required until you’re ready.
-              </p>
+              <p className="app__tagline">Run your business from one <span className="app__highlight">free Sedifex account.</span></p>
+              <p className="app__trial-note">No trial pressure. Start free and upgrade only when you need more uploads, automation, integrations, or growth tools.</p>
             </div>
           </div>
 
-          <div
-            className="app__mode-toggle"
-            role="tablist"
-            aria-label="Authentication mode"
-          >
-            <button
-              className={`app__mode-button${mode === 'login' ? ' is-active' : ''}`}
-              role="tab"
-              aria-selected={mode === 'login'}
-              onClick={() => handleModeChange('login')}
-              type="button"
-              disabled={isLoading}
-            >
-              Log in
-            </button>
-            <button
-              className={`app__mode-button${mode === 'signup' ? ' is-active' : ''}`}
-              role="tab"
-              aria-selected={mode === 'signup'}
-              onClick={() => handleModeChange('signup')}
-              type="button"
-              disabled={isLoading}
-            >
-              Start free trial
-            </button>
+          <div className="app__mode-toggle" role="tablist" aria-label="Authentication mode">
+            <button className={`app__mode-button${mode === 'login' ? ' is-active' : ''}`} role="tab" aria-selected={mode === 'login'} onClick={() => handleModeChange('login')} type="button" disabled={isLoading}>Log in</button>
+            <button className={`app__mode-button${mode === 'signup' ? ' is-active' : ''}`} role="tab" aria-selected={mode === 'signup'} onClick={() => handleModeChange('signup')} type="button" disabled={isLoading}>Sign up free</button>
           </div>
 
-          <form
-            className="form"
-            onSubmit={handleSubmit}
-            aria-label={mode === 'login' ? 'Log in form' : 'Sign up form'}
-          >
+          <form className="form" onSubmit={handleSubmit} aria-label={mode === 'login' ? 'Log in form' : 'Sign up form'}>
             <div className="form__field">
               <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                value={email}
-                onChange={event => setEmail(event.target.value)}
-                onBlur={() => setEmail(current => current.trim())}
-                type="email"
-                autoComplete="email"
-                placeholder="you@company.com"
-                required
-                disabled={isLoading}
-              />
-              <p className="form__hint">
-                {mode === 'signup'
-                  ? 'We’ll send a verification link to this address.'
-                  : 'Enter the email you use for work.'}
-              </p>
+              <input id="email" value={email} onChange={event => setEmail(event.target.value)} onBlur={() => setEmail(current => current.trim())} type="email" autoComplete="email" placeholder="you@company.com" required disabled={isLoading} />
+              <p className="form__hint">{mode === 'signup' ? 'We will send a verification link to this address.' : 'Enter the email you use for work.'}</p>
             </div>
 
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="full-name">Full name</label>
-                <input
-                  id="full-name"
-                  value={fullName}
-                  onChange={event => setFullName(event.target.value)}
-                  onBlur={() => setFullName(current => current.trim())}
-                  type="text"
-                  autoComplete="name"
-                  placeholder="Ada Lovelace"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={fullName.length > 0 && normalizedFullName.length === 0}
-                  aria-describedby="full-name-hint"
-                />
-                <p className="form__hint" id="full-name-hint">
-                  We use this to personalize your workspace and onboarding tips.
-                </p>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="business-name">Business name</label>
-                <input
-                  id="business-name"
-                  value={businessName}
-                  onChange={event => setBusinessName(event.target.value)}
-                  onBlur={() => setBusinessName(current => current.trim())}
-                  type="text"
-                  autoComplete="organization"
-                  placeholder="Sedifex Retail"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={
-                    businessName.length > 0 && normalizedBusinessName.length === 0
-                  }
-                  aria-describedby="business-name-hint"
-                />
-                <p className="form__hint" id="business-name-hint">
-                  Appears on invoices, receipts, and workspace communications.
-                </p>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="account-type">Account type</label>
-                <select
-                  id="account-type"
-                  value={accountType}
-                  onChange={event => setAccountType(event.target.value as AccountTypeOption)}
-                  required
-                  disabled={isLoading}
-                >
-                  <option value="shop">Shop / Retail</option>
-                  <option value="travel">Travel</option>
-                  <option value="ngo">NGO</option>
-                  <option value="school">School</option>
-                </select>
-                <p className="form__hint">
-                  We’ll configure your default navigation and onboarding playbook for this account type.
-                </p>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="phone">Phone number</label>
-                <input
-                  id="phone"
-                  value={phone}
-                  onChange={event => setPhone(event.target.value)}
-                  onBlur={() => setPhone(current => sanitizePhone(current))}
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="254 712 345 678"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={phone.length > 0 && normalizedPhone.length === 0}
-                  aria-describedby="phone-hint"
-                />
-                <p className="form__hint" id="phone-hint">
-                  Use a number where we can reach you for onboarding support.
-                </p>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="country">Country</label>
-                <input
-                  id="country"
-                  value={country}
-                  onChange={event => setCountry(event.target.value)}
-                  onBlur={() => setCountry(current => current.trim())}
-                  type="text"
-                  autoComplete="country-name"
-                  placeholder="Kenya or Ghana"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={country.length > 0 && normalizedCountry.length === 0}
-                  aria-describedby="country-hint"
-                />
-                <p className="form__hint" id="country-hint">
-                  Let us know where your business operates.
-                </p>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="town">Town or city</label>
-                <input
-                  id="town"
-                  value={town}
-                  onChange={event => setTown(event.target.value)}
-                  onBlur={() => setTown(current => current.trim())}
-                  type="text"
-                  autoComplete="address-level2"
-                  placeholder="Nairobi"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={town.length > 0 && normalizedTown.length === 0}
-                  aria-describedby="town-hint"
-                />
-                <p className="form__hint" id="town-hint">
-                  We’ll adapt recommendations for your local market.
-                </p>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="address">Business address</label>
-                <textarea
-                  id="address"
-                  value={address}
-                  onChange={event => setAddress(event.target.value)}
-                  onBlur={() => setAddress(current => current.trim())}
-                  autoComplete="street-address"
-                  placeholder="123 Market Street, Suite 5"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={address.length > 0 && normalizedAddress.length === 0}
-                  aria-describedby="address-hint"
-                  rows={3}
-                />
-                <p className="form__hint" id="address-hint">
-                  Helps us set up invoices and receipts with your mailing details.
-                </p>
-              </div>
-            )}
+            {mode === 'signup' && <>
+              <div className="form__field"><label htmlFor="full-name">Full name</label><input id="full-name" value={fullName} onChange={event => setFullName(event.target.value)} type="text" autoComplete="name" placeholder="Your name" required disabled={isLoading} /></div>
+              <div className="form__field"><label htmlFor="business-name">Business name</label><input id="business-name" value={businessName} onChange={event => setBusinessName(event.target.value)} type="text" autoComplete="organization" placeholder="Your business or school name" required disabled={isLoading} /></div>
+              <div className="form__field"><label htmlFor="account-type">Account type</label><select id="account-type" value={accountType} onChange={event => setAccountType(event.target.value as AccountTypeOption)} required disabled={isLoading}><option value="shop">Shop / Retail</option><option value="travel">Travel / Booking business</option><option value="ngo">NGO / Church / Foundation</option><option value="school">School / Training center</option></select><p className="form__hint">Sedifex will set up the right navigation for your business type.</p></div>
+              <div className="form__field"><label htmlFor="phone">Phone number</label><input id="phone" value={phone} onChange={event => setPhone(event.target.value)} onBlur={() => setPhone(current => sanitizePhone(current))} type="tel" autoComplete="tel" placeholder="024 000 0000" required disabled={isLoading} /></div>
+              <div className="form__field"><label htmlFor="country">Country</label><input id="country" value={country} onChange={event => setCountry(event.target.value)} type="text" autoComplete="country-name" placeholder="Ghana" required disabled={isLoading} /></div>
+              <div className="form__field"><label htmlFor="town">Town or city</label><input id="town" value={town} onChange={event => setTown(event.target.value)} type="text" autoComplete="address-level2" placeholder="Accra" required disabled={isLoading} /></div>
+              <div className="form__field"><label htmlFor="address">Business address</label><textarea id="address" value={address} onChange={event => setAddress(event.target.value)} autoComplete="street-address" placeholder="Your business location" required disabled={isLoading} rows={3} /></div>
+            </>}
 
             <div className="form__field">
               <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                value={password}
-                onChange={event => setPassword(event.target.value)}
-                onBlur={() => setPassword(current => current.trim())}
-                type={mode === 'login' && isPasswordVisible ? 'text' : 'password'}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                placeholder="Use a strong password"
-                required
-                disabled={isLoading}
-                aria-invalid={
-                  mode === 'signup' &&
-                  normalizedPassword.length > 0 &&
-                  !doesPasswordMeetAllChecks
-                }
-                aria-describedby={mode === 'signup' ? 'password-guidelines' : undefined}
-              />
-              {mode === 'login' && (
-                <label className="form__hint" style={{ display: 'inline-flex', gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={isPasswordVisible}
-                    onChange={event => setIsPasswordVisible(event.target.checked)}
-                    disabled={isLoading}
-                  />
-                  Show password
-                </label>
-              )}
-              {mode === 'signup' && (
-                <ul className="form__hint-list" id="password-guidelines">
-                  {passwordChecklist.map(item => (
-                    <li key={item.id} data-complete={item.passed}>
-                      <span
-                        className={`form__hint-indicator${
-                          item.passed ? ' is-valid' : ''
-                        }`}
-                      >
-                        {item.passed ? '✓' : '•'}
-                      </span>
-                      {item.label}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {mode === 'login' && (
-                <p className="form__hint">
-                  Forgot your password?{' '}
-                  <Link to="/reset-password" className="form__link">
-                    Reset it.
-                  </Link>
-                </p>
-              )}
+              <input id="password" value={password} onChange={event => setPassword(event.target.value)} type={mode === 'login' && isPasswordVisible ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="Use a strong password" required disabled={isLoading} />
+              {mode === 'login' && <label className="form__hint" style={{ display: 'inline-flex', gap: 8 }}><input type="checkbox" checked={isPasswordVisible} onChange={event => setIsPasswordVisible(event.target.checked)} disabled={isLoading} />Show password</label>}
+              {mode === 'signup' && <ul className="form__hint-list">{passwordChecklist.map(item => <li key={item.id} data-complete={item.passed}><span className={`form__hint-indicator${item.passed ? ' is-valid' : ''}`}>{item.passed ? '✓' : '•'}</span>{item.label}</li>)}</ul>}
+              {mode === 'login' && <p className="form__hint">Forgot your password? <Link to="/reset-password" className="form__link">Reset it.</Link></p>}
             </div>
 
-            {mode === 'signup' && (
-              <div className="form__field">
-                <label htmlFor="confirm-password">Confirm password</label>
-                <input
-                  id="confirm-password"
-                  value={confirmPassword}
-                  onChange={event => setConfirmPassword(event.target.value)}
-                  onBlur={() => setConfirmPassword(current => current.trim())}
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Re-enter your password"
-                  required
-                  disabled={isLoading}
-                  aria-invalid={
-                    normalizedConfirmPassword.length > 0 &&
-                    normalizedPassword !== normalizedConfirmPassword
-                  }
-                  aria-describedby="confirm-password-hint"
-                />
-                <p className="form__hint" id="confirm-password-hint">
-                  Must match the password exactly.
-                </p>
-              </div>
-            )}
+            {mode === 'signup' && <div className="form__field"><label htmlFor="confirm-password">Confirm password</label><input id="confirm-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" placeholder="Re-enter your password" required disabled={isLoading} /></div>}
+            {mode === 'signup' && <p className="form__hint" style={{ marginTop: 8 }}>You are creating a free Sedifex workspace and will be the owner.</p>}
 
-            {mode === 'signup' && (
-              <p className="form__hint" style={{ marginTop: 8 }}>
-                Summary: You are creating a new store and will be the owner of this
-                workspace.
-              </p>
-            )}
-
-            <button className="primary-button" type="submit" disabled={isSubmitDisabled}>
-              {isLoading
-                ? mode === 'login'
-                  ? 'Signing in…'
-                  : 'Starting free trial…'
-                : mode === 'login'
-                  ? 'Log in'
-                  : 'Start free trial'}
-            </button>
-
-            {mode === 'login' && (
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={isLoading}
-              >
-                Continue with Google
-              </button>
-            )}
+            <button className="primary-button" type="submit" disabled={isSubmitDisabled}>{isLoading ? (mode === 'login' ? 'Signing in…' : 'Creating free account…') : mode === 'login' ? 'Log in' : 'Create free account'}</button>
+            {mode === 'login' && <button className="secondary-button" type="button" onClick={handleGoogleSignIn} disabled={isLoading}>Continue with Google</button>}
           </form>
 
-          {status.tone !== 'idle' && status.message && (
-            <p
-              className={`status status--${status.tone}`}
-              role={status.tone === 'error' ? 'alert' : 'status'}
-              aria-live={status.tone === 'error' ? 'assertive' : 'polite'}
-            >
-              {status.message}
-            </p>
-          )}
+          {status.tone !== 'idle' && status.message && <p className={`status status--${status.tone}`} role={status.tone === 'error' ? 'alert' : 'status'}>{status.message}</p>}
         </div>
 
-        <aside
-          className="app__visual"
-          aria-label="Watch the Sedifex walkthrough before signing in"
-        >
-          <div className="app__visual-media" role="presentation">
-            <img
-              src={AUTH_VISUAL_IMAGE_URL}
-              alt="Small business owner reviewing inventory on a laptop"
-              loading="lazy"
-            />
-          </div>
+        <aside className="app__visual" aria-label="Sedifex business operating system">
+          <div className="app__visual-media" role="presentation"><img src={AUTH_VISUAL_IMAGE_URL} alt="Business owner using Sedifex on a laptop" loading="lazy" /></div>
           <div className="app__visual-overlay" />
-          <div className="app__visual-caption">
-            <span className="app__visual-pill">New updates</span>
-            <h2>See what is new in Sedifex before you sign up</h2>
-            <p>
-              We are rolling out new updates across sales, inventory, and finance tools.
-              Create your account to get the latest improvements for faster daily store
-              operations.
-            </p>
-          </div>
+          <div className="app__visual-caption"><span className="app__visual-pill">Free business operating system</span><h2>Sales, customers, bookings, registrations, payments, and growth tools in one place.</h2><p>Start with the free plan. Add paid power only when your business needs more capacity, automation, marketplace visibility, or integrations.</p></div>
         </aside>
       </div>
 
-      <section className="app__promo-strategy" aria-label="Sedifex promo strategy">
-        <header className="app__promo-strategy-header">
-          <span className="app__pill">Sedifex Promo Strategy</span>
-          <h2>One product post. Every channel updated at the same time.</h2>
-          <p>
-            Add your products once in Sedifex, sell with POS, and publish the same offer
-            across Sedifex Market, Google Merchant, your website, and social media.
-          </p>
-        </header>
-
-        <div className="promo-map" role="img" aria-label="Sedifex post distribution map">
-          <div className="promo-map__source">Sedifex Inventory + POS</div>
-          <div className="promo-map__target">Sedifex Market</div>
-          <div className="promo-map__target">Google Merchant</div>
-          <div className="promo-map__target">Website</div>
-          <div className="promo-map__target">Social Channels</div>
-        </div>
-
-        <div className="app__promo-pillars">
-          <h3>Promo pillars</h3>
-          <ul>
-            <li>
-              <strong>One-post distribution:</strong> one update in Sedifex pushes your
-              product story to every channel.
-            </li>
-            <li>
-              <strong>POS + inventory sync:</strong> sales, prices, and stock stay aligned
-              while campaigns are live.
-            </li>
-            <li>
-              <strong>AI content engine:</strong> generate branded social captions directly
-              from your own inventory data.
-            </li>
-            <li>
-              <strong>Branded SMS outreach:</strong> send company-branded bulk SMS offers to
-              your customer lists in minutes.
-            </li>
-          </ul>
-          <a className="app__partners-link" href="mailto:info@sedifex.com">
-            Book a Sedifex promo demo: info@sedifex.com
-          </a>
-        </div>
+      <section className="app__promo-strategy" aria-label="Why businesses choose Sedifex">
+        <header className="app__promo-strategy-header"><span className="app__pill">What Sedifex does</span><h2>One dashboard for daily operations and business growth.</h2><p>Sedifex helps shops, schools, NGOs, service businesses, and booking businesses manage work, customers, payments, and visibility without too many tools.</p></header>
+        <div className="app__promo-pillars"><h3>What you can run</h3><ul><li><strong>Sell:</strong> products, services, invoices, receipts, POS, and customer display.</li><li><strong>Manage:</strong> inventory, customers, bookings, students, donors, and funds.</li><li><strong>Grow:</strong> Sedifex Market, websites, Google integrations, SMS/email, and social content.</li><li><strong>Connect:</strong> client websites can send bookings, donations, registrations, and checkout data to Sedifex.</li></ul></div>
       </section>
 
-      <section className="app__pricing" aria-label="Sedifex pricing plans">
-        <header className="app__pricing-header">
-          <span className="app__pill">Pricing</span>
-          <h2>Pick the plan that matches your store growth</h2>
-          <p>
-            Start with a free 14-day trial, then switch to monthly or yearly billing when
-            you are ready. Every plan unlocks the full inventory + CRM platform: live
-            dashboards, smart products, expiring stock tracking, sales with customer
-            display, QR price sharing, bulk SMS, and finance tools.
-          </p>
-        </header>
-
-        <div className="app__pricing-grid" role="list">
-          {PRICING_PLANS.map(plan => (
-            <article
-              key={plan.name}
-              className={`pricing-card${plan.isFeatured ? ' pricing-card--featured' : ''}`}
-              role="listitem"
-            >
-              <div className="pricing-card__heading">
-                <h3>{plan.name}</h3>
-                <p>{plan.summary}</p>
-              </div>
-              <div className="pricing-card__price">
-                <span className="pricing-card__amount">{plan.amount}</span>
-                <span className="pricing-card__cadence">{plan.cadence}</span>
-              </div>
-              <ul className="pricing-card__list">
-                {plan.features.map(item => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              {plan.cta.type === 'button' ? (
-                <button
-                  className="pricing-card__cta"
-                  type="button"
-                  onClick={() => {
-                    handleModeChange('signup')
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                >
-                  {plan.cta.label}
-                </button>
-              ) : (
-                <a
-                  className="pricing-card__cta"
-                  href={plan.cta.href}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {plan.cta.label}
-                </a>
-              )}
-              {plan.note && <p className="pricing-card__note">{plan.note}</p>}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="app__blog" aria-label="Latest Sedifex blog posts">
-        <header className="app__blog-header">
-          <span className="app__pill">From the blog</span>
-          <h2>Latest tips for faster inventory growth</h2>
-          <p>
-            Read what we are building, learning, and sharing for modern retailers.
-            Stay updated with new playbooks from the Sedifex team.
-          </p>
-        </header>
-
-        {isBlogLoading ? (
-          <p className="app__blog-status">Loading the latest posts…</p>
-        ) : blogError ? (
-          <div className="app__blog-status">
-            <p>{blogError}</p>
-            <a
-              className="app__blog-link"
-              href="https://blog.sedifex.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Visit the Sedifex blog
-            </a>
-          </div>
-        ) : (
-          <>
-            {blogPosts.length ? (
-              <div className="app__blog-grid" role="list">
-                {blogPosts.map(post => (
-                  <a
-                    key={post.link}
-                    className="blog-card"
-                    href={post.link}
-                    target="_blank"
-                    rel="noreferrer"
-                    role="listitem"
-                  >
-                    <div className="blog-card__image">
-                      {post.imageUrl ? (
-                        <img src={post.imageUrl} alt={post.title} loading="lazy" />
-                      ) : (
-                        <div className="blog-card__placeholder" aria-hidden="true">
-                          Sedifex
-                        </div>
-                      )}
-                    </div>
-                    <div className="blog-card__body">
-                      <span className="blog-card__date">{post.published}</span>
-                      <h3>{post.title}</h3>
-                      <p>{post.excerpt}</p>
-                      <span className="blog-card__cta">Read article</span>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="app__blog-status">
-                No blog posts are available right now. Please check back soon.
-              </p>
-            )}
-            <a
-              className="app__blog-link"
-              href="https://blog.sedifex.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              View all articles
-            </a>
-          </>
-        )}
-      </section>
-
-      <section className="app__info-grid" aria-label="Sedifex company information">
-        <article className="info-card">
-          <h3>About Sedifex</h3>
-          <p>
-            Sedifex is the all-in-one business operating system for modern small businesses. We unite
-            sales, bookings, customer communication, and online presence so every
-            location can act on the same live source of truth.
-          </p>
-          <p>
-            Connect your POS, website, social publishing, and campaign workflows in minutes to run
-            daily operations and growth from one place—with less manual work, better
-            customer follow-up, and smarter AI-driven decisions.
-          </p>
-          <footer>
-            <ul className="info-card__list">
-              <li>Unified POS, inventory, bookings, and customer records</li>
-              <li>Bulk email/SMS, social posting, and blog-ready marketing workflows</li>
-              <li>Website integrations that keep products and updates in sync.</li>
-            </ul>
-          </footer>
-        </article>
-
-        <article className="info-card">
-          <h3>Our Mission</h3>
-          <p>
-            We believe resilient retailers win by responding to change faster than their
-            inventory can move. Sedifex exists to give small business operators the AI
-            clarity and confidence to do exactly that.
-          </p>
-          <ul className="info-card__list">
-            <li>Deliver every SKU promise with predictive AI inventory intelligence</li>
-            <li>Empower teams with guided workflows, not spreadsheets</li>
-            <li>Earn shopper loyalty through always-on availability</li>
-          </ul>
-        </article>
-
-        <article className="info-card">
-          <h3>Contact Sales</h3>
-          <p>
-            Partner with a retail operations strategist to tailor Sedifex to your fleet,
-            review pricing, and build an onboarding plan that keeps stores running while
-            we launch.
-          </p>
-          <a
-            className="info-card__cta"
-            href="https://calendly.com/sedifexbiz"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            Book a 30-minute consultation
-          </a>
-          <p className="info-card__caption">
-            Prefer email? Reach us at info@sedifex.com.
-          </p>
-        </article>
-
-        <article className="info-card">
-          <h3>Policies &amp; legal</h3>
-          <p>
-            Review Sedifex policy pages before signup to understand billing, data
-            handling, and service terms.
-          </p>
-          <ul className="info-card__list">
-            <li>
-              <Link to="/privacy">Privacy Policy</Link>
-            </li>
-            <li>
-              <Link to="/refund">Subscription &amp; Refund Policy</Link>
-            </li>
-            <li>
-              <Link to="/terms">Terms of Service</Link>
-            </li>
-            <li>
-              <Link to="/cookies">Cookies Policy</Link>
-            </li>
-            <li>
-              <Link to="/return-policy">Return &amp; Exchange Policy</Link>
-            </li>
-          </ul>
-        </article>
-      </section>
+      <section className="app__pricing" aria-label="Sedifex pricing plans"><header className="app__pricing-header"><span className="app__pill">Start free</span><h2>Use Sedifex free, then upgrade when you need more power.</h2><p>The free plan is not a trial. It lets you start running your business with limits. Paid plans unlock higher capacity, automation, integrations, and growth tools.</p></header></section>
     </main>
   )
 }
 
-const PRICING_PLANS = [
-  {
-    name: 'Free',
-    summary: 'Start selling with hard limits and no subscription.',
-    amount: 'GHS 0',
-    cadence: '/ forever',
-    features: [
-      'Up to 10 active products',
-      'Up to 10 sales per day',
-      'Buy SMS credits anytime (separate from plan)',
-      'Customer display and QR pricing',
-      'Products can publish to sedifexmarket.com',
-    ],
-    cta: {
-      type: 'button' as const,
-      label: 'Start free trial',
-    },
-    note: 'No card required.',
-  },
-  {
-    name: 'Starter',
-    summary: 'Best first paid tier for new stores.',
-    amount: 'GHS 20',
-    cadence: '/ month (billed yearly)',
-    features: [
-      'Up to 100 active products',
-      'Up to 100 sales per day',
-      'SMS credits sold separately',
-      'Invoice & receipt generator',
-    ],
-    cta: {
-      type: 'button' as const,
-      label: 'Sign up',
-    },
-    note: 'GHS 240 / year billed upfront.',
-  },
-  {
-    name: 'Growth',
-    summary: 'For stores with higher daily volume.',
-    amount: 'GHS 50',
-    cadence: '/ month (billed yearly)',
-    features: [
-      'Up to 500 active products',
-      'Up to 500 sales per day',
-      'SMS credits sold separately',
-      'Finance and advanced reporting suite',
-    ],
-    cta: {
-      type: 'button' as const,
-      label: 'Sign up',
-    },
-    note: 'GHS 600 / year billed upfront.',
-    isFeatured: true,
-  },
-  {
-    name: 'Scale',
-    summary: 'High limits for large operations.',
-    amount: 'GHS 100',
-    cadence: '/ month (billed yearly)',
-    features: [
-      'Unlimited active products',
-      'Unlimited sales per day',
-      'SMS credits sold separately',
-      'Priority onboarding and support',
-    ],
-    cta: {
-      type: 'button' as const,
-      label: 'Sign up',
-    },
-    note: 'GHS 1200 / year billed upfront. Need more? Contact sales for custom limits.',
-  },
-  {
-    name: 'Scale Plus',
-    summary: 'Unlimited uploads and website creation for enterprise growth.',
-    amount: 'GHS 166.67',
-    cadence: '/ month (billed yearly)',
-    features: [
-      'Unlimited active products',
-      'Unlimited sales per day',
-      'Unlimited uploads',
-      'Website creation support included',
-    ],
-    cta: {
-      type: 'button' as const,
-      label: 'Sign up',
-    },
-    note: 'GHS 2000 / year billed upfront.',
-  },
-] as const
-
-async function cleanupFailedSignup(_user: User) {
+async function cleanupFailedSignup() {
   try {
     await auth.signOut()
   } catch (error) {
