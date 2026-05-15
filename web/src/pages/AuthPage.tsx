@@ -32,6 +32,7 @@ import {
 import { auth, db } from '../firebase'
 import { setOnboardingStatus } from '../utils/onboarding'
 import { normalizeGhanaPhoneE164 } from '../utils/phone'
+import { INDUSTRY_ENABLED_MODULE_PRESETS, type Industry } from '../config/navigation'
 
 const AUTH_VISUAL_IMAGE_URL =
   'https://raw.githubusercontent.com/learngermanghana/sedifexbiz/main/photos/pexels-olly-3801439.jpg'
@@ -41,6 +42,7 @@ const MAX_BLOG_POSTS = 3
 
 type AuthMode = 'login' | 'signup'
 type StatusTone = 'idle' | 'loading' | 'success' | 'error'
+type AccountTypeOption = Industry
 
 interface StatusState {
   tone: StatusTone
@@ -277,6 +279,7 @@ export default function AuthPage() {
   const [country, setCountry] = useState('')
   const [town, setTown] = useState('')
   const [address, setAddress] = useState('')
+  const [accountType, setAccountType] = useState<AccountTypeOption>('shop')
   const [status, setStatus] = useState<StatusState>({ tone: 'idle', message: '' })
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
   const [isBlogLoading, setIsBlogLoading] = useState(true)
@@ -673,6 +676,25 @@ export default function AuthPage() {
           console.warn('[customers] Unable to upsert customer record', error)
         }
 
+        // 3b) Persist industry/account type so navigation defaults match immediately
+        try {
+          await setDoc(
+            doc(db, 'storeSettings', resolution.storeId),
+            {
+              navigation: {
+                industry: accountType,
+                labelPolicy: 'shared',
+                enabled_modules: INDUSTRY_ENABLED_MODULE_PRESETS[accountType],
+                showCustomizationBanner: false,
+                requiresIndustryReview: false,
+              },
+            },
+            { merge: true },
+          )
+        } catch (error) {
+          console.warn('[storeSettings] Unable to save account type preferences', error)
+        }
+
         // 4) Refresh ID token for fresh custom claims
         try {
           await nextUser.getIdToken(true)
@@ -711,6 +733,7 @@ export default function AuthPage() {
       setCountry('')
       setTown('')
       setAddress('')
+      setAccountType('shop')
     } catch (err: unknown) {
       setStatus({ tone: 'error', message: getAuthErrorMessage(err, mode) })
     }
@@ -846,6 +869,27 @@ export default function AuthPage() {
                 />
                 <p className="form__hint" id="business-name-hint">
                   Appears on invoices, receipts, and workspace communications.
+                </p>
+              </div>
+            )}
+
+            {mode === 'signup' && (
+              <div className="form__field">
+                <label htmlFor="account-type">Account type</label>
+                <select
+                  id="account-type"
+                  value={accountType}
+                  onChange={event => setAccountType(event.target.value as AccountTypeOption)}
+                  required
+                  disabled={isLoading}
+                >
+                  <option value="shop">Shop / Retail</option>
+                  <option value="travel">Travel</option>
+                  <option value="ngo">NGO</option>
+                  <option value="school">School</option>
+                </select>
+                <p className="form__hint">
+                  We’ll configure your default navigation and onboarding playbook for this account type.
                 </p>
               </div>
             )}

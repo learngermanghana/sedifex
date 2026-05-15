@@ -141,7 +141,7 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
 
   const baseItems = NAV_ITEMS.filter(item => {
     if (!item.rolesAllowed.includes(role)) return false
-    if (enabledModules && !enabledModules.has(item.id)) return false
+    if (item.id !== 'account' && enabledModules && !enabledModules.has(item.id)) return false
     return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {
     const customLabel = workspaceProfile.customLabels?.[item.target]?.trim()
