@@ -1,13 +1,27 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, getDocs, limit, query, serverTimestamp, where, type Timestamp } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  type Timestamp,
+} from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+
+type VolunteerStatus = 'new' | 'contacted' | 'active' | 'inactive'
 
 type VolunteerRecord = {
   id: string
   storeId?: string
   source?: string
-  status?: string
+  status?: VolunteerStatus | string
   person?: { name?: string; email?: string | null; phone?: string | null }
   data?: {
     skill?: string | null
@@ -27,9 +41,11 @@ type VolunteerForm = {
   availability: string
   preferredProject: string
   location: string
-  status: string
+  status: VolunteerStatus
   notes: string
 }
+
+const volunteerStatuses: VolunteerStatus[] = ['new', 'contacted', 'active', 'inactive']
 
 const initialForm: VolunteerForm = {
   name: '',
@@ -69,8 +85,9 @@ const styles = {
   actions: { display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 10, marginTop: 16 },
   primaryButton: { border: 0, borderRadius: 14, padding: '12px 18px', background: 'linear-gradient(135deg, #047857, #059669)', color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: '0 18px 36px -24px rgba(4, 120, 87, 0.85)' },
   secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 14, padding: '11px 16px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  dangerButton: { border: '1px solid #fecaca', borderRadius: 14, padding: '11px 16px', background: '#fff1f2', color: '#be123c', fontWeight: 850, cursor: 'pointer' },
   tableWrap: { overflowX: 'auto' as const, borderRadius: 18, border: '1px solid #e2e8f0' },
-  table: { width: '100%', minWidth: 980, borderCollapse: 'collapse' as const },
+  table: { width: '100%', minWidth: 1120, borderCollapse: 'collapse' as const },
   th: { textAlign: 'left' as const, padding: '13px 14px', fontSize: 12, color: '#64748b', background: '#f8fafc', textTransform: 'uppercase' as const, letterSpacing: '0.08em' },
   td: { padding: '14px 14px', borderTop: '1px solid #e2e8f0', verticalAlign: 'top' as const, color: '#334155', fontSize: 14 },
   alert: { borderRadius: 16, padding: '12px 14px', fontWeight: 800 },
@@ -82,6 +99,10 @@ function clean(value: string, max = 200) {
 
 function normalizeEmail(value: string) {
   return clean(value, 160).toLowerCase()
+}
+
+function normalizeStatus(value?: string): VolunteerStatus {
+  return volunteerStatuses.includes(value as VolunteerStatus) ? value as VolunteerStatus : 'new'
 }
 
 function toDate(value?: Timestamp | string | null) {
@@ -105,8 +126,9 @@ function label(value?: string) {
 
 function statusStyle(value?: string) {
   const normalized = (value || 'new').toLowerCase()
-  if (['active', 'approved', 'assigned'].includes(normalized)) return { background: '#dcfce7', color: '#166534' }
-  if (['contacted', 'screening', 'pending'].includes(normalized)) return { background: '#fef3c7', color: '#92400e' }
+  if (normalized === 'active') return { background: '#dcfce7', color: '#166534' }
+  if (normalized === 'contacted') return { background: '#fef3c7', color: '#92400e' }
+  if (normalized === 'inactive') return { background: '#f1f5f9', color: '#475569' }
   return { background: '#e0f2fe', color: '#075985' }
 }
 
@@ -123,6 +145,7 @@ export default function VolunteerApplications() {
   const { storeId } = useActiveStore()
   const [rows, setRows] = useState<VolunteerRecord[]>([])
   const [form, setForm] = useState<VolunteerForm>(initialForm)
+  const [editingId, setEditingId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -160,9 +183,60 @@ export default function VolunteerApplications() {
     const total = rows.length
     const website = rows.filter(item => item.source === 'website_intake').length
     const manual = rows.filter(item => item.source !== 'website_intake').length
-    const active = rows.filter(item => ['active', 'approved', 'assigned'].includes(item.status ?? '')).length
+    const active = rows.filter(item => item.status === 'active').length
     return { total, website, manual, active }
   }, [rows])
+
+  function resetForm() {
+    setForm(initialForm)
+    setEditingId('')
+  }
+
+  function startEdit(item: VolunteerRecord) {
+    setEditingId(item.id)
+    setForm({
+      name: item.person?.name ?? '',
+      phone: item.person?.phone ?? '',
+      email: item.person?.email ?? '',
+      skill: item.data?.skill ?? '',
+      availability: item.data?.availability ?? '',
+      preferredProject: item.data?.preferredProject ?? '',
+      location: item.data?.location ?? '',
+      status: normalizeStatus(item.status),
+      notes: item.data?.notes ?? '',
+    })
+    setMessage(null)
+    setError(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function updateStatus(item: VolunteerRecord, nextStatus: VolunteerStatus) {
+    try {
+      await updateDoc(doc(db, 'volunteer_applications', item.id), {
+        status: nextStatus,
+        updatedAt: serverTimestamp(),
+      })
+      setMessage(`Volunteer status changed to ${label(nextStatus)}.`)
+      await load(true)
+    } catch (statusError) {
+      console.error(statusError)
+      setError('Unable to update volunteer status.')
+    }
+  }
+
+  async function deleteVolunteer(item: VolunteerRecord) {
+    const name = item.person?.name || 'this volunteer'
+    if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return
+    try {
+      await deleteDoc(doc(db, 'volunteer_applications', item.id))
+      if (editingId === item.id) resetForm()
+      setMessage('Volunteer deleted.')
+      await load(true)
+    } catch (deleteError) {
+      console.error(deleteError)
+      setError('Unable to delete volunteer.')
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -178,11 +252,10 @@ export default function VolunteerApplications() {
       setError(null)
       setMessage(null)
       const now = serverTimestamp()
-      await addDoc(collection(db, 'volunteer_applications'), {
+      const payload = {
         storeId,
         pageType: 'volunteer_application',
-        source: 'manual_dashboard',
-        status: clean(form.status, 80) || 'new',
+        status: normalizeStatus(form.status),
         person: { name, phone: phone || null, email: email || null },
         data: {
           skill: clean(form.skill, 160) || null,
@@ -191,11 +264,22 @@ export default function VolunteerApplications() {
           location: clean(form.location, 160) || null,
           notes: clean(form.notes, 1000) || null,
         },
-        createdAt: now,
         updatedAt: now,
-      })
-      setForm(initialForm)
-      setMessage('Volunteer added.')
+      }
+
+      if (editingId) {
+        await updateDoc(doc(db, 'volunteer_applications', editingId), payload)
+        setMessage('Volunteer updated.')
+      } else {
+        await addDoc(collection(db, 'volunteer_applications'), {
+          ...payload,
+          source: 'manual_dashboard',
+          createdAt: now,
+        })
+        setMessage('Volunteer added.')
+      }
+
+      resetForm()
       await load(true)
     } catch (saveError) {
       console.error(saveError)
@@ -214,21 +298,21 @@ export default function VolunteerApplications() {
       <section style={styles.hero}>
         <p style={styles.eyebrow}>NGO workspace</p>
         <h1 style={styles.title}>Volunteers</h1>
-        <p style={styles.subtitle}>Manage people who want to volunteer. Add walk-ins manually or receive applications from your website through the Sedifex volunteer intake endpoint.</p>
+        <p style={styles.subtitle}>Manage people who want to volunteer. Move each volunteer through new, contacted, active, and inactive status stages.</p>
       </section>
 
       <section style={styles.statsGrid} aria-label="Volunteer summary">
         <StatCard labelText="Total volunteers" value={totals.total} accent="#059669" />
         <StatCard labelText="Website applications" value={totals.website} accent="#0284c7" />
         <StatCard labelText="Manual entries" value={totals.manual} accent="#7c3aed" />
-        <StatCard labelText="Active / assigned" value={totals.active} accent="#16a34a" />
+        <StatCard labelText="Active volunteers" value={totals.active} accent="#16a34a" />
       </section>
 
       <section style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
-            <h2 style={styles.cardTitle}>Add volunteer manually</h2>
-            <p style={styles.muted}>Use this for calls, WhatsApp enquiries, events, and office walk-ins.</p>
+            <h2 style={styles.cardTitle}>{editingId ? 'Edit volunteer' : 'Add volunteer manually'}</h2>
+            <p style={styles.muted}>{editingId ? 'Update volunteer details or status.' : 'Use this for calls, WhatsApp enquiries, events, and office walk-ins.'}</p>
           </div>
         </div>
         <form onSubmit={handleSubmit}>
@@ -240,12 +324,12 @@ export default function VolunteerApplications() {
             <label style={styles.label}>Availability<input style={styles.input} value={form.availability} onChange={event => update('availability', event.target.value)} placeholder="Weekends, weekdays, evenings" /></label>
             <label style={styles.label}>Preferred project<input style={styles.input} value={form.preferredProject} onChange={event => update('preferredProject', event.target.value)} placeholder="School outreach" /></label>
             <label style={styles.label}>Location<input style={styles.input} value={form.location} onChange={event => update('location', event.target.value)} placeholder="Tema, Accra" /></label>
-            <label style={styles.label}>Status<select style={styles.input} value={form.status} onChange={event => update('status', event.target.value)}><option value="new">New</option><option value="contacted">Contacted</option><option value="screening">Screening</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <label style={styles.label}>Status<select style={styles.input} value={form.status} onChange={event => update('status', normalizeStatus(event.target.value))}>{volunteerStatuses.map(status => <option key={status} value={status}>{label(status)}</option>)}</select></label>
           </div>
           <label style={{ ...styles.label, marginTop: 14 }}>Notes<textarea style={{ ...styles.input, minHeight: 90, resize: 'vertical' }} rows={3} value={form.notes} onChange={event => update('notes', event.target.value)} /></label>
           <div style={styles.actions}>
-            <button type="submit" style={{ ...styles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : 'Add volunteer'}</button>
-            <button type="button" style={styles.secondaryButton} onClick={() => setForm(initialForm)} disabled={saving}>Clear form</button>
+            <button type="submit" style={{ ...styles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : editingId ? 'Update volunteer' : 'Add volunteer'}</button>
+            <button type="button" style={styles.secondaryButton} onClick={resetForm} disabled={saving}>{editingId ? 'Cancel edit' : 'Clear form'}</button>
           </div>
           {message ? <p style={{ ...styles.alert, background: '#dcfce7', color: '#166534' }}>{message}</p> : null}
         </form>
@@ -253,7 +337,7 @@ export default function VolunteerApplications() {
 
       <section style={styles.card}>
         <div style={styles.cardHeader}>
-          <div><h2 style={styles.cardTitle}>Latest volunteers</h2><p style={styles.muted}>Website applications and manual entries appear here.</p></div>
+          <div><h2 style={styles.cardTitle}>Latest volunteers</h2><p style={styles.muted}>Website applications and manual entries appear here. Change status, edit details, or delete duplicates.</p></div>
           <button type="button" style={styles.secondaryButton} onClick={() => void load(true)} disabled={loading}>Refresh</button>
         </div>
         {loading ? <p style={styles.muted}>Loading volunteers…</p> : null}
@@ -262,8 +346,8 @@ export default function VolunteerApplications() {
         {rows.length > 0 ? (
           <div style={styles.tableWrap}>
             <table style={styles.table}>
-              <thead><tr><th style={styles.th}>Volunteer</th><th style={styles.th}>Skill</th><th style={styles.th}>Availability</th><th style={styles.th}>Project</th><th style={styles.th}>Source</th><th style={styles.th}>Status</th><th style={styles.th}>Date</th></tr></thead>
-              <tbody>{rows.map(item => <tr key={item.id}><td style={styles.td}><strong style={{ color: '#0f172a' }}>{item.person?.name ?? 'Unnamed volunteer'}</strong><br /><small>{item.person?.phone ?? item.person?.email ?? 'No contact'}</small></td><td style={styles.td}>{item.data?.skill ?? '—'}</td><td style={styles.td}>{item.data?.availability ?? '—'}</td><td style={styles.td}>{item.data?.preferredProject ?? '—'}</td><td style={styles.td}>{label(item.source)}</td><td style={styles.td}><span style={{ ...statusStyle(item.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{label(item.status)}</span></td><td style={styles.td}>{formatDate(item.createdAt)}</td></tr>)}</tbody>
+              <thead><tr><th style={styles.th}>Volunteer</th><th style={styles.th}>Skill</th><th style={styles.th}>Availability</th><th style={styles.th}>Project</th><th style={styles.th}>Source</th><th style={styles.th}>Status</th><th style={styles.th}>Date</th><th style={styles.th}>Actions</th></tr></thead>
+              <tbody>{rows.map(item => <tr key={item.id}><td style={styles.td}><strong style={{ color: '#0f172a' }}>{item.person?.name ?? 'Unnamed volunteer'}</strong><br /><small>{item.person?.phone ?? item.person?.email ?? 'No contact'}</small></td><td style={styles.td}>{item.data?.skill ?? '—'}</td><td style={styles.td}>{item.data?.availability ?? '—'}</td><td style={styles.td}>{item.data?.preferredProject ?? '—'}</td><td style={styles.td}>{label(item.source)}</td><td style={styles.td}><span style={{ ...statusStyle(item.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>{label(item.status)}</span><select style={{ ...styles.input, minWidth: 140 }} value={normalizeStatus(item.status)} onChange={event => void updateStatus(item, normalizeStatus(event.target.value))}>{volunteerStatuses.map(status => <option key={status} value={status}>{label(status)}</option>)}</select></td><td style={styles.td}>{formatDate(item.createdAt)}</td><td style={styles.td}><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" style={styles.secondaryButton} onClick={() => startEdit(item)}>Edit</button><button type="button" style={styles.dangerButton} onClick={() => void deleteVolunteer(item)}>Delete</button></div></td></tr>)}</tbody>
             </table>
           </div>
         ) : null}
