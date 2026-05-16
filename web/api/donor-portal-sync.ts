@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { FieldValue } from 'firebase-admin/firestore'
 import { db } from './_firebase-admin.js'
+import { calculateCheckoutFees, toPaystackMinorAmount } from './_checkout-fees.js'
 
 function text(value: unknown, max = 160) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
@@ -23,17 +24,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const firestore = db()
   const donorRef = await firestore.collection('donor_profiles').add({
-    storeId, name, email: email || null, phone: phone || null,
-    source: 'website', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    storeId,
+    name,
+    email: email || null,
+    phone: phone || null,
+    source: 'website',
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   })
 
   let payment: Record<string, unknown> | null = null
   if (initializePayment) {
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Valid amount is required for payment.' })
     const reference = `DON-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const feePolicy = calculateCheckoutFees({ amount, currency, useCase: 'donation' })
+
     await firestore.collection('fund_transactions').add({
-      storeId, donorId: donorRef.id, direction: 'inflow', amount, currency, status: 'pending', reference,
-      source: 'website', date: new Date().toISOString().slice(0, 10), createdAt: FieldValue.serverTimestamp(),
+      storeId,
+      donorId: donorRef.id,
+      direction: 'inflow',
+      amount,
+      currency,
+      status: 'pending',
+      reference,
+      payment: {
+        provider: 'paystack',
+        status: 'pending',
+        amount,
+        currency,
+        reference,
+        feePolicy,
+        customerTotal: feePolicy.customerTotalMajor,
+        sedifexCommission: feePolicy.sedifexCommissionMajor,
+        merchantNet: feePolicy.merchantNetMajor,
+      },
+      source: 'website',
+      date: new Date().toISOString().slice(0, 10),
+      createdAt: FieldValue.serverTimestamp(),
     })
 
     const secret = process.env.PAYSTACK_SECRET || ''
@@ -41,7 +68,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const response = await fetch('https://api.paystack.co/transaction/initialize', {
         method: 'POST',
         headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email || `${reference}@noemail.local`, amount: Math.round(amount * 100), reference, currency }),
+        body: JSON.stringify({
+          email: email || `${reference}@noemail.local`,
+          amount: toPaystackMinorAmount(feePolicy),
+          reference,
+          currency,
+          metadata: { storeId, donorId: donorRef.id, pageType: 'donation', feePolicy },
+        }),
       })
       const body = await response.json()
       payment = {
@@ -50,7 +83,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ok: response.ok,
         authorizationUrl: body?.data?.authorization_url ?? null,
         accessCode: body?.data?.access_code ?? null,
+        feePolicy,
       }
+    } else {
+      payment = { provider: 'paystack', reference, ok: false, authorizationUrl: null, accessCode: null, feePolicy }
     }
   }
 
