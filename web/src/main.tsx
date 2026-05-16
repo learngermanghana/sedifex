@@ -16,6 +16,8 @@ import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
 import OnlineOrders from './pages/MarketplaceOrders'
 import StudentRegistration from './pages/StudentRegistration'
+import VolunteerApplications from './pages/VolunteerApplications'
+import SupportRequests from './pages/SupportRequests'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
@@ -101,6 +103,8 @@ const router = createBrowserRouter([
           { path: 'marketplace-orders', element: <Navigate to="/online-orders" replace /> },
           { path: 'product-engagement', element: <Navigate to="/dashboard" replace /> },
           { path: 'student-registration', element: <StudentRegistration /> },
+          { path: 'volunteers', element: <VolunteerApplications /> },
+          { path: 'support-requests', element: <SupportRequests /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
           { path: 'bulk-email', element: <BulkEmail /> },
