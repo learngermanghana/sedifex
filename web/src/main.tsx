@@ -14,7 +14,7 @@ import Customers from './pages/Customers'
 import Bookings from './pages/Bookings'
 import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
-import MarketplaceOrders from './pages/MarketplaceOrders'
+import OnlineOrders from './pages/MarketplaceOrders'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
@@ -95,7 +95,8 @@ const router = createBrowserRouter([
           { path: 'bookings/new', element: <BookingEditor /> },
           { path: 'bookings/availability', element: <BookingsAvailability /> },
           { path: 'bookings/:bookingId', element: <BookingEditor /> },
-          { path: 'marketplace-orders', element: <MarketplaceOrders /> },
+          { path: 'online-orders', element: <OnlineOrders /> },
+          { path: 'marketplace-orders', element: <Navigate to="/online-orders" replace /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
           { path: 'bulk-email', element: <BulkEmail /> },
