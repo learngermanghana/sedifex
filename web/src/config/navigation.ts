@@ -53,9 +53,9 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'marketplace-orders',
-    label: 'Marketplace',
+    label: 'Online Orders',
     type: 'module',
-    target: '/marketplace-orders',
+    target: '/online-orders',
     rolesAllowed: ['owner', 'staff'],
     sortOrder: 52,
   },
