@@ -13,7 +13,6 @@ type PaystackSubaccountInput = {
   settlementBank?: unknown
   bankCode?: unknown
   accountNumber?: unknown
-  percentageCharge?: unknown
   description?: unknown
   primaryContactEmail?: unknown
   primaryContactName?: unknown
@@ -53,12 +52,14 @@ function cleanText(value: unknown, max = 300) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
-function cleanPercentage(value: unknown) {
-  const fallback = Number(DEFAULT_COMMISSION_PERCENT.value() || process.env.SEDIFEX_DEFAULT_PAYSTACK_COMMISSION_PERCENT || 3)
-  const parsed = Number(value)
-  const percentage = Number.isFinite(parsed) ? parsed : fallback
+function resolveSedifexCommissionPercentage() {
+  const raw = DEFAULT_COMMISSION_PERCENT.value() || process.env.SEDIFEX_DEFAULT_PAYSTACK_COMMISSION_PERCENT || '3'
+  const percentage = Number(raw)
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
-    throw new functions.https.HttpsError('invalid-argument', 'percentageCharge must be between 0 and 100.')
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'SEDIFEX_DEFAULT_PAYSTACK_COMMISSION_PERCENT must be between 0 and 100.',
+    )
   }
   return Math.round(percentage * 100) / 100
 }
@@ -126,6 +127,7 @@ function buildSubaccountDoc(input: {
     accountNumberLast4: input.data.account_number ? String(input.data.account_number).slice(-4) : null,
     settlementBank: input.data.settlement_bank ?? input.request.settlement_bank ?? null,
     percentageCharge: input.data.percentage_charge ?? input.percentageCharge,
+    commissionControlledBy: 'sedifex',
     currency: input.data.currency ?? 'GHS',
     active: input.data.active ?? true,
     isVerified: input.data.is_verified ?? false,
@@ -146,7 +148,7 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
     const businessName = cleanText(rawData?.businessName, 120) || cleanText(storeData.name ?? storeData.displayName, 120)
     const settlementBank = cleanText(rawData?.settlementBank ?? rawData?.bankCode, 30)
     const accountNumber = cleanText(rawData?.accountNumber, 30)
-    const percentageCharge = cleanPercentage(rawData?.percentageCharge)
+    const percentageCharge = resolveSedifexCommissionPercentage()
     const primaryContactEmail = cleanText(rawData?.primaryContactEmail, 220) || cleanText(storeData.ownerEmail ?? storeData.email, 220)
     const primaryContactName = cleanText(rawData?.primaryContactName, 160) || cleanText(storeData.displayName ?? storeData.name, 160)
     const primaryContactPhone = cleanText(rawData?.primaryContactPhone, 80) || cleanText(storeData.phone, 80)
@@ -169,6 +171,8 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
         storeId,
         platform: 'sedifex',
         source: 'sedifex_dashboard',
+        commissionControlledBy: 'sedifex',
+        commissionPercent: percentageCharge,
       }),
     }
 
@@ -197,6 +201,7 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
           settlementMode: 'subaccount',
           paystackSubaccountCode: response.data.subaccount_code,
           percentageCharge: docPayload.percentageCharge,
+          commissionControlledBy: 'sedifex',
           accountName: docPayload.accountName,
           accountNumberLast4: docPayload.accountNumberLast4,
           settlementBank: docPayload.settlementBank,
@@ -217,6 +222,7 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
       accountNumberLast4: docPayload.accountNumberLast4,
       settlementBank: docPayload.settlementBank,
       percentageCharge: docPayload.percentageCharge,
+      commissionControlledBy: 'sedifex',
       isVerified: docPayload.isVerified,
       message: response.message ?? 'Subaccount created',
     }
@@ -268,6 +274,7 @@ export const fetchPaystackMerchantSubaccount = functions.https.onCall(
       accountNumberLast4: stored.accountNumberLast4 ?? null,
       settlementBank: liveData?.settlement_bank ?? stored.settlementBank ?? null,
       percentageCharge: liveData?.percentage_charge ?? stored.percentageCharge ?? null,
+      commissionControlledBy: stored.commissionControlledBy ?? 'sedifex',
       active: liveData?.active ?? stored.active ?? null,
       isVerified: liveData?.is_verified ?? stored.isVerified ?? null,
       currency: liveData?.currency ?? stored.currency ?? null,
