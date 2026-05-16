@@ -3,9 +3,16 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 
-type MarketplaceTab = 'all-orders' | 'bookings' | 'pay-on-delivery' | 'online-paid'
+type OnlineOrderTab =
+  | 'product-orders'
+  | 'service-bookings'
+  | 'sedifex-market'
+  | 'client-website'
+  | 'pay-on-delivery'
+  | 'manual-payment'
+  | 'online-paid'
 
-type MarketplaceRecord = {
+type OnlineOrderRecord = {
   id: string
   collectionName: 'integrationOrders' | 'integrationBookings'
   recordType: 'product_order' | 'service_booking' | string
@@ -21,7 +28,11 @@ type MarketplaceRecord = {
   orderStatus: string
   bookingStatus: string
   paymentCollectionMode: string
+  sourceChannel: string
+  sourceLabel: string
   source: string
+  clientOrderId: string
+  sedifexOrderId: string
   createdAt: Date | null
   deliveryLocation: string
   bookingDate: string
@@ -57,14 +68,14 @@ function toDate(value: unknown): Date | null {
 }
 
 function normalizeStatus(value: string) {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return value.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
 }
 
 function statusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   const normalized = status.toLowerCase()
   if (['success', 'confirmed', 'paid', 'captured', 'completed', 'delivered', 'cash_collected'].some(token => normalized.includes(token))) return 'success'
   if (['failed', 'cancelled', 'canceled', 'rejected', 'abandoned'].some(token => normalized.includes(token))) return 'danger'
-  if (['pending', 'manual', 'delivery', 'processing', 'cash'].some(token => normalized.includes(token))) return 'warning'
+  if (['pending', 'manual', 'delivery', 'processing', 'cash', 'checkout'].some(token => normalized.includes(token))) return 'warning'
   return 'neutral'
 }
 
@@ -118,20 +129,58 @@ function readFeePolicy(source: Record<string, unknown>) {
         : directFeePolicy
 }
 
-function mapMarketplaceRecord(
+function normalizeSourceChannel(raw: string) {
+  const normalized = raw.trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
+  if (!normalized) return 'sedifex_market'
+  if (['client_website', 'website', 'client_site', 'wordpress', 'shopify', 'external_website'].includes(normalized)) return 'client_website'
+  if (normalized.includes('website') || normalized.includes('wordpress') || normalized.includes('client')) return 'client_website'
+  if (normalized.includes('custom_page') || normalized.includes('public_page') || normalized.includes('sedifex_custom')) return 'sedifex_custom_page'
+  if (normalized.includes('market')) return 'sedifex_market'
+  return normalized
+}
+
+function sourceLabel(channel: string) {
+  if (channel === 'client_website') return 'Client Website'
+  if (channel === 'sedifex_custom_page') return 'Sedifex Public Page'
+  if (channel === 'sedifex_market') return 'Sedifex Market'
+  return normalizeStatus(channel)
+}
+
+function readSourceChannel(source: Record<string, unknown>) {
+  const metadata = getNestedObject(source, 'metadata')
+  const attributes = getNestedObject(source, 'attributes')
+  const payment = getNestedObject(source, 'payment')
+  const raw = asText(
+    source.sourceChannel ??
+      source.source_channel ??
+      source.channel ??
+      metadata.sourceChannel ??
+      metadata.channel ??
+      attributes.sourceChannel ??
+      attributes.source ??
+      payment.sourceChannel ??
+      source.source,
+    'sedifex_market',
+  )
+  return normalizeSourceChannel(raw)
+}
+
+function mapOnlineOrderRecord(
   id: string,
   collectionName: 'integrationOrders' | 'integrationBookings',
   data: Record<string, unknown>,
-): MarketplaceRecord {
+): OnlineOrderRecord {
   const customer = getNestedObject(data, 'customer')
   const booking = getNestedObject(data, 'booking')
   const delivery = getNestedObject(data, 'delivery')
+  const metadata = getNestedObject(data, 'metadata')
   const item = firstItem(data)
   const feePolicy = readFeePolicy(data)
   const payment = getNestedObject(data, 'payment')
   const amount = readAmount(data)
   const currency = readCurrency(data)
-  const recordType = asText(data.recordType, collectionName === 'integrationBookings' ? 'service_booking' : 'product_order')
+  const recordType = asText(data.recordType ?? data.orderType, collectionName === 'integrationBookings' ? 'service_booking' : 'product_order')
+  const channel = readSourceChannel(data)
 
   return {
     id,
@@ -149,7 +198,11 @@ function mapMarketplaceRecord(
     orderStatus: asText(data.orderStatus ?? data.order_status, 'pending'),
     bookingStatus: asText(data.bookingStatus, ''),
     paymentCollectionMode: asText(data.paymentCollectionMode ?? payment.mode, 'online_checkout'),
-    source: asText(data.source, 'sedifex_market'),
+    sourceChannel: channel,
+    sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceLabel(channel)),
+    source: asText(data.source, channel),
+    clientOrderId: asText(data.clientOrderId ?? data.client_order_id ?? metadata.clientOrderId, ''),
+    sedifexOrderId: asText(data.sedifexOrderId ?? data.sedifex_order_id ?? metadata.sedifexOrderId, ''),
     createdAt: toDate(data.createdAtServer ?? data.createdAt),
     deliveryLocation: asText(data.deliveryLocation ?? delivery.location, ''),
     bookingDate: asText(data.bookingDate ?? booking.preferredDate, ''),
@@ -162,35 +215,50 @@ function mapMarketplaceRecord(
   }
 }
 
-function isOnlinePaid(record: MarketplaceRecord) {
+function isServiceBooking(record: OnlineOrderRecord) {
+  return record.recordType === 'service_booking' || record.collectionName === 'integrationBookings' || record.recordType === 'service'
+}
+
+function isPayOnDelivery(record: OnlineOrderRecord) {
+  return record.paymentCollectionMode === 'pay_on_delivery'
+}
+
+function isManualPayment(record: OnlineOrderRecord) {
+  return ['manual', 'manual_transfer', 'momo_manual', 'cash', 'bank_transfer'].includes(record.paymentCollectionMode)
+}
+
+function isOnlinePaid(record: OnlineOrderRecord) {
   const paymentStatus = record.paymentStatus.toLowerCase()
   return (
-    record.paymentCollectionMode !== 'pay_on_delivery' &&
-    record.paymentCollectionMode !== 'manual' &&
+    !isPayOnDelivery(record) &&
+    !isManualPayment(record) &&
     ['success', 'confirmed', 'paid', 'captured'].some(token => paymentStatus.includes(token))
   )
 }
 
-function filterRecords(records: MarketplaceRecord[], tab: MarketplaceTab) {
-  if (tab === 'bookings') return records.filter(record => record.recordType === 'service_booking' || record.collectionName === 'integrationBookings')
-  if (tab === 'pay-on-delivery') return records.filter(record => record.paymentCollectionMode === 'pay_on_delivery')
+function filterRecords(records: OnlineOrderRecord[], tab: OnlineOrderTab) {
+  if (tab === 'service-bookings') return records.filter(isServiceBooking)
+  if (tab === 'sedifex-market') return records.filter(record => record.sourceChannel === 'sedifex_market')
+  if (tab === 'client-website') return records.filter(record => record.sourceChannel === 'client_website')
+  if (tab === 'pay-on-delivery') return records.filter(isPayOnDelivery)
+  if (tab === 'manual-payment') return records.filter(isManualPayment)
   if (tab === 'online-paid') return records.filter(isOnlinePaid)
-  return records.filter(record => record.recordType !== 'service_booking')
+  return records.filter(record => !isServiceBooking(record))
 }
 
-function getPrimaryStatus(record: MarketplaceRecord) {
-  return record.recordType === 'service_booking' ? record.bookingStatus || record.orderStatus : record.orderStatus
+function getPrimaryStatus(record: OnlineOrderRecord) {
+  return isServiceBooking(record) ? record.bookingStatus || record.orderStatus : record.orderStatus
 }
 
-function buildCustomerContactHref(record: MarketplaceRecord) {
+function buildCustomerContactHref(record: OnlineOrderRecord) {
   const digits = record.customerPhone.replace(/[^\d]/g, '')
   if (digits) {
-    const message = encodeURIComponent(`Hello ${record.customerName}, we are contacting you about your Sedifex Market request. Reference: ${record.reference}`)
+    const message = encodeURIComponent(`Hello ${record.customerName}, we are contacting you about your Sedifex order. Reference: ${record.reference}`)
     return `https://wa.me/${digits}?text=${message}`
   }
   if (record.customerEmail) {
-    const subject = encodeURIComponent(`Sedifex Market request ${record.reference}`)
-    const body = encodeURIComponent(`Hello ${record.customerName},\n\nWe are contacting you about your Sedifex Market request.\nReference: ${record.reference}`)
+    const subject = encodeURIComponent(`Sedifex order ${record.reference}`)
+    const body = encodeURIComponent(`Hello ${record.customerName},\n\nWe are contacting you about your Sedifex order.\nReference: ${record.reference}`)
     return `mailto:${record.customerEmail}?subject=${subject}&body=${body}`
   }
   return ''
@@ -208,9 +276,9 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint: 
 
 export default function MarketplaceOrders() {
   const { storeId } = useActiveStore()
-  const [orders, setOrders] = useState<MarketplaceRecord[]>([])
-  const [bookings, setBookings] = useState<MarketplaceRecord[]>([])
-  const [activeTab, setActiveTab] = useState<MarketplaceTab>('all-orders')
+  const [orders, setOrders] = useState<OnlineOrderRecord[]>([])
+  const [bookings, setBookings] = useState<OnlineOrderRecord[]>([])
+  const [activeTab, setActiveTab] = useState<OnlineOrderTab>('product-orders')
   const [searchText, setSearchText] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -232,12 +300,12 @@ export default function MarketplaceOrders() {
     const unsubscribeOrders = onSnapshot(
       orderQuery,
       snapshot => {
-        setOrders(snapshot.docs.map(docSnap => mapMarketplaceRecord(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)))
+        setOrders(snapshot.docs.map(docSnap => mapOnlineOrderRecord(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)))
         setIsLoading(false)
       },
       err => {
-        console.error('[marketplace-orders] Failed to load marketplace orders', err)
-        setError('Unable to load marketplace orders right now.')
+        console.error('[online-orders] Failed to load product orders', err)
+        setError('Unable to load online orders right now.')
         setIsLoading(false)
       },
     )
@@ -245,12 +313,12 @@ export default function MarketplaceOrders() {
     const unsubscribeBookings = onSnapshot(
       bookingQuery,
       snapshot => {
-        setBookings(snapshot.docs.map(docSnap => mapMarketplaceRecord(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)))
+        setBookings(snapshot.docs.map(docSnap => mapOnlineOrderRecord(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)))
         setIsLoading(false)
       },
       err => {
-        console.error('[marketplace-orders] Failed to load marketplace bookings', err)
-        setError('Unable to load marketplace bookings right now.')
+        console.error('[online-orders] Failed to load service bookings', err)
+        setError('Unable to load online bookings right now.')
         setIsLoading(false)
       },
     )
@@ -266,57 +334,80 @@ export default function MarketplaceOrders() {
     [bookings, orders],
   )
 
-  const filteredRecords = useMemo(() => {
-    const tabRecords = filterRecords(allRecords, activeTab)
-    const search = searchText.trim().toLowerCase()
-    if (!search) return tabRecords
-    return tabRecords.filter(record =>
-      [record.reference, record.customerName, record.customerEmail, record.customerPhone, record.itemName, record.paymentStatus, record.orderStatus, record.bookingStatus]
-        .join(' ')
-        .toLowerCase()
-        .includes(search),
-    )
-  }, [activeTab, allRecords, searchText])
-
   const stats = useMemo(() => {
-    const productOrders = allRecords.filter(record => record.recordType !== 'service_booking')
-    const serviceBookings = allRecords.filter(record => record.recordType === 'service_booking' || record.collectionName === 'integrationBookings')
-    const payOnDelivery = allRecords.filter(record => record.paymentCollectionMode === 'pay_on_delivery')
+    const productOrders = allRecords.filter(record => !isServiceBooking(record))
+    const serviceBookings = allRecords.filter(isServiceBooking)
+    const sedifexMarket = allRecords.filter(record => record.sourceChannel === 'sedifex_market')
+    const clientWebsite = allRecords.filter(record => record.sourceChannel === 'client_website')
+    const payOnDelivery = allRecords.filter(isPayOnDelivery)
+    const manualPayment = allRecords.filter(isManualPayment)
     const onlinePaid = allRecords.filter(isOnlinePaid)
     return {
       productOrders,
       serviceBookings,
+      sedifexMarket,
+      clientWebsite,
       payOnDelivery,
+      manualPayment,
       onlinePaid,
       totalPaidValue: onlinePaid.reduce((sum, record) => sum + record.amount, 0),
       deliveryValue: payOnDelivery.reduce((sum, record) => sum + record.amount, 0),
     }
   }, [allRecords])
 
-  const tabs: Array<{ id: MarketplaceTab; label: string; count: number }> = [
-    { id: 'all-orders', label: 'Marketplace Orders', count: stats.productOrders.length },
-    { id: 'bookings', label: 'Marketplace Bookings', count: stats.serviceBookings.length },
-    { id: 'pay-on-delivery', label: 'Pay on Delivery Orders', count: stats.payOnDelivery.length },
-    { id: 'online-paid', label: 'Online Paid Orders', count: stats.onlinePaid.length },
+  const tabs: Array<{ id: OnlineOrderTab; label: string; count: number }> = [
+    { id: 'product-orders', label: 'All Product Orders', count: stats.productOrders.length },
+    { id: 'service-bookings', label: 'Service Bookings', count: stats.serviceBookings.length },
+    { id: 'sedifex-market', label: 'Sedifex Market', count: stats.sedifexMarket.length },
+    { id: 'client-website', label: 'Client Website', count: stats.clientWebsite.length },
+    { id: 'pay-on-delivery', label: 'Pay on Delivery', count: stats.payOnDelivery.length },
+    { id: 'manual-payment', label: 'Manual Payment', count: stats.manualPayment.length },
+    { id: 'online-paid', label: 'Online Paid', count: stats.onlinePaid.length },
   ]
+
+  const filteredRecords = useMemo(() => {
+    const tabRecords = filterRecords(allRecords, activeTab)
+    const search = searchText.trim().toLowerCase()
+    if (!search) return tabRecords
+    return tabRecords.filter(record =>
+      [
+        record.reference,
+        record.clientOrderId,
+        record.sedifexOrderId,
+        record.customerName,
+        record.customerEmail,
+        record.customerPhone,
+        record.itemName,
+        record.sourceLabel,
+        record.paymentStatus,
+        record.orderStatus,
+        record.bookingStatus,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(search),
+    )
+  }, [activeTab, allRecords, searchText])
 
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sedifex Market</p>
-        <h2 style={{ color: '#4338CA', margin: 0 }}>Marketplace orders</h2>
+        <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sedifex source of truth</p>
+        <h2 style={{ color: '#4338CA', margin: 0 }}>Online Orders</h2>
         <p style={{ color: '#475569', margin: '8px 0 0' }}>
-          View Sedifex Market product orders, service bookings, online paid orders, and free launch pay-on-delivery requests for this workspace.
+          View product orders and service bookings from Sedifex Market, client websites, public pages, online checkout, manual payment, and pay-on-delivery channels.
         </p>
       </div>
 
       <section style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 16, padding: 14, marginBottom: 20, color: '#92400E' }}>
-        <strong>Launch follow-up:</strong> Sedifex controls marketplace confirmation and follow-up for now. Stores can view customer details and prepare, but order confirmation is handled by Sedifex support during launch.
+        <strong>Launch follow-up:</strong> Sedifex controls external checkout confirmation and follow-up for now. Stores can view customer details and prepare, while Sedifex support manages confirmation during launch.
       </section>
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Product orders" value={String(stats.productOrders.length)} hint="Orders saved in integrationOrders" />
-        <StatCard label="Service bookings" value={String(stats.serviceBookings.length)} hint="Bookings saved in integrationBookings" />
+        <StatCard label="Product orders" value={String(stats.productOrders.length)} hint="Saved in integrationOrders" />
+        <StatCard label="Service bookings" value={String(stats.serviceBookings.length)} hint="Saved in integrationBookings" />
+        <StatCard label="Sedifex Market" value={String(stats.sedifexMarket.length)} hint="Marketplace-originated requests" />
+        <StatCard label="Client website" value={String(stats.clientWebsite.length)} hint="Website integration requests" />
         <StatCard label="Pay on delivery" value={String(stats.payOnDelivery.length)} hint={`${formatMoney(stats.deliveryValue, 'GHS')} free launch value`} />
         <StatCard label="Online paid" value={String(stats.onlinePaid.length)} hint={`${formatMoney(stats.totalPaidValue, 'GHS')} confirmed value`} />
       </section>
@@ -350,24 +441,25 @@ export default function MarketplaceOrders() {
               type="search"
               value={searchText}
               onChange={event => setSearchText(event.target.value)}
-              placeholder="Reference, customer, status…"
+              placeholder="Reference, customer, channel, status…"
               style={{ border: '1px solid #CBD5E1', borderRadius: 10, padding: '9px 10px' }}
             />
           </label>
         </div>
 
         {error ? <p style={{ margin: 0, color: '#B91C1C', fontWeight: 700 }}>{error}</p> : null}
-        {isLoading ? <p style={{ margin: 0, color: '#64748B' }}>Loading marketplace records…</p> : null}
-        {!isLoading && !storeId ? <p style={{ margin: 0, color: '#64748B' }}>Select a workspace to view marketplace records.</p> : null}
+        {isLoading ? <p style={{ margin: 0, color: '#64748B' }}>Loading online order records…</p> : null}
+        {!isLoading && !storeId ? <p style={{ margin: 0, color: '#64748B' }}>Select a workspace to view online orders.</p> : null}
         {!isLoading && storeId && filteredRecords.length === 0 ? <p style={{ margin: 0, color: '#64748B' }}>No records found for this view yet.</p> : null}
 
         {filteredRecords.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1120 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: '#475569', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Customer</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Item</th>
+                  <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Channel</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Amount</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Payment</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Status</th>
@@ -392,7 +484,12 @@ export default function MarketplaceOrders() {
                       <td style={{ padding: '12px 8px' }}>
                         <strong style={{ color: '#0F172A' }}>{record.itemName}</strong>
                         <br />
-                        <span style={{ color: '#64748B', fontSize: 13 }}>{record.recordType === 'service_booking' ? 'Service booking' : `Qty: ${record.quantity || 1}`}</span>
+                        <span style={{ color: '#64748B', fontSize: 13 }}>{isServiceBooking(record) ? 'Service booking' : `Qty: ${record.quantity || 1}`}</span>
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <strong style={{ color: '#0F172A' }}>{record.sourceLabel}</strong>
+                        <br />
+                        <span style={{ color: '#64748B', fontSize: 13 }}>{record.collectionName}</span>
                       </td>
                       <td style={{ padding: '12px 8px', color: '#0F172A', fontWeight: 700 }}>
                         {formatMoney(record.amount, record.currency)}
@@ -422,6 +519,8 @@ export default function MarketplaceOrders() {
                       </td>
                       <td style={{ padding: '12px 8px', color: '#475569', fontSize: 13 }}>
                         <strong>Ref:</strong> {record.reference}
+                        {record.clientOrderId ? <><br /><strong>Client:</strong> {record.clientOrderId}</> : null}
+                        {record.sedifexOrderId ? <><br /><strong>Sedifex:</strong> {record.sedifexOrderId}</> : null}
                         {record.deliveryLocation ? <><br /><strong>Delivery:</strong> {record.deliveryLocation}</> : null}
                         {record.bookingDate || record.bookingTime ? <><br /><strong>Booking:</strong> {[record.bookingDate, record.bookingTime, record.preferredBranch].filter(Boolean).join(' · ')}</> : null}
                         {record.notes ? <><br /><strong>Notes:</strong> {record.notes}</> : null}
