@@ -53,6 +53,171 @@ const initialManualForm: ManualForm = {
   reference: '',
 }
 
+const pageStyles = {
+  page: {
+    display: 'grid',
+    gap: 22,
+    color: '#0f172a',
+  },
+  hero: {
+    borderRadius: 26,
+    padding: '28px 30px',
+    background: 'linear-gradient(135deg, #312e81 0%, #4f46e5 52%, #7c3aed 100%)',
+    color: '#fff',
+    boxShadow: '0 28px 70px -42px rgba(49, 46, 129, 0.8)',
+  },
+  eyebrow: {
+    margin: 0,
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase' as const,
+    color: 'rgba(255,255,255,0.74)',
+  },
+  title: {
+    margin: '8px 0 0',
+    fontSize: 'clamp(28px, 4vw, 42px)',
+    lineHeight: 1.05,
+    letterSpacing: '-0.04em',
+  },
+  subtitle: {
+    margin: '12px 0 0',
+    maxWidth: 780,
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 16,
+    lineHeight: 1.65,
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+    gap: 14,
+  },
+  statCard: {
+    borderRadius: 22,
+    border: '1px solid #e2e8f0',
+    background: '#ffffff',
+    padding: 18,
+    boxShadow: '0 20px 50px -38px rgba(15, 23, 42, 0.55)',
+  },
+  statLabel: {
+    margin: '6px 0 0',
+    color: '#64748b',
+    fontWeight: 700,
+    fontSize: 13,
+  },
+  statValue: {
+    margin: 0,
+    fontSize: 34,
+    lineHeight: 1,
+    fontWeight: 900,
+    letterSpacing: '-0.05em',
+  },
+  card: {
+    borderRadius: 24,
+    border: '1px solid #e2e8f0',
+    background: '#ffffff',
+    padding: 22,
+    boxShadow: '0 24px 60px -42px rgba(15, 23, 42, 0.5)',
+  },
+  cardHeader: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  cardTitle: {
+    margin: 0,
+    fontSize: 21,
+    letterSpacing: '-0.02em',
+  },
+  muted: {
+    color: '#64748b',
+    margin: '5px 0 0',
+    lineHeight: 1.6,
+  },
+  formGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+    gap: 14,
+  },
+  label: {
+    display: 'grid',
+    gap: 7,
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: 800,
+  },
+  input: {
+    width: '100%',
+    border: '1px solid #cbd5e1',
+    borderRadius: 14,
+    padding: '12px 13px',
+    fontSize: 14,
+    background: '#ffffff',
+    color: '#0f172a',
+    outline: 'none',
+  },
+  actions: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+  },
+  primaryButton: {
+    border: 0,
+    borderRadius: 14,
+    padding: '12px 18px',
+    background: 'linear-gradient(135deg, #4338ca, #4f46e5)',
+    color: '#fff',
+    fontWeight: 900,
+    cursor: 'pointer',
+    boxShadow: '0 18px 36px -24px rgba(67, 56, 202, 0.85)',
+  },
+  secondaryButton: {
+    border: '1px solid #cbd5e1',
+    borderRadius: 14,
+    padding: '11px 16px',
+    background: '#fff',
+    color: '#334155',
+    fontWeight: 850,
+    cursor: 'pointer',
+  },
+  tableWrap: {
+    overflowX: 'auto' as const,
+    borderRadius: 18,
+    border: '1px solid #e2e8f0',
+  },
+  table: {
+    width: '100%',
+    minWidth: 920,
+    borderCollapse: 'collapse' as const,
+  },
+  th: {
+    textAlign: 'left' as const,
+    padding: '13px 14px',
+    fontSize: 12,
+    color: '#64748b',
+    background: '#f8fafc',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+  },
+  td: {
+    padding: '14px 14px',
+    borderTop: '1px solid #e2e8f0',
+    verticalAlign: 'top' as const,
+    color: '#334155',
+    fontSize: 14,
+  },
+  alert: {
+    borderRadius: 16,
+    padding: '12px 14px',
+    fontWeight: 800,
+  },
+}
+
 function toDate(value?: Timestamp | string | null) {
   if (!value) return null
   if (typeof value === 'string') {
@@ -93,6 +258,27 @@ function buildManualReference(storeId: string) {
   return `REG-${storeId.slice(0, 6).toUpperCase()}-${Date.now()}`
 }
 
+function statusLabel(value?: string) {
+  const text = value || 'not_required'
+  return text.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+function statusStyle(value?: string) {
+  const normalized = (value || '').toLowerCase()
+  if (['paid', 'success', 'captured', 'confirmed'].includes(normalized)) return { background: '#dcfce7', color: '#166534' }
+  if (['pending', 'checkout_created', 'pending_manual_review'].includes(normalized)) return { background: '#fef3c7', color: '#92400e' }
+  return { background: '#e0e7ff', color: '#3730a3' }
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <article style={{ ...pageStyles.statCard, borderTop: `4px solid ${accent}` }}>
+      <p style={{ ...pageStyles.statValue, color: accent }}>{value}</p>
+      <p style={pageStyles.statLabel}>{label}</p>
+    </article>
+  )
+}
+
 export default function StudentRegistration() {
   const { storeId } = useActiveStore()
   const [registrations, setRegistrations] = useState<RegistrationDoc[]>([])
@@ -131,7 +317,7 @@ export default function StudentRegistration() {
     } catch (loadError) {
       console.error(loadError)
       if (!active) return
-      setError('Unable to load student registrations. Check Firestore rules or refresh after deployment.')
+      setError('Unable to load student registrations. Check Firestore rules and try again.')
     } finally {
       if (active) setLoading(false)
     }
@@ -257,117 +443,139 @@ export default function StudentRegistration() {
   }
 
   return (
-    <div className="workspace-page">
-      <section className="workspace-card">
-        <p className="workspace-eyebrow">Custom page</p>
-        <h1>Student registration</h1>
-        <p className="workspace-muted">
-          Collect school admissions from a client website, sync registrations into Sedifex, or add students manually from the dashboard.
+    <div style={pageStyles.page}>
+      <section style={pageStyles.hero}>
+        <p style={pageStyles.eyebrow}>Admissions workspace</p>
+        <h1 style={pageStyles.title}>Student registration</h1>
+        <p style={pageStyles.subtitle}>
+          Keep website registrations and manually added students in one clean admissions list.
+          Track payment status, contact details, course interest, and class preference from Sedifex.
         </p>
       </section>
 
-      <section className="workspace-grid workspace-grid--four">
-        <article className="workspace-card"><strong>{totals.total}</strong><span>Total registrations</span></article>
-        <article className="workspace-card"><strong>{totals.paid}</strong><span>Paid or confirmed</span></article>
-        <article className="workspace-card"><strong>{totals.pending}</strong><span>Online pending</span></article>
-        <article className="workspace-card"><strong>{totals.manual}</strong><span>Manual review</span></article>
+      <section style={pageStyles.statsGrid} aria-label="Registration summary">
+        <StatCard label="Total registrations" value={totals.total} accent="#4f46e5" />
+        <StatCard label="Paid or confirmed" value={totals.paid} accent="#059669" />
+        <StatCard label="Online pending" value={totals.pending} accent="#d97706" />
+        <StatCard label="Manual review" value={totals.manual} accent="#7c3aed" />
       </section>
 
-      <section className="workspace-card">
-        <h2>Website sync</h2>
-        <p className="workspace-muted">Use this endpoint from school websites to sync registrations into this page:</p>
-        <pre className="workspace-code">POST https://www.sedifex.com/api/student-registration-intake</pre>
-        <p className="workspace-muted">Accepted payment modes: online, manual, none. Required data: storeId, customer name, and at least one customer contact.</p>
-      </section>
+      <section style={pageStyles.card}>
+        <div style={pageStyles.cardHeader}>
+          <div>
+            <h2 style={pageStyles.cardTitle}>Add student manually</h2>
+            <p style={pageStyles.muted}>Use this for walk-ins, phone enquiries, and students registered outside the website.</p>
+          </div>
+        </div>
 
-      <section className="workspace-card">
-        <h2>Add student manually</h2>
-        <form className="form" onSubmit={handleManualSubmit}>
-          <div className="workspace-grid workspace-grid--two">
-            <label>
-              <span>Student name *</span>
-              <input value={manualForm.name} onChange={event => updateManualForm('name', event.target.value)} placeholder="Student full name" />
+        <form onSubmit={handleManualSubmit}>
+          <div style={pageStyles.formGrid}>
+            <label style={pageStyles.label}>
+              Student name *
+              <input style={pageStyles.input} value={manualForm.name} onChange={event => updateManualForm('name', event.target.value)} placeholder="Student full name" />
             </label>
-            <label>
-              <span>Phone</span>
-              <input value={manualForm.phone} onChange={event => updateManualForm('phone', event.target.value)} placeholder="+233..." />
+            <label style={pageStyles.label}>
+              Phone
+              <input style={pageStyles.input} value={manualForm.phone} onChange={event => updateManualForm('phone', event.target.value)} placeholder="+233..." />
             </label>
-            <label>
-              <span>Email</span>
-              <input type="email" value={manualForm.email} onChange={event => updateManualForm('email', event.target.value)} placeholder="student@example.com" />
+            <label style={pageStyles.label}>
+              Email
+              <input style={pageStyles.input} type="email" value={manualForm.email} onChange={event => updateManualForm('email', event.target.value)} placeholder="student@example.com" />
             </label>
-            <label>
-              <span>Course / program</span>
-              <input value={manualForm.course} onChange={event => updateManualForm('course', event.target.value)} placeholder="Hair Braiding" />
+            <label style={pageStyles.label}>
+              Course / program
+              <input style={pageStyles.input} value={manualForm.course} onChange={event => updateManualForm('course', event.target.value)} placeholder="Hair Braiding" />
             </label>
-            <label>
-              <span>Preferred class time</span>
-              <input value={manualForm.preferredClassTime} onChange={event => updateManualForm('preferredClassTime', event.target.value)} placeholder="14 July 2026, Morning" />
+            <label style={pageStyles.label}>
+              Preferred class time
+              <input style={pageStyles.input} value={manualForm.preferredClassTime} onChange={event => updateManualForm('preferredClassTime', event.target.value)} placeholder="14 July 2026, Morning" />
             </label>
-            <label>
-              <span>Branch</span>
-              <input value={manualForm.branch} onChange={event => updateManualForm('branch', event.target.value)} placeholder="Tema" />
+            <label style={pageStyles.label}>
+              Branch
+              <input style={pageStyles.input} value={manualForm.branch} onChange={event => updateManualForm('branch', event.target.value)} placeholder="Tema" />
             </label>
-            <label>
-              <span>Payment mode</span>
-              <select value={manualForm.paymentMode} onChange={event => updateManualForm('paymentMode', event.target.value as ManualForm['paymentMode'])}>
+            <label style={pageStyles.label}>
+              Payment mode
+              <select style={pageStyles.input} value={manualForm.paymentMode} onChange={event => updateManualForm('paymentMode', event.target.value as ManualForm['paymentMode'])}>
                 <option value="none">No payment required</option>
                 <option value="manual">Manual payment</option>
                 <option value="online">Online payment</option>
               </select>
             </label>
-            <label>
-              <span>Payment status</span>
-              <input value={manualForm.paymentStatus} onChange={event => updateManualForm('paymentStatus', event.target.value)} />
+            <label style={pageStyles.label}>
+              Payment status
+              <input style={pageStyles.input} value={manualForm.paymentStatus} onChange={event => updateManualForm('paymentStatus', event.target.value)} />
             </label>
-            <label>
-              <span>Amount</span>
-              <input inputMode="decimal" value={manualForm.amount} onChange={event => updateManualForm('amount', event.target.value)} placeholder="0.00" />
+            <label style={pageStyles.label}>
+              Amount
+              <input style={pageStyles.input} inputMode="decimal" value={manualForm.amount} onChange={event => updateManualForm('amount', event.target.value)} placeholder="0.00" />
             </label>
-            <label>
-              <span>Reference</span>
-              <input value={manualForm.reference} onChange={event => updateManualForm('reference', event.target.value)} placeholder="Optional" />
+            <label style={pageStyles.label}>
+              Reference
+              <input style={pageStyles.input} value={manualForm.reference} onChange={event => updateManualForm('reference', event.target.value)} placeholder="Optional" />
             </label>
           </div>
-          <label>
-            <span>Notes</span>
-            <textarea rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." />
+          <label style={{ ...pageStyles.label, marginTop: 14 }}>
+            Notes
+            <textarea style={{ ...pageStyles.input, minHeight: 90, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." />
           </label>
-          <div className="form__actions">
-            <button type="submit" className="button button--primary" disabled={saving}>{saving ? 'Saving…' : 'Add student'}</button>
-            <button type="button" className="button button--secondary" onClick={() => setManualForm(initialManualForm)} disabled={saving}>Clear</button>
+          <div style={pageStyles.actions}>
+            <button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : 'Add student'}</button>
+            <button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving}>Clear form</button>
           </div>
-          {saveMessage ? <p className="form__success">{saveMessage}</p> : null}
+          {saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}
         </form>
       </section>
 
-      <section className="workspace-card">
-        <div className="workspace-card__header">
+      <section style={pageStyles.card}>
+        <div style={pageStyles.cardHeader}>
           <div>
-            <h2>Latest registrations</h2>
-            <p className="workspace-muted">Website sync and manual entries appear here.</p>
+            <h2 style={pageStyles.cardTitle}>Latest registrations</h2>
+            <p style={pageStyles.muted}>Website submissions and manual entries appear here.</p>
           </div>
-          <button type="button" className="button button--secondary" onClick={() => void loadRegistrations(true)} disabled={loading}>Refresh</button>
+          <button type="button" style={pageStyles.secondaryButton} onClick={() => void loadRegistrations(true)} disabled={loading}>Refresh</button>
         </div>
-        {loading ? <p>Loading registrations…</p> : null}
-        {error ? <p className="form__error">{error}</p> : null}
-        {!loading && !error && registrations.length === 0 ? <p className="workspace-muted">No student registrations yet.</p> : null}
+        {loading ? <p style={pageStyles.muted}>Loading registrations…</p> : null}
+        {error ? <p style={{ ...pageStyles.alert, background: '#fef2f2', color: '#b91c1c' }}>{error}</p> : null}
+        {!loading && !error && registrations.length === 0 ? (
+          <div style={{ border: '1px dashed #cbd5e1', borderRadius: 18, padding: 24, textAlign: 'center', color: '#64748b' }}>
+            <strong style={{ color: '#334155' }}>No student registrations yet.</strong>
+            <p style={{ margin: '6px 0 0' }}>Add one manually or wait for the connected website to submit a registration.</p>
+          </div>
+        ) : null}
         {registrations.length > 0 ? (
-          <div className="workspace-table-wrap">
-            <table className="workspace-table">
+          <div style={pageStyles.tableWrap}>
+            <table style={pageStyles.table}>
               <thead>
-                <tr><th>Student</th><th>Course</th><th>Class time</th><th>Source</th><th>Payment</th><th>Reference</th><th>Date</th></tr>
+                <tr>
+                  <th style={pageStyles.th}>Student</th>
+                  <th style={pageStyles.th}>Course</th>
+                  <th style={pageStyles.th}>Class time</th>
+                  <th style={pageStyles.th}>Source</th>
+                  <th style={pageStyles.th}>Payment</th>
+                  <th style={pageStyles.th}>Reference</th>
+                  <th style={pageStyles.th}>Date</th>
+                </tr>
               </thead>
               <tbody>
                 {registrations.map(item => (
                   <tr key={item.id}>
-                    <td><strong>{item.customer?.name ?? 'Unnamed student'}</strong><br /><small>{item.customer?.phone ?? item.customer?.email ?? 'No contact'}</small></td>
-                    <td>{item.data?.course ?? '—'}</td>
-                    <td>{item.data?.preferredClassTime ?? '—'}</td>
-                    <td>{item.source ?? '—'}</td>
-                    <td>{item.payment?.status ?? '—'}<br /><small>{formatAmount(item.payment)}</small></td>
-                    <td>{item.payment?.reference ?? '—'}</td>
-                    <td>{formatDate(item.createdAt)}</td>
+                    <td style={pageStyles.td}>
+                      <strong style={{ color: '#0f172a' }}>{item.customer?.name ?? 'Unnamed student'}</strong><br />
+                      <small>{item.customer?.phone ?? item.customer?.email ?? 'No contact'}</small>
+                    </td>
+                    <td style={pageStyles.td}>{item.data?.course ?? '—'}</td>
+                    <td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td>
+                    <td style={pageStyles.td}>{statusLabel(item.source)}</td>
+                    <td style={pageStyles.td}>
+                      <span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>
+                        {statusLabel(item.payment?.status)}
+                      </span>
+                      <br />
+                      <small>{formatAmount(item.payment)}</small>
+                    </td>
+                    <td style={pageStyles.td}>{item.payment?.reference ?? '—'}</td>
+                    <td style={pageStyles.td}>{formatDate(item.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
