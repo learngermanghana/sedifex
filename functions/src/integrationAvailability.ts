@@ -72,26 +72,67 @@ function assertContract(req: functions.https.Request, res: functions.Response) {
   return true
 }
 
-async function isAuthorized(req: functions.https.Request) {
-  const bearer = clean(req.get('authorization'), 500).replace(/^Bearer\s+/i, '')
-  const apiKey = clean(req.get('x-api-key'), 500) || bearer
+async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReference, field: string, apiKey: string) {
+  const snapshot = await collectionPath.where(field, '==', apiKey).limit(1).get()
+  return !snapshot.empty
+}
+
+function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
+  const candidates = [
+    record.integrationApiKey,
+    record.integrationKey,
+    record.integrationToken,
+    record.apiKey,
+    record.token,
+    record.key,
+  ]
+  return candidates.some(value => clean(value, 1000) === apiKey)
+}
+
+async function isAuthorized(req: functions.https.Request, storeId: string) {
+  const bearer = clean(req.get('authorization'), 1000).replace(/^Bearer\s+/i, '')
+  const apiKey = clean(req.get('x-api-key'), 1000) || bearer
   if (!apiKey) return false
 
   const master = SEDIFEX_INTEGRATION_API_KEY.value()?.trim() || process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() || ''
   if (master && apiKey === master) return true
 
-  // Store-specific keys are currently used by some websites. Support common document shapes.
-  const keyQueries = [
-    defaultDb.collection('integrationApiKeys').where('token', '==', apiKey).where('status', '==', 'active').limit(1).get(),
-    defaultDb.collection('integrationApiKeys').where('key', '==', apiKey).where('status', '==', 'active').limit(1).get(),
-  ]
-
   try {
-    const snapshots = await Promise.all(keyQueries)
-    return snapshots.some(snapshot => !snapshot.empty)
-  } catch {
-    return false
+    const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
+    const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
+    if (recordContainsKey(storeData, apiKey)) return true
+
+    const settingsSnap = await defaultDb.collection('storeSettings').doc(storeId).get()
+    const settingsData = (settingsSnap.data() ?? {}) as Record<string, unknown>
+    if (recordContainsKey(settingsData, apiKey)) return true
+
+    const storeKeyCollections = [
+      defaultDb.collection('stores').doc(storeId).collection('integrationApiKeys'),
+      defaultDb.collection('storeSettings').doc(storeId).collection('integrationApiKeys'),
+    ]
+
+    for (const keyCollection of storeKeyCollections) {
+      for (const field of ['token', 'key', 'apiKey', 'value']) {
+        if (await queryHasMatch(keyCollection, field, apiKey)) return true
+      }
+    }
+
+    const globalKeyCollections = [defaultDb.collection('integrationApiKeys')]
+    for (const keyCollection of globalKeyCollections) {
+      for (const field of ['token', 'key', 'apiKey', 'value']) {
+        const snapshot = await keyCollection
+          .where('storeId', '==', storeId)
+          .where(field, '==', apiKey)
+          .limit(1)
+          .get()
+        if (!snapshot.empty) return true
+      }
+    }
+  } catch (error) {
+    functions.logger.warn('availability auth lookup failed', { storeId, error })
   }
+
+  return false
 }
 
 function slotMatchesFilters(slot: SlotResponse, fromDate: Date | null, toDateFilter: Date | null, serviceId: string) {
@@ -126,7 +167,7 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
       return
     }
 
-    const authorized = await isAuthorized(req)
+    const authorized = await isAuthorized(req, storeId)
     if (!authorized) {
       res.status(401).json({ error: 'unauthorized' })
       return
