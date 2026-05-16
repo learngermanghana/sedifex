@@ -7,6 +7,7 @@ import ShellLayout from './layout/ShellLayout'
 
 import Dashboard from './pages/Dashboard'
 import DashboardHub from './pages/DashboardHub'
+import Products from './pages/Products'
 import Sell from './pages/Sell'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
@@ -88,7 +89,7 @@ const router = createBrowserRouter([
               { index: true, element: <Dashboard /> },
             ],
           },
-          { path: 'products', element: <Navigate to="/dashboard" replace /> },
+          { path: 'products', element: <Products /> },
           { path: 'sell', element: <Sell /> },
           { path: 'customers', element: <Customers /> },
           { path: 'bookings', element: <Bookings /> },
