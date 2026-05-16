@@ -52,6 +52,14 @@ export const NAV_ITEMS: NavItem[] = [
     sortOrder: 50,
   },
   {
+    id: 'marketplace-orders',
+    label: 'Marketplace',
+    type: 'module',
+    target: '/marketplace-orders',
+    rolesAllowed: ['owner', 'staff'],
+    sortOrder: 52,
+  },
+  {
     id: 'student-registration',
     label: 'Student registration',
     type: 'module',
@@ -111,10 +119,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'donor-management', 'public-page'],
-  travel: ['dashboard', 'bookings', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'bookings', 'student-registration', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'marketplace-orders', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'bookings', 'marketplace-orders', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'customers', 'marketplace-orders', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'bookings', 'student-registration', 'marketplace-orders', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
