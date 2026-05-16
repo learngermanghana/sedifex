@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './BlogPage.css'
 import {
   addDoc,
@@ -66,8 +66,23 @@ function makeSlug(value: string): string {
     .replace(/-+/g, '-')
 }
 
+function getCatalogImageUrl(data: Record<string, unknown>): string | null {
+  const imageCandidates = [data.imageUrl, data.image_url, data.image, data.thumbnail, data.photo1, data.photo_1]
+  for (const candidate of imageCandidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  const imageArrays = [data.imageUrls, data.images, data.gallery, data.photos]
+  for (const value of imageArrays) {
+    if (!Array.isArray(value)) continue
+    const firstImage = value.find((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    if (firstImage) return firstImage.trim()
+  }
+  return null
+}
+
 export default function BlogPage() {
   const { storeId } = useActiveStore()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [metaTitle, setMetaTitle] = useState('')
@@ -82,6 +97,8 @@ export default function BlogPage() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [selectedCatalogItemId, setSelectedCatalogItemId] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [customImageSelected, setCustomImageSelected] = useState(false)
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [dailyShareEnabled, setDailyShareEnabled] = useState(false)
 
@@ -105,7 +122,7 @@ export default function BlogPage() {
           tags: Array.isArray(data.tags) ? data.tags.filter((item): item is string => typeof item === 'string') : [],
           publishAt: typeof data.publishAt?.toDate === 'function' ? data.publishAt.toDate().toISOString().slice(0, 16) : null,
           linkUrl: typeof data.linkUrl === 'string' ? data.linkUrl : null,
-          imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
+          imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof data.ogImage === 'string' ? data.ogImage : null,
           status: data.status === 'published' || data.status === 'scheduled' || data.status === 'archived' ? data.status : 'draft',
           updatedAt: typeof data.updatedAt?.toDate === 'function' ? data.updatedAt.toDate().toLocaleString() : null,
         }
@@ -158,12 +175,7 @@ export default function BlogPage() {
           itemType: data.itemType === 'service' ? 'service' : 'product',
           price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
           description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
-          imageUrl:
-            typeof data.imageUrl === 'string' && data.imageUrl.trim()
-              ? data.imageUrl.trim()
-              : Array.isArray(data.imageUrls)
-                ? (data.imageUrls.find((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)?.trim() ?? null)
-                : null,
+          imageUrl: getCatalogImageUrl(data),
         }
       })
       setCatalogItems(rows)
@@ -178,16 +190,50 @@ export default function BlogPage() {
     [catalogItems, selectedCatalogItemId],
   )
 
-
   useEffect(() => {
-    if (!selectedCatalogItem) return
+    if (!selectedCatalogItem || customImageSelected) return
     if (selectedCatalogItem.imageUrl) {
       setImageUrl(selectedCatalogItem.imageUrl)
+      setSelectedFileName(null)
       setUploadStatus(`Using ${selectedCatalogItem.name} image for this post.`)
       return
     }
-    setUploadStatus(`${selectedCatalogItem.name} has no product image yet.`)
-  }, [selectedCatalogItem])
+    setImageUrl(null)
+    setUploadStatus(`${selectedCatalogItem.name} has no product image yet. You can browse and add one manually.`)
+  }, [selectedCatalogItem, customImageSelected])
+
+  function handleBrowseImage(file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setUploadStatus('Please choose a valid image file.')
+      return
+    }
+    if (file.size > 2_500_000) {
+      setUploadStatus('Image is too large. Please choose an image below 2.5MB.')
+      return
+    }
+    setSelectedFileName(file.name)
+    setCustomImageSelected(true)
+    setUploadStatus(`Selected custom image: ${file.name}`)
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setImageUrl(reader.result)
+        setUploadStatus(`Custom image ready: ${file.name}`)
+      }
+    }
+    reader.onerror = () => setUploadStatus(`Could not read image: ${file.name}`)
+    reader.readAsDataURL(file)
+  }
+
+  function clearFeaturedImage() {
+    setImageUrl(null)
+    setSelectedFileName(null)
+    setCustomImageSelected(false)
+    setUploadStatus(selectedCatalogItem?.imageUrl ? `Using ${selectedCatalogItem.name} image for this post.` : null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (selectedCatalogItem?.imageUrl) setImageUrl(selectedCatalogItem.imageUrl)
+  }
 
   async function generateBlogWithAi() {
     if (!storeId) return
@@ -199,6 +245,7 @@ export default function BlogPage() {
             `Featured ${selectedCatalogItem.itemType}: ${selectedCatalogItem.name}.`,
             selectedCatalogItem.price != null ? `Price: GHS ${selectedCatalogItem.price.toFixed(2)}.` : null,
             selectedCatalogItem.description ? `Details: ${selectedCatalogItem.description}.` : null,
+            selectedCatalogItem.imageUrl ? 'This item has an image; use it as the post image.' : null,
             'Use this item naturally in the post.',
           ]
             .filter(Boolean)
@@ -258,6 +305,7 @@ export default function BlogPage() {
     setMessage(null)
     try {
       const slug = makeSlug(title)
+      const featuredImageUrl = imageUrl || selectedCatalogItem?.imageUrl || null
       const payload = {
         storeId,
         title: title.trim(),
@@ -267,11 +315,15 @@ export default function BlogPage() {
         metaTitle: metaTitle.trim() || title.trim() || null,
         metaDescription: metaDescription.trim() || content.trim().replace(/\s+/g, ' ').slice(0, 155) || null,
         canonicalUrl: null,
-        ogImage: null,
+        ogImage: featuredImageUrl,
         tags: [],
         publishAt: publishAt ? new Date(publishAt) : null,
         linkUrl: null,
-        imageUrl,
+        imageUrl: featuredImageUrl,
+        imageSource: customImageSelected ? 'custom_upload' : selectedCatalogItem ? 'catalog_item' : 'none',
+        featuredItemId: selectedCatalogItem?.id ?? null,
+        featuredItemName: selectedCatalogItem?.name ?? null,
+        featuredItemType: selectedCatalogItem?.itemType ?? null,
         status,
         publishedAt: status === 'published' ? serverTimestamp() : null,
         updatedAt: serverTimestamp(),
@@ -287,6 +339,9 @@ export default function BlogPage() {
       setPublishAt('')
       setStatus('draft')
       setImageUrl(null)
+      setCustomImageSelected(false)
+      setSelectedFileName(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       setEditingPostId(null)
       setMessage(editingPostId ? 'Post updated.' : 'Post saved.')
       await loadPosts()
@@ -305,7 +360,9 @@ export default function BlogPage() {
     setMetaDescription(post.metaDescription ?? '')
     setPublishAt(post.publishAt ?? '')
     setStatus(post.status === 'archived' ? 'draft' : post.status)
-    setImageUrl(post.imageUrl)
+    setImageUrl(post.imageUrl ?? post.ogImage ?? null)
+    setCustomImageSelected(false)
+    setSelectedFileName(null)
   }
 
   async function archivePost(postId: string) {
@@ -332,30 +389,32 @@ export default function BlogPage() {
             <p>Write updates and publish polished posts for your public audience.</p>
           </div>
           <div className="blog-page__top-actions">
-            <label className="blog-page__image-upload">
+            <div className="blog-page__image-panel">
+              <div>
+                <strong>Featured image</strong>
+                <p>Product images are used automatically. Browse only when you want to override it.</p>
+              </div>
               <input
+                ref={fileInputRef}
+                className="blog-page__file-input"
                 type="file"
                 accept="image/*"
-                onChange={event => {
-                  const file = event.currentTarget.files?.[0]
-                  if (!file) return
-                  setUploadStatus(`Upload started: ${file.name}`)
-                  const reader = new FileReader()
-                  reader.onload = () => {
-                    if (typeof reader.result === 'string') {
-                      setImageUrl(reader.result)
-                      setUploadStatus(`Upload completed: ${file.name}`)
-                    }
-                  }
-                  reader.onerror = () => setUploadStatus(`Upload failed: ${file.name}`)
-                  reader.readAsDataURL(file)
-                }}
+                onChange={event => handleBrowseImage(event.currentTarget.files?.[0])}
               />
-              Upload custom image (optional override)
-            </label>
-            {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
-            {imageUrl ? <img className="blog-page__image-preview" src={imageUrl} alt="Selected upload preview" /> : null}
-            {null}
+              <div className="blog-page__image-actions">
+                <button type="button" className="button button--ghost" onClick={() => fileInputRef.current?.click()}>
+                  Browse image
+                </button>
+                {imageUrl ? (
+                  <button type="button" className="button button--ghost" onClick={clearFeaturedImage}>
+                    Clear image
+                  </button>
+                ) : null}
+              </div>
+              {selectedFileName ? <p className="blog-page__upload-status">File: {selectedFileName}</p> : null}
+              {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
+              {imageUrl ? <img className="blog-page__image-preview" src={imageUrl} alt="Selected blog featured preview" /> : null}
+            </div>
           </div>
         </header>
 
@@ -369,11 +428,11 @@ export default function BlogPage() {
 
               <label className="stack">
                 <span>Featured product or service (optional)</span>
-                <select value={selectedCatalogItemId} onChange={e => setSelectedCatalogItemId(e.target.value)}>
+                <select value={selectedCatalogItemId} onChange={e => { setCustomImageSelected(false); setSelectedFileName(null); setSelectedCatalogItemId(e.target.value) }}>
                   <option value="">Select from your products/services</option>
                   {catalogItems.map(item => (
                     <option key={item.id} value={item.id}>
-                      {item.name} ({item.itemType})
+                      {item.name} ({item.itemType}){item.imageUrl ? ' — image available' : ' — no image'}
                     </option>
                   ))}
                 </select>
@@ -447,6 +506,7 @@ export default function BlogPage() {
             {posts.map(post => (
               <li key={post.id} className="blog-post-item">
                 <div className="blog-post-item__top">
+                  {post.imageUrl ? <img className="blog-post-item__image" src={post.imageUrl} alt={post.title} /> : null}
                   <div>
                     <h3 className="blog-post-item__title">{post.title}</h3>
                     <div className="blog-post-item__meta">
