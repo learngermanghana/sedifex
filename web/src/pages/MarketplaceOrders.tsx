@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 
 type MarketplaceTab = 'all-orders' | 'bookings' | 'pay-on-delivery' | 'online-paid'
+type MarketplaceAction = 'confirm' | 'complete' | 'cancel'
 
 type MarketplaceRecord = {
   id: string
@@ -62,7 +63,7 @@ function normalizeStatus(value: string) {
 
 function statusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   const normalized = status.toLowerCase()
-  if (['success', 'confirmed', 'paid', 'captured', 'completed'].some(token => normalized.includes(token))) return 'success'
+  if (['success', 'confirmed', 'paid', 'captured', 'completed', 'delivered', 'cash_collected'].some(token => normalized.includes(token))) return 'success'
   if (['failed', 'cancelled', 'canceled', 'rejected', 'abandoned'].some(token => normalized.includes(token))) return 'danger'
   if (['pending', 'manual', 'delivery', 'processing', 'cash'].some(token => normalized.includes(token))) return 'warning'
   return 'neutral'
@@ -178,6 +179,109 @@ function filterRecords(records: MarketplaceRecord[], tab: MarketplaceTab) {
   return records.filter(record => record.recordType !== 'service_booking')
 }
 
+function getPrimaryStatus(record: MarketplaceRecord) {
+  return record.recordType === 'service_booking' ? record.bookingStatus || record.orderStatus : record.orderStatus
+}
+
+function isTerminalStatus(record: MarketplaceRecord) {
+  const status = getPrimaryStatus(record).toLowerCase()
+  return ['cancelled', 'canceled', 'completed', 'delivered'].some(token => status.includes(token))
+}
+
+function buildCustomerContactHref(record: MarketplaceRecord) {
+  const digits = record.customerPhone.replace(/[^\d]/g, '')
+  if (digits) {
+    const message = encodeURIComponent(`Hello ${record.customerName}, we are contacting you about your Sedifex Market request. Reference: ${record.reference}`)
+    return `https://wa.me/${digits}?text=${message}`
+  }
+  if (record.customerEmail) {
+    const subject = encodeURIComponent(`Sedifex Market request ${record.reference}`)
+    const body = encodeURIComponent(`Hello ${record.customerName},\n\nWe are contacting you about your Sedifex Market request.\nReference: ${record.reference}`)
+    return `mailto:${record.customerEmail}?subject=${subject}&body=${body}`
+  }
+  return ''
+}
+
+function actionLabel(record: MarketplaceRecord, action: MarketplaceAction) {
+  if (action === 'confirm') return record.recordType === 'service_booking' ? 'Confirm booking' : 'Confirm order'
+  if (action === 'complete') return record.recordType === 'service_booking' ? 'Mark completed' : 'Mark delivered'
+  return 'Cancel'
+}
+
+function buildActionUpdate(record: MarketplaceRecord, action: MarketplaceAction) {
+  const isBooking = record.recordType === 'service_booking' || record.collectionName === 'integrationBookings'
+  const nowIso = new Date().toISOString()
+  const base = {
+    updatedAt: nowIso,
+    updatedAtServer: serverTimestamp(),
+    lastMerchantAction: action,
+    lastMerchantActionAt: nowIso,
+    lastMerchantActionSource: 'sedifex_dashboard',
+  }
+
+  if (isBooking) {
+    if (action === 'confirm') {
+      return {
+        ...base,
+        bookingStatus: 'confirmed_by_store',
+        orderStatus: 'confirmed_by_store',
+        order_status: 'confirmed_by_store',
+        confirmedByStoreAt: nowIso,
+      }
+    }
+    if (action === 'complete') {
+      return {
+        ...base,
+        bookingStatus: 'completed',
+        orderStatus: 'completed',
+        order_status: 'completed',
+        completedAt: nowIso,
+      }
+    }
+    return {
+      ...base,
+      bookingStatus: 'cancelled_by_store',
+      orderStatus: 'cancelled_by_store',
+      order_status: 'cancelled_by_store',
+      cancelledByStoreAt: nowIso,
+    }
+  }
+
+  if (action === 'confirm') {
+    return {
+      ...base,
+      orderStatus: 'confirmed_by_store',
+      order_status: 'confirmed_by_store',
+      confirmedByStoreAt: nowIso,
+    }
+  }
+
+  if (action === 'complete') {
+    const paymentUpdates = record.paymentCollectionMode === 'pay_on_delivery'
+      ? {
+          paymentStatus: 'cash_collected',
+          payment_status: 'cash_collected',
+          paymentCollectedAt: nowIso,
+          'payment.status': 'cash_collected',
+        }
+      : {}
+    return {
+      ...base,
+      ...paymentUpdates,
+      orderStatus: 'delivered',
+      order_status: 'delivered',
+      deliveredAt: nowIso,
+    }
+  }
+
+  return {
+    ...base,
+    orderStatus: 'cancelled_by_store',
+    order_status: 'cancelled_by_store',
+    cancelledByStoreAt: nowIso,
+  }
+}
+
 function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <article style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 16, padding: 16 }}>
@@ -185,6 +289,28 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint: 
       <p style={{ margin: '6px 0 2px', color: '#0F172A', fontSize: 24, fontWeight: 800 }}>{value}</p>
       <p style={{ margin: 0, color: '#64748B', fontSize: 13 }}>{hint}</p>
     </article>
+  )
+}
+
+function ActionButton({ children, disabled, onClick, tone = 'neutral' }: { children: React.ReactNode; disabled?: boolean; onClick: () => void; tone?: 'neutral' | 'primary' | 'danger' }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        border: tone === 'danger' ? '1px solid #FCA5A5' : tone === 'primary' ? '1px solid #4338CA' : '1px solid #CBD5E1',
+        background: disabled ? '#F1F5F9' : tone === 'danger' ? '#FEF2F2' : tone === 'primary' ? '#EEF2FF' : '#FFFFFF',
+        color: disabled ? '#94A3B8' : tone === 'danger' ? '#B91C1C' : tone === 'primary' ? '#3730A3' : '#334155',
+        borderRadius: 999,
+        padding: '6px 10px',
+        fontSize: 12,
+        fontWeight: 800,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -196,6 +322,8 @@ export default function MarketplaceOrders() {
   const [searchText, setSearchText] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState('')
+  const [busyActionKey, setBusyActionKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!storeId) {
@@ -282,13 +410,30 @@ export default function MarketplaceOrders() {
     { id: 'online-paid', label: 'Online Paid Orders', count: stats.onlinePaid.length },
   ]
 
+  async function handleRecordAction(record: MarketplaceRecord, action: MarketplaceAction) {
+    const actionKey = `${record.collectionName}-${record.id}-${action}`
+    setBusyActionKey(actionKey)
+    setError(null)
+    setSuccessMessage('')
+
+    try {
+      await updateDoc(doc(db, record.collectionName, record.id), buildActionUpdate(record, action))
+      setSuccessMessage(`${actionLabel(record, action)} saved for reference ${record.reference}.`)
+    } catch (err) {
+      console.error('[marketplace-orders] Failed to update marketplace record', err)
+      setError('Unable to update this marketplace record. Check your Firestore rules or try again.')
+    } finally {
+      setBusyActionKey(null)
+    }
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
         <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sedifex Market</p>
         <h2 style={{ color: '#4338CA', margin: 0 }}>Marketplace orders</h2>
         <p style={{ color: '#475569', margin: '8px 0 0' }}>
-          Track Sedifex Market product orders, service bookings, online paid orders, and free launch pay-on-delivery requests for this workspace.
+          Track and manage Sedifex Market product orders, service bookings, online paid orders, and free launch pay-on-delivery requests for this workspace.
         </p>
       </div>
 
@@ -334,6 +479,7 @@ export default function MarketplaceOrders() {
           </label>
         </div>
 
+        {successMessage ? <p style={{ margin: 0, color: '#166534', fontWeight: 700, background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 12, padding: '10px 12px' }}>{successMessage}</p> : null}
         {error ? <p style={{ margin: 0, color: '#B91C1C', fontWeight: 700 }}>{error}</p> : null}
         {isLoading ? <p style={{ margin: 0, color: '#64748B' }}>Loading marketplace records…</p> : null}
         {!isLoading && !storeId ? <p style={{ margin: 0, color: '#64748B' }}>Select a workspace to view marketplace records.</p> : null}
@@ -341,7 +487,7 @@ export default function MarketplaceOrders() {
 
         {filteredRecords.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1060 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: '#475569', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Customer</th>
@@ -350,13 +496,20 @@ export default function MarketplaceOrders() {
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Payment</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Status</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Details</th>
+                  <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Actions</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Created</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRecords.map(record => {
-                  const primaryStatus = record.recordType === 'service_booking' ? record.bookingStatus || record.orderStatus : record.orderStatus
+                  const primaryStatus = getPrimaryStatus(record)
                   const tone = statusTone(primaryStatus || record.paymentStatus)
+                  const terminal = isTerminalStatus(record)
+                  const contactHref = buildCustomerContactHref(record)
+                  const confirmKey = `${record.collectionName}-${record.id}-confirm`
+                  const completeKey = `${record.collectionName}-${record.id}-complete`
+                  const cancelKey = `${record.collectionName}-${record.id}-cancel`
+
                   return (
                     <tr key={`${record.collectionName}-${record.id}`} style={{ borderBottom: '1px solid #E2E8F0', verticalAlign: 'top' }}>
                       <td style={{ padding: '12px 8px' }}>
@@ -400,6 +553,49 @@ export default function MarketplaceOrders() {
                         {record.deliveryLocation ? <><br /><strong>Delivery:</strong> {record.deliveryLocation}</> : null}
                         {record.bookingDate || record.bookingTime ? <><br /><strong>Booking:</strong> {[record.bookingDate, record.bookingTime, record.preferredBranch].filter(Boolean).join(' · ')}</> : null}
                         {record.notes ? <><br /><strong>Notes:</strong> {record.notes}</> : null}
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 220 }}>
+                          <ActionButton
+                            tone="primary"
+                            disabled={terminal || busyActionKey === confirmKey}
+                            onClick={() => void handleRecordAction(record, 'confirm')}
+                          >
+                            {busyActionKey === confirmKey ? 'Saving…' : actionLabel(record, 'confirm')}
+                          </ActionButton>
+                          <ActionButton
+                            disabled={terminal || busyActionKey === completeKey}
+                            onClick={() => void handleRecordAction(record, 'complete')}
+                          >
+                            {busyActionKey === completeKey ? 'Saving…' : actionLabel(record, 'complete')}
+                          </ActionButton>
+                          <ActionButton
+                            tone="danger"
+                            disabled={terminal || busyActionKey === cancelKey}
+                            onClick={() => void handleRecordAction(record, 'cancel')}
+                          >
+                            {busyActionKey === cancelKey ? 'Saving…' : actionLabel(record, 'cancel')}
+                          </ActionButton>
+                          {contactHref ? (
+                            <a
+                              href={contactHref}
+                              target={contactHref.startsWith('mailto:') ? undefined : '_blank'}
+                              rel={contactHref.startsWith('mailto:') ? undefined : 'noreferrer'}
+                              style={{
+                                border: '1px solid #BBF7D0',
+                                background: '#F0FDF4',
+                                color: '#166534',
+                                borderRadius: 999,
+                                padding: '6px 10px',
+                                fontSize: 12,
+                                fontWeight: 800,
+                                textDecoration: 'none',
+                              }}
+                            >
+                              Contact customer
+                            </a>
+                          ) : null}
+                        </div>
                       </td>
                       <td style={{ padding: '12px 8px', color: '#64748B', fontSize: 13 }}>
                         {record.createdAt ? record.createdAt.toLocaleString() : 'Unknown'}
