@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { FieldValue } from 'firebase-admin/firestore'
 import { db } from './_firebase-admin.js'
+import { calculateCheckoutFees, toPaystackMinorAmount } from './_checkout-fees.js'
 
 type PaymentMode = 'online' | 'manual' | 'none'
 
@@ -33,16 +34,18 @@ async function initializePaystack(input: {
   const secret = process.env.PAYSTACK_SECRET || process.env.PAYSTACK_SECRET_KEY || ''
   if (!secret) return null
 
+  const fees = calculateCheckoutFees({ amount: input.amount, currency: input.currency, useCase: 'student_registration' })
+
   const response = await fetch('https://api.paystack.co/transaction/initialize', {
     method: 'POST',
     headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: input.email || `${input.reference.toLowerCase()}@noemail.sedifex.local`,
-      amount: Math.round(input.amount * 100),
+      amount: toPaystackMinorAmount(fees),
       reference: input.reference,
       currency: input.currency,
       ...(input.callbackUrl ? { callback_url: input.callbackUrl } : {}),
-      metadata: input.metadata,
+      metadata: { ...input.metadata, feePolicy: fees },
     }),
   })
 
@@ -54,6 +57,7 @@ async function initializePaystack(input: {
     authorizationUrl: body?.data?.authorization_url ?? null,
     accessCode: body?.data?.access_code ?? null,
     message: body?.message ?? null,
+    feePolicy: fees,
   }
 }
 
@@ -86,6 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const reference = text(paymentInput.reference, 140) || buildReference(storeId)
   const callbackUrl = text(paymentInput.callbackUrl, 500)
   const manualInstructions = text(paymentInput.manualInstructions, 1000)
+  const feePolicy = Number.isFinite(amount) && amount > 0 ? calculateCheckoutFees({ amount, currency, useCase: 'student_registration' }) : null
 
   if (paymentMode === 'online' && (!Number.isFinite(amount) || amount <= 0)) {
     return res.status(400).json({ error: 'A valid payment.amount is required for online payment.' })
@@ -126,6 +131,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       amount: Number.isFinite(amount) ? amount : null,
       currency,
       reference,
+      feePolicy,
+      customerTotal: feePolicy?.customerTotalMajor ?? null,
+      sedifexCommission: feePolicy?.sedifexCommissionMajor ?? null,
+      merchantNet: feePolicy?.merchantNetMajor ?? null,
       manualInstructions: paymentMode === 'manual' ? manualInstructions || null : null,
     },
     createdAt: now,
@@ -174,6 +183,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           provider: 'paystack',
           authorizationUrl: payment.authorizationUrl ?? null,
           accessCode: payment.accessCode ?? null,
+          feePolicy: payment.feePolicy ?? feePolicy,
+          customerTotal: (payment.feePolicy as { customerTotalMajor?: number } | undefined)?.customerTotalMajor ?? feePolicy?.customerTotalMajor ?? null,
+          sedifexCommission: (payment.feePolicy as { sedifexCommissionMajor?: number } | undefined)?.sedifexCommissionMajor ?? feePolicy?.sedifexCommissionMajor ?? null,
+          merchantNet: (payment.feePolicy as { merchantNetMajor?: number } | undefined)?.merchantNetMajor ?? feePolicy?.merchantNetMajor ?? null,
           initializedAt: now,
         },
         updatedAt: now,
@@ -187,6 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     reference,
     paymentMode,
     paymentStatus,
+    feePolicy,
     payment,
     manualPayment: paymentMode === 'manual'
       ? {
