@@ -15,6 +15,7 @@ export type StorePreferences = {
     industry: Industry
     labelPolicy: NavigationLabelPolicy
     enabledModules: string[]
+    dashboardModules: string[]
     customLabels: Partial<Record<string, string>>
     customNavItems: CustomNavItem[]
     showCustomizationBanner?: boolean
@@ -32,9 +33,18 @@ const DEFAULT_PREFERENCES: StorePreferences = {
     industry: 'shop',
     labelPolicy: 'shared',
     enabledModules: [],
+    dashboardModules: [],
     customLabels: {},
     customNavItems: [],
   },
+}
+
+function stringListFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.reduce<string[]>((acc, item) => {
+    if (typeof item === 'string' && item.trim()) acc.push(item.trim())
+    return acc
+  }, [])
 }
 
 function mergePreferences(raw: Record<string, unknown> | undefined | null): StorePreferences {
@@ -94,7 +104,6 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
         ) as Partial<Record<string, string>>)
       : DEFAULT_PREFERENCES.navigation.customLabels
 
-
   const enabledModulesSource =
     navigation && Array.isArray(navigation.enabled_modules)
       ? navigation.enabled_modules
@@ -106,11 +115,17 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
 
   const enabledModules =
     enabledModulesSource
-      ? (enabledModulesSource as unknown[]).reduce<string[]>((acc, value) => {
-          if (typeof value === 'string' && value.trim()) acc.push(value.trim())
-          return acc
-        }, [])
+      ? stringListFrom(enabledModulesSource)
       : INDUSTRY_ENABLED_MODULE_PRESETS[industry]
+
+  const dashboardModulesSource =
+    navigation && Array.isArray(navigation.dashboard_modules)
+      ? navigation.dashboard_modules
+      : navigation && Array.isArray(navigation.dashboardModules)
+      ? navigation.dashboardModules
+      : []
+
+  const dashboardModules = stringListFrom(dashboardModulesSource)
 
   const customNavItemsSource =
     navigation && Array.isArray(navigation.custom_nav_items)
@@ -159,13 +174,13 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
       industry,
       labelPolicy,
       enabledModules,
+      dashboardModules,
       customLabels,
       customNavItems,
       showCustomizationBanner: explicitIndustry == null,
       requiresIndustryReview: isBookingsHeavy && explicitIndustry == null,
     },
   }
-
 }
 
 export function useStorePreferences(storeId: string | null) {
