@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paystackWebhook = exports.checkSignupUnlock = exports.createCheckout = void 0;
+exports.handlePaystackWebhook = exports.paystackWebhook = exports.checkSignupUnlock = exports.createCheckout = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
 const params_1 = require("firebase-functions/params");
@@ -76,6 +76,117 @@ function isIntegrationCheckoutEvent(data) {
         toTrimmedString(metadata.sedifexOrderId) ||
         toTrimmedString(metadata.clientOrderId) ||
         toTrimmedString(metadata.orderType));
+}
+function isDonationEvent(data) {
+    const metadata = data.metadata ?? {};
+    return Boolean(toTrimmedString(metadata.pageType) === 'donation' ||
+        toTrimmedString(metadata.fundTransactionId) ||
+        toTrimmedString(data.reference).startsWith('DON-'));
+}
+async function updateDonationTransactionFromPaystackEvent(evtType, data) {
+    if (!isDonationEvent(data))
+        return false;
+    const metadata = data.metadata ?? {};
+    const reference = toTrimmedString(data.reference);
+    const storeId = toTrimmedString(metadata.storeId);
+    const fundTransactionId = toTrimmedString(metadata.fundTransactionId);
+    const isSuccess = evtType === 'charge.success';
+    const isFailure = evtType === 'charge.failed';
+    if (!reference || (!isSuccess && !isFailure))
+        return false;
+    const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    const amount = typeof data.amount === 'number' ? data.amount / 100 : null;
+    const fees = typeof data.fees === 'number' ? data.fees / 100 : null;
+    const status = isSuccess ? 'captured' : 'failed';
+    const updatePayload = {
+        status,
+        provider: 'paystack',
+        providerReference: reference,
+        paymentReference: reference,
+        paystackReference: reference,
+        providerTransactionId: data.reference ?? null,
+        confirmedAmount: amount,
+        confirmedAt: isSuccess ? now : null,
+        failedAt: isFailure ? now : null,
+        updatedAt: now,
+        payment: {
+            provider: 'paystack',
+            status,
+            reference,
+            amountPaid: isSuccess ? amount : null,
+            amount,
+            currency: data.currency || 'GHS',
+            fees,
+            channel: data.channel || null,
+            paidAt: data.paid_at || null,
+            gatewayRaw: data,
+        },
+    };
+    const matchedRefs = new Map();
+    if (fundTransactionId) {
+        const directRef = firestore_1.defaultDb.collection('fund_transactions').doc(fundTransactionId);
+        const directSnap = await directRef.get();
+        if (directSnap.exists)
+            matchedRefs.set(directRef.path, directRef);
+    }
+    const fields = ['reference', 'paymentReference', 'payment.reference'];
+    for (const field of fields) {
+        let snap;
+        if (storeId) {
+            snap = await firestore_1.defaultDb
+                .collection('fund_transactions')
+                .where('storeId', '==', storeId)
+                .where(field, '==', reference)
+                .limit(10)
+                .get();
+        }
+        else {
+            snap = await firestore_1.defaultDb
+                .collection('fund_transactions')
+                .where(field, '==', reference)
+                .limit(10)
+                .get();
+        }
+        snap.docs.forEach(docSnap => matchedRefs.set(docSnap.ref.path, docSnap.ref));
+    }
+    if (matchedRefs.size === 0) {
+        functions.logger.warn('Donation Paystack event had no matching fund transaction', {
+            event: evtType,
+            storeId,
+            reference,
+            fundTransactionId,
+            metadata,
+        });
+        return true;
+    }
+    const batch = firestore_1.defaultDb.batch();
+    Array.from(matchedRefs.values()).forEach(ref => batch.set(ref, updatePayload, { merge: true }));
+    await batch.commit();
+    if (isSuccess) {
+        for (const ref of matchedRefs.values()) {
+            const snap = await ref.get();
+            const txData = snap.data() ?? {};
+            const donorId = toTrimmedString(txData.donorId);
+            if (donorId) {
+                await firestore_1.defaultDb.collection('donor_profiles').doc(donorId).set({
+                    lastDonationAmount: amount,
+                    lastDonationCurrency: data.currency || 'GHS',
+                    lastDonationReference: reference,
+                    lastDonationStatus: 'captured',
+                    lastDonationAt: now,
+                    updatedAt: now,
+                }, { merge: true });
+            }
+        }
+    }
+    functions.logger.info('Donation Paystack status updated', {
+        event: evtType,
+        storeId,
+        reference,
+        matchedCount: matchedRefs.size,
+        status,
+    });
+    return true;
 }
 async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
     if (!isIntegrationCheckoutEvent(data))
@@ -473,6 +584,9 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
         });
         switch (evtType) {
             case 'charge.success': {
+                const donationHandled = await updateDonationTransactionFromPaystackEvent(evtType, data);
+                if (donationHandled)
+                    break;
                 const integrationOrderHandled = await updateIntegrationOrderFromPaystackEvent(evtType, data);
                 if (integrationOrderHandled)
                     break;
@@ -514,6 +628,9 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
                 break;
             }
             case 'charge.failed': {
+                const donationHandled = await updateDonationTransactionFromPaystackEvent(evtType, data);
+                if (donationHandled)
+                    break;
                 const integrationOrderHandled = await updateIntegrationOrderFromPaystackEvent(evtType, data);
                 if (integrationOrderHandled)
                     break;
@@ -553,3 +670,4 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
         res.status(500).send('error');
     }
 });
+exports.handlePaystackWebhook = exports.paystackWebhook;
