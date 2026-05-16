@@ -7,7 +7,7 @@ import { normalizePhoneE164, normalizePhoneForWhatsApp } from './phone'
 import { normalizePublicSlugValue } from './utils/publicSlug'
 import type { ProductReadModel } from './types/product'
 import { normalizeCatalogPublicationFields, resolvePublicationTimestampCandidate } from './catalogPublication'
-export { checkSignupUnlock } from './paystack'
+export { checkSignupUnlock, createCheckout, paystackWebhook } from './paystack'
 export {
   createPaystackMerchantSubaccount,
   fetchPaystackMerchantSubaccount,
