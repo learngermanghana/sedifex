@@ -46,6 +46,22 @@ const paymentTemplates = {
   },
 }
 
+function StatusCard({ title, value, helper, good }: { title: string; value: string; helper: string; good?: boolean }) {
+  return (
+    <article
+      className="account-overview__card"
+      style={{
+        borderTop: `4px solid ${good ? '#16a34a' : '#f59e0b'}`,
+        minHeight: 126,
+      }}
+    >
+      <p className="account-overview__hint" style={{ marginTop: 0 }}>{title}</p>
+      <h3 style={{ margin: '4px 0 8px', color: good ? '#166534' : '#92400e' }}>{value}</h3>
+      <p className="account-overview__hint" style={{ marginBottom: 0 }}>{helper}</p>
+    </article>
+  )
+}
+
 export default function PaymentSettlement() {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
   const { memberships } = useMemberships()
@@ -72,6 +88,8 @@ export default function PaymentSettlement() {
   const isOwner = activeMembership?.role === 'owner'
   const digits = (value: string, max: number) => value.replace(/\D/g, '').slice(0, max)
   const template = paymentTemplates[paymentType]
+  const bankConnected = Boolean(status?.configured && status?.subaccountCode)
+  const onlineCheckoutReady = bankConnected && (status?.active === true || status?.active === 1 || status?.active == null)
 
   const filteredOptions = useMemo(() => {
     const selectedType = paymentType === 'mobile_money' ? 'mobile_money' : 'bank'
@@ -187,6 +205,39 @@ export default function PaymentSettlement() {
       {storeId && !isOwner ? <div className="account-overview__error" role="alert">Only the workspace owner can set up settlement.</div> : null}
       {storeId && isOwner ? (
         <>
+          <section aria-labelledby="settlement-confidence">
+            <div className="account-overview__section-header">
+              <h2 id="settlement-confidence">Payment confidence</h2>
+              <p className="account-overview__subtitle">These cards tell the store owner exactly what is ready before accepting online payments.</p>
+            </div>
+            <div className="account-overview__grid">
+              <StatusCard
+                title="Bank or MoMo connected"
+                value={bankConnected ? 'Connected' : 'Setup needed'}
+                helper={bankConnected ? 'Your payout destination is saved for this store.' : 'Add settlement details before relying on online checkout.'}
+                good={bankConnected}
+              />
+              <StatusCard
+                title="Online checkout"
+                value={onlineCheckoutReady ? 'Active' : 'Waiting for setup'}
+                helper={onlineCheckoutReady ? 'Sedifex Market and connected websites can route paid orders to this store.' : 'Online payments should be activated after settlement is ready.'}
+                good={onlineCheckoutReady}
+              />
+              <StatusCard
+                title="Sedifex commission"
+                value={typeof status?.percentageCharge === 'number' ? `${status.percentageCharge}%` : 'Controlled by Sedifex'}
+                helper="Stores do not calculate commission manually. Sedifex applies the configured percentage during checkout."
+                good
+              />
+              <StatusCard
+                title="Store settlement"
+                value={bankConnected ? 'Paystack subaccount' : 'Not connected yet'}
+                helper={bankConnected ? 'The store receives its share through the saved Paystack subaccount.' : 'A Paystack subaccount will be created after setup is saved.'}
+                good={bankConnected}
+              />
+            </div>
+          </section>
+
           <section aria-labelledby="settlement-status">
             <div className="account-overview__section-header">
               <h2 id="settlement-status">Current setup</h2>
