@@ -20,6 +20,7 @@ import SupportRequests from './pages/SupportRequests'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
+import CleanAccountOverview from './pages/CleanAccountOverview'
 import PaymentSettlement from './pages/PaymentSettlement'
 import BulkMessaging from './pages/BulkMessaging'
 import BulkEmail from './pages/BulkEmail'
@@ -125,8 +126,8 @@ const router = createBrowserRouter([
           // Other authenticated pages
           { path: 'onboarding', element: <Onboarding /> },
           { path: 'staff', element: <StaffManagement /> },
-          { path: 'account', element: <AccountOverview /> },
-          { path: 'account/overview', element: <AccountOverview /> },
+          { path: 'account', element: <CleanAccountOverview /> },
+          { path: 'account/overview', element: <CleanAccountOverview /> },
           { path: 'public-page', element: <PublicPageSettings /> },
           { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
           { path: 'support', element: <Support /> },
