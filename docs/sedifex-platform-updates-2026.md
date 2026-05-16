@@ -17,6 +17,7 @@ Use this document together with:
 - `docs/integration-contract.md`
 - `docs/integration-api-guide.md`
 - `docs/engagement-cross-platform-integration-reference.md`
+- `docs/paystack-split-checkout-url.md`
 
 ---
 
@@ -165,7 +166,50 @@ Recommended merchant website flow:
 
 A separate `/checkout` page is only needed for a full multi-product cart. For small stores, inline product-page checkout is simpler and matches Sedifex Market.
 
-### 4.3 Pay-on-delivery product endpoint
+### 4.3 Online checkout create URL for Paystack split
+
+All online payments that should split automatically between Sedifex and a merchant Paystack subaccount must use the dedicated checkout-create function URL:
+
+```txt
+https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
+```
+
+Required website env:
+
+```bash
+SEDIFEX_INTEGRATION_API_BASE_URL=https://us-central1-sedifex-web.cloudfunctions.net
+SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
+```
+
+Use the base URL for catalog, preview, pay-on-delivery, bookings, gallery, blog, and other integration calls. Use the dedicated checkout-create URL only when creating online Paystack checkout.
+
+The checkout-create function accepts and forwards Paystack split fields:
+
+```ts
+{
+  subaccount: paystackSubaccountCode,
+  transaction_charge: sedifexCommissionMinor,
+  bearer: 'subaccount',
+  metadata: {
+    storeId,
+    sourceChannel,
+    sourceLabel,
+    paystackSubaccountCode,
+    splitEnabled: true
+  }
+}
+```
+
+Automatic split requires the merchant to have a saved Paystack subaccount in Sedifex:
+
+```txt
+stores/{storeId}.paymentRouting.paystackSubaccountCode
+paystackSubaccounts/{storeId}.subaccountCode
+```
+
+See `docs/paystack-split-checkout-url.md` for full setup instructions.
+
+### 4.4 Pay-on-delivery product endpoint
 
 Use:
 
@@ -270,6 +314,12 @@ paymentCollectionMode: online_checkout
 paymentStatus: pending | checkout_created | confirmed
 orderType: service
 reference: Sedifex/Paystack reference
+```
+
+Online service checkout should also use:
+
+```txt
+SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
 ```
 
 Browser return from Paystack is not final payment proof. Final state must come from webhook verification or `GET /integration/orders/:reference`.
@@ -463,16 +513,24 @@ Before launching a merchant website:
 - API keys are server-side only.
 - Product orders write to `integrationOrders`.
 - Service bookings write to `integrationBookings`.
-- Online payment uses `POST /integration/checkout/create`.
+- Online payment uses `SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL`.
 - Pay on delivery uses `POST /integration/orders/request`.
 - Website sends `sourceChannel: client_website`.
 - Website sends `clientOrderId` and stores Sedifex `reference`.
 - Product checkout collects phone and delivery location.
 - Comments/favorites resolve with `storeId + sourceProductId`.
+- Merchant has Paystack settlement configured if auto-split is required.
 - Merchant can see results in Sedifex dashboard:
   - Online Orders
   - Product Engagement
   - Bookings
+
+Required env for websites that take online payment:
+
+```bash
+SEDIFEX_INTEGRATION_API_BASE_URL=https://us-central1-sedifex-web.cloudfunctions.net
+SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
+```
 
 ---
 
