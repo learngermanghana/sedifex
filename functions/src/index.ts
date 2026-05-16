@@ -19,10 +19,6 @@ export {
 } from './googleAds'
 export * from './googleShopping'
 export * from './reporting'
-export {
-  googleBusinessLocations,
-  googleBusinessUploadLocationMedia,
-} from './googleBusinessProfile'
 
 /**
  * SINGLE FIRESTORE INSTANCE
@@ -242,25 +238,10 @@ function getIntegrationMasterApiKey(): string {
 
   if (!apiKey && !integrationApiKeyWarned) {
     functions.logger.warn(
-      'SEDIFEX_INTEGRATION_API_KEY is missing. Set it via Firebase params before calling integration HTTP endpoints.',
+      'SEDIFEX_INTEGRATION_API_KEY is missing. Integration HTTP endpoints will reject requests until it is configured.',
     )
     integrationApiKeyWarned = true
   }
+
   return apiKey
-}
-
-function normalizeAiAdvicePayload(raw: GenerateAiAdvicePayload | undefined) {
-  const question = typeof raw?.question === 'string' ? raw.question.trim() : ''
-  if (!question) throw new functions.https.HttpsError('invalid-argument', 'Question is required')
-  if (question.length > 2_000) {
-    throw new functions.https.HttpsError('invalid-argument', 'Question must be 2000 characters or less')
-  }
-
-  const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : ''
-  const jsonContext =
-    raw?.jsonContext && typeof raw.jsonContext === 'object'
-      ? (raw.jsonContext as Record<string, unknown>)
-      : {}
-
-  return { question, storeId, jsonContext }
 }
