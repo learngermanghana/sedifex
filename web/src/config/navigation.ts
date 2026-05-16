@@ -60,6 +60,14 @@ export const NAV_ITEMS: NavItem[] = [
     sortOrder: 52,
   },
   {
+    id: 'upcoming-events',
+    label: 'Upcoming events',
+    type: 'module',
+    target: '/upcoming-events',
+    rolesAllowed: ['owner', 'staff'],
+    sortOrder: 53,
+  },
+  {
     id: 'product-engagement',
     label: 'Product Engagement',
     type: 'module',
@@ -96,14 +104,17 @@ const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
   travel: {
     '/customers': 'Travelers',
     '/bookings': 'Trips',
+    '/upcoming-events': 'Upcoming trips',
   },
   ngo: {
     '/customers': 'Donors',
     '/bookings': 'Campaigns',
+    '/upcoming-events': 'Upcoming campaigns',
   },
   school: {
     '/customers': 'Students',
     '/bookings': 'Classes',
+    '/upcoming-events': 'Upcoming classes',
   },
 }
 
@@ -126,10 +137,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'marketplace-orders', 'product-engagement', 'donor-management', 'public-page'],
-  travel: ['dashboard', 'bookings', 'marketplace-orders', 'product-engagement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'customers', 'marketplace-orders', 'product-engagement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'bookings', 'student-registration', 'marketplace-orders', 'product-engagement', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'marketplace-orders', 'upcoming-events', 'product-engagement', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'bookings', 'upcoming-events', 'marketplace-orders', 'product-engagement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'customers', 'upcoming-events', 'marketplace-orders', 'product-engagement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'bookings', 'upcoming-events', 'student-registration', 'marketplace-orders', 'product-engagement', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
