@@ -11,6 +11,7 @@ type OnlineOrderTab =
   | 'pay-on-delivery'
   | 'manual-payment'
   | 'online-paid'
+  | 'pending'
 
 type OnlineOrderRecord = {
   id: string
@@ -236,6 +237,11 @@ function isOnlinePaid(record: OnlineOrderRecord) {
   )
 }
 
+function isPending(record: OnlineOrderRecord) {
+  const joined = `${record.paymentStatus} ${record.orderStatus} ${record.bookingStatus}`.toLowerCase()
+  return joined.includes('pending') || joined.includes('waiting') || joined.includes('manual')
+}
+
 function filterRecords(records: OnlineOrderRecord[], tab: OnlineOrderTab) {
   if (tab === 'service-bookings') return records.filter(isServiceBooking)
   if (tab === 'sedifex-market') return records.filter(record => record.sourceChannel === 'sedifex_market')
@@ -243,6 +249,7 @@ function filterRecords(records: OnlineOrderRecord[], tab: OnlineOrderTab) {
   if (tab === 'pay-on-delivery') return records.filter(isPayOnDelivery)
   if (tab === 'manual-payment') return records.filter(isManualPayment)
   if (tab === 'online-paid') return records.filter(isOnlinePaid)
+  if (tab === 'pending') return records.filter(isPending)
   return records.filter(record => !isServiceBooking(record))
 }
 
@@ -264,17 +271,29 @@ function buildCustomerContactHref(record: OnlineOrderRecord) {
   return ''
 }
 
-function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+function StatCard({ label, value, hint, active, onClick }: { label: string; value: string; hint: string; active?: boolean; onClick?: () => void }) {
   return (
-    <article style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 16, padding: 16 }}>
-      <p style={{ margin: 0, fontSize: 12, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>{label}</p>
-      <p style={{ margin: '6px 0 2px', color: '#0F172A', fontSize: 24, fontWeight: 800 }}>{value}</p>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        textAlign: 'left',
+        background: active ? '#EEF2FF' : '#F8FAFC',
+        border: active ? '1px solid #4338CA' : '1px solid #E2E8F0',
+        borderRadius: 18,
+        padding: 16,
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: active ? '0 18px 42px -30px rgba(67, 56, 202, 0.75)' : 'none',
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 12, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 800 }}>{label}</p>
+      <p style={{ margin: '7px 0 3px', color: '#0F172A', fontSize: 27, fontWeight: 900 }}>{value}</p>
       <p style={{ margin: 0, color: '#64748B', fontSize: 13 }}>{hint}</p>
-    </article>
+    </button>
   )
 }
 
-export default function MarketplaceOrders() {
+export default function MarketplaceOrders({ compactHeader = false }: { compactHeader?: boolean }) {
   const { storeId } = useActiveStore()
   const [orders, setOrders] = useState<OnlineOrderRecord[]>([])
   const [bookings, setBookings] = useState<OnlineOrderRecord[]>([])
@@ -342,6 +361,7 @@ export default function MarketplaceOrders() {
     const payOnDelivery = allRecords.filter(isPayOnDelivery)
     const manualPayment = allRecords.filter(isManualPayment)
     const onlinePaid = allRecords.filter(isOnlinePaid)
+    const pending = allRecords.filter(isPending)
     return {
       productOrders,
       serviceBookings,
@@ -350,13 +370,15 @@ export default function MarketplaceOrders() {
       payOnDelivery,
       manualPayment,
       onlinePaid,
+      pending,
       totalPaidValue: onlinePaid.reduce((sum, record) => sum + record.amount, 0),
       deliveryValue: payOnDelivery.reduce((sum, record) => sum + record.amount, 0),
     }
   }, [allRecords])
 
   const tabs: Array<{ id: OnlineOrderTab; label: string; count: number }> = [
-    { id: 'product-orders', label: 'All Product Orders', count: stats.productOrders.length },
+    { id: 'product-orders', label: 'Product Orders', count: stats.productOrders.length },
+    { id: 'pending', label: 'Pending', count: stats.pending.length },
     { id: 'service-bookings', label: 'Service Bookings', count: stats.serviceBookings.length },
     { id: 'sedifex-market', label: 'Sedifex Market', count: stats.sedifexMarket.length },
     { id: 'client-website', label: 'Client Website', count: stats.clientWebsite.length },
@@ -391,60 +413,63 @@ export default function MarketplaceOrders() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sedifex source of truth</p>
-        <h2 style={{ color: '#4338CA', margin: 0 }}>Online Orders</h2>
-        <p style={{ color: '#475569', margin: '8px 0 0' }}>
-          View product orders and service bookings from Sedifex Market, client websites, public pages, online checkout, manual payment, and pay-on-delivery channels.
-        </p>
-      </div>
-
-      <section style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 16, padding: 14, marginBottom: 20, color: '#92400E' }}>
-        <strong>Launch follow-up:</strong> Sedifex controls external checkout confirmation and follow-up for now. Stores can view customer details and prepare, while Sedifex support manages confirmation during launch.
-      </section>
+      {!compactHeader ? (
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sedifex source of truth</p>
+          <h1 style={{ color: '#111827', margin: 0 }}>Sales & Online Orders</h1>
+          <p style={{ color: '#475569', margin: '8px 0 0' }}>
+            View product orders and service bookings from Sedifex Market, client websites, public pages, online checkout, manual payment, and pay-on-delivery channels.
+          </p>
+        </div>
+      ) : null}
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Product orders" value={String(stats.productOrders.length)} hint="Saved in integrationOrders" />
-        <StatCard label="Service bookings" value={String(stats.serviceBookings.length)} hint="Saved in integrationBookings" />
-        <StatCard label="Sedifex Market" value={String(stats.sedifexMarket.length)} hint="Marketplace-originated requests" />
-        <StatCard label="Client website" value={String(stats.clientWebsite.length)} hint="Website integration requests" />
-        <StatCard label="Pay on delivery" value={String(stats.payOnDelivery.length)} hint={`${formatMoney(stats.deliveryValue, 'GHS')} free launch value`} />
-        <StatCard label="Online paid" value={String(stats.onlinePaid.length)} hint={`${formatMoney(stats.totalPaidValue, 'GHS')} confirmed value`} />
+        <StatCard label="Product orders" value={String(stats.productOrders.length)} hint="All product sales requests" active={activeTab === 'product-orders'} onClick={() => setActiveTab('product-orders')} />
+        <StatCard label="Pending" value={String(stats.pending.length)} hint="Needs follow-up" active={activeTab === 'pending'} onClick={() => setActiveTab('pending')} />
+        <StatCard label="Online paid" value={String(stats.onlinePaid.length)} hint={`${formatMoney(stats.totalPaidValue, 'GHS')} confirmed`} active={activeTab === 'online-paid'} onClick={() => setActiveTab('online-paid')} />
+        <StatCard label="Pay on delivery" value={String(stats.payOnDelivery.length)} hint={`${formatMoney(stats.deliveryValue, 'GHS')} to collect`} active={activeTab === 'pay-on-delivery'} onClick={() => setActiveTab('pay-on-delivery')} />
+        <StatCard label="Service bookings" value={String(stats.serviceBookings.length)} hint="Appointments and classes" active={activeTab === 'service-bookings'} onClick={() => setActiveTab('service-bookings')} />
+        <StatCard label="Client website" value={String(stats.clientWebsite.length)} hint="Website checkout requests" active={activeTab === 'client-website'} onClick={() => setActiveTab('client-website')} />
       </section>
 
-      <section style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 20, padding: 18, display: 'grid', gap: 16 }}>
+      <section style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 22, padding: 18, display: 'grid', gap: 16, boxShadow: '0 24px 60px -48px rgba(15, 23, 42, 0.7)' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  border: activeTab === tab.id ? '1px solid #4338CA' : '1px solid #CBD5E1',
-                  background: activeTab === tab.id ? '#EEF2FF' : '#FFFFFF',
-                  color: activeTab === tab.id ? '#3730A3' : '#334155',
-                  borderRadius: 999,
-                  padding: '8px 12px',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                {tab.label} ({tab.count})
-              </button>
-            ))}
+          <div>
+            <h2 style={{ margin: 0, color: '#111827' }}>Orders workspace</h2>
+            <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 14 }}>This replaces the separate Online Orders page as the main daily dashboard area.</p>
           </div>
-          <label style={{ display: 'grid', gap: 4, color: '#475569', fontSize: 13, minWidth: 220 }}>
+          <label style={{ display: 'grid', gap: 4, color: '#475569', fontSize: 13, minWidth: 250 }}>
             Search
             <input
               type="search"
               value={searchText}
               onChange={event => setSearchText(event.target.value)}
               placeholder="Reference, customer, channel, status…"
-              style={{ border: '1px solid #CBD5E1', borderRadius: 10, padding: '9px 10px' }}
+              style={{ border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 11px' }}
             />
           </label>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                border: activeTab === tab.id ? '1px solid #4338CA' : '1px solid #CBD5E1',
+                background: activeTab === tab.id ? '#EEF2FF' : '#FFFFFF',
+                color: activeTab === tab.id ? '#3730A3' : '#334155',
+                borderRadius: 999,
+                padding: '8px 12px',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
         </div>
 
         {error ? <p style={{ margin: 0, color: '#B91C1C', fontWeight: 700 }}>{error}</p> : null}
