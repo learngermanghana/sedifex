@@ -76,12 +76,30 @@ export const NAV_ITEMS: NavItem[] = [
     sortOrder: 55,
   },
   {
+    id: 'volunteers',
+    label: 'Volunteers',
+    type: 'module',
+    target: '/volunteers',
+    rolesAllowed: ['owner', 'staff'],
+    industries: ['ngo'],
+    sortOrder: 56,
+  },
+  {
+    id: 'support-requests',
+    label: 'Support requests',
+    type: 'module',
+    target: '/support-requests',
+    rolesAllowed: ['owner', 'staff'],
+    industries: ['ngo'],
+    sortOrder: 57,
+  },
+  {
     id: 'settlement',
     label: 'Payments / Settlement',
     type: 'module',
     target: '/settlement',
     rolesAllowed: ['owner'],
-    sortOrder: 56,
+    sortOrder: 58,
   },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
@@ -139,7 +157,7 @@ export type NavigationSettings = {
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'marketplace-orders', 'upcoming-events', 'settlement', 'donor-management', 'public-page'],
   travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'products', 'customers', 'upcoming-events', 'marketplace-orders', 'settlement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'marketplace-orders', 'settlement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
   school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
