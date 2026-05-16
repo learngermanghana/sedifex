@@ -16,6 +16,7 @@ import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
 import OnlineOrders from './pages/MarketplaceOrders'
 import ProductEngagement from './pages/ProductEngagement'
+import StudentRegistration from './pages/StudentRegistration'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
@@ -99,6 +100,7 @@ const router = createBrowserRouter([
           { path: 'online-orders', element: <OnlineOrders /> },
           { path: 'marketplace-orders', element: <Navigate to="/online-orders" replace /> },
           { path: 'product-engagement', element: <ProductEngagement /> },
+          { path: 'student-registration', element: <StudentRegistration /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
           { path: 'bulk-email', element: <BulkEmail /> },
