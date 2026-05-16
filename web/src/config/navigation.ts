@@ -73,7 +73,6 @@ export const NAV_ITEMS: NavItem[] = [
     type: 'module',
     target: '/student-registration',
     rolesAllowed: ['owner', 'staff'],
-    industries: ['school'],
     sortOrder: 55,
   },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
