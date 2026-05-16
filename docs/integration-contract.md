@@ -4,6 +4,31 @@ This is the authoritative integration contract for all Sedifex partner-facing en
 
 All integration documentation must link to this page and must not redefine contract semantics independently.
 
+Related current implementation docs:
+
+- `docs/integration-api-guide.md` — endpoint usage, checkout, catalog, bookings, and webhook guidance.
+- `docs/sedifex-platform-updates-2026.md` — latest Online Orders, source-of-truth, checkout, booking, pay-on-delivery, and engagement updates.
+- `docs/engagement-cross-platform-integration-reference.md` — product comments/favorites cross-platform contract.
+
+## Current source-of-truth rule
+
+Sedifex remains the source of truth for external commerce, booking, and engagement integrations.
+
+| Domain | Canonical record |
+|---|---|
+| Product orders from Sedifex Market | `integrationOrders` |
+| Product orders from merchant/client websites | `integrationOrders` |
+| Product pay-on-delivery orders | `integrationOrders` |
+| Service bookings from Sedifex Market | `integrationBookings` |
+| Service bookings from merchant/client websites | `integrationBookings` |
+| Lead-only enquiries | `checkoutRequests` |
+| Payment/webhook event logs | `integrationWebhookEvents` |
+| Product comments | `engagement_comments` |
+| Product favorites/reactions | `engagement_favorites` |
+| Engagement summaries | `engagement_threads` |
+
+Do not store product purchases as bookings. Do not treat webhook logs as order records. Do not make merchant websites the permanent source of truth.
+
 ## Mandatory versioning policy
 
 - **Current contract version:** `2026-04-13`
@@ -37,6 +62,10 @@ All integration documentation must link to this page and must not redefine contr
 - Send `x-api-key` and `X-Sedifex-Contract-Version` on every authenticated integration request.
 - Log `x-sedifex-request-id` for support/debugging correlation.
 - Treat contract-version mismatch as a deployment/configuration incident and escalate immediately.
+- Send `sourceChannel`, `sourceLabel`, `clientOrderId`, `storeId`, and `reference` where applicable.
+- For product orders, write to Sedifex order endpoints so records appear in **Online Orders**.
+- For service bookings, create bookings first and link checkout/payment afterward.
+- For comments/favorites, resolve to `canonicalProductKey = storeId:sourceProductId`.
 
 ## Required behavior for Sedifex-owned docs
 
@@ -45,3 +74,4 @@ Every integration doc (quickstarts, plugin guides, webhook docs, and plans) must
 1. Link to this canonical contract page.
 2. State that header-based contract versioning is mandatory.
 3. Avoid introducing alternative versioning guidance.
+4. Follow the current source-of-truth mapping above.
