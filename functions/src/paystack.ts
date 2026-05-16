@@ -165,6 +165,110 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
 
   const orderSnap = await orderRef.get()
   const orderData = (orderSnap.data() ?? {}) as Record<string, unknown>
+
+  const candidateIdentifiers = [
+    reference,
+    toTrimmedString(data.reference),
+    toTrimmedString(metadata.clientOrderId),
+    toTrimmedString(metadata.sedifexOrderId),
+    toTrimmedString(orderData.clientOrderId),
+    toTrimmedString(orderData.client_order_id),
+    toTrimmedString(orderData.sedifexOrderId),
+    toTrimmedString(orderData.sedifex_order_id),
+    toTrimmedString(orderData.paymentReference),
+    toTrimmedString(orderData.payment_reference),
+    toTrimmedString(orderData.paystackReference),
+  ].filter(Boolean)
+  const identifiers = Array.from(new Set(candidateIdentifiers))
+  const fieldsToMatch = [
+    'reference',
+    'paymentReference',
+    'payment_reference',
+    'clientOrderId',
+    'client_order_id',
+    'sedifexOrderId',
+    'sedifex_order_id',
+    'paystackReference',
+  ]
+
+  const topLevelMatched = new Map<string, FirebaseFirestore.DocumentReference>()
+  for (const field of fieldsToMatch) {
+    for (let i = 0; i < identifiers.length; i += 10) {
+      const chunk = identifiers.slice(i, i + 10)
+      if (!chunk.length) continue
+      const snap = await defaultDb
+        .collection('integrationOrders')
+        .where(field, 'in', chunk)
+        .get()
+      snap.docs.forEach((doc) => {
+        const docData = doc.data() as Record<string, unknown>
+        const docStoreId = toTrimmedString(docData.storeId)
+        const docMerchantId = toTrimmedString(docData.merchantId)
+        if (
+          !docStoreId ||
+          !docMerchantId ||
+          docStoreId === storeId ||
+          docMerchantId === storeId
+        ) {
+          topLevelMatched.set(doc.ref.path, doc.ref)
+        }
+      })
+    }
+  }
+
+  if (topLevelMatched.size > 0) {
+    const topLevelUpdate: Record<string, unknown> = {
+      provider: 'paystack',
+      paymentProvider: 'paystack',
+      paymentReference: reference,
+      payment_reference: reference,
+      paystackReference: reference,
+      paystackStatus: data.status ?? (isSuccess ? 'success' : 'failed'),
+      lastPaymentEvent: evtType,
+      lastPaymentMetadata: metadata,
+      paymentUpdatedAt: now,
+      updatedAt: now,
+    }
+
+    if (isSuccess) {
+      topLevelUpdate.paymentStatus = 'success'
+      topLevelUpdate.payment_status = 'success'
+      topLevelUpdate.orderStatus = 'confirmed'
+      topLevelUpdate.order_status = 'confirmed'
+      topLevelUpdate.status = 'confirmed'
+      topLevelUpdate.paystackChannel = data.channel ?? null
+      topLevelUpdate.paystackFees = fees
+      topLevelUpdate.amountPaid = amount
+      topLevelUpdate.customerEmail = data.customer?.email ?? null
+      topLevelUpdate.paymentConfirmedAt = now
+      topLevelUpdate.syncStatus = 'pending'
+      topLevelUpdate.syncRequestedAt = now
+    } else {
+      topLevelUpdate.paymentStatus = 'failed'
+      topLevelUpdate.payment_status = 'failed'
+      topLevelUpdate.orderStatus = 'payment_failed'
+      topLevelUpdate.order_status = 'payment_failed'
+      topLevelUpdate.status = 'payment_failed'
+      topLevelUpdate.paymentFailedAt = now
+    }
+
+    const matchedRefs = Array.from(topLevelMatched.values())
+    for (let i = 0; i < matchedRefs.length; i += 450) {
+      const batch = defaultDb.batch()
+      matchedRefs.slice(i, i + 450).forEach((docRef) => {
+        batch.set(docRef, topLevelUpdate, { merge: true })
+      })
+      await batch.commit()
+    }
+  }
+
+  functions.logger.info('Mirrored Paystack integration payment status to top-level integrationOrders', {
+    storeId,
+    reference,
+    matchedCount: topLevelMatched.size,
+    paymentStatus: isSuccess ? 'success' : 'failed',
+  })
+
   const bookingId = toTrimmedString(orderData.bookingId) || toTrimmedString(metadata.bookingId)
 
   if (bookingId) {
