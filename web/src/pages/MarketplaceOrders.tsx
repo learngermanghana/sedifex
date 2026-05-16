@@ -100,9 +100,34 @@ function readAmount(source: Record<string, unknown>) {
   const payment = getNestedObject(source, 'payment')
   const pricingSnapshot = getNestedObject(source, 'pricingSnapshot')
   const pricingSnapshotSnake = getNestedObject(source, 'pricing_snapshot')
-  return asNumber(
-    payment.customerTotal ?? payment.amount ?? pricingSnapshot.subtotal ?? pricingSnapshot.final_total ?? pricingSnapshotSnake.subtotal ?? pricingSnapshotSnake.final_total,
+
+  const directAmountMinor = asNumber(source.amountMinor, 0)
+  const finalTotalMinor = asNumber(
+    pricingSnapshot.final_total_minor ??
+      pricingSnapshot.finalTotalMinor ??
+      pricingSnapshotSnake.final_total_minor ??
+      pricingSnapshotSnake.finalTotalMinor,
     0,
+  )
+
+  return asNumber(
+    payment.customerTotal ??
+      payment.amount ??
+      source.amountPaid ??
+      source.amount ??
+      source.total ??
+      source.grandTotal ??
+      pricingSnapshot.subtotal ??
+      pricingSnapshot.finalTotal ??
+      pricingSnapshot.final_total ??
+      pricingSnapshotSnake.subtotal ??
+      pricingSnapshotSnake.finalTotal ??
+      pricingSnapshotSnake.final_total,
+    directAmountMinor > 0
+      ? directAmountMinor / 100
+      : finalTotalMinor > 0
+        ? finalTotalMinor / 100
+        : 0,
   )
 }
 
