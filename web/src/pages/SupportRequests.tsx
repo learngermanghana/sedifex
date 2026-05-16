@@ -1,14 +1,29 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, getDocs, limit, query, serverTimestamp, where, type Timestamp } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  type Timestamp,
+} from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+
+type SupportStatus = 'new' | 'in_review' | 'contacted' | 'assigned' | 'fulfilled' | 'rejected'
+type SupportPriority = 'normal' | 'high' | 'urgent'
 
 type SupportRecord = {
   id: string
   storeId?: string
   source?: string
-  status?: string
-  priority?: string
+  status?: SupportStatus | string
+  priority?: SupportPriority | string
   person?: { name?: string; email?: string | null; phone?: string | null }
   data?: {
     supportType?: string | null
@@ -29,11 +44,14 @@ type SupportForm = {
   needSummary: string
   location: string
   householdSize: string
-  urgency: string
-  status: string
-  priority: string
+  urgency: SupportPriority
+  status: SupportStatus
+  priority: SupportPriority
   notes: string
 }
+
+const supportStatuses: SupportStatus[] = ['new', 'in_review', 'contacted', 'assigned', 'fulfilled', 'rejected']
+const supportPriorities: SupportPriority[] = ['normal', 'high', 'urgent']
 
 const initialForm: SupportForm = {
   name: '',
@@ -75,8 +93,9 @@ const styles = {
   actions: { display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 10, marginTop: 16 },
   primaryButton: { border: 0, borderRadius: 14, padding: '12px 18px', background: 'linear-gradient(135deg, #b91c1c, #dc2626)', color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: '0 18px 36px -24px rgba(185, 28, 28, 0.85)' },
   secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 14, padding: '11px 16px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  dangerButton: { border: '1px solid #fecaca', borderRadius: 14, padding: '11px 16px', background: '#fff1f2', color: '#be123c', fontWeight: 850, cursor: 'pointer' },
   tableWrap: { overflowX: 'auto' as const, borderRadius: 18, border: '1px solid #e2e8f0' },
-  table: { width: '100%', minWidth: 1040, borderCollapse: 'collapse' as const },
+  table: { width: '100%', minWidth: 1180, borderCollapse: 'collapse' as const },
   th: { textAlign: 'left' as const, padding: '13px 14px', fontSize: 12, color: '#64748b', background: '#f8fafc', textTransform: 'uppercase' as const, letterSpacing: '0.08em' },
   td: { padding: '14px 14px', borderTop: '1px solid #e2e8f0', verticalAlign: 'top' as const, color: '#334155', fontSize: 14 },
   alert: { borderRadius: 16, padding: '12px 14px', fontWeight: 800 },
@@ -88,6 +107,14 @@ function clean(value: string, max = 200) {
 
 function normalizeEmail(value: string) {
   return clean(value, 160).toLowerCase()
+}
+
+function normalizeStatus(value?: string): SupportStatus {
+  return supportStatuses.includes(value as SupportStatus) ? value as SupportStatus : 'new'
+}
+
+function normalizePriority(value?: string): SupportPriority {
+  return supportPriorities.includes(value as SupportPriority) ? value as SupportPriority : 'normal'
 }
 
 function toDate(value?: Timestamp | string | null) {
@@ -111,9 +138,9 @@ function label(value?: string) {
 
 function statusStyle(value?: string) {
   const normalized = (value || 'new').toLowerCase()
-  if (['approved', 'fulfilled', 'resolved'].includes(normalized)) return { background: '#dcfce7', color: '#166534' }
+  if (['fulfilled', 'resolved'].includes(normalized)) return { background: '#dcfce7', color: '#166534' }
   if (['in_review', 'contacted', 'assigned'].includes(normalized)) return { background: '#fef3c7', color: '#92400e' }
-  if (['urgent', 'high'].includes(normalized)) return { background: '#fee2e2', color: '#991b1b' }
+  if (['urgent', 'high', 'rejected'].includes(normalized)) return { background: '#fee2e2', color: '#991b1b' }
   return { background: '#e0f2fe', color: '#075985' }
 }
 
@@ -130,6 +157,7 @@ export default function SupportRequests() {
   const { storeId } = useActiveStore()
   const [rows, setRows] = useState<SupportRecord[]>([])
   const [form, setForm] = useState<SupportForm>(initialForm)
+  const [editingId, setEditingId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -171,6 +199,75 @@ export default function SupportRequests() {
     return { total, website, manual, urgent }
   }, [rows])
 
+  function resetForm() {
+    setForm(initialForm)
+    setEditingId('')
+  }
+
+  function startEdit(item: SupportRecord) {
+    const priority = normalizePriority(item.priority || item.data?.urgency || undefined)
+    setEditingId(item.id)
+    setForm({
+      name: item.person?.name ?? '',
+      phone: item.person?.phone ?? '',
+      email: item.person?.email ?? '',
+      supportType: item.data?.supportType ?? '',
+      needSummary: item.data?.needSummary ?? '',
+      location: item.data?.location ?? '',
+      householdSize: item.data?.householdSize ?? '',
+      urgency: normalizePriority(item.data?.urgency || priority),
+      status: normalizeStatus(item.status),
+      priority,
+      notes: item.data?.notes ?? '',
+    })
+    setMessage(null)
+    setError(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function updateStatus(item: SupportRecord, nextStatus: SupportStatus) {
+    try {
+      await updateDoc(doc(db, 'support_requests', item.id), {
+        status: nextStatus,
+        updatedAt: serverTimestamp(),
+      })
+      setMessage(`Support request status changed to ${label(nextStatus)}.`)
+      await load(true)
+    } catch (statusError) {
+      console.error(statusError)
+      setError('Unable to update support request status.')
+    }
+  }
+
+  async function updatePriority(item: SupportRecord, nextPriority: SupportPriority) {
+    try {
+      await updateDoc(doc(db, 'support_requests', item.id), {
+        priority: nextPriority,
+        'data.urgency': nextPriority,
+        updatedAt: serverTimestamp(),
+      })
+      setMessage(`Support request priority changed to ${label(nextPriority)}.`)
+      await load(true)
+    } catch (priorityError) {
+      console.error(priorityError)
+      setError('Unable to update support request priority.')
+    }
+  }
+
+  async function deleteRequest(item: SupportRecord) {
+    const name = item.person?.name || 'this request'
+    if (!window.confirm(`Delete support request from ${name}? This cannot be undone.`)) return
+    try {
+      await deleteDoc(doc(db, 'support_requests', item.id))
+      if (editingId === item.id) resetForm()
+      setMessage('Support request deleted.')
+      await load(true)
+    } catch (deleteError) {
+      console.error(deleteError)
+      setError('Unable to delete support request.')
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!storeId) return setError('Select a workspace before adding a support request.')
@@ -186,26 +283,36 @@ export default function SupportRequests() {
       setError(null)
       setMessage(null)
       const now = serverTimestamp()
-      await addDoc(collection(db, 'support_requests'), {
+      const payload = {
         storeId,
         pageType: 'support_request',
-        source: 'manual_dashboard',
-        status: clean(form.status, 80) || 'new',
-        priority: clean(form.priority, 80) || clean(form.urgency, 80) || 'normal',
+        status: normalizeStatus(form.status),
+        priority: normalizePriority(form.priority || form.urgency),
         person: { name, phone: phone || null, email: email || null },
         data: {
           supportType: clean(form.supportType, 160) || null,
           needSummary: clean(form.needSummary, 500) || null,
           location: clean(form.location, 160) || null,
           householdSize: clean(form.householdSize, 80) || null,
-          urgency: clean(form.urgency, 80) || null,
+          urgency: normalizePriority(form.urgency || form.priority),
           notes: clean(form.notes, 1000) || null,
         },
-        createdAt: now,
         updatedAt: now,
-      })
-      setForm(initialForm)
-      setMessage('Support request added.')
+      }
+
+      if (editingId) {
+        await updateDoc(doc(db, 'support_requests', editingId), payload)
+        setMessage('Support request updated.')
+      } else {
+        await addDoc(collection(db, 'support_requests'), {
+          ...payload,
+          source: 'manual_dashboard',
+          createdAt: now,
+        })
+        setMessage('Support request added.')
+      }
+
+      resetForm()
       await load(true)
     } catch (saveError) {
       console.error(saveError)
@@ -224,7 +331,7 @@ export default function SupportRequests() {
       <section style={styles.hero}>
         <p style={styles.eyebrow}>NGO workspace</p>
         <h1 style={styles.title}>Support requests</h1>
-        <p style={styles.subtitle}>Track people requesting help from your NGO. Add requests manually or receive submissions from your website without using extra Vercel API routes.</p>
+        <p style={styles.subtitle}>Track people requesting help from your NGO. Move requests from new to review, contacted, assigned, fulfilled, or rejected.</p>
       </section>
 
       <section style={styles.statsGrid} aria-label="Support request summary">
@@ -237,8 +344,8 @@ export default function SupportRequests() {
       <section style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
-            <h2 style={styles.cardTitle}>Add support request manually</h2>
-            <p style={styles.muted}>Use this for calls, walk-ins, WhatsApp requests, community outreach, and field officer reports.</p>
+            <h2 style={styles.cardTitle}>{editingId ? 'Edit support request' : 'Add support request manually'}</h2>
+            <p style={styles.muted}>{editingId ? 'Update requester details, priority, or status.' : 'Use this for calls, walk-ins, WhatsApp requests, community outreach, and field officer reports.'}</p>
           </div>
         </div>
         <form onSubmit={handleSubmit}>
@@ -249,14 +356,14 @@ export default function SupportRequests() {
             <label style={styles.label}>Support type *<input style={styles.input} value={form.supportType} onChange={event => update('supportType', event.target.value)} placeholder="Food, fees, medical, shelter" /></label>
             <label style={styles.label}>Location<input style={styles.input} value={form.location} onChange={event => update('location', event.target.value)} placeholder="Community / town" /></label>
             <label style={styles.label}>Household size<input style={styles.input} value={form.householdSize} onChange={event => update('householdSize', event.target.value)} placeholder="e.g. 4 people" /></label>
-            <label style={styles.label}>Priority<select style={styles.input} value={form.priority} onChange={event => update('priority', event.target.value)}><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
-            <label style={styles.label}>Status<select style={styles.input} value={form.status} onChange={event => update('status', event.target.value)}><option value="new">New</option><option value="in_review">In review</option><option value="contacted">Contacted</option><option value="assigned">Assigned</option><option value="fulfilled">Fulfilled</option><option value="rejected">Rejected</option></select></label>
+            <label style={styles.label}>Priority<select style={styles.input} value={form.priority} onChange={event => update('priority', normalizePriority(event.target.value))}>{supportPriorities.map(priority => <option key={priority} value={priority}>{label(priority)}</option>)}</select></label>
+            <label style={styles.label}>Status<select style={styles.input} value={form.status} onChange={event => update('status', normalizeStatus(event.target.value))}>{supportStatuses.map(status => <option key={status} value={status}>{label(status)}</option>)}</select></label>
           </div>
           <label style={{ ...styles.label, marginTop: 14 }}>Need summary<textarea style={{ ...styles.input, minHeight: 90, resize: 'vertical' }} rows={3} value={form.needSummary} onChange={event => update('needSummary', event.target.value)} placeholder="What support is needed?" /></label>
           <label style={{ ...styles.label, marginTop: 14 }}>Notes<textarea style={{ ...styles.input, minHeight: 90, resize: 'vertical' }} rows={3} value={form.notes} onChange={event => update('notes', event.target.value)} /></label>
           <div style={styles.actions}>
-            <button type="submit" style={{ ...styles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : 'Add request'}</button>
-            <button type="button" style={styles.secondaryButton} onClick={() => setForm(initialForm)} disabled={saving}>Clear form</button>
+            <button type="submit" style={{ ...styles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : editingId ? 'Update request' : 'Add request'}</button>
+            <button type="button" style={styles.secondaryButton} onClick={resetForm} disabled={saving}>{editingId ? 'Cancel edit' : 'Clear form'}</button>
           </div>
           {message ? <p style={{ ...styles.alert, background: '#dcfce7', color: '#166534' }}>{message}</p> : null}
         </form>
@@ -264,7 +371,7 @@ export default function SupportRequests() {
 
       <section style={styles.card}>
         <div style={styles.cardHeader}>
-          <div><h2 style={styles.cardTitle}>Latest support requests</h2><p style={styles.muted}>Website requests and manual entries appear here.</p></div>
+          <div><h2 style={styles.cardTitle}>Latest support requests</h2><p style={styles.muted}>Website requests and manual entries appear here. Change status, edit details, or delete duplicates.</p></div>
           <button type="button" style={styles.secondaryButton} onClick={() => void load(true)} disabled={loading}>Refresh</button>
         </div>
         {loading ? <p style={styles.muted}>Loading support requests…</p> : null}
@@ -273,8 +380,8 @@ export default function SupportRequests() {
         {rows.length > 0 ? (
           <div style={styles.tableWrap}>
             <table style={styles.table}>
-              <thead><tr><th style={styles.th}>Requester</th><th style={styles.th}>Type</th><th style={styles.th}>Summary</th><th style={styles.th}>Location</th><th style={styles.th}>Source</th><th style={styles.th}>Priority</th><th style={styles.th}>Status</th><th style={styles.th}>Date</th></tr></thead>
-              <tbody>{rows.map(item => <tr key={item.id}><td style={styles.td}><strong style={{ color: '#0f172a' }}>{item.person?.name ?? 'Unnamed requester'}</strong><br /><small>{item.person?.phone ?? item.person?.email ?? 'No contact'}</small></td><td style={styles.td}>{item.data?.supportType ?? '—'}</td><td style={styles.td}>{item.data?.needSummary ?? '—'}</td><td style={styles.td}>{item.data?.location ?? '—'}</td><td style={styles.td}>{label(item.source)}</td><td style={styles.td}><span style={{ ...statusStyle(item.priority), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{label(item.priority)}</span></td><td style={styles.td}><span style={{ ...statusStyle(item.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{label(item.status)}</span></td><td style={styles.td}>{formatDate(item.createdAt)}</td></tr>)}</tbody>
+              <thead><tr><th style={styles.th}>Requester</th><th style={styles.th}>Type</th><th style={styles.th}>Summary</th><th style={styles.th}>Source</th><th style={styles.th}>Priority</th><th style={styles.th}>Status</th><th style={styles.th}>Date</th><th style={styles.th}>Actions</th></tr></thead>
+              <tbody>{rows.map(item => <tr key={item.id}><td style={styles.td}><strong style={{ color: '#0f172a' }}>{item.person?.name ?? 'Unnamed requester'}</strong><br /><small>{item.person?.phone ?? item.person?.email ?? 'No contact'}</small><br /><small>{item.data?.location ?? '—'}</small></td><td style={styles.td}>{item.data?.supportType ?? '—'}</td><td style={styles.td}>{item.data?.needSummary ?? '—'}</td><td style={styles.td}>{label(item.source)}</td><td style={styles.td}><span style={{ ...statusStyle(item.priority), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>{label(item.priority)}</span><select style={{ ...styles.input, minWidth: 120 }} value={normalizePriority(item.priority || item.data?.urgency || undefined)} onChange={event => void updatePriority(item, normalizePriority(event.target.value))}>{supportPriorities.map(priority => <option key={priority} value={priority}>{label(priority)}</option>)}</select></td><td style={styles.td}><span style={{ ...statusStyle(item.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>{label(item.status)}</span><select style={{ ...styles.input, minWidth: 140 }} value={normalizeStatus(item.status)} onChange={event => void updateStatus(item, normalizeStatus(event.target.value))}>{supportStatuses.map(status => <option key={status} value={status}>{label(status)}</option>)}</select></td><td style={styles.td}>{formatDate(item.createdAt)}</td><td style={styles.td}><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" style={styles.secondaryButton} onClick={() => startEdit(item)}>Edit</button><button type="button" style={styles.dangerButton} onClick={() => void deleteRequest(item)}>Delete</button></div></td></tr>)}</tbody>
             </table>
           </div>
         ) : null}
