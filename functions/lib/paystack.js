@@ -68,6 +68,225 @@ function assertAuthenticated(context) {
         throw new functions.https.HttpsError('unauthenticated', 'Sign in required');
     }
 }
+const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '');
+function isIntegrationCheckoutEvent(data) {
+    const metadata = data.metadata ?? {};
+    const channel = toTrimmedString(metadata.channel);
+    return Boolean(channel === 'client-website' ||
+        toTrimmedString(metadata.sedifexOrderId) ||
+        toTrimmedString(metadata.clientOrderId) ||
+        toTrimmedString(metadata.orderType));
+}
+async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
+    if (!isIntegrationCheckoutEvent(data))
+        return false;
+    const metadata = data.metadata ?? {};
+    const storeId = toTrimmedString(metadata.storeId);
+    const reference = toTrimmedString(data.reference);
+    if (!storeId || !reference) {
+        functions.logger.warn('Integration Paystack event missing storeId/reference', {
+            event: evtType,
+            storeId,
+            reference,
+            metadata,
+        });
+        return false;
+    }
+    const isSuccess = evtType === 'charge.success';
+    const isFailure = evtType === 'charge.failed';
+    if (!isSuccess && !isFailure)
+        return false;
+    const amount = typeof data.amount === 'number' ? data.amount / 100 : null;
+    const fees = typeof data.fees === 'number' ? data.fees / 100 : null;
+    const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    const orderRef = firestore_1.defaultDb
+        .collection('stores')
+        .doc(storeId)
+        .collection('integrationOrders')
+        .doc(reference);
+    const orderUpdate = {
+        provider: 'paystack',
+        paymentProvider: 'paystack',
+        paymentReference: reference,
+        paystackReference: reference,
+        paystackStatus: data.status ?? null,
+        paystackChannel: data.channel ?? null,
+        paystackFees: fees,
+        customerEmail: data.customer?.email ?? null,
+        lastPaymentEvent: evtType,
+        lastPaymentMetadata: metadata,
+        paymentUpdatedAt: now,
+        updatedAt: now,
+    };
+    if (amount !== null) {
+        orderUpdate.amountPaid = amount;
+    }
+    if (isSuccess) {
+        orderUpdate.paymentStatus = 'paid';
+        orderUpdate.payment_status = 'paid';
+        orderUpdate.orderStatus = 'paid';
+        orderUpdate.order_status = 'paid';
+        orderUpdate.paidAt = data.paid_at ?? null;
+        orderUpdate.paymentConfirmedAt = now;
+        orderUpdate.syncStatus = 'pending';
+        orderUpdate.syncRequestedAt = now;
+    }
+    else {
+        orderUpdate.paymentStatus = 'failed';
+        orderUpdate.payment_status = 'failed';
+        orderUpdate.orderStatus = 'payment_failed';
+        orderUpdate.order_status = 'payment_failed';
+        orderUpdate.paymentFailedAt = now;
+    }
+    await orderRef.set(orderUpdate, { merge: true });
+    const orderSnap = await orderRef.get();
+    const orderData = (orderSnap.data() ?? {});
+    const candidateIdentifiers = [
+        reference,
+        toTrimmedString(data.reference),
+        toTrimmedString(metadata.clientOrderId),
+        toTrimmedString(metadata.sedifexOrderId),
+        toTrimmedString(orderData.clientOrderId),
+        toTrimmedString(orderData.client_order_id),
+        toTrimmedString(orderData.sedifexOrderId),
+        toTrimmedString(orderData.sedifex_order_id),
+        toTrimmedString(orderData.paymentReference),
+        toTrimmedString(orderData.payment_reference),
+        toTrimmedString(orderData.paystackReference),
+    ].filter(Boolean);
+    const identifiers = Array.from(new Set(candidateIdentifiers));
+    const fieldsToMatch = [
+        'reference',
+        'paymentReference',
+        'payment_reference',
+        'clientOrderId',
+        'client_order_id',
+        'sedifexOrderId',
+        'sedifex_order_id',
+        'paystackReference',
+    ];
+    const topLevelMatched = new Map();
+    for (const field of fieldsToMatch) {
+        for (let i = 0; i < identifiers.length; i += 10) {
+            const chunk = identifiers.slice(i, i + 10);
+            if (!chunk.length)
+                continue;
+            const snap = await firestore_1.defaultDb
+                .collection('integrationOrders')
+                .where(field, 'in', chunk)
+                .get();
+            snap.docs.forEach((doc) => {
+                const docData = doc.data();
+                const docStoreId = toTrimmedString(docData.storeId);
+                const docMerchantId = toTrimmedString(docData.merchantId);
+                if (!docStoreId ||
+                    !docMerchantId ||
+                    docStoreId === storeId ||
+                    docMerchantId === storeId) {
+                    topLevelMatched.set(doc.ref.path, doc.ref);
+                }
+            });
+        }
+    }
+    if (topLevelMatched.size > 0) {
+        const topLevelUpdate = {
+            provider: 'paystack',
+            paymentProvider: 'paystack',
+            paymentReference: reference,
+            payment_reference: reference,
+            paystackReference: reference,
+            paystackStatus: data.status ?? (isSuccess ? 'success' : 'failed'),
+            lastPaymentEvent: evtType,
+            lastPaymentMetadata: metadata,
+            paymentUpdatedAt: now,
+            updatedAt: now,
+        };
+        if (isSuccess) {
+            topLevelUpdate.paymentStatus = 'success';
+            topLevelUpdate.payment_status = 'success';
+            topLevelUpdate.orderStatus = 'confirmed';
+            topLevelUpdate.order_status = 'confirmed';
+            topLevelUpdate.status = 'confirmed';
+            topLevelUpdate.paystackChannel = data.channel ?? null;
+            topLevelUpdate.paystackFees = fees;
+            topLevelUpdate.amountPaid = amount;
+            topLevelUpdate.customerEmail = data.customer?.email ?? null;
+            topLevelUpdate.paymentConfirmedAt = now;
+            topLevelUpdate.syncStatus = 'pending';
+            topLevelUpdate.syncRequestedAt = now;
+        }
+        else {
+            topLevelUpdate.paymentStatus = 'failed';
+            topLevelUpdate.payment_status = 'failed';
+            topLevelUpdate.orderStatus = 'payment_failed';
+            topLevelUpdate.order_status = 'payment_failed';
+            topLevelUpdate.status = 'payment_failed';
+            topLevelUpdate.paymentFailedAt = now;
+        }
+        const matchedRefs = Array.from(topLevelMatched.values());
+        for (let i = 0; i < matchedRefs.length; i += 450) {
+            const batch = firestore_1.defaultDb.batch();
+            matchedRefs.slice(i, i + 450).forEach((docRef) => {
+                batch.set(docRef, topLevelUpdate, { merge: true });
+            });
+            await batch.commit();
+        }
+    }
+    functions.logger.info('Mirrored Paystack integration payment status to top-level integrationOrders', {
+        storeId,
+        reference,
+        matchedCount: topLevelMatched.size,
+        paymentStatus: isSuccess ? 'success' : 'failed',
+    });
+    const bookingId = toTrimmedString(orderData.bookingId) || toTrimmedString(metadata.bookingId);
+    if (bookingId) {
+        const bookingUpdate = {
+            paymentReference: reference,
+            payment_reference: reference,
+            sedifexOrderId: toTrimmedString(metadata.sedifexOrderId) || orderData.sedifexOrderId || null,
+            clientOrderId: toTrimmedString(metadata.clientOrderId) || orderData.clientOrderId || null,
+            paymentUpdatedAt: now,
+            updatedAt: now,
+        };
+        if (isSuccess) {
+            bookingUpdate.paymentStatus = 'paid';
+            bookingUpdate.payment_status = 'paid';
+            bookingUpdate.paymentConfirmedAt = now;
+            bookingUpdate.syncStatus = 'pending';
+            bookingUpdate.syncRequestedAt = now;
+        }
+        else {
+            bookingUpdate.paymentStatus = 'failed';
+            bookingUpdate.payment_status = 'failed';
+            bookingUpdate.paymentFailedAt = now;
+        }
+        await firestore_1.defaultDb
+            .collection('stores')
+            .doc(storeId)
+            .collection('integrationBookings')
+            .doc(bookingId)
+            .set(bookingUpdate, { merge: true });
+    }
+    await firestore_1.defaultDb
+        .collection('stores')
+        .doc(storeId)
+        .collection('integrationPaymentEvents')
+        .doc(`${reference}_${Date.now()}`)
+        .set({
+        event: evtType,
+        reference,
+        data,
+        receivedAt: now,
+    });
+    functions.logger.info('Integration order Paystack status updated', {
+        event: evtType,
+        storeId,
+        reference,
+        paymentStatus: isSuccess ? 'paid' : 'failed',
+        bookingId: bookingId || null,
+    });
+    return true;
+}
 async function recordPaystackEvent(storeId, evtType, data) {
     try {
         await firestore_1.defaultDb
@@ -254,6 +473,9 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
         });
         switch (evtType) {
             case 'charge.success': {
+                const integrationOrderHandled = await updateIntegrationOrderFromPaystackEvent(evtType, data);
+                if (integrationOrderHandled)
+                    break;
                 const storeId = data.metadata?.storeId;
                 if (!storeId)
                     break;
@@ -292,6 +514,9 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
                 break;
             }
             case 'charge.failed': {
+                const integrationOrderHandled = await updateIntegrationOrderFromPaystackEvent(evtType, data);
+                if (integrationOrderHandled)
+                    break;
                 const storeId = data.metadata?.storeId;
                 const reference = data.reference || null;
                 const fees = typeof data.fees === 'number' ? data.fees / 100 : null;
