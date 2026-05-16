@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
-import { admin, defaultDb } from './firestore'
+import { defaultDb } from './firestore'
 
 const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
   default: '2026-04-13',
@@ -27,7 +27,7 @@ function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
-function toDate(value: unknown): Date | null {
+function parseDate(value: unknown): Date | null {
   if (!value) return null
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value
   if (typeof value === 'string') {
@@ -42,7 +42,7 @@ function toDate(value: unknown): Date | null {
 }
 
 function toIso(value: unknown) {
-  return toDate(value)?.toISOString() ?? null
+  return parseDate(value)?.toISOString() ?? null
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -94,12 +94,12 @@ async function isAuthorized(req: functions.https.Request) {
   }
 }
 
-function slotMatchesFilters(slot: SlotResponse, fromDate: Date | null, toDate: Date | null, serviceId: string) {
-  const start = toDate(slot.startAt)
+function slotMatchesFilters(slot: SlotResponse, fromDate: Date | null, toDateFilter: Date | null, serviceId: string) {
+  const start = parseDate(slot.startAt)
   if (!start) return false
   if (serviceId && slot.serviceId !== serviceId) return false
   if (fromDate && start < fromDate) return false
-  if (toDate && start > toDate) return false
+  if (toDateFilter && start > toDateFilter) return false
   return true
 }
 
@@ -118,8 +118,8 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
   try {
     const storeId = clean(req.query.storeId, 180)
     const serviceId = clean(req.query.serviceId, 220)
-    const fromDate = toDate(clean(req.query.from, 100))
-    const toDateFilter = toDate(clean(req.query.to, 100))
+    const fromDate = parseDate(clean(req.query.from, 100))
+    const toDateFilter = parseDate(clean(req.query.to, 100))
 
     if (!storeId) {
       res.status(400).json({ error: 'missing-store-id' })
