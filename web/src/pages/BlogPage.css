@@ -16,6 +16,20 @@
 .blog-page__title p { margin: 4px 0 0; color: #64748b; }
 
 .blog-page__top-actions { display: flex; gap: 10px; align-items: center; }
+.blog-page__image-panel {
+  min-width: 300px;
+  max-width: 360px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+.blog-page__image-panel strong { color: #0f172a; }
+.blog-page__image-panel p { margin: 4px 0 0; color: #64748b; font-size: 13px; line-height: 1.45; }
+.blog-page__image-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.blog-page__file-input { display: none; }
 .blog-page__image-upload {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -35,7 +49,7 @@
 
 .blog-page__editor-form { display: grid; gap: 12px; }
 .blog-page__toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.blog-page__toolbar--actions { justify-content: flex-start; }
+.blog-page__toolbar--actions { justify-content: flex-start; flex-wrap: wrap; }
 .blog-page__toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; color: #334155; }
 .blog-page__editor-form .stack { display: grid; gap: 6px; }
 .blog-page__editor-form textarea { width: 100%; min-height: 180px; resize: both; }
@@ -56,9 +70,10 @@
   gap: 8px;
 }
 .blog-post-item__top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.blog-post-item__image { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; flex: 0 0 auto; }
 .blog-post-item__title { margin: 0; font-size: 16px; }
 .blog-post-item__meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #64748b; font-size: 12px; }
-.blog-post-item__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.blog-post-item__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .blog-post-item__slug { color: #94a3b8; }
 
 .blog-status-badge {
@@ -82,8 +97,9 @@
 @media (max-width: 980px) {
   .blog-page__header { flex-direction: column; }
   .blog-page__top-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .blog-page__image-panel { max-width: none; width: 100%; }
   .blog-page__feed { width: 100%; }
 }
 
 .blog-page__upload-status { margin: 0; font-size: 13px; color: #334155; }
-.blog-page__image-preview { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #cbd5e1; }
+.blog-page__image-preview { width: 160px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid #cbd5e1; }
