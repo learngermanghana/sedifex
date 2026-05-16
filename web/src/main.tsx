@@ -7,7 +7,6 @@ import ShellLayout from './layout/ShellLayout'
 
 import Dashboard from './pages/Dashboard'
 import DashboardHub from './pages/DashboardHub'
-import Products from './pages/Products'
 import Sell from './pages/Sell'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
@@ -15,11 +14,11 @@ import Bookings from './pages/Bookings'
 import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
 import OnlineOrders from './pages/MarketplaceOrders'
-import ProductEngagement from './pages/ProductEngagement'
 import StudentRegistration from './pages/StudentRegistration'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import AccountOverview from './pages/AccountOverview'
+import PaymentSettlement from './pages/PaymentSettlement'
 import BulkMessaging from './pages/BulkMessaging'
 import BulkEmail from './pages/BulkEmail'
 import StaffManagement from './pages/StaffManagement'
@@ -40,7 +39,6 @@ import BookingMappingSettings from './pages/BookingMappingSettings'
 import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
 import IntegrationEmailSettings from './pages/IntegrationEmailSettings'
-import IntegrationGoogleBusinessSettings from './pages/IntegrationGoogleBusinessSettings'
 import BlogPage from './pages/BlogPage'
 
 // ✅ NEW: public receipt page used by QR/share
@@ -90,7 +88,7 @@ const router = createBrowserRouter([
               { index: true, element: <Dashboard /> },
             ],
           },
-          { path: 'products', element: <Products /> },
+          { path: 'products', element: <Navigate to="/dashboard" replace /> },
           { path: 'sell', element: <Sell /> },
           { path: 'customers', element: <Customers /> },
           { path: 'bookings', element: <Bookings /> },
@@ -100,7 +98,7 @@ const router = createBrowserRouter([
           { path: 'bookings/:bookingId', element: <BookingEditor /> },
           { path: 'online-orders', element: <OnlineOrders /> },
           { path: 'marketplace-orders', element: <Navigate to="/online-orders" replace /> },
-          { path: 'product-engagement', element: <ProductEngagement /> },
+          { path: 'product-engagement', element: <Navigate to="/dashboard" replace /> },
           { path: 'student-registration', element: <StudentRegistration /> },
           { path: 'data-transfer', element: <DataTransfer /> },
           { path: 'bulk-messaging', element: <BulkMessaging /> },
@@ -114,6 +112,7 @@ const router = createBrowserRouter([
           { path: 'expenses', element: <Navigate to="/donor-management" replace /> },
           { path: 'donor-management', element: <Expenses /> },
           { path: 'funds-ledger', element: <FundsLedger /> },
+          { path: 'settlement', element: <PaymentSettlement /> },
 
           // Close day
           { path: 'sell/close-day', element: <CloseDay /> },
@@ -132,7 +131,7 @@ const router = createBrowserRouter([
           { path: 'settings/integrations/website', element: <IntegrationWebsiteSettings /> },
           { path: 'settings/integrations/bookings', element: <IntegrationBookingsSettings /> },
           { path: 'settings/integrations/email', element: <IntegrationEmailSettings /> },
-          { path: 'settings/integrations/google-business', element: <IntegrationGoogleBusinessSettings /> },
+          { path: 'settings/integrations/google-business', element: <Navigate to="/account" replace /> },
         ],
       },
 
