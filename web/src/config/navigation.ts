@@ -93,6 +93,14 @@ export const NAV_ITEMS: NavItem[] = [
     rolesAllowed: ['owner'],
     sortOrder: 58,
   },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    type: 'module',
+    target: '/settings/integrations/website',
+    rolesAllowed: ['owner'],
+    sortOrder: 59,
+  },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
@@ -147,10 +155,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'donor-management', 'public-page'],
-  travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'settlement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
