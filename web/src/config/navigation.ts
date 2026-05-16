@@ -26,7 +26,6 @@ export const NAV_ITEMS: NavItem[] = [
     rolesAllowed: ['owner'],
     sortOrder: 10,
   },
-  { id: 'products', label: 'Items', type: 'module', target: '/products', rolesAllowed: ['owner'], sortOrder: 20 },
   {
     id: 'sell',
     label: 'Sell',
@@ -68,20 +67,20 @@ export const NAV_ITEMS: NavItem[] = [
     sortOrder: 53,
   },
   {
-    id: 'product-engagement',
-    label: 'Product Engagement',
-    type: 'module',
-    target: '/product-engagement',
-    rolesAllowed: ['owner', 'staff'],
-    sortOrder: 54,
-  },
-  {
     id: 'student-registration',
     label: 'Student registration',
     type: 'module',
     target: '/student-registration',
     rolesAllowed: ['owner', 'staff'],
     sortOrder: 55,
+  },
+  {
+    id: 'settlement',
+    label: 'Payments / Settlement',
+    type: 'module',
+    target: '/settlement',
+    rolesAllowed: ['owner'],
+    sortOrder: 56,
   },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
@@ -137,10 +136,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'marketplace-orders', 'upcoming-events', 'product-engagement', 'donor-management', 'public-page'],
-  travel: ['dashboard', 'bookings', 'upcoming-events', 'marketplace-orders', 'product-engagement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'customers', 'upcoming-events', 'marketplace-orders', 'product-engagement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'bookings', 'upcoming-events', 'student-registration', 'marketplace-orders', 'product-engagement', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'sell', 'customers', 'bookings', 'marketplace-orders', 'upcoming-events', 'settlement', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'bookings', 'upcoming-events', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'customers', 'upcoming-events', 'marketplace-orders', 'settlement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'bookings', 'upcoming-events', 'student-registration', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
