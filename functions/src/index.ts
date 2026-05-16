@@ -9,6 +9,7 @@ import type { ProductReadModel } from './types/product'
 import { normalizeCatalogPublicationFields, resolvePublicationTimestampCandidate } from './catalogPublication'
 export { checkSignupUnlock } from './paystack'
 export { createPaystackMerchantSubaccount, fetchPaystackMerchantSubaccount } from './paystackSubaccounts'
+export { integrationCheckoutCreate } from './integrationCheckout'
 export {
   googleAdsOAuthStart,
   googleAdsOAuthCallback,
