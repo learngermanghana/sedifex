@@ -41,6 +41,13 @@ function sanitizePhone(value: string): string {
   return normalizeGhanaPhoneE164(value)
 }
 
+function toTitleCase(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, match => match.toUpperCase())
+}
+
 function evaluatePasswordStrength(password: string): PasswordStrength {
   return {
     isLongEnough: password.length >= PASSWORD_MIN_LENGTH,
@@ -189,8 +196,8 @@ export default function AuthPage() {
     const sanitizedPassword = password.trim()
     const sanitizedConfirmPassword = confirmPassword.trim()
     const sanitizedPhone = sanitizePhone(phone)
-    const sanitizedFullName = fullName.trim()
-    const sanitizedBusinessName = businessName.trim()
+    const sanitizedFullName = toTitleCase(fullName)
+    const sanitizedBusinessName = toTitleCase(businessName)
     const sanitizedCountry = country.trim()
     const sanitizedTown = town.trim()
     const sanitizedAddress = address.trim()
