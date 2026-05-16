@@ -7,6 +7,19 @@ function text(value: unknown, max = 160) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
+function nullableText(value: unknown, max = 500) {
+  const cleaned = text(value, max)
+  return cleaned || null
+}
+
+function resolveReturnUrl(req: VercelRequest) {
+  const explicit = text(req.body?.returnUrl ?? req.body?.redirectUrl, 500)
+  if (explicit) return explicit
+  const origin = text(req.headers.origin, 500)
+  if (origin) return `${origin.replace(/\/$/, '')}/donation-success`
+  return undefined
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' })
 
@@ -14,39 +27,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const name = text(req.body?.donor?.name, 120)
   const email = text(req.body?.donor?.email, 120).toLowerCase()
   const phone = text(req.body?.donor?.phone, 40)
-  const amount = Number(req.body?.amount)
-  const currency = text(req.body?.currency, 10) || 'GHS'
+  const amount = Number(req.body?.amount ?? req.body?.donation?.amount)
+  const currency = text(req.body?.currency ?? req.body?.donation?.currency, 10) || 'GHS'
   const initializePayment = Boolean(req.body?.initializePayment)
+  const sourceChannel = text(req.body?.sourceChannel, 120) || 'website'
+  const metadata = req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata as Record<string, unknown> : {}
 
   if (!storeId || !name || (!email && !phone)) {
     return res.status(400).json({ error: 'storeId, donor name, and email or phone are required.' })
   }
 
   const firestore = db()
+  const now = FieldValue.serverTimestamp()
   const donorRef = await firestore.collection('donor_profiles').add({
     storeId,
     name,
     email: email || null,
     phone: phone || null,
-    source: 'website',
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+    source: sourceChannel,
+    latestDonationAmount: Number.isFinite(amount) && amount > 0 ? amount : null,
+    latestDonationCurrency: currency,
+    createdAt: now,
+    updatedAt: now,
   })
 
   let payment: Record<string, unknown> | null = null
+  let donationTransactionId: string | null = null
+
   if (initializePayment) {
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Valid amount is required for payment.' })
     const reference = `DON-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const feePolicy = calculateCheckoutFees({ amount, currency, useCase: 'donation' })
+    const returnUrl = resolveReturnUrl(req)
 
-    await firestore.collection('fund_transactions').add({
+    const txRef = await firestore.collection('fund_transactions').add({
       storeId,
       donorId: donorRef.id,
       direction: 'inflow',
       amount,
       currency,
-      status: 'pending',
+      status: 'pending_payment',
       reference,
+      paymentReference: reference,
+      source: sourceChannel,
+      category: 'Donation',
+      project: text(req.body?.pageId, 120) || 'donate',
+      description: nullableText(metadata.message, 1000) || 'Website donation intent',
+      date: new Date().toISOString().slice(0, 10),
       payment: {
         provider: 'paystack',
         status: 'pending',
@@ -58,10 +85,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sedifexCommission: feePolicy.sedifexCommissionMajor,
         merchantNet: feePolicy.merchantNetMajor,
       },
-      source: 'website',
-      date: new Date().toISOString().slice(0, 10),
-      createdAt: FieldValue.serverTimestamp(),
+      donor: {
+        name,
+        email: email || null,
+        phone: phone || null,
+        anonymous: Boolean(metadata.anonymous),
+      },
+      metadata: {
+        ...metadata,
+        source: metadata.source || sourceChannel,
+        returnUrl: returnUrl || null,
+      },
+      createdAt: now,
+      updatedAt: now,
     })
+    donationTransactionId = txRef.id
 
     const secret = process.env.PAYSTACK_SECRET || ''
     if (secret) {
@@ -73,10 +111,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           amount: toPaystackMinorAmount(feePolicy),
           reference,
           currency,
-          metadata: { storeId, donorId: donorRef.id, pageType: 'donation', feePolicy },
+          callback_url: returnUrl,
+          metadata: {
+            storeId,
+            donorId: donorRef.id,
+            fundTransactionId: txRef.id,
+            pageType: 'donation',
+            sourceChannel,
+            feePolicy,
+          },
         }),
       })
-      const body = await response.json()
+      const body = await response.json().catch(() => ({}))
       payment = {
         provider: 'paystack',
         reference,
@@ -85,10 +131,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         accessCode: body?.data?.access_code ?? null,
         feePolicy,
       }
+
+      await txRef.set({
+        'payment.initializeOk': response.ok,
+        'payment.authorizationUrl': body?.data?.authorization_url ?? null,
+        'payment.accessCode': body?.data?.access_code ?? null,
+        'payment.initializeRaw': response.ok ? null : body,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
     } else {
-      payment = { provider: 'paystack', reference, ok: false, authorizationUrl: null, accessCode: null, feePolicy }
+      payment = { provider: 'paystack', reference, ok: false, authorizationUrl: null, accessCode: null, feePolicy, error: 'PAYSTACK_SECRET missing' }
+      await txRef.set({ 'payment.initializeOk': false, 'payment.initializeError': 'PAYSTACK_SECRET missing', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
     }
   }
 
-  return res.status(200).json({ ok: true, donorId: donorRef.id, payment })
+  return res.status(200).json({ ok: true, donorId: donorRef.id, donationTransactionId, payment })
 }
