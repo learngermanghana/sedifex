@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleBusinessUploadLocationMedia = exports.googleBusinessLocations = exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.v1IntegrationAvailability = exports.integrationCheckoutCreate = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.checkSignupUnlock = void 0;
+exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyDonationCaptured = exports.notifySupportRequestCreated = exports.notifyVolunteerApplicationCreated = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationAvailability = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.checkSignupUnlock = void 0;
 // functions/src/index.ts
 const functions = __importStar(require("firebase-functions/v1"));
 const params_1 = require("firebase-functions/params");
@@ -45,10 +45,22 @@ Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: fun
 var paystackSubaccounts_1 = require("./paystackSubaccounts");
 Object.defineProperty(exports, "createPaystackMerchantSubaccount", { enumerable: true, get: function () { return paystackSubaccounts_1.createPaystackMerchantSubaccount; } });
 Object.defineProperty(exports, "fetchPaystackMerchantSubaccount", { enumerable: true, get: function () { return paystackSubaccounts_1.fetchPaystackMerchantSubaccount; } });
+Object.defineProperty(exports, "fetchPaystackSettlementBanks", { enumerable: true, get: function () { return paystackSubaccounts_1.fetchPaystackSettlementBanks; } });
 var integrationCheckout_1 = require("./integrationCheckout");
 Object.defineProperty(exports, "integrationCheckoutCreate", { enumerable: true, get: function () { return integrationCheckout_1.integrationCheckoutCreate; } });
 var integrationAvailability_1 = require("./integrationAvailability");
 Object.defineProperty(exports, "v1IntegrationAvailability", { enumerable: true, get: function () { return integrationAvailability_1.v1IntegrationAvailability; } });
+var ngoIntake_1 = require("./ngoIntake");
+Object.defineProperty(exports, "volunteerIntake", { enumerable: true, get: function () { return ngoIntake_1.volunteerIntake; } });
+Object.defineProperty(exports, "supportRequestIntake", { enumerable: true, get: function () { return ngoIntake_1.supportRequestIntake; } });
+var notifications_1 = require("./notifications");
+Object.defineProperty(exports, "initializeStoreNotificationDefaults", { enumerable: true, get: function () { return notifications_1.initializeStoreNotificationDefaults; } });
+Object.defineProperty(exports, "notifyIntegrationOrderStatus", { enumerable: true, get: function () { return notifications_1.notifyIntegrationOrderStatus; } });
+Object.defineProperty(exports, "notifyStudentRegistrationCreated", { enumerable: true, get: function () { return notifications_1.notifyStudentRegistrationCreated; } });
+Object.defineProperty(exports, "notifyVolunteerApplicationCreated", { enumerable: true, get: function () { return notifications_1.notifyVolunteerApplicationCreated; } });
+Object.defineProperty(exports, "notifySupportRequestCreated", { enumerable: true, get: function () { return notifications_1.notifySupportRequestCreated; } });
+Object.defineProperty(exports, "notifyDonationCaptured", { enumerable: true, get: function () { return notifications_1.notifyDonationCaptured; } });
+Object.defineProperty(exports, "sendBrandedNotificationPreview", { enumerable: true, get: function () { return notifications_1.sendBrandedNotificationPreview; } });
 var googleAds_1 = require("./googleAds");
 Object.defineProperty(exports, "googleAdsOAuthStart", { enumerable: true, get: function () { return googleAds_1.googleAdsOAuthStart; } });
 Object.defineProperty(exports, "googleAdsOAuthCallback", { enumerable: true, get: function () { return googleAds_1.googleAdsOAuthCallback; } });
@@ -56,9 +68,6 @@ Object.defineProperty(exports, "googleAdsCampaign", { enumerable: true, get: fun
 Object.defineProperty(exports, "googleAdsMetricsSync", { enumerable: true, get: function () { return googleAds_1.googleAdsMetricsSync; } });
 __exportStar(require("./googleShopping"), exports);
 __exportStar(require("./reporting"), exports);
-var googleBusinessProfile_1 = require("./googleBusinessProfile");
-Object.defineProperty(exports, "googleBusinessLocations", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessLocations; } });
-Object.defineProperty(exports, "googleBusinessUploadLocationMedia", { enumerable: true, get: function () { return googleBusinessProfile_1.googleBusinessUploadLocationMedia; } });
 const VALID_ROLES = new Set(['owner', 'staff']);
 const GRACE_DAYS = 7;
 const MILLIS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -103,21 +112,8 @@ function getIntegrationMasterApiKey() {
         process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() ||
         '';
     if (!apiKey && !integrationApiKeyWarned) {
-        functions.logger.warn('SEDIFEX_INTEGRATION_API_KEY is missing. Set it via Firebase params before calling integration HTTP endpoints.');
+        functions.logger.warn('SEDIFEX_INTEGRATION_API_KEY is missing. Integration HTTP endpoints will reject requests until it is configured.');
         integrationApiKeyWarned = true;
     }
     return apiKey;
-}
-function normalizeAiAdvicePayload(raw) {
-    const question = typeof raw?.question === 'string' ? raw.question.trim() : '';
-    if (!question)
-        throw new functions.https.HttpsError('invalid-argument', 'Question is required');
-    if (question.length > 2000) {
-        throw new functions.https.HttpsError('invalid-argument', 'Question must be 2000 characters or less');
-    }
-    const storeId = typeof raw?.storeId === 'string' ? raw.storeId.trim() : '';
-    const jsonContext = raw?.jsonContext && typeof raw.jsonContext === 'object'
-        ? raw.jsonContext
-        : {};
-    return { question, storeId, jsonContext };
 }

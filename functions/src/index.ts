@@ -17,6 +17,15 @@ export { integrationCheckoutCreate } from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
+  initializeStoreNotificationDefaults,
+  notifyIntegrationOrderStatus,
+  notifyStudentRegistrationCreated,
+  notifyVolunteerApplicationCreated,
+  notifySupportRequestCreated,
+  notifyDonationCaptured,
+  sendBrandedNotificationPreview,
+} from './notifications'
+export {
   googleAdsOAuthStart,
   googleAdsOAuthCallback,
   googleAdsCampaign,
