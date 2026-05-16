@@ -8,7 +8,11 @@ import { normalizePublicSlugValue } from './utils/publicSlug'
 import type { ProductReadModel } from './types/product'
 import { normalizeCatalogPublicationFields, resolvePublicationTimestampCandidate } from './catalogPublication'
 export { checkSignupUnlock } from './paystack'
-export { createPaystackMerchantSubaccount, fetchPaystackMerchantSubaccount } from './paystackSubaccounts'
+export {
+  createPaystackMerchantSubaccount,
+  fetchPaystackMerchantSubaccount,
+  fetchPaystackSettlementBanks,
+} from './paystackSubaccounts'
 export { integrationCheckoutCreate } from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
