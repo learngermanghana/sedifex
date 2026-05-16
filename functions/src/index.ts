@@ -10,6 +10,7 @@ import { normalizeCatalogPublicationFields, resolvePublicationTimestampCandidate
 export { checkSignupUnlock } from './paystack'
 export { createPaystackMerchantSubaccount, fetchPaystackMerchantSubaccount } from './paystackSubaccounts'
 export { integrationCheckoutCreate } from './integrationCheckout'
+export { v1IntegrationAvailability } from './integrationAvailability'
 export {
   googleAdsOAuthStart,
   googleAdsOAuthCallback,
