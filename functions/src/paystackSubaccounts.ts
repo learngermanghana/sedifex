@@ -19,6 +19,28 @@ type PaystackSubaccountInput = {
   primaryContactPhone?: unknown
 }
 
+type PaystackBankOption = {
+  id?: number
+  name?: string
+  slug?: string
+  code?: string
+  longcode?: string
+  gateway?: string | null
+  pay_with_bank?: boolean
+  supports_transfer?: boolean
+  active?: boolean
+  is_deleted?: boolean
+  country?: string
+  currency?: string
+  type?: string
+}
+
+type PaystackBankListResponse = {
+  status: boolean
+  message?: string
+  data?: PaystackBankOption[]
+}
+
 type PaystackSubaccountResponse = {
   status: boolean
   message?: string
@@ -108,6 +130,23 @@ async function paystackRequest<T>(path: string, init: RequestInit): Promise<T> {
   return payload
 }
 
+function normalizeBankOption(option: PaystackBankOption, fallbackType: string) {
+  const code = cleanText(option.code, 60)
+  const name = cleanText(option.name, 160)
+  if (!code || !name || option.is_deleted === true || option.active === false) return null
+  return {
+    id: option.id ?? null,
+    name,
+    code,
+    slug: cleanText(option.slug, 160) || null,
+    type: cleanText(option.type, 80) || fallbackType,
+    country: cleanText(option.country, 80) || 'Ghana',
+    currency: cleanText(option.currency, 20) || 'GHS',
+    supportsTransfer: option.supports_transfer ?? null,
+    gateway: option.gateway ?? null,
+  }
+}
+
 function buildSubaccountDoc(input: {
   storeId: string
   request: Record<string, unknown>
@@ -138,6 +177,47 @@ function buildSubaccountDoc(input: {
     createdAt: now,
   }
 }
+
+export const fetchPaystackSettlementBanks = functions.https.onCall(
+  async (_rawData: { country?: unknown; currency?: unknown } | undefined, context) => {
+    assertAuthenticated(context)
+    const country = cleanText(_rawData?.country, 40) || 'ghana'
+    const currency = cleanText(_rawData?.currency, 12) || 'GHS'
+
+    const requests: Array<{ path: string; type: string }> = [
+      { path: `/bank?country=${encodeURIComponent(country)}&currency=${encodeURIComponent(currency)}`, type: 'bank' },
+      { path: `/bank?country=${encodeURIComponent(country)}&currency=${encodeURIComponent(currency)}&type=mobile_money`, type: 'mobile_money' },
+    ]
+
+    const results = await Promise.allSettled(
+      requests.map(request => paystackRequest<PaystackBankListResponse>(request.path, { method: 'GET' })),
+    )
+
+    const options = new Map<string, ReturnType<typeof normalizeBankOption>>()
+    results.forEach((result, index) => {
+      if (result.status !== 'fulfilled') {
+        functions.logger.warn('Unable to fetch Paystack settlement banks', { index, reason: result.reason })
+        return
+      }
+      const fallbackType = requests[index].type
+      for (const item of result.value.data ?? []) {
+        const normalized = normalizeBankOption(item, fallbackType)
+        if (normalized) options.set(`${normalized.code}:${normalized.name}`, normalized)
+      }
+    })
+
+    const banks = Array.from(options.values())
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .sort((a, b) => `${a.type}-${a.name}`.localeCompare(`${b.type}-${b.name}`))
+
+    return {
+      ok: true,
+      country,
+      currency,
+      banks,
+    }
+  },
+)
 
 export const createPaystackMerchantSubaccount = functions.https.onCall(
   async (rawData: PaystackSubaccountInput | undefined, context) => {
