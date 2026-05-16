@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasText(field, maxLength) {
+      return field is string && field.size() > 0 && field.size() <= maxLength;
+    }
+
+    function isEngagementCommentCreate() {
+      return hasText(request.resource.data.canonicalProductKey, 400)
+        && hasText(request.resource.data.storeId, 180)
+        && hasText(request.resource.data.sourceProductId, 220)
+        && hasText(request.resource.data.body, 2000)
+        && request.resource.data.status in ['pending', 'approved']
+        && request.resource.data.visibility in ['public', 'store_only'];
+    }
+
+    function isEngagementFavoriteWrite() {
+      return hasText(request.resource.data.canonicalProductKey, 400)
+        && hasText(request.resource.data.storeId, 180)
+        && hasText(request.resource.data.sourceProductId, 220)
+        && hasText(request.resource.data.userId, 120)
+        && request.resource.data.active is bool;
+    }
+
+    function isEngagementThreadWrite() {
+      return hasText(request.resource.data.canonicalProductKey, 400)
+        && hasText(request.resource.data.storeId, 180)
+        && hasText(request.resource.data.sourceProductId, 220);
+    }
+
+    function isIntegrationOrderCreate() {
+      return hasText(request.resource.data.storeId, 180)
+        && hasText(request.resource.data.reference, 240)
+        && request.resource.data.customer is map;
+    }
+
+    match /publicProducts/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /publicServices/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /storeSettings/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /publicStores/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /engagement_threads/{threadId} {
+      allow read: if true;
+      allow create, update: if isEngagementThreadWrite() || isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    match /engagement_comments/{commentId} {
+      allow read: if true;
+      allow create: if isEngagementCommentCreate();
+      allow update, delete: if isSignedIn();
+    }
+
+    match /engagement_favorites/{favoriteId} {
+      allow read: if true;
+      allow create, update: if isEngagementFavoriteWrite();
+      allow delete: if isSignedIn();
+    }
+
+    match /integrationOrders/{docId} {
+      allow create: if isIntegrationOrderCreate();
+      allow read, update, delete: if isSignedIn();
+    }
+
+    match /integrationBookings/{docId} {
+      allow create: if isIntegrationOrderCreate();
+      allow read, update, delete: if isSignedIn();
+    }
+
+    match /checkoutRequests/{docId} {
+      allow create: if request.resource.data.customer is map || request.resource.data.customerName is string;
+      allow read, update, delete: if isSignedIn();
+    }
+
+    match /{document=**} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
