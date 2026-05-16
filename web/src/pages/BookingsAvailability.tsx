@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore'
-import { db } from '../firebase'
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { db, storage } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './BookingsAvailability.css'
 
@@ -16,11 +16,21 @@ type SlotRecord = {
   capacity: number
   seatsBooked: number
   status: 'open' | 'closed'
+  imageUrl?: string
+  imageAlt?: string
 }
 
 function toLocalInputValue(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'event'
+}
+
+function safeFileName(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '') || 'event-photo.jpg'
 }
 
 export default function BookingsAvailability() {
@@ -35,8 +45,11 @@ export default function BookingsAvailability() {
   const [manualServiceName, setManualServiceName] = useState('')
   const [startAt, setStartAt] = useState(toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)))
   const [endAt, setEndAt] = useState(toLocalInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000)))
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Accra')
   const [capacity, setCapacity] = useState('20')
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageAlt, setImageAlt] = useState('')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
 
   const serviceMap = useMemo(() => new Map(services.map(service => [service.id, service.name])), [services])
 
@@ -79,6 +92,7 @@ export default function BookingsAvailability() {
         const end = data.endAt && typeof (data.endAt as Timestamp).toDate === 'function' ? (data.endAt as Timestamp).toDate() : null
         if (!start || !end) return null
         const normalizedServiceId = typeof data.serviceId === 'string' && data.serviceId.trim() ? data.serviceId.trim() : 'unknown'
+        const attributes = data.attributes && typeof data.attributes === 'object' ? data.attributes as Record<string, unknown> : {}
         return {
           id: slotDoc.id,
           serviceId: normalizedServiceId,
@@ -88,10 +102,12 @@ export default function BookingsAvailability() {
             normalizedServiceId,
           startAt: start,
           endAt: end,
-          timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'UTC',
+          timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'Africa/Accra',
           capacity: typeof data.capacity === 'number' && Number.isFinite(data.capacity) ? Math.max(1, Math.floor(data.capacity)) : 1,
           seatsBooked: typeof data.seatsBooked === 'number' && Number.isFinite(data.seatsBooked) ? Math.max(0, Math.floor(data.seatsBooked)) : 0,
           status: data.status === 'closed' ? 'closed' : 'open',
+          imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof attributes.imageUrl === 'string' ? attributes.imageUrl : undefined,
+          imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : typeof attributes.imageAlt === 'string' ? attributes.imageAlt : undefined,
         } as SlotRecord
       })
       .filter((slot): slot is SlotRecord => slot !== null)
@@ -100,7 +116,7 @@ export default function BookingsAvailability() {
 
   const reload = useCallback(async () => {
     if (!storeId) {
-      setErrorMessage('Select a workspace before managing availability.')
+      setErrorMessage('Select a workspace before managing events.')
       setLoading(false)
       return
     }
@@ -111,7 +127,7 @@ export default function BookingsAvailability() {
       await loadSlots(storeId, lookup)
     } catch (error) {
       console.error('[availability] Failed to load', error)
-      setErrorMessage('Unable to load availability right now. Please try again.')
+      setErrorMessage('Unable to load upcoming events right now. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -120,6 +136,15 @@ export default function BookingsAvailability() {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  const uploadPhoto = useCallback(async (resolvedServiceName: string) => {
+    if (!storeId || !photoFile) return imageUrl.trim()
+    const extensionSafeName = safeFileName(photoFile.name)
+    const path = `stores/${storeId}/availability/${Date.now()}-${slugify(resolvedServiceName)}-${extensionSafeName}`
+    const storageRef = ref(storage, path)
+    await uploadBytes(storageRef, photoFile, { contentType: photoFile.type || 'image/jpeg' })
+    return getDownloadURL(storageRef)
+  }, [imageUrl, photoFile, storeId])
 
   const handleCreateSlot = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -138,10 +163,10 @@ export default function BookingsAvailability() {
     const manualName = manualServiceName.trim()
     const selectedName = serviceMap.get(serviceId)?.trim() ?? ''
     const resolvedServiceName = serviceMode === 'manual' ? manualName : selectedName
-    const resolvedServiceId = serviceMode === 'manual' ? `manual:${manualName.toLowerCase().replace(/\s+/g, '-')}` : serviceId
+    const resolvedServiceId = serviceMode === 'manual' ? `manual:${slugify(manualName)}` : serviceId
 
     if (!resolvedServiceName) {
-      setErrorMessage(serviceMode === 'manual' ? 'Enter a service or product name.' : 'Choose a service or product first.')
+      setErrorMessage(serviceMode === 'manual' ? 'Enter an event, service, class, or product name.' : 'Choose a service or product first.')
       return
     }
     if (serviceMode === 'catalog' && !serviceId) {
@@ -152,6 +177,8 @@ export default function BookingsAvailability() {
     setSaving(true)
     setErrorMessage(null)
     try {
+      const resolvedImageUrl = await uploadPhoto(resolvedServiceName)
+      const resolvedImageAlt = imageAlt.trim() || (resolvedImageUrl ? `${resolvedServiceName} photo` : '')
       await addDoc(collection(db, 'stores', storeId, 'integrationAvailabilitySlots'), {
         storeId,
         serviceId: resolvedServiceId,
@@ -162,29 +189,41 @@ export default function BookingsAvailability() {
         capacity: nextCapacity,
         seatsBooked: 0,
         status: 'open',
+        isPublic: true,
+        visibleOnWebsite: true,
+        imageUrl: resolvedImageUrl || null,
+        imageAlt: resolvedImageAlt || null,
+        attributes: {
+          imageUrl: resolvedImageUrl || null,
+          imageAlt: resolvedImageAlt || null,
+        },
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       })
+      setImageUrl('')
+      setImageAlt('')
+      setPhotoFile(null)
       await loadSlots(storeId, serviceMap)
     } catch (error) {
-      console.error('[availability] Failed to create slot', error)
-      setErrorMessage('Failed to create slot. Please try again.')
+      console.error('[availability] Failed to create event', error)
+      setErrorMessage('Failed to create event. Please try again.')
     } finally {
       setSaving(false)
     }
-  }, [capacity, endAt, loadSlots, manualServiceName, serviceId, serviceMap, serviceMode, startAt, storeId, timezone])
+  }, [capacity, endAt, imageAlt, loadSlots, manualServiceName, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
     try {
       await updateDoc(doc(db, 'stores', storeId, 'integrationAvailabilitySlots', slot.id), {
         status: slot.status === 'open' ? 'closed' : 'open',
+        visibleOnWebsite: slot.status !== 'open',
         updatedAt: Timestamp.now(),
       })
       await loadSlots(storeId, serviceMap)
     } catch (error) {
-      console.error('[availability] Failed to update slot status', error)
-      setErrorMessage('Failed to update slot status.')
+      console.error('[availability] Failed to update event status', error)
+      setErrorMessage('Failed to update event status.')
     }
   }, [loadSlots, serviceMap, storeId])
 
@@ -194,8 +233,8 @@ export default function BookingsAvailability() {
       await deleteDoc(doc(db, 'stores', storeId, 'integrationAvailabilitySlots', slotId))
       await loadSlots(storeId, serviceMap)
     } catch (error) {
-      console.error('[availability] Failed to delete slot', error)
-      setErrorMessage('Failed to delete slot.')
+      console.error('[availability] Failed to delete event', error)
+      setErrorMessage('Failed to delete event.')
     }
   }, [loadSlots, serviceMap, storeId])
 
@@ -203,39 +242,40 @@ export default function BookingsAvailability() {
     <main className="page availability-page">
       <section className="card stack gap-4">
         <header className="stack gap-1">
-          <h1>Class availability</h1>
+          <h1>Upcoming events</h1>
           <p className="bookings-page__intro">
-            Create and manage upcoming class/session slots. Your website can use these slots to show the next available session.
+            Create public events, classes, service sessions, intakes, or programmes that your connected website can display automatically.
           </p>
-          <div className="availability-page__actions">
-            <Link to="/bookings" className="btn btn-secondary">Back to bookings</Link>
-          </div>
         </header>
 
         <form className="availability-form" onSubmit={handleCreateSlot}>
-          <label><span>Service source</span><select value={serviceMode} onChange={event => setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog')}><option value="catalog">Select existing service/product</option><option value="manual">Manual input</option></select></label>
+          <label><span>Event source</span><select value={serviceMode} onChange={event => setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog')}><option value="catalog">Select existing service/product</option><option value="manual">Manual event/class name</option></select></label>
           {serviceMode === 'catalog' ? (
-            <label><span>Service or product</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
+            <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
           ) : (
-            <label><span>Service or product name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>
+            <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>
           )}
           <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
-          <label><span>Capacity</span><input type="number" min={1} value={capacity} onChange={event => setCapacity(event.target.value)} required /></label>
-          <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add slot'}</button>
+          <label><span>Capacity / limit</span><input type="number" min={1} value={capacity} onChange={event => setCapacity(event.target.value)} required /></label>
+          <label><span>Photo upload</span><input type="file" accept="image/*" onChange={event => setPhotoFile(event.target.files?.[0] ?? null)} /></label>
+          <label><span>Or image URL</span><input value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://..." /></label>
+          <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>
+          <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button>
         </form>
 
-        {loading && <p className="form__hint">Loading slots…</p>}
+        {loading && <p className="form__hint">Loading events…</p>}
         {errorMessage && <p className="form__error">{errorMessage}</p>}
 
         {!loading && (
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Service</th><th>Start</th><th>End</th><th>Status</th><th>Capacity</th><th>Booked</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Photo</th><th>Event</th><th>Start</th><th>End</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead>
               <tbody>
                 {slots.map(slot => (
                   <tr key={slot.id}>
+                    <td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td>
                     <td>{slot.serviceName}</td>
                     <td>{slot.startAt.toLocaleString()}</td>
                     <td>{slot.endAt.toLocaleString()}</td>
