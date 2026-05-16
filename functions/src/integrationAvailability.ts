@@ -169,8 +169,7 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
 
     const authorized = await isAuthorized(req, storeId)
     if (!authorized) {
-      res.status(401).json({ error: 'unauthorized' })
-      return
+      functions.logger.info('Availability request using public open-slot fallback', { storeId, serviceId })
     }
 
     const snapshot = await defaultDb
@@ -190,6 +189,12 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
       const seatsBooked = Math.max(0, Math.floor(toNumber(data.seatsBooked, 0)))
       const resolvedServiceId = clean(data.serviceId, 220)
       const resolvedServiceName = clean(data.serviceName, 240)
+      if (!authorized) {
+        const isClosed = data.status === 'closed'
+        const isPublicBlocked = data.public === false || data.isPublic === false || data.visibleOnWebsite === false
+        if (isClosed || isPublicBlocked) return []
+      }
+
       const slot: SlotResponse = {
         id: slotDoc.id,
         storeId,
@@ -209,10 +214,12 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
     })
 
     res.status(200).json({
+      ok: true,
       storeId,
       serviceId: serviceId || null,
       from: fromDate?.toISOString() ?? null,
       to: toDateFilter?.toISOString() ?? null,
+      authenticated: authorized,
       slots,
     })
   } catch (error) {
