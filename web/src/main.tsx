@@ -14,7 +14,6 @@ import Customers from './pages/Customers'
 import Bookings from './pages/Bookings'
 import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
-import OnlineOrders from './pages/MarketplaceOrders'
 import StudentRegistration from './pages/StudentRegistration'
 import VolunteerApplications from './pages/VolunteerApplications'
 import SupportRequests from './pages/SupportRequests'
@@ -99,8 +98,8 @@ const router = createBrowserRouter([
           { path: 'bookings/availability', element: <Navigate to="/upcoming-events" replace /> },
           { path: 'upcoming-events', element: <BookingsAvailability /> },
           { path: 'bookings/:bookingId', element: <BookingEditor /> },
-          { path: 'online-orders', element: <OnlineOrders /> },
-          { path: 'marketplace-orders', element: <Navigate to="/online-orders" replace /> },
+          { path: 'online-orders', element: <Navigate to="/dashboard" replace /> },
+          { path: 'marketplace-orders', element: <Navigate to="/dashboard" replace /> },
           { path: 'product-engagement', element: <Navigate to="/dashboard" replace /> },
           { path: 'student-registration', element: <StudentRegistration /> },
           { path: 'volunteers', element: <VolunteerApplications /> },
