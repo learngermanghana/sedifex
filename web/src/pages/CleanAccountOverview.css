@@ -1,0 +1,3 @@
+.clean-account-overview .account-overview__tabs[aria-label="Account sections"] button:nth-of-type(2) {
+  display: none;
+}
