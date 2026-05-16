@@ -26,6 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
     rolesAllowed: ['owner'],
     sortOrder: 10,
   },
+  { id: 'products', label: 'Items', type: 'module', target: '/products', rolesAllowed: ['owner'], sortOrder: 20 },
   {
     id: 'sell',
     label: 'Sell',
@@ -136,10 +137,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'sell', 'customers', 'bookings', 'marketplace-orders', 'upcoming-events', 'settlement', 'donor-management', 'public-page'],
-  travel: ['dashboard', 'bookings', 'upcoming-events', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'customers', 'upcoming-events', 'marketplace-orders', 'settlement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'bookings', 'upcoming-events', 'student-registration', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'marketplace-orders', 'upcoming-events', 'settlement', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'products', 'customers', 'upcoming-events', 'marketplace-orders', 'settlement', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'marketplace-orders', 'settlement', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
