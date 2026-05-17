@@ -449,6 +449,128 @@ To prevent sync mismatches between different form builders, use these canonical 
 }
 ```
 
+
+## 3.2) New intake integrations: student registration, donor, volunteer
+
+Use this section for the newer NGO/school style form integrations so stores can route submissions correctly.
+
+### A) Student registration (store-authenticated)
+
+Endpoint: `POST /v1IntegrationBookings?storeId=<storeId>`
+
+Use this for school/course admissions and class registration forms. The same booking endpoint is the canonical intake path for service registrations.
+
+Recommended payload additions for student flows:
+
+- `customer` (`name`, `phone`, `email`)
+- `serviceId` (admission/course/service id)
+- `notes` (free text)
+- `attributes` with student-specific fields (examples: `studentName`, `guardianName`, `programme`, `intakeTerm`, `preferredClassTime`)
+- Optional payment hints using canonical keys already supported in this guide: `paymentMethod`, `paymentAmount`
+
+Minimal example:
+
+```json
+{
+  "serviceId": "svc_school_admission",
+  "customer": {
+    "name": "Parent Contact",
+    "phone": "+233201234567",
+    "email": "parent@example.com"
+  },
+  "notes": "Student needs weekday classes",
+  "attributes": {
+    "studentName": "Kojo Mensah",
+    "guardianName": "Ama Mensah",
+    "programme": "JHS Bridge",
+    "intakeTerm": "September 2026",
+    "preferredClassTime": "16:00"
+  }
+}
+```
+
+### B) Donor checkout (store-authenticated online payment)
+
+Endpoint: `POST /integration/checkout/create`
+
+Use this when a store website collects donations and wants Sedifex + Paystack to handle payment tracking.
+
+Recommended donor metadata:
+
+- `metadata.pageType: "donation"`
+- `metadata.donorId` (if your website already has a donor record id)
+- `metadata.project` or `metadata.campaign`
+- `clientOrderId` as your website donation reference
+
+Minimal example:
+
+```json
+{
+  "storeId": "store_123",
+  "clientOrderId": "donation_web_00045",
+  "amount": 150,
+  "currency": "GHS",
+  "customer": {
+    "email": "donor@example.com",
+    "phone": "+233201234567"
+  },
+  "metadata": {
+    "pageType": "donation",
+    "donorId": "donor_789",
+    "project": "Back-to-school support"
+  }
+}
+```
+
+### C) Volunteer form intake (public endpoint, no integration key)
+
+Endpoint: `POST /volunteerIntake`
+
+Use this for volunteer application forms on NGO/community websites.
+
+Required:
+
+- `storeId`
+- `name` (or alias `fullName`/`volunteerName`)
+- At least one contact: `phone` (or alias `telephone`/`whatsapp`) **or** `email`
+
+Optional:
+
+- `skill`/`skills`/`interest`
+- `availability`
+- `preferredProject`/`project`/`campaign`
+- `location`/`city`/`town`
+- `notes`/`message`
+
+Minimal example:
+
+```json
+{
+  "storeId": "store_123",
+  "name": "Efua Owusu",
+  "phone": "+233245551111",
+  "email": "efua@example.com",
+  "skill": "Community outreach",
+  "availability": "Weekends",
+  "preferredProject": "Youth literacy",
+  "location": "Accra",
+  "notes": "Can support in-person events"
+}
+```
+
+### Store usage checklist for these three flows
+
+1. Choose flow by intent:
+   - Student/course/event registration → `POST /v1IntegrationBookings`
+   - Donation with online payment → `POST /integration/checkout/create`
+   - Volunteer application (non-payment intake) → `POST /volunteerIntake`
+2. Always include `storeId` from the store owner onboarding settings.
+3. For authenticated endpoints, send both headers:
+   - `x-api-key`
+   - `X-Sedifex-Contract-Version: 2026-04-13`
+4. Persist references from successful responses (`reference`, `orderId`, or intake `id`) for support follow-up.
+5. Add webhook or status polling for payment-backed flows so donation state is confirmed before final fulfillment messaging.
+
 ## 4) Deduplication and caching
 
 - Deduplicate by product `id` (and optionally `updatedAt` when merging data sources).
