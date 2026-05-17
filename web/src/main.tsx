@@ -26,6 +26,7 @@ import VolunteersReport from './pages/reports/VolunteersReport'
 import DonorsReport from './pages/reports/DonorsReport'
 import FundsReport from './pages/reports/FundsReport'
 import BlogReport from './pages/reports/BlogReport'
+import SettlementReport from './pages/reports/SettlementReport'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import CleanAccountOverview from './pages/CleanAccountOverview'
@@ -88,6 +89,7 @@ const router = createBrowserRouter([
       { path: 'reports/inventory', element: <InventoryReport /> },
       { path: 'reports/pos-sales', element: <PosSalesReport /> },
       { path: 'reports/website-sales', element: <WebsiteSalesReport /> },
+      { path: 'reports/settlement', element: <SettlementReport /> },
       { path: 'reports/bookings', element: <BookingsReport /> },
       { path: 'reports/student-registrations', element: <StudentRegistrationsReport /> },
       { path: 'reports/volunteers', element: <VolunteersReport /> },
