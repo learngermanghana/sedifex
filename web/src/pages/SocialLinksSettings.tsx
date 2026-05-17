@@ -10,7 +10,6 @@ import './AccountOverview.css'
 type PublicProfile = Record<string, string | null | undefined>
 type StoreProfile = { name?: string | null; displayName?: string | null; publicProfile?: PublicProfile | null; socialLinks?: PublicProfile | null }
 const fields = [
-  ['logoUrl', 'Logo URL'],
   ['publicPhone', 'Phone number'],
   ['whatsappNumber', 'WhatsApp number'],
   ['telegramNumber', 'Messenger number or handle'],
@@ -109,16 +108,17 @@ export default function SocialLinksSettings() {
     }
   }
 
-  async function uploadLogoFile() {
+  async function uploadLogoFile(selectedFile?: File | null) {
     if (!storeId || !canEdit) return
-    if (!logoFile) {
+    const fileToUpload = selectedFile ?? logoFile
+    if (!fileToUpload) {
       setMessage('Choose a logo image first.')
       return
     }
     setUploadingLogo(true)
     setMessage('')
     try {
-      const uploadedUrl = await uploadProductImage(logoFile, {
+      const uploadedUrl = await uploadProductImage(fileToUpload, {
         storagePath: `stores/${storeId}/assets/logo.jpg`,
       })
       setProfile(current => ({ ...current, logoUrl: uploadedUrl }))
@@ -143,7 +143,7 @@ export default function SocialLinksSettings() {
       {!storeId && !isLoading ? <p>Select a workspace first.</p> : null}
       {storeId && !canEdit ? <p className="account-overview__error">You do not have permission to edit social links.</p> : null}
       {message ? <p className="account-overview__error" role="alert">{message}</p> : null}
-      {storeId && canEdit ? <form className="account-overview__profile-form" onSubmit={saveSocialLinks}><section className="account-overview__card"><h2>{storeName || 'Public profile'}</h2><div className="account-overview__form-grid">{fields.map(([key, label]) => <label key={key}><span>{label}</span><input value={text(profile[key])} onChange={event => updateField(key, event.target.value)} disabled={!isEditing || saving || uploadingLogo} /></label>)}</div><div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}><label><span>Logo upload</span><input type="file" accept="image/*" onChange={event => setLogoFile(event.target.files?.[0] ?? null)} disabled={!isEditing || saving || uploadingLogo} /></label><button className="button" type="button" onClick={uploadLogoFile} disabled={!isEditing || !logoFile || saving || uploadingLogo}>{uploadingLogo ? 'Uploading…' : 'Browse & upload logo'}</button></div></section>{isEditing ? <div style={{ display: 'flex', gap: '0.75rem' }}><button className="button" type="button" onClick={cancelEditing} disabled={saving || uploadingLogo}>Cancel</button><button className="button button--primary" type="submit" disabled={saving || uploadingLogo}>{saving ? 'Saving…' : 'Save public profile'}</button></div> : <button className="button button--primary" type="button" onClick={beginEditing}>Edit public profile</button>}</form> : null}
+      {storeId && canEdit ? <form className="account-overview__profile-form" onSubmit={saveSocialLinks}><section className="account-overview__card"><h2>{storeName || 'Public profile'}</h2><div className="account-overview__form-grid">{fields.map(([key, label]) => <label key={key}><span>{label}</span><input value={text(profile[key])} onChange={event => updateField(key, event.target.value)} disabled={!isEditing || saving || uploadingLogo} /></label>)}</div></section>{isEditing ? <div style={{ display: 'flex', gap: '0.75rem' }}><button className="button" type="button" onClick={cancelEditing} disabled={saving || uploadingLogo}>Cancel</button><button className="button button--primary" type="submit" disabled={saving || uploadingLogo}>{saving ? 'Saving…' : 'Save public profile'}</button></div> : <button className="button button--primary" type="button" onClick={beginEditing}>Edit public profile</button>}<section className="account-overview__card"><h2>Logo</h2><div className="account-overview__form-grid"><label><span>Logo URL</span><input value={text(profile.logoUrl)} onChange={event => updateField('logoUrl', event.target.value)} disabled={!isEditing || saving || uploadingLogo} /></label></div><div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}><label><span>{uploadingLogo ? 'Uploading logo…' : 'Logo upload'}</span><input type="file" accept="image/*" onChange={event => { const selected = event.target.files?.[0] ?? null; setLogoFile(selected); if (selected) void uploadLogoFile(selected) }} disabled={!isEditing || saving || uploadingLogo} /></label></div></section></form> : null}
     </main>
   )
 }
