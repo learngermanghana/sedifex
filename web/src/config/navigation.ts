@@ -102,6 +102,8 @@ export const NAV_ITEMS: NavItem[] = [
     sortOrder: 59,
   },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
+  { id: 'promo', label: 'Promo', type: 'module', target: '/promo', rolesAllowed: ['owner', 'staff'], sortOrder: 61 },
+  { id: 'gallery', label: 'Gallery', type: 'module', target: '/gallery', rolesAllowed: ['owner', 'staff'], sortOrder: 62 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   {
@@ -123,16 +125,22 @@ const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
     '/customers': 'Travelers',
     '/bookings': 'Trips',
     '/upcoming-events': 'Upcoming trips',
+    '/promo': 'Trip promos',
+    '/gallery': 'Trip gallery',
   },
   ngo: {
     '/customers': 'Donors',
     '/bookings': 'Campaigns',
     '/upcoming-events': 'Upcoming campaigns',
+    '/promo': 'Campaign promo',
+    '/gallery': 'Impact gallery',
   },
   school: {
     '/customers': 'Students',
     '/bookings': 'Classes',
     '/upcoming-events': 'Upcoming classes',
+    '/promo': 'Admissions promo',
+    '/gallery': 'School gallery',
   },
 }
 
@@ -155,10 +163,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'donor-management', 'public-page'],
-  travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
-  school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'donor-management', 'public-page'],
+  travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'promo', 'gallery', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = {
