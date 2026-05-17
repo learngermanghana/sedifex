@@ -81,6 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : null
 
   let donorId: string
+  let donorProfileId: string
   if (donorLookup && !donorLookup.empty) {
     donorId = donorLookup.docs[0].id
     await donorLookup.docs[0].ref.set({
@@ -106,22 +107,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     donorId = donorRef.id
   }
 
+  const donorProfileLookup = email
+    ? await firestore.collection('donor_profiles').where('storeId', '==', storeId).where('email', '==', email).limit(1).get()
+    : phone
+      ? await firestore.collection('donor_profiles').where('storeId', '==', storeId).where('phone', '==', phone).limit(1).get()
+      : null
+
+  if (donorProfileLookup && !donorProfileLookup.empty) {
+    donorProfileId = donorProfileLookup.docs[0].id
+    await donorProfileLookup.docs[0].ref.set({
+      name: donorName,
+      email: email || null,
+      phone: phone || null,
+      source: 'website-donation-intake',
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  } else {
+    const donorProfileRef = await firestore.collection('donor_profiles').add({
+      storeId,
+      name: donorName,
+      email: email || null,
+      phone: phone || null,
+      source: 'website-donation-intake',
+      status: 'active',
+      lifetimeGiving: 0,
+      lastGiftAmount: 0,
+      lastGiftDate: null,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    donorProfileId = donorProfileRef.id
+  }
+
   if (mode === 'donation') {
+    const today = new Date().toISOString().slice(0, 10)
     await firestore.collection('fund_transactions').add({
       storeId,
       fundId,
-      donorId,
+      donorId: donorProfileId,
       direction: 'inflow',
       amount,
       currency,
       project,
       description: message,
-      date: new Date().toISOString().slice(0, 10),
+      date: today,
       source: 'api',
       status: 'pending_confirmation',
       reference: reference || null,
       createdAt: FieldValue.serverTimestamp(),
     })
+
+    await firestore.collection('donor_profiles').doc(donorProfileId).set({
+      lifetimeGiving: FieldValue.increment(amount),
+      lastGiftAmount: amount,
+      lastGiftDate: today,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
   }
 
   await dedupeRef.set({
