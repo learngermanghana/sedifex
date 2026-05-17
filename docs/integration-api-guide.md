@@ -246,15 +246,32 @@ const items = Array.isArray(payload.items) ? payload.items : []
 
 ### `GET /integrationGallery?storeId=<storeId>` (public via store/slug resolution)
 
-- Returns published gallery images sorted by `sortOrder asc`.
-- Useful for `/integrationGallery` page sections on partner websites.
+- Returns gallery content in **album-first format** for the new custom `/gallery` website navigation style.
+- Useful for partner websites that render album cards first, then open album image grids/lightboxes.
+- Response includes:
+  - `albums`: published albums sorted by `sortOrder asc`.
+  - `gallery`: published images sorted by `sortOrder asc` (legacy flat list kept for backward compatibility).
+  - Each image may include `albumId` so websites can group images under the correct album.
 
 ```json
 {
   "storeId": "store_123",
+  "albums": [
+    {
+      "id": "album_1",
+      "title": "Graduation 2026",
+      "description": "Highlights from the graduation set",
+      "coverImageUrl": "https://...",
+      "sortOrder": 0,
+      "isPublished": true,
+      "createdAt": "2026-04-13T00:00:00.000Z",
+      "updatedAt": "2026-04-13T00:00:00.000Z"
+    }
+  ],
   "gallery": [
     {
       "id": "gallery_1",
+      "albumId": "album_1",
       "url": "https://...",
       "alt": "Front store display",
       "caption": "Grand opening",
@@ -266,6 +283,18 @@ const items = Array.isArray(payload.items) ? payload.items : []
   ]
 }
 ```
+
+#### Gallery website integration (album style)
+
+Use this rendering flow for the new gallery style:
+
+1. Render `albums` as the top-level gallery navigation (cards/tabs/sections).
+2. For each album, display album title, optional description, and `coverImageUrl` as preview.
+3. Map `gallery` images by `albumId` and render album-specific image grids.
+4. Hide albums/images where `isPublished !== true` if your website keeps cached snapshots.
+5. If `albums` is empty, gracefully fallback to the legacy flat `gallery` list.
+
+> Store setup note: this gallery is intended for stores that add a custom `/gallery` menu item from **Account → Navigation settings**.
 
 ### `GET /integrationCustomers?storeId=<storeId>` (authenticated)
 
@@ -340,7 +369,7 @@ Use this sequence when wiring those integration pages/widgets in external websit
    - `/integrationCustomers`
    - `/integrationTopSelling?days=30&limit=10` (adjust as needed)
 4. Normalize and cache:
-   - Gallery/videos: preserve `sortOrder`; filter to published records only.
+   - Gallery: preserve album and image `sortOrder`; group images by `albumId`; filter to published records only.
    - Customers/top-selling: dedupe by `id`/`productId`; sort by latest `updatedAt`/`lastSoldAt`.
 5. Fallback safely:
    - Keep local fallback data for UI continuity.
