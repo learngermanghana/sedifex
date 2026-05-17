@@ -9,6 +9,36 @@
   gap: 6px;
 }
 
+.availability-photo-picker {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--line, #cfd8dc);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.availability-photo-preview {
+  width: 100%;
+  max-width: 220px;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line, #cfd8dc);
+}
+
+.availability-photo-name {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted, #616161);
+}
+
+.availability-photo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .availability-page__row-actions,
 .availability-page__actions {
   display: flex;

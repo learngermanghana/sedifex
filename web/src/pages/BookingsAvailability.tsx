@@ -1,11 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy, query, updateDoc, where } from 'firebase/firestore'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './BookingsAvailability.css'
 
-type ServiceRecord = { id: string; name: string }
+type ServiceRecord = {
+  id: string
+  name: string
+  itemType?: 'product' | 'service' | 'programme'
+  imageUrl?: string | null
+  imageAlt?: string | null
+  source?: string
+}
 type SlotRecord = {
   id: string
   serviceId: string
@@ -33,6 +40,21 @@ function safeFileName(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '') || 'event-photo.jpg'
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms)
+    promise
+      .then(result => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      .catch(error => {
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
+}
+
 export default function BookingsAvailability() {
   const { storeId } = useActiveStore()
   const [services, setServices] = useState<ServiceRecord[]>([])
@@ -50,39 +72,67 @@ export default function BookingsAvailability() {
   const [imageUrl, setImageUrl] = useState('')
   const [imageAlt, setImageAlt] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const serviceMap = useMemo(() => new Map(services.map(service => [service.id, service.name])), [services])
+  const serviceMap = useMemo(() => new Map(services.map(service => [service.id, service])), [services])
+  const selectedService = serviceMap.get(serviceId)
+  const previewUrl = useMemo(() => (photoFile ? URL.createObjectURL(photoFile) : ''), [photoFile])
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const loadServices = useCallback(async (activeStoreId: string) => {
-    const map = new Map<string, string>()
-    for (const collectionName of ['services', 'integrationServices']) {
-      const snapshot = await getDocs(collection(db, 'stores', activeStoreId, collectionName))
-      snapshot.forEach(serviceDoc => {
-        const data = serviceDoc.data() as Record<string, unknown>
-        const nameCandidate = [data.name, data.title, data.serviceName].find(
-          value => typeof value === 'string' && value.trim(),
-        ) as string | undefined
-        if (nameCandidate) map.set(serviceDoc.id, nameCandidate.trim())
-      })
-    }
-    const productSnapshot = await getDocs(collection(db, 'stores', activeStoreId, 'products'))
-    productSnapshot.forEach(productDoc => {
-      const data = productDoc.data() as Record<string, unknown>
-      const nameCandidate = [data.name, data.title, data.productName].find(
+    const map = new Map<string, ServiceRecord>()
+
+    const addService = (docId: string, data: Record<string, unknown>, source: string, fallbackType: ServiceRecord['itemType']) => {
+      const nameCandidate = [data.name, data.title, data.productName, data.serviceName].find(
         value => typeof value === 'string' && value.trim(),
       ) as string | undefined
-      if (nameCandidate) map.set(productDoc.id, nameCandidate.trim())
+      if (!nameCandidate) return
+      map.set(docId, {
+        id: docId,
+        name: nameCandidate.trim(),
+        itemType: data.itemType === 'programme' ? 'programme' : data.itemType === 'service' ? 'service' : fallbackType,
+        imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
+        imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
+        source,
+      })
+    }
+
+    const topLevelProducts = await getDocs(query(collection(db, 'products'), where('storeId', '==', activeStoreId), limit(500)))
+    topLevelProducts.forEach(productDoc => {
+      addService(productDoc.id, productDoc.data() as Record<string, unknown>, 'products', 'product')
     })
 
-    const nextServices = Array.from(map.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((left, right) => left.name.localeCompare(right.name))
+    const legacyCollections = [
+      'services',
+      'integrationServices',
+      'products',
+      'programmes',
+      'programs',
+      'integrationProgrammes',
+      'integrationPrograms',
+    ]
+
+    for (const collectionName of legacyCollections) {
+      const snapshot = await getDocs(collection(db, 'stores', activeStoreId, collectionName))
+      snapshot.forEach(serviceDoc => {
+        const inferredType: ServiceRecord['itemType'] =
+          collectionName.includes('program') ? 'programme' : collectionName.includes('service') ? 'service' : 'product'
+        addService(serviceDoc.id, serviceDoc.data() as Record<string, unknown>, `stores/${activeStoreId}/${collectionName}`, inferredType)
+      })
+    }
+
+    const nextServices = Array.from(map.values()).sort((left, right) => left.name.localeCompare(right.name))
     setServices(nextServices)
     setServiceId(previous => (previous && map.has(previous) ? previous : nextServices[0]?.id ?? ''))
     return map
   }, [])
 
-  const loadSlots = useCallback(async (activeStoreId: string, serviceLookup: Map<string, string>) => {
+  const loadSlots = useCallback(async (activeStoreId: string, serviceLookup: Map<string, ServiceRecord>) => {
     const slotQuery = query(collection(db, 'stores', activeStoreId, 'integrationAvailabilitySlots'), orderBy('startAt', 'asc'))
     const snapshot = await getDocs(slotQuery)
     const nextSlots: SlotRecord[] = snapshot.docs
@@ -98,7 +148,7 @@ export default function BookingsAvailability() {
           serviceId: normalizedServiceId,
           serviceName:
             (typeof data.serviceName === 'string' && data.serviceName.trim()) ||
-            serviceLookup.get(normalizedServiceId) ||
+            serviceLookup.get(normalizedServiceId)?.name ||
             normalizedServiceId,
           startAt: start,
           endAt: end,
@@ -138,17 +188,22 @@ export default function BookingsAvailability() {
   }, [reload])
 
   const uploadPhoto = useCallback(async (resolvedServiceName: string) => {
-    if (!storeId || !photoFile) return imageUrl.trim()
-    const extensionSafeName = safeFileName(photoFile.name)
-    const path = `stores/${storeId}/availability/${Date.now()}-${slugify(resolvedServiceName)}-${extensionSafeName}`
-    const storageRef = ref(storage, path)
-    await uploadBytes(storageRef, photoFile, { contentType: photoFile.type || 'image/jpeg' })
-    return getDownloadURL(storageRef)
+    if (photoFile) {
+      if (!photoFile.type.startsWith('image/')) throw new Error('The selected file must be an image.')
+      if (photoFile.size > 5 * 1024 * 1024) throw new Error('The selected file must be 5MB or smaller.')
+      if (!storeId) throw new Error('No active store selected.')
+      const extensionSafeName = safeFileName(photoFile.name)
+      const path = `stores/${storeId}/availability/${Date.now()}-${slugify(resolvedServiceName)}-${extensionSafeName}`
+      const storageRef = ref(storage, path)
+      await withTimeout(uploadBytes(storageRef, photoFile, { contentType: photoFile.type || 'image/jpeg' }), 20000, 'Photo upload timed out.')
+      return withTimeout(getDownloadURL(storageRef), 15000, 'Could not get uploaded photo URL in time.')
+    }
+    return imageUrl.trim()
   }, [imageUrl, photoFile, storeId])
 
   const handleCreateSlot = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!storeId) return
+    if (!storeId || saving) return
     const startDate = new Date(startAt)
     const endDate = new Date(endAt)
     const nextCapacity = Math.max(1, Math.floor(Number(capacity) || 1))
@@ -161,28 +216,35 @@ export default function BookingsAvailability() {
       return
     }
     const manualName = manualServiceName.trim()
-    const selectedName = serviceMap.get(serviceId)?.trim() ?? ''
-    const resolvedServiceName = serviceMode === 'manual' ? manualName : selectedName
+    const resolvedServiceName = serviceMode === 'manual' ? manualName : selectedService?.name?.trim() ?? ''
     const resolvedServiceId = serviceMode === 'manual' ? `manual:${slugify(manualName)}` : serviceId
 
     if (!resolvedServiceName) {
-      setErrorMessage(serviceMode === 'manual' ? 'Enter an event, service, class, or product name.' : 'Choose a service or product first.')
+      setErrorMessage(serviceMode === 'manual' ? 'Enter an event, service, class, or product name.' : 'Choose a service, product, or programme first.')
       return
     }
     if (serviceMode === 'catalog' && !serviceId) {
-      setErrorMessage('Choose a service or product first.')
+      setErrorMessage('Choose a service, product, or programme first.')
       return
     }
 
     setSaving(true)
     setErrorMessage(null)
     try {
-      const resolvedImageUrl = await uploadPhoto(resolvedServiceName)
-      const resolvedImageAlt = imageAlt.trim() || (resolvedImageUrl ? `${resolvedServiceName} photo` : '')
+      const uploadedImageUrl = await uploadPhoto(resolvedServiceName)
+      const fallbackImageUrl = !uploadedImageUrl && !imageUrl.trim() ? selectedService?.imageUrl?.trim() || '' : ''
+      const resolvedImageUrl = uploadedImageUrl || imageUrl.trim() || fallbackImageUrl
+      const fallbackImageAlt = selectedService?.imageAlt?.trim() || `${resolvedServiceName} photo`
+      const resolvedImageAlt = imageAlt.trim() || (resolvedImageUrl ? fallbackImageAlt : '')
+
       await addDoc(collection(db, 'stores', storeId, 'integrationAvailabilitySlots'), {
         storeId,
         serviceId: resolvedServiceId,
         serviceName: resolvedServiceName,
+        sourceItemId: selectedService?.id || null,
+        sourceItemType: selectedService?.itemType || null,
+        sourceItemCollection: selectedService?.source || null,
+        source: selectedService?.source || null,
         startAt: Timestamp.fromDate(startDate),
         endAt: Timestamp.fromDate(endDate),
         timezone,
@@ -200,17 +262,20 @@ export default function BookingsAvailability() {
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       })
+
       setImageUrl('')
       setImageAlt('')
       setPhotoFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (serviceMode === 'manual') setManualServiceName('')
       await loadSlots(storeId, serviceMap)
     } catch (error) {
       console.error('[availability] Failed to create event', error)
-      setErrorMessage('Failed to create event. Please try again.')
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to create event. Please try again.')
     } finally {
       setSaving(false)
     }
-  }, [capacity, endAt, imageAlt, loadSlots, manualServiceName, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
+  }, [capacity, endAt, imageAlt, imageUrl, loadSlots, manualServiceName, saving, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -259,7 +324,16 @@ export default function BookingsAvailability() {
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
           <label><span>Capacity / limit</span><input type="number" min={1} value={capacity} onChange={event => setCapacity(event.target.value)} required /></label>
-          <label><span>Photo upload</span><input type="file" accept="image/*" onChange={event => setPhotoFile(event.target.files?.[0] ?? null)} /></label>
+          <div className="availability-photo-picker">
+            <span>Photo upload</span>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => setPhotoFile(event.target.files?.[0] ?? null)} />
+            <div className="availability-photo-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>Upload photo</button>
+              {photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>Remove photo</button>}
+            </div>
+            <p className="availability-photo-name">{photoFile ? `Selected: ${photoFile.name}` : 'No file selected yet.'}</p>
+            {previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}
+          </div>
           <label><span>Or image URL</span><input value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://..." /></label>
           <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>
           <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button>
