@@ -18,6 +18,7 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', type: 'module', target: '/dashboard', end: true, rolesAllowed: ['owner'], sortOrder: 10 },
+  { id: 'reports', label: 'Reports', type: 'module', target: '/reports', rolesAllowed: ['owner', 'staff'], sortOrder: 15 },
   { id: 'products', label: 'Items', type: 'module', target: '/products', rolesAllowed: ['owner'], sortOrder: 20 },
   { id: 'sell', label: 'Sell', type: 'module', target: '/sell', rolesAllowed: ['owner', 'staff'], sortOrder: 30 },
   { id: 'customers', label: 'Customers', type: 'module', target: '/customers', rolesAllowed: ['owner', 'staff'], sortOrder: 40 },
@@ -65,10 +66,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'donor-management'],
-  travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
-  school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'reports', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'donor-management'],
+  travel: ['dashboard', 'reports', 'products', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'reports', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
+  school: ['dashboard', 'reports', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = { role: NavRole; workspaceProfile: NavigationSettings; permissions?: string[] }
