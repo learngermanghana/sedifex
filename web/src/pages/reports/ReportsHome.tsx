@@ -1,41 +1,15 @@
 import { Link } from 'react-router-dom'
 
 const reports = [
-  {
-    title: 'Inventory report',
-    href: '/reports/inventory',
-    description: 'Stock units, services, categories, low-stock alerts, inventory value, and CSV export.',
-  },
-  {
-    title: 'POS sales report',
-    href: '/reports/pos-sales',
-    description: 'Internal sales from Sell, receipts, payment splits, units sold, and CSV export.',
-  },
-  {
-    title: 'Website sales report',
-    href: '/reports/website-sales',
-    description: 'Sedifex Market, client website orders, public page orders, payment modes, and CSV export.',
-  },
-  {
-    title: 'Bookings report',
-    href: '/reports/bookings',
-    description: 'Service bookings, class sessions, appointments, booking status, payment status, and CSV export.',
-  },
-  {
-    title: 'Student registrations report',
-    href: '/reports/student-registrations',
-    description: 'Admissions data, course interest, start dates, payment status, and CSV export.',
-  },
-  {
-    title: 'Volunteers report',
-    href: '/reports/volunteers',
-    description: 'Volunteer applications, skills, availability, follow-up status, and CSV export.',
-  },
-  {
-    title: 'Blog report',
-    href: '/reports/blog',
-    description: 'Published and draft posts, simple content metrics, and CSV export.',
-  },
+  { title: 'Inventory report', href: '/reports/inventory', description: 'Stock units, services, categories, low-stock alerts, inventory value, CSV export, and PDF export.' },
+  { title: 'POS sales report', href: '/reports/pos-sales', description: 'Internal sales from Sell, receipts, payment splits, units sold, and exports.' },
+  { title: 'Website sales report', href: '/reports/website-sales', description: 'Sedifex Market, client website orders, public page orders, payment modes, and exports.' },
+  { title: 'Bookings report', href: '/reports/bookings', description: 'Service bookings, class sessions, appointments, booking status, payment status, and exports.' },
+  { title: 'Student registrations report', href: '/reports/student-registrations', description: 'Admissions data, course interest, start dates, payment status, and exports.' },
+  { title: 'Volunteers report', href: '/reports/volunteers', description: 'Volunteer applications, skills, availability, follow-up status, and exports.' },
+  { title: 'Donors report', href: '/reports/donors', description: 'Donor profiles, giving totals, contact details, status, and exports.' },
+  { title: 'Funds report', href: '/reports/funds', description: 'Manual fund buckets, inflows, outflows, balances, and exports.' },
+  { title: 'Blog report', href: '/reports/blog', description: 'Published and draft posts, simple content metrics, and exports.' },
 ]
 
 export default function ReportsHome() {
@@ -44,7 +18,7 @@ export default function ReportsHome() {
       <section className="workspace-card">
         <p className="workspace-eyebrow">Reports</p>
         <h1>Business reports</h1>
-        <p className="workspace-muted">The dashboard should stay simple. Use reports for rich data, exports, and future PDF generation.</p>
+        <p className="workspace-muted">The dashboard stays simple. Use reports for rich data, CSV exports, and PDF print/download reports.</p>
       </section>
       <section className="workspace-grid">
         {reports.map(report => (
