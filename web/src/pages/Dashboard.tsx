@@ -4,13 +4,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 
-type Metric = {
-  id: string
-  label: string
-  value: string
-  hint: string
-  tone: string
-}
+type Metric = { id: string; label: string; value: string; hint: string; tone: string }
 
 function asNumber(value: unknown, fallback = 0) {
   const parsed = Number(value)
@@ -38,9 +32,7 @@ function isToday(value: unknown) {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 }
 
-function formatMoney(value: number, currency = 'GHS') {
-  return `${currency} ${value.toFixed(2)}`
-}
+function formatMoney(value: number, currency = 'GHS') { return `${currency} ${value.toFixed(2)}` }
 
 function normalizeSourceChannel(value: unknown) {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_') : ''
@@ -51,15 +43,7 @@ function normalizeSourceChannel(value: unknown) {
 }
 
 function cardStyle(tone: string) {
-  return {
-    borderRadius: 22,
-    border: '1px solid #e2e8f0',
-    borderTop: `5px solid ${tone}`,
-    background: '#fff',
-    padding: 18,
-    boxShadow: '0 24px 60px -48px rgba(15, 23, 42, 0.65)',
-    minHeight: 132,
-  }
+  return { borderRadius: 22, border: '1px solid #e2e8f0', borderTop: `5px solid ${tone}`, background: '#fff', padding: 18, boxShadow: '0 24px 60px -48px rgba(15, 23, 42, 0.65)', minHeight: 132 }
 }
 
 export default function Dashboard() {
@@ -69,54 +53,36 @@ export default function Dashboard() {
   const [orders, setOrders] = useState<Array<Record<string, unknown>>>([])
   const [bookings, setBookings] = useState<Array<Record<string, unknown>>>([])
   const [volunteers, setVolunteers] = useState<Array<Record<string, unknown>>>([])
+  const [donors, setDonors] = useState<Array<Record<string, unknown>>>([])
   const [registrations, setRegistrations] = useState<Array<Record<string, unknown>>>([])
   const [blogPosts, setBlogPosts] = useState<Array<Record<string, unknown>>>([])
 
   useEffect(() => {
     if (!storeId) {
-      setProducts([])
-      setSales([])
-      setOrders([])
-      setBookings([])
-      setVolunteers([])
-      setRegistrations([])
-      setBlogPosts([])
+      setProducts([]); setSales([]); setOrders([]); setBookings([]); setVolunteers([]); setDonors([]); setRegistrations([]); setBlogPosts([])
       return undefined
     }
 
     const unsubscribers = [
-      onSnapshot(query(collection(db, 'products'), where('storeId', '==', storeId)), snapshot => {
-        setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
-      onSnapshot(query(collection(db, 'sales'), where('storeId', '==', storeId)), snapshot => {
-        setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
-      onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId)), snapshot => {
-        setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
-      onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => {
-        setBookings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
-      onSnapshot(query(collection(db, 'volunteer_applications'), where('storeId', '==', storeId)), snapshot => {
-        setVolunteers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
-      onSnapshot(query(collection(db, 'student_registrations'), where('storeId', '==', storeId)), snapshot => {
-        setRegistrations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
-      onSnapshot(query(collection(db, 'blogPosts'), where('storeId', '==', storeId)), snapshot => {
-        setBlogPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      }),
+      onSnapshot(query(collection(db, 'products'), where('storeId', '==', storeId)), snapshot => setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'sales'), where('storeId', '==', storeId)), snapshot => setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId)), snapshot => setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => setBookings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'volunteer_applications'), where('storeId', '==', storeId)), snapshot => setVolunteers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'donor_profiles'), where('storeId', '==', storeId)), snapshot => setDonors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'student_registrations'), where('storeId', '==', storeId)), snapshot => setRegistrations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
+      onSnapshot(query(collection(db, 'blogPosts'), where('storeId', '==', storeId)), snapshot => setBlogPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))),
     ]
-
     return () => unsubscribers.forEach(unsubscribe => unsubscribe())
   }, [storeId])
 
   const todaySales = sales.filter(item => isToday(item.createdAt))
   const todayOrders = orders.filter(item => isToday(item.createdAtServer ?? item.createdAt))
   const todayBookings = bookings.filter(item => isToday(item.createdAtServer ?? item.createdAt))
-  const todayVolunteers = volunteers.filter(item => isToday(item.createdAt))
-  const todayRegistrations = registrations.filter(item => isToday(item.createdAt))
-  const todayBlogPosts = blogPosts.filter(item => isToday(item.createdAt))
+  const todayVolunteers = volunteers.filter(item => isToday(item.createdAtServer ?? item.createdAt))
+  const todayDonors = donors.filter(item => isToday(item.createdAtServer ?? item.createdAt))
+  const todayRegistrations = registrations.filter(item => isToday(item.createdAtServer ?? item.createdAt))
+  const todayBlogPosts = blogPosts.filter(item => isToday(item.createdAtServer ?? item.createdAt))
 
   const inventory = useMemo(() => {
     const inventoryItems = products.filter(item => item.itemType !== 'service')
@@ -135,7 +101,7 @@ export default function Dashboard() {
     if (amountMinor > 0) return sum + amountMinor / 100
     return sum + asNumber(item.amount ?? item.total, 0)
   }, 0)
-
+  const donorLifetimeGiving = donors.reduce((sum, item) => sum + asNumber(item.lifetimeGiving, 0), 0)
   const websiteOrdersToday = todayOrders.filter(item => normalizeSourceChannel(item.sourceChannel ?? item.source_channel ?? item.source) === 'client_website').length
   const marketOrdersToday = todayOrders.filter(item => normalizeSourceChannel(item.sourceChannel ?? item.source_channel ?? item.source) === 'sedifex_market').length
 
@@ -144,6 +110,7 @@ export default function Dashboard() {
     { id: 'internal-sales', label: 'Internal sales today', value: String(todaySales.length), hint: 'Recorded in Sell (POS)', tone: '#059669' },
     { id: 'online-orders', label: 'Online orders today', value: String(todayOrders.length), hint: `${websiteOrdersToday} website · ${marketOrdersToday} marketplace`, tone: '#2563eb' },
     { id: 'bookings', label: 'Bookings today', value: String(todayBookings.length), hint: 'New booking entries', tone: '#d97706' },
+    { id: 'donors', label: 'New donors today', value: String(todayDonors.length), hint: `${donors.length} donor profiles total`, tone: '#16a34a' },
     { id: 'volunteers', label: 'Volunteers today', value: String(todayVolunteers.length), hint: 'New volunteer applications', tone: '#7c3aed' },
     { id: 'student-registrations', label: 'Student registrations today', value: String(todayRegistrations.length), hint: 'New student registration entries', tone: '#db2777' },
     { id: 'blog-posts', label: 'New blog posts today', value: String(todayBlogPosts.length), hint: 'Published or drafted today', tone: '#0891b2' },
@@ -152,6 +119,7 @@ export default function Dashboard() {
 
   const secondaryMetrics: Metric[] = [
     { id: 'online-value', label: 'Online order value today', value: formatMoney(onlineRevenueToday), hint: 'From integrationOrders', tone: '#0f766e' },
+    { id: 'donor-lifetime-giving', label: 'Donor lifetime giving', value: formatMoney(donorLifetimeGiving), hint: 'From donor profiles', tone: '#15803d' },
     { id: 'all-products', label: 'Catalog records', value: String(products.length), hint: 'Products, services, and made-to-order records', tone: '#9333ea' },
     { id: 'all-orders', label: 'All online orders', value: String(orders.length), hint: 'Full history for this workspace', tone: '#1d4ed8' },
     { id: 'all-registrations', label: 'All student registrations', value: String(registrations.length), hint: 'Full registration history', tone: '#be123c' },
@@ -159,42 +127,9 @@ export default function Dashboard() {
 
   return (
     <div className="workspace-page">
-      <section className="workspace-card">
-        <p className="workspace-eyebrow">Dashboard</p>
-        <h1>Quick business overview</h1>
-        <p className="workspace-muted">
-          This dashboard now shows only quick KPIs. Detailed inventory, website sales, exports, and future PDF reports live under Reports.
-        </p>
-      </section>
-
-      <section aria-label="Primary metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16 }}>
-        {primaryMetrics.map(metric => (
-          <article key={metric.id} style={cardStyle(metric.tone)}>
-            <p style={{ margin: 0, color: metric.tone, fontWeight: 900, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Primary metric</p>
-            <h2 style={{ margin: '8px 0 4px', fontSize: 32, letterSpacing: '-0.03em' }}>{metric.value}</h2>
-            <p style={{ margin: '0 0 4px', fontWeight: 800, color: '#0f172a' }}>{metric.label}</p>
-            <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>{metric.hint}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="workspace-card">
-        <div className="workspace-section-header">
-          <div>
-            <h2>Smart report direction</h2>
-            <p className="workspace-muted">Use Reports for rich data. Dashboard stays fast and clean for daily decisions.</p>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
-          {secondaryMetrics.map(metric => (
-            <article key={metric.id} style={{ border: '1px solid #e2e8f0', borderRadius: 18, padding: 16, background: '#f8fafc' }}>
-              <strong style={{ display: 'block', fontSize: 22, color: '#0f172a' }}>{metric.value}</strong>
-              <span style={{ display: 'block', fontWeight: 800, color: '#334155' }}>{metric.label}</span>
-              <small style={{ color: '#64748b' }}>{metric.hint}</small>
-            </article>
-          ))}
-        </div>
-      </section>
+      <section className="workspace-card"><p className="workspace-eyebrow">Dashboard</p><h1>Quick business overview</h1><p className="workspace-muted">This dashboard now shows only quick KPIs. Detailed inventory, website sales, donor reports, exports, and PDF reports live under Reports.</p></section>
+      <section aria-label="Primary metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16 }}>{primaryMetrics.map(metric => <article key={metric.id} style={cardStyle(metric.tone)}><p style={{ margin: 0, color: metric.tone, fontWeight: 900, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Primary metric</p><h2 style={{ margin: '8px 0 4px', fontSize: 32, letterSpacing: '-0.03em' }}>{metric.value}</h2><p style={{ margin: '0 0 4px', fontWeight: 800, color: '#0f172a' }}>{metric.label}</p><p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>{metric.hint}</p></article>)}</section>
+      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Smart report direction</h2><p className="workspace-muted">Use Reports for rich data. Dashboard stays fast and clean for daily decisions.</p></div></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>{secondaryMetrics.map(metric => <article key={metric.id} style={{ border: '1px solid #e2e8f0', borderRadius: 18, padding: 16, background: '#f8fafc' }}><strong style={{ display: 'block', fontSize: 22, color: '#0f172a' }}>{metric.value}</strong><span style={{ display: 'block', fontWeight: 800, color: '#334155' }}>{metric.label}</span><small style={{ color: '#64748b' }}>{metric.hint}</small></article>)}</div></section>
     </div>
   )
 }
