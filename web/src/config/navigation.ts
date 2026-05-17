@@ -114,7 +114,6 @@ export const NAV_ITEMS: NavItem[] = [
     rolesAllowed: ['owner', 'staff'],
     sortOrder: 90,
   },
-  { id: 'public-page', label: 'Public page', type: 'module', target: '/public-page', rolesAllowed: ['owner'], sortOrder: 100 },
   { id: 'funds-ledger', label: 'Funds ledger', type: 'module', target: '/funds-ledger', rolesAllowed: ['owner', 'staff'], sortOrder: 105 },
   { id: 'account', label: 'Account', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
 ]
@@ -163,9 +162,9 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'donor-management', 'public-page'],
+  shop: ['dashboard', 'products', 'sell', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'donor-management'],
   travel: ['dashboard', 'products', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'promo', 'gallery', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger', 'public-page'],
+  ngo: ['dashboard', 'products', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
   school: ['dashboard', 'products', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
