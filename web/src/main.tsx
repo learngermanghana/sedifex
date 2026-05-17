@@ -23,6 +23,8 @@ import WebsiteSalesReport from './pages/reports/WebsiteSalesReport'
 import BookingsReport from './pages/reports/BookingsReport'
 import StudentRegistrationsReport from './pages/reports/StudentRegistrationsReport'
 import VolunteersReport from './pages/reports/VolunteersReport'
+import DonorsReport from './pages/reports/DonorsReport'
+import FundsReport from './pages/reports/FundsReport'
 import BlogReport from './pages/reports/BlogReport'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
@@ -89,6 +91,8 @@ const router = createBrowserRouter([
       { path: 'reports/bookings', element: <BookingsReport /> },
       { path: 'reports/student-registrations', element: <StudentRegistrationsReport /> },
       { path: 'reports/volunteers', element: <VolunteersReport /> },
+      { path: 'reports/donors', element: <DonorsReport /> },
+      { path: 'reports/funds', element: <FundsReport /> },
       { path: 'reports/blog', element: <BlogReport /> },
       { path: 'products', element: <Products /> },
       { path: 'sell', element: <Sell /> },
