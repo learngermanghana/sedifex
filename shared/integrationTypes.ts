@@ -10,7 +10,7 @@ export interface IntegrationProduct {
   description: string | null
   price: number | null
   stockCount: number | null
-  itemType: 'product' | 'service' | 'made_to_order'
+  itemType: 'product' | 'service'
   imageUrl: string | null
   imageUrls: string[]
   imageAlt: string | null
@@ -65,9 +65,13 @@ export interface IntegrationAvailabilitySlot {
   registrationMode?: 'free' | 'paid' | 'deposit' | 'enquiry'
   price?: number | null
   depositAmount?: number | null
+  currency?: string | null
   location?: string | null
   description?: string | null
+  registrationDeadline?: string | null
   marketplaceEnabled?: boolean | null
+  category?: string | null
+  tags?: string[]
   startAt: string
   endAt: string
   timezone: string | null

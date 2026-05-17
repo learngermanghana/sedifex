@@ -148,7 +148,7 @@ function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
 }
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
-  const itemType: ItemType = data.itemType === 'service' || data.itemType === 'made_to_order' ? 'service' : 'product'
+  const itemType: ItemType = data.itemType === 'service' ? 'service' : 'product'
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
   return {
@@ -189,7 +189,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
 
-  const serviceKind: ServiceKind = isCourse ? 'quote_request' : draft.serviceKind
+  const serviceKind: ServiceKind = isCourse ? 'appointment' : draft.serviceKind
   const salesMode = isCourse ? 'register' : serviceKind === 'quote_request' ? 'request_quote' : 'book_now'
 
   return {
