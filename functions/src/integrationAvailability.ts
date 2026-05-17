@@ -17,9 +17,13 @@ type SlotResponse = {
   registrationMode?: 'free' | 'paid' | 'deposit' | 'enquiry'
   price?: number | null
   depositAmount?: number | null
+  currency?: string | null
   location?: string | null
   description?: string | null
+  registrationDeadline?: string | null
   marketplaceEnabled?: boolean | null
+  category?: string | null
+  tags?: string[]
   startAt: string
   endAt: string
   timezone: string
@@ -222,9 +226,13 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
         registrationMode,
         price: data.price == null ? null : toNumber(data.price, 0),
         depositAmount: data.depositAmount == null ? null : toNumber(data.depositAmount, 0),
+        currency: clean(data.currency, 20) || null,
         location: clean(data.location, 240) || null,
         description: clean(data.description, 1200) || null,
+        registrationDeadline: toIso(data.registrationDeadline),
         marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : null,
+        category: clean(data.category, 120) || null,
+        tags: Array.isArray(data.tags) ? data.tags.map(tag => clean(tag, 80)).filter(Boolean) : [],
         startAt,
         endAt,
         timezone: clean(data.timezone, 80) || 'Africa/Accra',
