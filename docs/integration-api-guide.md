@@ -197,7 +197,6 @@ const items = Array.isArray(payload.items) ? payload.items : []
     "summary": "Promo summary",
     "startDate": "2026-04-01",
     "endDate": "2026-04-30",
-    "websiteUrl": "https://example.com",
     "youtubeUrl": null,
     "youtubeEmbedUrl": null,
     "youtubeChannelId": null,
@@ -210,6 +209,32 @@ const items = Array.isArray(payload.items) ? payload.items : []
   }
 }
 ```
+
+Promo settings are intentionally simplified for core campaign data (`title`, `summary`, `startDate`, `endDate`). Rich social/contact links should come from the store's shared public contact profile (`publicProfile`) so websites can reuse one source across headers, footers, contact sections, and public pages.
+
+### Website pull mapping for shared public contact data
+
+When your integration layer receives store profile data, use this priority order to avoid duplicates and field drift:
+
+1. `publicProfile.<field>` (preferred)
+2. legacy/top-level fallback fields on the store record
+
+Recommended field mapping:
+
+- `logoUrl` → `publicProfile.logoUrl` then fallback `logoUrl`
+- `phone` → `publicProfile.publicPhone` then fallback `phoneNumber`
+- `whatsapp` → `publicProfile.whatsappNumber` then fallback `whatsappNumber`
+- `telegram` → `publicProfile.telegramNumber` then fallback `telegramNumber`
+- `email` → `publicProfile.publicEmail`
+- `website` → `publicProfile.websiteUrl` then fallback `websiteUrl`
+- `instagram` → `publicProfile.instagramHandle`
+- `facebook` → `publicProfile.facebookUrl`
+- `tiktok` → `publicProfile.tiktokHandle`
+- `youtube` → `publicProfile.youtubeUrl`
+- `x` → `publicProfile.xHandle`
+- `linkedin` → `publicProfile.linkedinUrl`
+
+This keeps promo content focused while ensuring all website surfaces pull the same brand/contact values from one shared profile.
 
 ### `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>` (authenticated)
 
