@@ -1,0 +1,454 @@
+import React, { useEffect, useMemo, useState } from 'react'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
+import './Products.css'
+import { db } from '../firebase'
+import { useActiveStore } from '../hooks/useActiveStore'
+import { useMemberships } from '../hooks/useMemberships'
+import type { ItemType, Product } from '../types/product'
+
+type Draft = {
+  name: string
+  itemType: ItemType
+  category: string
+  price: string
+  costPrice: string
+  description: string
+  sku: string
+  openingStock: string
+  reorderPoint: string
+  expiryDate: string
+  imageUrl: string
+  imageAlt: string
+}
+
+const PRODUCT_CATEGORY = 'General Products'
+const SERVICE_CATEGORY = 'General Services'
+
+const PRODUCT_CATEGORIES = [
+  PRODUCT_CATEGORY,
+  'Skin Care',
+  'Hair Care',
+  'Supplements',
+  'Food & Beverages',
+  'Household',
+  'Electronics',
+  'Fashion',
+]
+
+const SERVICE_CATEGORIES = [
+  SERVICE_CATEGORY,
+  'Beauty Services',
+  'Spa Services',
+  'Hair Services',
+  'Training / Classes',
+  'Consultation',
+  'Repairs',
+  'Delivery Services',
+]
+
+const blankDraft: Draft = {
+  name: '',
+  itemType: 'product',
+  category: PRODUCT_CATEGORY,
+  price: '',
+  costPrice: '',
+  description: '',
+  sku: '',
+  openingStock: '',
+  reorderPoint: '',
+  expiryDate: '',
+  imageUrl: '',
+  imageAlt: '',
+}
+
+function titleCase(value: string) {
+  return value.trim().toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase())
+}
+
+function cleanNumber(value: unknown): number | null {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return parsed
+}
+
+function toDate(value: unknown): Date | null {
+  if (!value) return null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  if (typeof (value as any)?.toDate === 'function') {
+    const parsed = (value as any).toDate()
+    return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  return null
+}
+
+function formatDateInput(value: Date | null | undefined) {
+  return value ? value.toISOString().slice(0, 10) : ''
+}
+
+function formatMoney(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? `GHS ${value.toFixed(2)}` : '—'
+}
+
+function normalizeCategory(value: unknown, itemType: ItemType) {
+  const raw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+  const lowered = raw.toLowerCase()
+  if (itemType === 'service') {
+    if (!raw || lowered === 'general product' || lowered === 'general products') return SERVICE_CATEGORY
+    return titleCase(raw)
+  }
+  if (!raw || lowered === 'general service' || lowered === 'general services') return PRODUCT_CATEGORY
+  return titleCase(raw)
+}
+
+function normalizeProduct(id: string, data: Record<string, unknown>): Product {
+  const itemType: ItemType = data.itemType === 'service' ? 'service' : 'product'
+  const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
+  const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+  return {
+    id,
+    name,
+    itemType,
+    category: normalizeCategory(data.category, itemType),
+    description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+    sku: itemType === 'product' && typeof data.sku === 'string' && data.sku.trim() ? data.sku.trim() : null,
+    barcode: itemType === 'product' && typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : null,
+    price: cleanNumber(data.price),
+    costPrice: itemType === 'product' ? cleanNumber(data.costPrice) : null,
+    stockCount: itemType === 'product' ? cleanNumber(data.stockCount) : null,
+    reorderPoint: itemType === 'product' ? cleanNumber(data.reorderPoint ?? data.reorderLevel) : null,
+    taxRate: cleanNumber(data.taxRate),
+    expiryDate: itemType === 'product' ? toDate(data.expiryDate) : null,
+    productionDate: itemType === 'product' ? toDate(data.productionDate) : null,
+    manufacturerName: itemType === 'product' && typeof data.manufacturerName === 'string' ? data.manufacturerName : null,
+    batchNumber: itemType === 'product' && typeof data.batchNumber === 'string' ? data.batchNumber : null,
+    showOnReceipt: itemType === 'product' && data.showOnReceipt === true,
+    imageUrl,
+    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls.filter((item): item is string => typeof item === 'string') : imageUrl ? [imageUrl] : [],
+    imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : name,
+    lastReceiptAt: data.lastReceiptAt,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    sortOrder: cleanNumber(data.sortOrder),
+  }
+}
+
+function buildSavePayload(draft: Draft, storeId: string) {
+  const isService = draft.itemType === 'service'
+  const name = titleCase(draft.name)
+  const category = normalizeCategory(draft.category, draft.itemType)
+  const price = cleanNumber(draft.price)
+  if (!name) throw new Error('Name is required.')
+  if (price === null) throw new Error('Price is required.')
+
+  return {
+    storeId,
+    name,
+    itemType: draft.itemType,
+    category,
+    description: draft.description.trim() || null,
+    price,
+    costPrice: isService ? null : cleanNumber(draft.costPrice),
+    sku: isService ? null : draft.sku.trim() || null,
+    barcode: isService ? null : draft.sku.trim() || null,
+    stockCount: isService ? null : cleanNumber(draft.openingStock),
+    reorderPoint: isService ? null : cleanNumber(draft.reorderPoint),
+    expiryDate: isService || !draft.expiryDate ? null : new Date(draft.expiryDate),
+    productionDate: null,
+    manufacturerName: null,
+    batchNumber: null,
+    showOnReceipt: false,
+    imageUrl: draft.imageUrl.trim() || null,
+    imageUrls: draft.imageUrl.trim() ? [draft.imageUrl.trim()] : [],
+    imageAlt: draft.imageAlt.trim() || name,
+    updatedAt: serverTimestamp(),
+  }
+}
+
+export default function ProductsServiceFirst() {
+  const { storeId } = useActiveStore()
+  const { memberships } = useMemberships()
+  const [items, setItems] = useState<Product[]>([])
+  const [draft, setDraft] = useState<Draft>(blankDraft)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
+  const canManage = activeMembership?.role === 'owner'
+  const isService = draft.itemType === 'service'
+  const categoryOptions = isService ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES
+
+  useEffect(() => {
+    if (!storeId) {
+      setItems([])
+      return
+    }
+    const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('updatedAt', 'desc'), limit(500))
+    return onSnapshot(q, snapshot => {
+      const rows = snapshot.docs.map(documentSnapshot => normalizeProduct(documentSnapshot.id, documentSnapshot.data() as Record<string, unknown>))
+      setItems(rows)
+    })
+  }, [storeId])
+
+  function updateDraft(key: keyof Draft, value: string) {
+    setDraft(current => {
+      if (key === 'itemType') {
+        const nextItemType = value as ItemType
+        return {
+          ...current,
+          itemType: nextItemType,
+          category: normalizeCategory(current.category, nextItemType),
+          sku: nextItemType === 'service' ? '' : current.sku,
+          openingStock: nextItemType === 'service' ? '' : current.openingStock,
+          reorderPoint: nextItemType === 'service' ? '' : current.reorderPoint,
+          expiryDate: nextItemType === 'service' ? '' : current.expiryDate,
+          costPrice: nextItemType === 'service' ? '' : current.costPrice,
+        }
+      }
+      return { ...current, [key]: value }
+    })
+  }
+
+  function resetForm() {
+    setEditingId(null)
+    setDraft(blankDraft)
+    setError('')
+  }
+
+  function editItem(item: Product) {
+    const itemType = item.itemType === 'service' ? 'service' : 'product'
+    setEditingId(item.id)
+    setDraft({
+      name: item.name,
+      itemType,
+      category: normalizeCategory(item.category, itemType),
+      price: typeof item.price === 'number' ? String(item.price) : '',
+      costPrice: itemType === 'product' && typeof item.costPrice === 'number' ? String(item.costPrice) : '',
+      description: item.description ?? '',
+      sku: itemType === 'product' ? item.sku ?? item.barcode ?? '' : '',
+      openingStock: itemType === 'product' && typeof item.stockCount === 'number' ? String(item.stockCount) : '',
+      reorderPoint: itemType === 'product' && typeof item.reorderPoint === 'number' ? String(item.reorderPoint) : '',
+      expiryDate: itemType === 'product' ? formatDateInput(item.expiryDate) : '',
+      imageUrl: item.imageUrl ?? '',
+      imageAlt: item.imageAlt ?? item.name,
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveItem(event: React.FormEvent) {
+    event.preventDefault()
+    if (!storeId || !canManage) return
+    setSaving(true)
+    setMessage('')
+    setError('')
+    try {
+      const payload = buildSavePayload(draft, storeId)
+      if (editingId) {
+        await updateDoc(doc(db, 'products', editingId), payload)
+        setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} updated.`)
+      } else {
+        await setDoc(doc(collection(db, 'products')), {
+          ...payload,
+          createdAt: serverTimestamp(),
+          sortOrder: items.length + 1,
+        })
+        setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} added.`)
+      }
+      resetForm()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save item.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteItem(item: Product) {
+    if (!canManage) return
+    if (!window.confirm(`Delete ${item.name}?`)) return
+    await deleteDoc(doc(db, 'products', item.id))
+    setMessage(`${item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
+  }
+
+  const visibleItems = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return items
+    return items.filter(item => [item.name, item.category ?? '', item.sku ?? '', item.itemType].join(' ').toLowerCase().includes(term))
+  }, [items, search])
+
+  return (
+    <div className="page products-page">
+      <header className="page__header products-page__header">
+        <div>
+          <h2 className="page__title">Items</h2>
+          <p className="page__subtitle">Manage physical products and services with the right fields for each type.</p>
+        </div>
+      </header>
+
+      <div className="products-page__grid">
+        <section className="card products-page__add-card">
+          <h3 className="card__title">{editingId ? 'Edit item' : 'Add item'}</h3>
+          <p className="card__subtitle">
+            {isService
+              ? 'Service mode keeps the form simple: name, category, price, description, and image. Stock fields are hidden.'
+              : 'Product mode includes inventory fields like SKU, opening stock, reorder point, and expiry date.'}
+          </p>
+          {!canManage ? <p className="products__message products__message--error">Only the workspace owner can manage items.</p> : null}
+          {message ? <p className="products__message products__message--success">{message}</p> : null}
+          {error ? <p className="products__message products__message--error">{error}</p> : null}
+
+          <form className="form" onSubmit={saveItem}>
+            <div className="field">
+              <label className="field__label" htmlFor="item-type">Item type</label>
+              <select id="item-type" value={draft.itemType} onChange={event => updateDraft('itemType', event.target.value)}>
+                <option value="product">Physical product</option>
+                <option value="service">Service</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="item-name">{isService ? 'Service name' : 'Product name'}</label>
+              <input id="item-name" value={draft.name} onChange={event => updateDraft('name', event.target.value)} required />
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="item-category">{isService ? 'Service category' : 'Product category'}</label>
+              <input
+                id="item-category"
+                value={draft.category}
+                onChange={event => updateDraft('category', event.target.value)}
+                onBlur={event => updateDraft('category', normalizeCategory(event.target.value, draft.itemType))}
+                list="item-category-options"
+              />
+              <datalist id="item-category-options">
+                {categoryOptions.map(category => <option key={category} value={category} />)}
+              </datalist>
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="item-price">{isService ? 'Service price' : 'Selling price'}</label>
+              <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
+            </div>
+
+            {!isService ? (
+              <>
+                <div className="field">
+                  <label className="field__label" htmlFor="item-sku">SKU / Barcode</label>
+                  <input id="item-sku" value={draft.sku} onChange={event => updateDraft('sku', event.target.value)} />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="item-cost">Cost price</label>
+                  <input id="item-cost" type="number" min="0" step="0.01" value={draft.costPrice} onChange={event => updateDraft('costPrice', event.target.value)} />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="item-stock">Opening / current stock</label>
+                  <input id="item-stock" type="number" min="0" step="1" value={draft.openingStock} onChange={event => updateDraft('openingStock', event.target.value)} />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="item-reorder">Reorder point</label>
+                  <input id="item-reorder" type="number" min="0" step="1" value={draft.reorderPoint} onChange={event => updateDraft('reorderPoint', event.target.value)} />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="item-expiry">Expiry date</label>
+                  <input id="item-expiry" type="date" value={draft.expiryDate} onChange={event => updateDraft('expiryDate', event.target.value)} />
+                </div>
+              </>
+            ) : null}
+
+            <div className="field">
+              <label className="field__label" htmlFor="item-description">{isService ? 'Service description' : 'Product description'}</label>
+              <textarea id="item-description" rows={4} value={draft.description} onChange={event => updateDraft('description', event.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor="item-image">Image URL</label>
+              <input id="item-image" type="url" value={draft.imageUrl} onChange={event => updateDraft('imageUrl', event.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor="item-image-alt">Image alt text</label>
+              <input id="item-image-alt" value={draft.imageAlt} onChange={event => updateDraft('imageAlt', event.target.value)} />
+            </div>
+            <div className="products-page__list-actions">
+              <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
+              {editingId ? <button type="button" className="button button--ghost" onClick={resetForm}>Cancel</button> : null}
+            </div>
+          </form>
+        </section>
+
+        <section className="card products-page__list-card">
+          <div className="products-page__list-header">
+            <div className="field field--inline">
+              <label className="field__label" htmlFor="items-search">Search</label>
+              <input id="items-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search products or services" />
+            </div>
+          </div>
+
+          <div className="products-page__list" aria-live="polite">
+            {visibleItems.map(item => {
+              const itemIsService = item.itemType === 'service'
+              return (
+                <article key={item.id} className="products-page__list-card">
+                  <header className="products-page__list-card__header">
+                    <div className="products-page__thumb-wrap">
+                      {item.imageUrl ? <img className="products-page__thumb" src={item.imageUrl} alt={item.imageAlt ?? item.name} /> : <div className="products-page__thumb products-page__thumb--placeholder">No image</div>}
+                    </div>
+                    <div className="products-page__list-title">
+                      <h4>{item.name}</h4>
+                      <span className="products-page__badge products-page__badge--muted">{itemIsService ? 'Service' : 'Product'}</span>
+                      <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
+                    </div>
+                    <div className="products-page__list-meta">
+                      <span className="products-page__meta-label">Price</span>
+                      <span>{formatMoney(item.price)}</span>
+                    </div>
+                  </header>
+
+                  <div className="products-page__list-grid">
+                    {itemIsService ? (
+                      <>
+                        <div className="products-page__list-field"><label className="field__label">Service category</label><p className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">Booking / service item</label><p className="products-page__list-value">No stock tracking</p></div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="products-page__list-field"><label className="field__label">Product category</label><p className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">SKU / Barcode</label><p className="products-page__list-value">{item.sku || item.barcode || '—'}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">On hand</label><p className="products-page__list-value">{item.stockCount ?? 0}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">Reorder point</label><p className="products-page__list-value">{item.reorderPoint ?? '—'}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">Expiry</label><p className="products-page__list-value">{item.expiryDate ? item.expiryDate.toLocaleDateString() : '—'}</p></div>
+                      </>
+                    )}
+                    <div className="products-page__list-field"><label className="field__label">Description</label><p className="products-page__list-value">{item.description || '—'}</p></div>
+                  </div>
+
+                  <div className="products-page__list-actions">
+                    {canManage ? <button type="button" className="button button--ghost" onClick={() => editItem(item)}>Edit</button> : null}
+                    {canManage ? <button type="button" className="button button--danger" onClick={() => void deleteItem(item)}>Delete</button> : null}
+                  </div>
+                </article>
+              )
+            })}
+            {visibleItems.length === 0 ? <div className="empty-state"><h3 className="empty-state__title">No items found</h3><p>Add a product or service to get started.</p></div> : null}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
