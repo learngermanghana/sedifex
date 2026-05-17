@@ -60,6 +60,14 @@ export interface IntegrationAvailabilitySlot {
   id: string
   storeId: string
   serviceId: string
+  linkedCourseId?: string | null
+  eventKind?: 'intake' | 'class' | 'workshop' | 'event' | 'trip'
+  registrationMode?: 'free' | 'paid' | 'deposit' | 'enquiry'
+  price?: number | null
+  depositAmount?: number | null
+  location?: string | null
+  description?: string | null
+  marketplaceEnabled?: boolean | null
   startAt: string
   endAt: string
   timezone: string | null

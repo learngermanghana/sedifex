@@ -12,6 +12,14 @@ type SlotResponse = {
   storeId: string
   serviceId: string
   serviceName?: string
+  linkedCourseId?: string | null
+  eventKind?: 'intake' | 'class' | 'workshop' | 'event' | 'trip'
+  registrationMode?: 'free' | 'paid' | 'deposit' | 'enquiry'
+  price?: number | null
+  depositAmount?: number | null
+  location?: string | null
+  description?: string | null
+  marketplaceEnabled?: boolean | null
   startAt: string
   endAt: string
   timezone: string
@@ -195,11 +203,28 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
         if (isClosed || isPublicBlocked) return []
       }
 
+      const rawEventKind = clean(data.eventKind, 40).toLowerCase()
+      const eventKind = ['intake', 'class', 'workshop', 'event', 'trip'].includes(rawEventKind)
+        ? (rawEventKind as SlotResponse['eventKind'])
+        : undefined
+      const rawRegistrationMode = clean(data.registrationMode, 40).toLowerCase()
+      const registrationMode = ['free', 'paid', 'deposit', 'enquiry'].includes(rawRegistrationMode)
+        ? (rawRegistrationMode as SlotResponse['registrationMode'])
+        : undefined
+
       const slot: SlotResponse = {
         id: slotDoc.id,
         storeId,
         serviceId: resolvedServiceId,
         serviceName: resolvedServiceName || undefined,
+        linkedCourseId: clean(data.linkedCourseId, 220) || null,
+        eventKind,
+        registrationMode,
+        price: data.price == null ? null : toNumber(data.price, 0),
+        depositAmount: data.depositAmount == null ? null : toNumber(data.depositAmount, 0),
+        location: clean(data.location, 240) || null,
+        description: clean(data.description, 1200) || null,
+        marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : null,
         startAt,
         endAt,
         timezone: clean(data.timezone, 80) || 'Africa/Accra',

@@ -13,10 +13,21 @@ type ServiceRecord = {
   imageAlt?: string | null
   source?: string
 }
+type EventKind = 'intake' | 'class' | 'workshop' | 'event' | 'trip'
+type RegistrationMode = 'free' | 'paid' | 'deposit' | 'enquiry'
+
 type SlotRecord = {
   id: string
   serviceId: string
   serviceName: string
+  linkedCourseId?: string
+  eventKind: EventKind
+  registrationMode: RegistrationMode
+  price?: number
+  depositAmount?: number
+  location?: string
+  description?: string
+  marketplaceEnabled: boolean
   startAt: Date
   endAt: Date
   timezone: string
@@ -69,6 +80,14 @@ export default function BookingsAvailability() {
   const [endAt, setEndAt] = useState(toLocalInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000)))
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Accra')
   const [capacity, setCapacity] = useState('20')
+  const [eventKind, setEventKind] = useState<EventKind>('intake')
+  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('paid')
+  const [linkedCourseId, setLinkedCourseId] = useState('')
+  const [price, setPrice] = useState('')
+  const [depositAmount, setDepositAmount] = useState('')
+  const [location, setLocation] = useState('')
+  const [description, setDescription] = useState('')
+  const [marketplaceEnabled, setMarketplaceEnabled] = useState(true)
   const [imageUrl, setImageUrl] = useState('')
   const [imageAlt, setImageAlt] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -156,6 +175,14 @@ export default function BookingsAvailability() {
           capacity: typeof data.capacity === 'number' && Number.isFinite(data.capacity) ? Math.max(1, Math.floor(data.capacity)) : 1,
           seatsBooked: typeof data.seatsBooked === 'number' && Number.isFinite(data.seatsBooked) ? Math.max(0, Math.floor(data.seatsBooked)) : 0,
           status: data.status === 'closed' ? 'closed' : 'open',
+          linkedCourseId: typeof data.linkedCourseId === 'string' ? data.linkedCourseId : undefined,
+          eventKind: (typeof data.eventKind === 'string' ? data.eventKind : 'event') as EventKind,
+          registrationMode: (typeof data.registrationMode === 'string' ? data.registrationMode : 'paid') as RegistrationMode,
+          price: typeof data.price === 'number' ? data.price : undefined,
+          depositAmount: typeof data.depositAmount === 'number' ? data.depositAmount : undefined,
+          location: typeof data.location === 'string' ? data.location : undefined,
+          description: typeof data.description === 'string' ? data.description : undefined,
+          marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : true,
           imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof attributes.imageUrl === 'string' ? attributes.imageUrl : undefined,
           imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : typeof attributes.imageAlt === 'string' ? attributes.imageAlt : undefined,
         } as SlotRecord
@@ -250,6 +277,16 @@ export default function BookingsAvailability() {
         timezone,
         capacity: nextCapacity,
         seatsBooked: 0,
+        listingType: 'event',
+        enrollmentMode: 'scheduled',
+        eventKind,
+        registrationMode,
+        linkedCourseId: linkedCourseId.trim() || null,
+        price: price.trim() ? Number(price) : null,
+        depositAmount: depositAmount.trim() ? Number(depositAmount) : null,
+        location: location.trim() || null,
+        description: description.trim() || null,
+        marketplaceEnabled,
         status: 'open',
         isPublic: true,
         visibleOnWebsite: true,
@@ -275,7 +312,7 @@ export default function BookingsAvailability() {
     } finally {
       setSaving(false)
     }
-  }, [capacity, endAt, imageAlt, imageUrl, loadSlots, manualServiceName, saving, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
+  }, [capacity, depositAmount, description, endAt, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, marketplaceEnabled, price, registrationMode, saving, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -323,7 +360,15 @@ export default function BookingsAvailability() {
           <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
+          <label><span>Event kind</span><select value={eventKind} onChange={event => setEventKind(event.target.value as EventKind)}><option value="intake">Intake</option><option value="class">Class</option><option value="workshop">Workshop</option><option value="event">Event</option><option value="trip">Trip</option></select></label>
+          <label><span>Registration mode</span><select value={registrationMode} onChange={event => setRegistrationMode(event.target.value as RegistrationMode)}><option value="paid">Paid</option><option value="free">Free</option><option value="deposit">Deposit</option><option value="enquiry">Enquiry</option></select></label>
+          <label><span>Linked course ID (optional)</span><input value={linkedCourseId} onChange={event => setLinkedCourseId(event.target.value)} placeholder="e.g. german-b1-course" /></label>
           <label><span>Capacity / limit</span><input type="number" min={1} value={capacity} onChange={event => setCapacity(event.target.value)} required /></label>
+          <label><span>Price (optional)</span><input type="number" min={0} step="0.01" value={price} onChange={event => setPrice(event.target.value)} /></label>
+          <label><span>Deposit amount (optional)</span><input type="number" min={0} step="0.01" value={depositAmount} onChange={event => setDepositAmount(event.target.value)} /></label>
+          <label><span>Location (optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>
+          <label><span>Description (optional)</span><input value={description} onChange={event => setDescription(event.target.value)} /></label>
+          <label><span>Marketplace enabled</span><select value={marketplaceEnabled ? 'yes' : 'no'} onChange={event => setMarketplaceEnabled(event.target.value === 'yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>
           <div className="availability-photo-picker">
             <span>Photo upload</span>
             <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => setPhotoFile(event.target.files?.[0] ?? null)} />
