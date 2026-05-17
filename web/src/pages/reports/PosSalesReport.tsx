@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
 
 type SaleRow = {
@@ -80,6 +81,16 @@ export default function PosSalesReport() {
     cash: filtered.reduce((sum, sale) => sum + sale.cashTotal, 0),
   }), [filtered])
 
+
+  const columns: ReportColumn<SaleRow>[] = [
+    { key: 'receiptNo', label: 'Receipt', sortable: true, value: row => row.receiptNo },
+    { key: 'customer', label: 'Customer', sortable: true, value: row => row.customerName },
+    { key: 'total', label: 'Total', sortable: true, align: 'right', value: row => row.total, render: row => formatMoney(row.total) },
+    { key: 'payment', label: 'Payment', sortable: true, value: row => row.paymentSummary },
+    { key: 'units', label: 'Units', sortable: true, align: 'right', value: row => row.unitsSold },
+    { key: 'date', label: 'Date', sortable: true, value: row => row.createdAt ?? undefined, render: row => formatDate(row.createdAt) },
+  ]
+
   function exportRows() {
     downloadCsv('sedifex-pos-sales-report.csv', filtered.map(sale => ({
       receiptNo: sale.receiptNo,
@@ -146,23 +157,7 @@ export default function PosSalesReport() {
             <option value="30">Last 30 days</option>
           </select>
         </div>
-        <div className="workspace-table-wrap">
-          <table className="workspace-table">
-            <thead><tr><th>Receipt</th><th>Customer</th><th>Total</th><th>Payment</th><th>Units</th><th>Date</th></tr></thead>
-            <tbody>
-              {filtered.map(sale => (
-                <tr key={sale.id}>
-                  <td>{sale.receiptNo}</td>
-                  <td>{sale.customerName}</td>
-                  <td>{formatMoney(sale.total)}</td>
-                  <td>{sale.paymentSummary}</td>
-                  <td>{sale.unitsSold}</td>
-                  <td>{formatDate(sale.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportDataTable rows={filtered} columns={columns} getRowKey={row => row.id} searchPlaceholder="Search receipt, customer, payment…" />
       </section>
     </div>
   )

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
 
 type OrderRow = {
@@ -79,6 +80,17 @@ export default function WebsiteSalesReport() {
     payOnDelivery: filtered.filter(order => order.paymentCollectionMode === 'pay_on_delivery').length,
   }), [filtered])
 
+
+  const columns: ReportColumn<OrderRow>[] = [
+    { key: 'reference', label: 'Reference', sortable: true, value: row => row.reference },
+    { key: 'source', label: 'Source', sortable: true, value: row => row.sourceLabel },
+    { key: 'customer', label: 'Customer', sortable: true, value: row => row.customerName, render: row => <><strong>{row.customerName}</strong><br /><small>{row.customerPhone || 'No contact'}</small></> },
+    { key: 'amount', label: 'Amount', sortable: true, align: 'right', value: row => row.amount, render: row => formatMoney(row.amount, row.currency) },
+    { key: 'payment', label: 'Payment', sortable: true, value: row => row.paymentStatus, render: row => <>{row.paymentStatus}<br /><small>{row.paymentCollectionMode}</small></> },
+    { key: 'order', label: 'Order', sortable: true, value: row => row.orderStatus },
+    { key: 'date', label: 'Date', sortable: true, value: row => row.createdAt ?? undefined, render: row => formatDate(row.createdAt) },
+  ]
+
   function exportRows() {
     downloadCsv('sedifex-website-sales-report.csv', filtered.map(order => ({
       reference: order.reference,
@@ -154,24 +166,7 @@ export default function WebsiteSalesReport() {
             <option value="manual">Manual</option>
           </select>
         </div>
-        <div className="workspace-table-wrap">
-          <table className="workspace-table">
-            <thead><tr><th>Reference</th><th>Source</th><th>Customer</th><th>Amount</th><th>Payment</th><th>Order</th><th>Date</th></tr></thead>
-            <tbody>
-              {filtered.map(order => (
-                <tr key={order.id}>
-                  <td>{order.reference}</td>
-                  <td>{order.sourceLabel}</td>
-                  <td><strong>{order.customerName}</strong><br /><small>{order.customerPhone || 'No contact'}</small></td>
-                  <td>{formatMoney(order.amount, order.currency)}</td>
-                  <td>{order.paymentStatus}<br /><small>{order.paymentCollectionMode}</small></td>
-                  <td>{order.orderStatus}</td>
-                  <td>{formatDate(order.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportDataTable rows={filtered} columns={columns} getRowKey={row => row.id} searchPlaceholder="Search reference, source, customer…" />
       </section>
     </div>
   )
