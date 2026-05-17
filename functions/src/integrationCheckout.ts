@@ -104,7 +104,33 @@ async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReferen
   return !snapshot.empty
 }
 
+function nestedRecordContainsKey(value: unknown, apiKey: string, depth = 0): boolean {
+  if (!value || depth > 6) return false
+  if (Array.isArray(value)) {
+    return value.some(item => nestedRecordContainsKey(item, apiKey, depth + 1))
+  }
+  if (typeof value !== 'object') return false
+
+  const record = value as Record<string, unknown>
+  for (const [field, fieldValue] of Object.entries(record)) {
+    const looksLikeCredential = /api.?key|integration.?key|token|secret|credential|authorization/i.test(field)
+    if (looksLikeCredential && clean(fieldValue, 1000) === apiKey) return true
+    if (fieldValue && typeof fieldValue === 'object' && nestedRecordContainsKey(fieldValue, apiKey, depth + 1)) return true
+  }
+  return false
+}
+
 function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
+  const googleShopping = record.googleShopping && typeof record.googleShopping === 'object'
+    ? record.googleShopping as Record<string, unknown>
+    : {}
+  const catalogSync = googleShopping.catalogSync && typeof googleShopping.catalogSync === 'object'
+    ? googleShopping.catalogSync as Record<string, unknown>
+    : {}
+  const connection = googleShopping.connection && typeof googleShopping.connection === 'object'
+    ? googleShopping.connection as Record<string, unknown>
+    : {}
+
   const candidates = [
     record.integrationApiKey,
     record.integrationKey,
@@ -112,8 +138,15 @@ function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
     record.apiKey,
     record.token,
     record.key,
+    catalogSync.integrationApiKey,
+    catalogSync.integrationKey,
+    catalogSync.apiKey,
+    connection.integrationApiKey,
+    connection.integrationKey,
+    connection.apiKey,
   ]
-  return candidates.some(value => clean(value, 1000) === apiKey)
+
+  return candidates.some(value => clean(value, 1000) === apiKey) || nestedRecordContainsKey(record, apiKey)
 }
 
 async function isAuthorized(req: functions.https.Request, storeId: string) {
