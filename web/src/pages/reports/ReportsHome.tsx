@@ -114,21 +114,6 @@ function reportAllowed(report: ReportCard, enabledModules: string[], industry: s
   return report.moduleIds.some(moduleId => enabledModules.includes(moduleId))
 }
 
-function cardStyle(tone: string) {
-  return {
-    textDecoration: 'none',
-    color: 'inherit',
-    border: '1px solid #e2e8f0',
-    borderTop: `5px solid ${tone}`,
-    borderRadius: 22,
-    background: `linear-gradient(135deg, #ffffff 0%, #ffffff 62%, ${tone}10 100%)`,
-    boxShadow: '0 26px 70px -55px rgba(15, 23, 42, 0.75)',
-    minHeight: 210,
-    display: 'grid',
-    gap: 14,
-  }
-}
-
 export default function ReportsHome() {
   const { storeId } = useActiveStore()
   const { preferences } = useStorePreferences(storeId)
@@ -138,56 +123,67 @@ export default function ReportsHome() {
 
   return (
     <div className="workspace-page">
-      <section className="workspace-card" style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #ffffff 48%, #ecfeff 100%)' }}>
+      <section className="workspace-card" style={{ background: '#ffffff' }}>
         <div className="workspace-section-header">
           <div>
             <p className="workspace-eyebrow">Reports</p>
             <h1>Business reports</h1>
-            <p className="workspace-muted">
-              Showing only the reports enabled for this store from Account/navigation settings, so the list stays focused.
-            </p>
+            <p className="workspace-muted">Simple report list for quick selection.</p>
           </div>
           <Link className="button button--secondary" to="/account">
             Manage account modules
           </Link>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-          <span style={{ borderRadius: 999, background: '#e0f2fe', color: '#075985', padding: '8px 12px', fontWeight: 800, fontSize: 13 }}>{visibleReports.length} reports visible</span>
-          {hiddenCount > 0 ? <span style={{ borderRadius: 999, background: '#f1f5f9', color: '#475569', padding: '8px 12px', fontWeight: 800, fontSize: 13 }}>{hiddenCount} hidden by account setup</span> : null}
-          <span style={{ borderRadius: 999, background: '#fef3c7', color: '#92400e', padding: '8px 12px', fontWeight: 800, fontSize: 13 }}>{preferences.navigation.industry.toUpperCase()} workspace</span>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+          <span style={{ borderRadius: 999, background: '#e0f2fe', color: '#075985', padding: '7px 12px', fontWeight: 800, fontSize: 12 }}>{visibleReports.length} visible</span>
+          {hiddenCount > 0 ? <span style={{ borderRadius: 999, background: '#f1f5f9', color: '#475569', padding: '7px 12px', fontWeight: 800, fontSize: 12 }}>{hiddenCount} hidden</span> : null}
+          <span style={{ borderRadius: 999, background: '#f8fafc', color: '#334155', padding: '7px 12px', fontWeight: 800, fontSize: 12 }}>{preferences.navigation.industry.toUpperCase()}</span>
         </div>
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 16 }}>
-        {visibleReports.map(report => (
-          <Link key={report.href} to={report.href} className="workspace-card" style={cardStyle(report.tone)}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-              <span style={{ borderRadius: 999, background: `${report.tone}18`, color: report.tone, padding: '7px 11px', fontWeight: 900, fontSize: 12, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                {report.badge}
-              </span>
-              <span aria-hidden="true" style={{ width: 42, height: 42, borderRadius: 14, display: 'grid', placeItems: 'center', background: `${report.tone}14`, color: report.tone, fontSize: 22, fontWeight: 900 }}>
-                →
-              </span>
-            </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 22, letterSpacing: '-0.02em' }}>{report.title}</h2>
-              <p className="workspace-muted" style={{ marginTop: 8 }}>{report.description}</p>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>
-              <strong style={{ color: report.tone }}>{report.metricHint}</strong>
-              <span style={{ color: '#334155', fontWeight: 800 }}>Open report</span>
-            </div>
-          </Link>
-        ))}
-      </section>
-
-      {!visibleReports.length ? (
+      {visibleReports.length ? (
+        <section className="workspace-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'grid' }}>
+            {visibleReports.map((report, index) => (
+              <Link
+                key={report.href}
+                to={report.href}
+                style={{
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  display: 'grid',
+                  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+                  gap: 14,
+                  alignItems: 'center',
+                  padding: '14px 18px',
+                  borderTop: index === 0 ? 'none' : '1px solid #e2e8f0',
+                  background: '#ffffff',
+                }}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: 999, background: report.tone }} aria-hidden="true" />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <strong style={{ fontSize: 16 }}>{report.title}</strong>
+                    <span style={{ borderRadius: 999, background: `${report.tone}16`, color: report.tone, padding: '3px 9px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase' }}>
+                      {report.badge}
+                    </span>
+                    <span style={{ color: '#64748b', fontSize: 12 }}>{report.metricHint}</span>
+                  </div>
+                  <p className="workspace-muted" style={{ margin: '4px 0 0', fontSize: 13 }}>{report.description}</p>
+                </div>
+                <span style={{ color: '#334155', fontWeight: 800 }}>Open →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : (
         <section className="workspace-card">
           <h2>No reports enabled yet</h2>
           <p className="workspace-muted">Enable modules in Account settings to show the matching reports here.</p>
           <Link className="button button--primary" to="/account">Go to Account</Link>
         </section>
-      ) : null}
+      )}
     </div>
   )
 }
