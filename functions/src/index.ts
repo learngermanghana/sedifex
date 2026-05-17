@@ -14,7 +14,7 @@ export {
   fetchPaystackMerchantSubaccount,
   fetchPaystackSettlementBanks,
 } from './paystackSubaccounts'
-export { integrationCheckoutCreate } from './integrationCheckout'
+export { integrationCheckoutCreate, integrationOrderStatus } from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
@@ -218,45 +218,3 @@ const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID'
 
 let openAiConfigWarned = false
 let integrationApiKeyWarned = false
-
-function hashString(value: string): number {
-  let hash = 0
-  for (let index = 0; index < value.length; index += 1) {
-    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0
-  }
-  return Math.abs(hash)
-}
-
-function getOpenAiConfig() {
-  const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
-  const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini'
-
-  if (!apiKey && !openAiConfigWarned) {
-    functions.logger.warn(
-      'OPENAI_API_KEY is missing. Set it via Firebase params before calling generateAiAdvice.',
-    )
-    openAiConfigWarned = true
-  }
-
-  return { apiKey, model }
-}
-
-function getBookingDefaultServiceId() {
-  return process.env[BOOKING_DEFAULT_SERVICE_ID_ENV_KEY]?.trim() || ''
-}
-
-function getIntegrationMasterApiKey(): string {
-  const apiKey =
-    SEDIFEX_INTEGRATION_API_KEY.value()?.trim() ||
-    process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() ||
-    ''
-
-  if (!apiKey && !integrationApiKeyWarned) {
-    functions.logger.warn(
-      'SEDIFEX_INTEGRATION_API_KEY is missing. Integration HTTP endpoints will reject requests until it is configured.',
-    )
-    integrationApiKeyWarned = true
-  }
-
-  return apiKey
-}
