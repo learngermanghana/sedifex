@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import './DashboardHub.css'
 
 const tabs = [
-  { to: '/dashboard', label: 'Dashboard metrics', end: true },
+  { to: '/dashboard', label: 'Main dashboard', end: true },
 ]
 
 export default function DashboardHub() {
