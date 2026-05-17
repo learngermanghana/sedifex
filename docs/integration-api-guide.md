@@ -236,6 +236,69 @@ Recommended field mapping:
 
 This keeps promo content focused while ensuring all website surfaces pull the same brand/contact values from one shared profile.
 
+### Website integration pattern for social links (recommended)
+
+For website integrations, treat the store `publicProfile` as the single source for contact/social/footer/header data.
+
+#### 1) Pull core page data from promo endpoint
+
+Use promo endpoint for campaign content and basic identity:
+
+- `GET /v1IntegrationPromo?slug=<promoSlug>` (public), or
+- `GET /v1IntegrationPromo?storeId=<storeId>` (authenticated with `x-api-key`).
+
+This gives campaign fields (`title`, `summary`, dates, media) and `storeName`.
+
+#### 2) Pull/merge public contact profile into website model
+
+Your integration backend should also resolve the store profile payload and map:
+
+- `publicProfile.logoUrl` as the **official logo URL** across invoice/receipt templates, website header, and favicon/logo surfaces.
+- `publicProfile.publicPhone`, `publicProfile.whatsappNumber`, `publicProfile.telegramNumber`, `publicProfile.publicEmail`.
+- `publicProfile.websiteUrl`, `publicProfile.instagramHandle`, `publicProfile.facebookUrl`, `publicProfile.tiktokHandle`, `publicProfile.youtubeUrl`, `publicProfile.xHandle`, `publicProfile.linkedinUrl`.
+
+Always keep legacy fallbacks for backward compatibility (example: `logoUrl`, `phoneNumber`, `whatsappNumber`, `telegramNumber`, `websiteUrl`) using the priority mapping above.
+
+#### 3) Render once, reuse everywhere
+
+To avoid drift between pages:
+
+- Build one `contactLinks` object in your website codebase from mapped fields.
+- Reuse that same object in:
+  - website header,
+  - footer,
+  - contact page,
+  - promo landing CTA blocks,
+  - invoice/receipt logo surfaces.
+
+#### Example normalized object
+
+```json
+{
+  "brand": {
+    "name": "Sedifex Store",
+    "logoUrl": "https://cdn.example.com/stores/store_123/assets/logo.jpg"
+  },
+  "contact": {
+    "phone": "+233...",
+    "whatsapp": "+233...",
+    "telegram": "@storehandle",
+    "email": "hello@store.com",
+    "website": "https://store.com"
+  },
+  "social": {
+    "instagram": "@store",
+    "facebook": "https://facebook.com/store",
+    "tiktok": "@store",
+    "youtube": "https://youtube.com/@store",
+    "x": "@store",
+    "linkedin": "https://linkedin.com/company/store"
+  }
+}
+```
+
+This normalization allows sites to update once in Sedifex **Social links** and automatically stay consistent across Sedifex-generated documents and external websites.
+
 ### `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>` (authenticated)
 
 - Returns session/class slots for service-type offerings.
