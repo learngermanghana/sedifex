@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } fr
 import { Link } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import './Dashboard.css'
 
 type Metric = { id: string; label: string; value: string; hint: string; tone: string; group: 'sales' | 'inventory' | 'orders' | 'customers' | 'content' | 'ngo' | 'school' }
 
@@ -45,18 +46,6 @@ function normalizeSourceChannel(value: unknown) {
   return normalized || 'sedifex_market'
 }
 
-function cardStyle(tone: string, isSelected = true) {
-  return {
-    borderRadius: 22,
-    border: isSelected ? '1px solid #e2e8f0' : '1px dashed #cbd5e1',
-    borderTop: `5px solid ${tone}`,
-    background: isSelected ? '#fff' : '#f8fafc',
-    padding: 18,
-    boxShadow: isSelected ? '0 24px 60px -48px rgba(15, 23, 42, 0.65)' : 'none',
-    minHeight: 132,
-  }
-}
-
 function normalizeSelectedKpis(value: unknown, availableIds: string[]) {
   if (!Array.isArray(value)) return DEFAULT_KPI_IDS.filter(id => availableIds.includes(id))
   const cleaned = value.filter((item): item is string => typeof item === 'string' && availableIds.includes(item))
@@ -74,6 +63,10 @@ function groupLabel(group: Metric['group']) {
     school: 'School',
   }
   return labels[group]
+}
+
+function kpiStyle(tone: string) {
+  return { '--dashboard-kpi-tone': tone } as React.CSSProperties
 }
 
 export default function Dashboard() {
@@ -192,11 +185,7 @@ export default function Dashboard() {
     if (!storeId) return
     try {
       setIsSavingKpis(true)
-      await setDoc(doc(db, 'dashboardPreferences', storeId), {
-        storeId,
-        selectedKpiIds,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
+      await setDoc(doc(db, 'dashboardPreferences', storeId), { storeId, selectedKpiIds, updatedAt: serverTimestamp() }, { merge: true })
       setKpiMessage('Dashboard KPIs saved for this store.')
       setIsCustomizing(false)
     } catch (error) {
@@ -214,16 +203,14 @@ export default function Dashboard() {
 
   return (
     <div className="workspace-page">
-      <section className="workspace-card">
+      <section className="dashboard-hero">
         <div className="workspace-section-header">
           <div>
             <p className="workspace-eyebrow">Dashboard</p>
             <h1>Quick business overview</h1>
-            <p className="workspace-muted">Pick the KPIs each store wants to see first. Detailed inventory, website sales, donor reports, exports, and PDF reports live under Reports.</p>
+            <p className="workspace-muted">A cleaner KPI board for daily decisions. Pick the numbers this store wants to see first; deeper exports stay inside Reports.</p>
           </div>
-          <button type="button" className="button button--primary" onClick={() => setIsCustomizing(value => !value)}>
-            {isCustomizing ? 'Close KPI picker' : 'Customize KPIs'}
-          </button>
+          <button type="button" className="button button--primary" onClick={() => setIsCustomizing(value => !value)}>{isCustomizing ? 'Close KPI picker' : 'Customize KPIs'}</button>
         </div>
         {kpiMessage ? <p style={{ margin: '12px 0 0', color: kpiMessage.includes('Unable') ? '#b91c1c' : '#166534', fontWeight: 700 }}>{kpiMessage}</p> : null}
       </section>
@@ -231,24 +218,18 @@ export default function Dashboard() {
       {isCustomizing ? (
         <section className="workspace-card" aria-label="Customize dashboard KPIs">
           <div className="workspace-section-header">
-            <div>
-              <h2>Choose dashboard KPIs</h2>
-              <p className="workspace-muted">Selected KPIs show at the top of this store dashboard. At least one KPI must remain selected.</p>
-            </div>
+            <div><h2>Choose dashboard KPIs</h2><p className="workspace-muted">Selected KPIs show at the top of this store dashboard. At least one KPI must remain selected.</p></div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="button button--secondary" onClick={resetKpiPreferences}>Reset default</button>
               <button type="button" className="button button--primary" disabled={isSavingKpis} onClick={() => void saveKpiPreferences()}>{isSavingKpis ? 'Saving…' : 'Save KPIs'}</button>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          <div className="dashboard-kpi-picker-grid">
             {allMetrics.map(metric => {
               const isChecked = selectedKpiIds.includes(metric.id)
               return (
-                <label key={metric.id} style={{ display: 'grid', gap: 8, border: isChecked ? `1px solid ${metric.tone}` : '1px solid #e2e8f0', borderRadius: 18, padding: 14, background: isChecked ? '#fff' : '#f8fafc', cursor: 'pointer' }}>
-                  <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <input type="checkbox" checked={isChecked} onChange={() => toggleKpi(metric.id)} />
-                    <strong>{metric.label}</strong>
-                  </span>
+                <label key={metric.id} className={`dashboard-kpi-picker-option${isChecked ? ' is-selected' : ''}`} style={kpiStyle(metric.tone)}>
+                  <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}><input type="checkbox" checked={isChecked} onChange={() => toggleKpi(metric.id)} /><strong>{metric.label}</strong></span>
                   <small style={{ color: '#64748b' }}>{groupLabel(metric.group)} · {metric.hint}</small>
                 </label>
               )
@@ -257,32 +238,25 @@ export default function Dashboard() {
         </section>
       ) : null}
 
-      <section aria-label="Selected dashboard metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16 }}>
+      <section aria-label="Selected dashboard metrics" className="dashboard-kpi-grid">
         {selectedMetrics.map(metric => (
-          <article key={metric.id} style={cardStyle(metric.tone)}>
-            <p style={{ margin: 0, color: metric.tone, fontWeight: 900, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{groupLabel(metric.group)}</p>
-            <h2 style={{ margin: '8px 0 4px', fontSize: 32, letterSpacing: '-0.03em' }}>{metric.value}</h2>
-            <p style={{ margin: '0 0 4px', fontWeight: 800, color: '#0f172a' }}>{metric.label}</p>
-            <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>{metric.hint}</p>
+          <article key={metric.id} className="dashboard-kpi-card" style={kpiStyle(metric.tone)}>
+            <div className="dashboard-kpi-card__top"><span className="dashboard-kpi-card__badge">{groupLabel(metric.group)}</span></div>
+            <h2 className="dashboard-kpi-card__value">{metric.value}</h2>
+            <p className="dashboard-kpi-card__label">{metric.label}</p>
+            <p className="dashboard-kpi-card__hint">{metric.hint}</p>
           </article>
         ))}
       </section>
 
       <section className="workspace-card">
         <div className="workspace-section-header">
-          <div><h2>Smart report direction</h2><p className="workspace-muted">Use Reports for rich data. Dashboard stays fast and clean for daily decisions.</p></div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link className="button button--secondary" to="/online-orders">Online Orders</Link>
-            <Link className="button button--primary" to="/customers">Customers</Link>
-          </div>
+          <div><h2>Smart report direction</h2><p className="workspace-muted">Dashboard is now focused. Reports show only the modules enabled for this store.</p></div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link className="button button--secondary" to="/online-orders">Online Orders</Link><Link className="button button--primary" to="/reports">Reports</Link></div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+        <div className="dashboard-report-strip">
           {secondaryMetrics.map(metric => (
-            <article key={metric.id} style={{ border: '1px solid #e2e8f0', borderRadius: 18, padding: 16, background: '#f8fafc' }}>
-              <strong style={{ display: 'block', fontSize: 22, color: '#0f172a' }}>{metric.value}</strong>
-              <span style={{ display: 'block', fontWeight: 800, color: '#334155' }}>{metric.label}</span>
-              <small style={{ color: '#64748b' }}>{metric.hint}</small>
-            </article>
+            <article key={metric.id} className="dashboard-report-mini-card"><strong>{metric.value}</strong><span>{metric.label}</span><small>{metric.hint}</small></article>
           ))}
         </div>
       </section>
