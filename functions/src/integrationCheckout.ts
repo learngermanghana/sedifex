@@ -232,7 +232,18 @@ function normalizeIntegrationOrder(reference: string, storeId: string, record: R
   const paymentStatus = pickString(record, ['paymentStatus', 'payment_status', 'paystackStatus'], 80) || null
   const orderStatus = pickString(record, ['orderStatus', 'order_status', 'status'], 80) || null
   const syncStatus = pickString(record, ['syncStatus', 'sync_status'], 80) || null
-  const status = pickString(record, ['status', 'orderStatus', 'order_status', 'paymentStatus', 'payment_status'], 80) || syncStatus || 'pending'
+  const rawStatus = pickString(record, ['status', 'orderStatus', 'order_status', 'paymentStatus', 'payment_status', 'paystackStatus'], 80) || syncStatus || 'pending'
+
+  const normalizeStatus = (value: string | null) => {
+    if (!value) return null
+    const normalized = value.toLowerCase()
+    if (['success', 'successful', 'paid', 'completed', 'complete', 'settled'].includes(normalized)) return 'paid'
+    if (['failed', 'abandoned', 'cancelled', 'canceled', 'declined', 'reversed'].includes(normalized)) return 'failed'
+    if (['pending', 'processing', 'queued', 'syncing', 'pending_payment'].includes(normalized)) return 'pending'
+    return value
+  }
+
+  const status = normalizeStatus(paymentStatus) ?? normalizeStatus(orderStatus) ?? normalizeStatus(rawStatus) ?? 'pending'
 
   return {
     ok: true,
