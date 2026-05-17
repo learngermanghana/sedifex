@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
-import { asNumber, asText, downloadCsv, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
 
 type OrderRow = {
   id: string
@@ -94,6 +94,31 @@ export default function WebsiteSalesReport() {
     })))
   }
 
+  function exportPdf() {
+    exportReportPdf({
+      title: 'Website sales report',
+      subtitle: 'Online and website sales from Sedifex Market, client websites, and public pages.',
+      summary: [
+        { label: 'Orders', value: totals.count },
+        { label: 'Order value', value: formatMoney(totals.revenue) },
+        { label: 'Client website orders', value: totals.website },
+        { label: 'Pay on delivery', value: totals.payOnDelivery },
+      ],
+      rows: filtered.map(order => ({
+        reference: order.reference,
+        source: order.sourceLabel,
+        customer: order.customerName,
+        contact: order.customerPhone,
+        amount: order.amount,
+        currency: order.currency,
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        paymentCollectionMode: order.paymentCollectionMode,
+        createdAt: formatDate(order.createdAt),
+      })),
+    })
+  }
+
   return (
     <div className="workspace-page">
       <section className="workspace-card">
@@ -110,7 +135,10 @@ export default function WebsiteSalesReport() {
       <section className="workspace-card">
         <div className="workspace-section-header">
           <div><h2>Order details</h2><p className="workspace-muted">Filter by source or payment mode, then export CSV.</p></div>
-          <button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button>
+            <button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
+          </div>
         </div>
         <div className="workspace-toolbar">
           <select value={channel} onChange={event => setChannel(event.target.value)}>

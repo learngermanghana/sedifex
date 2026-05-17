@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
-import { asNumber, asText, downloadCsv, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
+import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
 
 type SaleRow = {
   id: string
@@ -93,6 +93,30 @@ export default function PosSalesReport() {
     })))
   }
 
+  function exportPdf() {
+    exportReportPdf({
+      title: 'POS sales report',
+      subtitle: 'Detailed POS sales with receipts, payment split, units sold, and totals.',
+      summary: [
+        { label: 'Sales', value: totals.count },
+        { label: 'Sales value', value: formatMoney(totals.revenue) },
+        { label: 'Units sold', value: totals.units },
+        { label: 'Cash collected', value: formatMoney(totals.cash) },
+      ],
+      rows: filtered.map(sale => ({
+        receiptNo: sale.receiptNo,
+        customer: sale.customerName,
+        total: sale.total,
+        cash: sale.cashTotal,
+        card: sale.cardTotal,
+        momo: sale.momoTotal,
+        unitsSold: sale.unitsSold,
+        paymentSummary: sale.paymentSummary,
+        createdAt: formatDate(sale.createdAt),
+      })),
+    })
+  }
+
   return (
     <div className="workspace-page">
       <section className="workspace-card">
@@ -109,7 +133,10 @@ export default function PosSalesReport() {
       <section className="workspace-card">
         <div className="workspace-section-header">
           <div><h2>Sale details</h2><p className="workspace-muted">Filter by period and export sales.</p></div>
-          <button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button>
+            <button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
+          </div>
         </div>
         <div className="workspace-toolbar">
           <select value={range} onChange={event => setRange(event.target.value)}>

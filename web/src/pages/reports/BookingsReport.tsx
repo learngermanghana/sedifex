@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
-import { asNumber, asText, downloadCsv, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
 
 type BookingRow = {
   id: string
@@ -82,6 +82,32 @@ export default function BookingsReport() {
     })))
   }
 
+  function exportPdf() {
+    exportReportPdf({
+      title: 'Bookings report',
+      subtitle: 'Service, class, appointment, and website bookings with payment and schedule details.',
+      summary: [
+        { label: 'Total bookings', value: totals.count },
+        { label: 'Paid/confirmed', value: totals.paid },
+        { label: 'Pending', value: totals.pending },
+        { label: 'Booking value', value: formatMoney(totals.value) },
+      ],
+      rows: filtered.map(booking => ({
+        reference: booking.reference,
+        serviceName: booking.serviceName,
+        customer: booking.customerName,
+        contact: booking.customerPhone,
+        source: booking.sourceChannel,
+        bookingDate: booking.bookingDate,
+        bookingTime: booking.bookingTime,
+        paymentStatus: booking.paymentStatus,
+        bookingStatus: booking.bookingStatus,
+        amount: booking.amount,
+        createdAt: formatDate(booking.createdAt),
+      })),
+    })
+  }
+
   return (
     <div className="workspace-page">
       <section className="workspace-card">
@@ -96,7 +122,7 @@ export default function BookingsReport() {
         <article className="workspace-card"><strong>{formatMoney(totals.value)}</strong><span>Booking value</span></article>
       </section>
       <section className="workspace-card">
-        <div className="workspace-section-header"><div><h2>Booking details</h2><p className="workspace-muted">Filter status and export data.</p></div><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></div>
+        <div className="workspace-section-header"><div><h2>Booking details</h2><p className="workspace-muted">Filter status and export data.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></div></div>
         <div className="workspace-toolbar"><select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="success">Paid</option><option value="completed">Completed</option></select></div>
         <div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Reference</th><th>Service</th><th>Customer</th><th>Schedule</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead><tbody>{filtered.map(booking => <tr key={booking.id}><td>{booking.reference}</td><td>{booking.serviceName}</td><td><strong>{booking.customerName}</strong><br /><small>{booking.customerPhone || 'No contact'}</small></td><td>{booking.bookingDate}<br /><small>{booking.bookingTime}</small></td><td>{booking.bookingStatus}<br /><small>{booking.paymentStatus}</small></td><td>{formatMoney(booking.amount)}</td><td>{formatDate(booking.createdAt)}</td></tr>)}</tbody></table></div>
       </section>
