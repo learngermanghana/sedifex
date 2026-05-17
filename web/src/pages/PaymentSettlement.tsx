@@ -46,21 +46,7 @@ const paymentTemplates = {
   },
 }
 
-function StatusCard({ title, value, helper, good }: { title: string; value: string; helper: string; good?: boolean }) {
-  return (
-    <article
-      className="account-overview__card"
-      style={{
-        borderTop: `4px solid ${good ? '#16a34a' : '#f59e0b'}`,
-        minHeight: 126,
-      }}
-    >
-      <p className="account-overview__hint" style={{ marginTop: 0 }}>{title}</p>
-      <h3 style={{ margin: '4px 0 8px', color: good ? '#166534' : '#92400e' }}>{value}</h3>
-      <p className="account-overview__hint" style={{ marginBottom: 0 }}>{helper}</p>
-    </article>
-  )
-}
+const digitsOnly = (value: string, max: number) => value.replace(/\D/g, '').slice(0, max)
 
 export default function PaymentSettlement() {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
@@ -86,10 +72,7 @@ export default function PaymentSettlement() {
     return memberships.find(member => member.storeId === storeId) ?? null
   }, [memberships, storeId])
   const isOwner = activeMembership?.role === 'owner'
-  const digits = (value: string, max: number) => value.replace(/\D/g, '').slice(0, max)
   const template = paymentTemplates[paymentType]
-  const bankConnected = Boolean(status?.configured && status?.subaccountCode)
-  const onlineCheckoutReady = bankConnected && (status?.active === true || status?.active === 1 || status?.active == null)
 
   const filteredOptions = useMemo(() => {
     const selectedType = paymentType === 'mobile_money' ? 'mobile_money' : 'bank'
@@ -161,7 +144,7 @@ export default function PaymentSettlement() {
     if (!storeId || !isOwner) return
     const cleanBusinessName = businessName.trim()
     const cleanRoutingCode = routingCode.trim()
-    const cleanPaymentNumber = digits(paymentNumber, 20)
+    const cleanPaymentNumber = digitsOnly(paymentNumber, 20)
     if (!cleanBusinessName) return setErrorMessage('Business name is required.')
     if (!cleanRoutingCode) return setErrorMessage('Select a bank/mobile money provider or enter the Paystack routing code.')
     if (cleanPaymentNumber.length < 8) return setErrorMessage('Enter a valid payment number.')
@@ -198,46 +181,12 @@ export default function PaymentSettlement() {
   return (
     <div className="account-overview">
       <h1>Payments / Settlement</h1>
-      <p className="account-overview__subtitle">Set up where store payouts should settle after Sedifex online checkout.</p>
-      <div className="account-overview__banner" role="status"><p>Sedifex controls commission from backend settings. Stores only provide bank or mobile money settlement details.</p></div>
+      <p className="account-overview__subtitle">Add where store payouts should settle after Sedifex online checkout.</p>
       {storeLoading ? <p>Loading workspace…</p> : null}
       {!storeId && !storeLoading ? <p>Select a workspace to configure settlement.</p> : null}
       {storeId && !isOwner ? <div className="account-overview__error" role="alert">Only the workspace owner can set up settlement.</div> : null}
       {storeId && isOwner ? (
         <>
-          <section aria-labelledby="settlement-confidence">
-            <div className="account-overview__section-header">
-              <h2 id="settlement-confidence">Payment confidence</h2>
-              <p className="account-overview__subtitle">These cards tell the store owner exactly what is ready before accepting online payments.</p>
-            </div>
-            <div className="account-overview__grid">
-              <StatusCard
-                title="Bank or MoMo connected"
-                value={bankConnected ? 'Connected' : 'Setup needed'}
-                helper={bankConnected ? 'Your payout destination is saved for this store.' : 'Add settlement details before relying on online checkout.'}
-                good={bankConnected}
-              />
-              <StatusCard
-                title="Online checkout"
-                value={onlineCheckoutReady ? 'Active' : 'Waiting for setup'}
-                helper={onlineCheckoutReady ? 'Sedifex Market and connected websites can route paid orders to this store.' : 'Online payments should be activated after settlement is ready.'}
-                good={onlineCheckoutReady}
-              />
-              <StatusCard
-                title="Sedifex commission"
-                value={typeof status?.percentageCharge === 'number' ? `${status.percentageCharge}%` : 'Controlled by Sedifex'}
-                helper="Stores do not calculate commission manually. Sedifex applies the configured percentage during checkout."
-                good
-              />
-              <StatusCard
-                title="Store settlement"
-                value={bankConnected ? 'Paystack subaccount' : 'Not connected yet'}
-                helper={bankConnected ? 'The store receives its share through the saved Paystack subaccount.' : 'A Paystack subaccount will be created after setup is saved.'}
-                good={bankConnected}
-              />
-            </div>
-          </section>
-
           <section aria-labelledby="settlement-status">
             <div className="account-overview__section-header">
               <h2 id="settlement-status">Current setup</h2>
@@ -272,7 +221,7 @@ export default function PaymentSettlement() {
                   </select>
                 </label>
                 <label><span>Paystack routing code</span><input value={routingCode} onChange={event => setRoutingCode(event.target.value.trim())} maxLength={30} placeholder="Auto-filled when you select provider" required /></label>
-                <label><span>{template.numberLabel}</span><input inputMode="numeric" value={paymentNumber} onChange={event => setPaymentNumber(digits(event.target.value, 20))} maxLength={20} placeholder={template.placeholder} required /></label>
+                <label><span>{template.numberLabel}</span><input inputMode="numeric" value={paymentNumber} onChange={event => setPaymentNumber(digitsOnly(event.target.value, 20))} maxLength={20} placeholder={template.placeholder} required /></label>
                 <label><span>Contact email</span><input type="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} /></label>
                 <label><span>Contact name</span><input value={contactName} onChange={event => setContactName(event.target.value)} maxLength={160} /></label>
                 <label><span>Phone</span><input type="tel" value={contactPhone} onChange={event => setContactPhone(event.target.value)} maxLength={80} /></label>
@@ -280,7 +229,7 @@ export default function PaymentSettlement() {
               <div className="account-overview__banner" role="note" style={{ marginTop: 16 }}>
                 <p><strong>{template.numberLabel}:</strong> {template.numberHint}</p>
                 {selectedOption ? <p><strong>Selected provider:</strong> {selectedOption.name} ({selectedOption.code})</p> : null}
-                <button type="button" className="button button--secondary" onClick={() => setPaymentNumber(digits(contactPhone, 20))} disabled={!contactPhone}>Use contact phone as payment number</button>
+                <button type="button" className="button button--secondary" onClick={() => setPaymentNumber(digitsOnly(contactPhone, 20))} disabled={!contactPhone}>Use contact phone as payment number</button>
               </div>
               {errorMessage ? <p className="account-overview__error" role="alert">{errorMessage}</p> : null}
               <div className="account-overview__actions"><p className="account-overview__hint">Sedifex stores the Paystack subaccount code and masked payment number. Commission remains controlled by Sedifex.</p><button type="submit" className="button button--primary" disabled={isSaving}>{isSaving ? 'Saving…' : 'Save payment setup'}</button></div>
