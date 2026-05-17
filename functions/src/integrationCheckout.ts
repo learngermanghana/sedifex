@@ -149,9 +149,60 @@ function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
   return candidates.some(value => clean(value, 1000) === apiKey) || nestedRecordContainsKey(record, apiKey)
 }
 
-async function isAuthorized(req: functions.https.Request, storeId: string) {
+function getRequestApiKey(req: functions.https.Request) {
   const bearer = clean(req.get('authorization'), 1000).replace(/^Bearer\s+/i, '')
-  const apiKey = clean(req.get('x-api-key'), 1000) || bearer
+  return clean(req.get('x-api-key'), 1000) || bearer
+}
+
+async function isAuthorizedByExistingProductEndpoint(req: functions.https.Request, storeId: string, apiKey: string) {
+  const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'sedifex-web'
+  const contractVersion = INTEGRATION_CONTRACT_VERSION.value() || '2026-04-13'
+  const endpoint = `https://us-central1-${projectId}.cloudfunctions.net/v1IntegrationProducts?storeId=${encodeURIComponent(storeId)}`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 7000)
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'x-api-key': apiKey,
+        Accept: 'application/json',
+        'X-Sedifex-Contract-Version': clean(req.get('x-sedifex-contract-version'), 80) || contractVersion,
+      },
+      signal: controller.signal,
+    })
+
+    if (!response.ok) return false
+
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null
+    if (!payload || typeof payload !== 'object') return true
+
+    const payloadStoreId = clean(payload.storeId, 180)
+    if (payloadStoreId && payloadStoreId !== storeId) return false
+
+    const products = Array.isArray(payload.products) ? payload.products : []
+    const publicProducts = Array.isArray(payload.publicProducts) ? payload.publicProducts : []
+    const publicServices = Array.isArray(payload.publicServices) ? payload.publicServices : []
+    const sampledItems = [...products, ...publicProducts, ...publicServices].slice(0, 10)
+
+    for (const item of sampledItems) {
+      if (!item || typeof item !== 'object') continue
+      const itemStoreId = clean((item as Record<string, unknown>).storeId, 180)
+      if (itemStoreId && itemStoreId !== storeId) return false
+    }
+
+    return true
+  } catch (error) {
+    functions.logger.warn('integration order status product endpoint auth fallback failed', { storeId, error })
+    return false
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function isAuthorized(req: functions.https.Request, storeId: string) {
+  const apiKey = getRequestApiKey(req)
   if (!apiKey) return false
 
   const master = SEDIFEX_INTEGRATION_API_KEY.value()?.trim() || process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() || ''
@@ -186,6 +237,8 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
         .get()
       if (!snapshot.empty) return true
     }
+
+    if (await isAuthorizedByExistingProductEndpoint(req, storeId, apiKey)) return true
   } catch (error) {
     functions.logger.warn('integration order status auth lookup failed', { storeId, error })
   }
