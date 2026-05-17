@@ -15,6 +15,7 @@ const EMAIL_HEADER_MATCHERS = new Set([
 const SHEETS_SERVICE_ACCOUNT = defineString('SHEETS_SERVICE_ACCOUNT', { default: '' })
 const SHEETS_SPREADSHEET_ID = defineString('SHEETS_SPREADSHEET_ID', { default: '' })
 const SHEETS_RANGE = defineString('SHEETS_RANGE', { default: '' })
+const NOTIFICATION_OUTBOX_SHEET_RANGE = defineString('NOTIFICATION_OUTBOX_SHEET_RANGE', { default: 'NotificationOutbox!A:Z' })
 
 type SheetsClient = sheets_v4.Sheets
 
@@ -94,7 +95,7 @@ async function getSheetsClient() {
 
     const auth = new google.auth.GoogleAuth({
       credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     })
 
     const authClientPromise = auth.getClient()
@@ -215,3 +216,22 @@ export function getDefaultSpreadsheetId() {
 }
 
 export type FetchClientRowResult = Awaited<ReturnType<typeof fetchClientRowByEmail>>
+
+export function getNotificationOutboxRange() {
+  const configured = NOTIFICATION_OUTBOX_SHEET_RANGE.value()?.trim()
+  return configured || 'NotificationOutbox!A:Z'
+}
+
+export async function appendNotificationOutboxRow(row: Array<string | number | null | undefined>, spreadsheetId?: string | null) {
+  const config = readConfig()
+  const resolvedSpreadsheetId = resolveSpreadsheetId(config, spreadsheetId ?? null)
+  const sheets = await getSheetsClient()
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: resolvedSpreadsheetId,
+    range: getNotificationOutboxRange(),
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [row.map(value => (value === null || value === undefined ? '' : String(value)))],
+    },
+  })
+}

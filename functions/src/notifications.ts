@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { appendNotificationOutboxRow, getDefaultSpreadsheetId } from './googleSheets'
 
 const SEDIFEX_NOTIFICATION_WEBHOOK_URL = defineString('SEDIFEX_NOTIFICATION_WEBHOOK_URL', { default: '' })
 const SEDIFEX_NOTIFICATION_SHARED_SECRET = defineString('SEDIFEX_NOTIFICATION_SHARED_SECRET', { default: '' })
@@ -130,12 +131,37 @@ async function createDelivery(args: { payload: NotificationPayload; brand: Store
     return true
   })
   if (!created) return { created: false, webhook: null }
+  let sheetSyncStatus: 'synced_to_sheet' | 'sheet_sync_failed' | 'sheet_sync_skipped' = 'sheet_sync_skipped'
+  try {
+    await appendNotificationOutboxRow([
+      new Date().toISOString(),
+      args.payload.storeId,
+      args.brand.storeName,
+      args.payload.eventType,
+      reference,
+      args.recipientType,
+      args.to,
+      args.subject,
+      text(args.payload.payment?.status, 80) || '',
+      formatMoney(args.payload.payment) || '',
+      text(args.payload.payment?.method, 80) || '',
+      email(args.payload.customer?.email) || '',
+      text(args.payload.customer?.phone, 80) || '',
+      text(args.payload.data?.itemName, 220) || '',
+      getDefaultSpreadsheetId(),
+    ])
+    sheetSyncStatus = 'synced_to_sheet'
+  } catch (error) {
+    sheetSyncStatus = 'sheet_sync_failed'
+    await outboxRef.set({ sheetSyncError: error instanceof Error ? error.message : 'sheet-sync-error', updatedAt: now }, { merge: true })
+  }
   try {
     const webhook = await postToWebhook({ storeId: args.payload.storeId, eventType: args.payload.eventType, reference, recipientType: args.recipientType, to: args.to, subject: args.subject, html: args.html, text: args.text, brand: args.brand, customer: args.payload.customer ?? null, payment: args.payload.payment ?? null, data: args.payload.data ?? null }, args.settings)
-    if (webhook.attempted) await outboxRef.set({ status: webhook.ok ? 'sent_to_webhook' : 'webhook_failed', webhookStatus: webhook.status, sentToWebhookAt: now, updatedAt: now }, { merge: true })
+    if (webhook.attempted) await outboxRef.set({ status: webhook.ok ? 'sent_to_webhook' : 'webhook_failed', webhookStatus: webhook.status, sentToWebhookAt: now, sheetSyncStatus, updatedAt: now }, { merge: true })
+    if (!webhook.attempted) await outboxRef.set({ status: sheetSyncStatus, sheetSyncStatus, updatedAt: now }, { merge: true })
     return { created: true, webhook }
   } catch (error) {
-    await outboxRef.set({ status: 'webhook_error', errorMessage: error instanceof Error ? error.message : 'webhook-error', updatedAt: now }, { merge: true })
+    await outboxRef.set({ status: 'webhook_error', errorMessage: error instanceof Error ? error.message : 'webhook-error', sheetSyncStatus, updatedAt: now }, { merge: true })
     return { created: true, webhook: { attempted: true, ok: false, status: null } }
   }
 }
