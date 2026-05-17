@@ -127,6 +127,30 @@ Query parameters:
 
 `publicProducts` and `publicServices` are convenience buckets derived from `itemType` so storefronts can render physical products and services in separate sections without extra client-side sorting.
 
+### Listing model guidance (products, services, courses, events)
+
+Use these values to keep catalog and upcoming availability consistent:
+
+- **Products**
+  - `listingType: "product"`
+  - `salesMode: "buy_now"`
+- **Services**
+  - `listingType: "service"`
+  - `serviceKind: "appointment" | "consultation" | "quote_request"`
+  - `salesMode: "book_now" | "request_quote"`
+- **Always-open courses/programmes**
+  - `listingType: "course"`
+  - `serviceKind: "course_enrollment"`
+  - `enrollmentMode: "always_open"`
+  - `salesMode: "register"`
+  - These should not require `startAt/endAt`.
+- **Scheduled intakes/events**
+  - `listingType: "event"`
+  - `enrollmentMode: "scheduled"`
+  - Store schedule rows in `stores/{storeId}/integrationAvailabilitySlots`.
+
+Backward compatibility note: existing `publicProducts` / `publicServices` consumption remains valid; new fields are additive.
+
 #### Which endpoint should other websites use?
 
 1. **Server-to-server (recommended):** `GET /v1IntegrationProducts?storeId=<storeId>` with `x-api-key`.
@@ -301,9 +325,18 @@ This normalization allows sites to update once in Sedifex **Social links** and a
 
 ### `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>` (authenticated)
 
-- Returns session/class slots for service-type offerings.
+- Returns scheduled slots/intakes/events from `stores/{storeId}/integrationAvailabilitySlots`.
 - `serviceId`, `from`, and `to` are optional filters.
-- `attributes` is a flexible object for industry-specific fields (for example: school grade level or travel pickup point).
+- `attributes` remains a flexible object for industry-specific fields.
+- New optional event metadata is now returned when present:
+  - `linkedCourseId`
+  - `eventKind` (`intake | class | workshop | event | trip`)
+  - `registrationMode` (`free | paid | deposit | enquiry`)
+  - `price`
+  - `depositAmount`
+  - `location`
+  - `description`
+  - `marketplaceEnabled`
 
 ```json
 {
@@ -316,8 +349,16 @@ This normalization allows sites to update once in Sedifex **Social links** and a
       "id": "slot_1",
       "storeId": "store_123",
       "serviceId": "service_abc",
-      "startAt": "2026-04-22T10:00:00.000Z",
-      "endAt": "2026-04-22T11:00:00.000Z",
+      "linkedCourseId": "german-b1-course",
+      "eventKind": "intake",
+      "registrationMode": "paid",
+      "price": 1200,
+      "depositAmount": 300,
+      "location": "East Legon Campus",
+      "description": "German B1 Evening Batch starts 10 June",
+      "marketplaceEnabled": true,
+      "startAt": "2026-06-10T18:00:00.000Z",
+      "endAt": "2026-06-10T20:00:00.000Z",
       "timezone": "Africa/Accra",
       "capacity": 20,
       "seatsBooked": 8,
@@ -326,7 +367,7 @@ This normalization allows sites to update once in Sedifex **Social links** and a
       "attributes": {
         "level": "Beginner"
       },
-      "updatedAt": "2026-04-13T00:00:00.000Z"
+      "updatedAt": "2026-05-17T00:00:00.000Z"
     }
   ]
 }

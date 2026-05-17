@@ -179,7 +179,7 @@ Base URL:
 
 - `GET /integrationCustomers?storeId=<storeId>`
 - `GET /integrationTopSelling?storeId=<storeId>&days=30&limit=10`
-- `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>`
+- `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>` (includes optional `linkedCourseId`, `eventKind`, `registrationMode`, `price`, `depositAmount`, `location`, `description`, `marketplaceEnabled`)
 - `GET /v1IntegrationBookings?storeId=<storeId>`
 - `POST /v1IntegrationBookings?storeId=<storeId>`
 
