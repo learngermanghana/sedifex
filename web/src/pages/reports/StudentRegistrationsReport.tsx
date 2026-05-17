@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
-import { asNumber, asText, downloadCsv, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
+import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
 
 type RegistrationRow = {
   id: string
@@ -73,11 +73,35 @@ export default function StudentRegistrationsReport() {
     })))
   }
 
+  function exportPdf() {
+    exportReportPdf({
+      title: 'Student registrations report',
+      subtitle: 'Admissions and registration data from Sedifex and connected school websites.',
+      summary: [
+        { label: 'Registrations', value: totals.count },
+        { label: 'Paid/confirmed', value: totals.paid },
+        { label: 'Pending', value: totals.pending },
+        { label: 'Registration value', value: formatMoney(totals.value) },
+      ],
+      rows: filtered.map(row => ({
+        fullName: row.fullName,
+        phone: row.phone,
+        email: row.email,
+        course: row.course,
+        startMonth: row.startMonth,
+        paymentStatus: row.paymentStatus,
+        amount: row.amount,
+        reference: row.reference,
+        createdAt: formatDate(row.createdAt),
+      })),
+    })
+  }
+
   return (
     <div className="workspace-page">
       <section className="workspace-card"><p className="workspace-eyebrow">Reports / Student registrations</p><h1>Student registrations report</h1><p className="workspace-muted">Admissions data from Sedifex student registration and connected school websites.</p></section>
       <section className="workspace-grid workspace-grid--four"><article className="workspace-card"><strong>{totals.count}</strong><span>Registrations</span></article><article className="workspace-card"><strong>{totals.paid}</strong><span>Paid/confirmed</span></article><article className="workspace-card"><strong>{totals.pending}</strong><span>Pending</span></article><article className="workspace-card"><strong>{formatMoney(totals.value)}</strong><span>Registration value</span></article></section>
-      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Registration details</h2><p className="workspace-muted">Filter by course and export CSV.</p></div><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></div><div className="workspace-toolbar"><select value={course} onChange={event => setCourse(event.target.value)}><option value="all">All courses</option>{courses.map(name => <option key={name} value={name}>{name}</option>)}</select></div><div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Student</th><th>Course</th><th>Start</th><th>Payment</th><th>Amount</th><th>Reference</th><th>Date</th></tr></thead><tbody>{filtered.map(row => <tr key={row.id}><td><strong>{row.fullName}</strong><br /><small>{row.phone || row.email || 'No contact'}</small></td><td>{row.course}</td><td>{row.startMonth}</td><td>{row.paymentStatus}</td><td>{formatMoney(row.amount)}</td><td>{row.reference}</td><td>{formatDate(row.createdAt)}</td></tr>)}</tbody></table></div></section>
+      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Registration details</h2><p className="workspace-muted">Filter by course and export data.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></div></div><div className="workspace-toolbar"><select value={course} onChange={event => setCourse(event.target.value)}><option value="all">All courses</option>{courses.map(name => <option key={name} value={name}>{name}</option>)}</select></div><div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Student</th><th>Course</th><th>Start</th><th>Payment</th><th>Amount</th><th>Reference</th><th>Date</th></tr></thead><tbody>{filtered.map(row => <tr key={row.id}><td><strong>{row.fullName}</strong><br /><small>{row.phone || row.email || 'No contact'}</small></td><td>{row.course}</td><td>{row.startMonth}</td><td>{row.paymentStatus}</td><td>{formatMoney(row.amount)}</td><td>{row.reference}</td><td>{formatDate(row.createdAt)}</td></tr>)}</tbody></table></div></section>
     </div>
   )
 }

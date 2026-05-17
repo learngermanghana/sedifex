@@ -1,6 +1,7 @@
 // web/src/pages/Dashboard.tsx
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { Link } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 
@@ -129,7 +130,7 @@ export default function Dashboard() {
     <div className="workspace-page">
       <section className="workspace-card"><p className="workspace-eyebrow">Dashboard</p><h1>Quick business overview</h1><p className="workspace-muted">This dashboard now shows only quick KPIs. Detailed inventory, website sales, donor reports, exports, and PDF reports live under Reports.</p></section>
       <section aria-label="Primary metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16 }}>{primaryMetrics.map(metric => <article key={metric.id} style={cardStyle(metric.tone)}><p style={{ margin: 0, color: metric.tone, fontWeight: 900, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Primary metric</p><h2 style={{ margin: '8px 0 4px', fontSize: 32, letterSpacing: '-0.03em' }}>{metric.value}</h2><p style={{ margin: '0 0 4px', fontWeight: 800, color: '#0f172a' }}>{metric.label}</p><p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>{metric.hint}</p></article>)}</section>
-      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Smart report direction</h2><p className="workspace-muted">Use Reports for rich data. Dashboard stays fast and clean for daily decisions.</p></div></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>{secondaryMetrics.map(metric => <article key={metric.id} style={{ border: '1px solid #e2e8f0', borderRadius: 18, padding: 16, background: '#f8fafc' }}><strong style={{ display: 'block', fontSize: 22, color: '#0f172a' }}>{metric.value}</strong><span style={{ display: 'block', fontWeight: 800, color: '#334155' }}>{metric.label}</span><small style={{ color: '#64748b' }}>{metric.hint}</small></article>)}</div></section>
+      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Smart report direction</h2><p className="workspace-muted">Use Reports for rich data. Dashboard stays fast and clean for daily decisions.</p></div><Link className="button button--primary" to="/customers">Customers</Link></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>{secondaryMetrics.map(metric => <article key={metric.id} style={{ border: '1px solid #e2e8f0', borderRadius: 18, padding: 16, background: '#f8fafc' }}><strong style={{ display: 'block', fontSize: 22, color: '#0f172a' }}>{metric.value}</strong><span style={{ display: 'block', fontWeight: 800, color: '#334155' }}>{metric.label}</span><small style={{ color: '#64748b' }}>{metric.hint}</small></article>)}</div></section>
     </div>
   )
 }
