@@ -4,6 +4,7 @@ const reports = [
   { title: 'Inventory report', href: '/reports/inventory', description: 'Stock units, services, categories, low-stock alerts, inventory value, CSV export, and PDF export.' },
   { title: 'POS sales report', href: '/reports/pos-sales', description: 'Internal sales from Sell, receipts, payment splits, units sold, and exports.' },
   { title: 'Website sales report', href: '/reports/website-sales', description: 'Sedifex Market, client website orders, public page orders, payment modes, and exports.' },
+  { title: 'Settlement report', href: '/reports/settlement', description: 'Online gross payments, customer processing fees, Sedifex commission, Paystack split status, and expected merchant net.' },
   { title: 'Bookings report', href: '/reports/bookings', description: 'Service bookings, class sessions, appointments, booking status, payment status, and exports.' },
   { title: 'Student registrations report', href: '/reports/student-registrations', description: 'Admissions data, course interest, start dates, payment status, and exports.' },
   { title: 'Volunteers report', href: '/reports/volunteers', description: 'Volunteer applications, skills, availability, follow-up status, and exports.' },
