@@ -10,46 +10,25 @@ var __createBinding = (this && this.__createBinding) || (Object.create ? (functi
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyDonationCaptured = exports.notifySupportRequestCreated = exports.notifyVolunteerApplicationCreated = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationAvailability = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
-// functions/src/index.ts
-const functions = __importStar(require("firebase-functions/v1"));
+exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyDonationCaptured = exports.notifySupportRequestCreated = exports.notifyVolunteerApplicationCreated = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
 const params_1 = require("firebase-functions/params");
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
 Object.defineProperty(exports, "createCheckout", { enumerable: true, get: function () { return paystack_1.createCheckout; } });
 Object.defineProperty(exports, "paystackWebhook", { enumerable: true, get: function () { return paystack_1.paystackWebhook; } });
+var marketplacePaystackWebhook_1 = require("./marketplacePaystackWebhook");
+Object.defineProperty(exports, "handlePaystackWebhook", { enumerable: true, get: function () { return marketplacePaystackWebhook_1.handlePaystackWebhook; } });
 var paystackSubaccounts_1 = require("./paystackSubaccounts");
 Object.defineProperty(exports, "createPaystackMerchantSubaccount", { enumerable: true, get: function () { return paystackSubaccounts_1.createPaystackMerchantSubaccount; } });
 Object.defineProperty(exports, "fetchPaystackMerchantSubaccount", { enumerable: true, get: function () { return paystackSubaccounts_1.fetchPaystackMerchantSubaccount; } });
 Object.defineProperty(exports, "fetchPaystackSettlementBanks", { enumerable: true, get: function () { return paystackSubaccounts_1.fetchPaystackSettlementBanks; } });
 var integrationCheckout_1 = require("./integrationCheckout");
 Object.defineProperty(exports, "integrationCheckoutCreate", { enumerable: true, get: function () { return integrationCheckout_1.integrationCheckoutCreate; } });
+Object.defineProperty(exports, "integrationOrderStatus", { enumerable: true, get: function () { return integrationCheckout_1.integrationOrderStatus; } });
 var integrationAvailability_1 = require("./integrationAvailability");
 Object.defineProperty(exports, "v1IntegrationAvailability", { enumerable: true, get: function () { return integrationAvailability_1.v1IntegrationAvailability; } });
 var ngoIntake_1 = require("./ngoIntake");
@@ -90,32 +69,3 @@ const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID';
  * ==========================================================================*/
 let openAiConfigWarned = false;
 let integrationApiKeyWarned = false;
-function hashString(value) {
-    let hash = 0;
-    for (let index = 0; index < value.length; index += 1) {
-        hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
-    }
-    return Math.abs(hash);
-}
-function getOpenAiConfig() {
-    const apiKey = OPENAI_API_KEY.value()?.trim() || process.env.OPENAI_API_KEY?.trim() || '';
-    const model = OPENAI_MODEL.value()?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
-    if (!apiKey && !openAiConfigWarned) {
-        functions.logger.warn('OPENAI_API_KEY is missing. Set it via Firebase params before calling generateAiAdvice.');
-        openAiConfigWarned = true;
-    }
-    return { apiKey, model };
-}
-function getBookingDefaultServiceId() {
-    return process.env[BOOKING_DEFAULT_SERVICE_ID_ENV_KEY]?.trim() || '';
-}
-function getIntegrationMasterApiKey() {
-    const apiKey = SEDIFEX_INTEGRATION_API_KEY.value()?.trim() ||
-        process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() ||
-        '';
-    if (!apiKey && !integrationApiKeyWarned) {
-        functions.logger.warn('SEDIFEX_INTEGRATION_API_KEY is missing. Integration HTTP endpoints will reject requests until it is configured.');
-        integrationApiKeyWarned = true;
-    }
-    return apiKey;
-}
