@@ -3,7 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import type { Product } from '../../types/product'
-import { asNumber, downloadCsv, formatMoney } from './reportUtils'
+import { asNumber, downloadCsv, exportReportPdf, formatMoney } from './reportUtils'
 
 type ProductRow = Product & { inventoryValue: number; status: string }
 
@@ -55,19 +55,35 @@ export default function InventoryReport() {
     }
   }, [products])
 
+  const reportRows = filtered.map(product => ({
+    name: product.name,
+    itemType: product.itemType,
+    category: product.category ?? '',
+    sku: product.sku ?? '',
+    barcode: product.barcode ?? '',
+    price: product.price ?? 0,
+    stockCount: product.stockCount ?? 0,
+    reorderPoint: product.reorderPoint ?? 0,
+    status: product.status,
+    inventoryValue: product.inventoryValue,
+  }))
+
   function exportRows() {
-    downloadCsv('sedifex-inventory-report.csv', filtered.map(product => ({
-      name: product.name,
-      itemType: product.itemType,
-      category: product.category ?? '',
-      sku: product.sku ?? '',
-      barcode: product.barcode ?? '',
-      price: product.price ?? 0,
-      stockCount: product.stockCount ?? 0,
-      reorderPoint: product.reorderPoint ?? 0,
-      status: product.status,
-      inventoryValue: product.inventoryValue,
-    })))
+    downloadCsv('sedifex-inventory-report.csv', reportRows)
+  }
+
+  function exportPdf() {
+    exportReportPdf({
+      title: 'Inventory report',
+      subtitle: 'Stock, services, low-stock alerts, and inventory value.',
+      summary: [
+        { label: 'Total items', value: totals.totalItems },
+        { label: 'Total stock units', value: totals.totalStock },
+        { label: 'Estimated inventory value', value: formatMoney(totals.totalValue) },
+        { label: 'Stock alerts', value: totals.lowStock + totals.outOfStock },
+      ],
+      rows: reportRows,
+    })
   }
 
   return (
@@ -75,7 +91,7 @@ export default function InventoryReport() {
       <section className="workspace-card">
         <p className="workspace-eyebrow">Reports / Inventory</p>
         <h1>Inventory report</h1>
-        <p className="workspace-muted">Rich inventory details for stock, services, low-stock alerts, and CSV export. PDF export can be added on top of this report layout later.</p>
+        <p className="workspace-muted">Rich inventory details for stock, services, low-stock alerts, inventory value, CSV export, and PDF export.</p>
       </section>
 
       <section className="workspace-grid workspace-grid--four">
@@ -91,7 +107,10 @@ export default function InventoryReport() {
             <h2>Inventory details</h2>
             <p className="workspace-muted">Filter and export all inventory rows.</p>
           </div>
-          <button type="button" className="button button--primary" onClick={exportRows} disabled={filtered.length === 0}>Export CSV</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="button button--secondary" onClick={exportPdf} disabled={filtered.length === 0}>Export PDF</button>
+            <button type="button" className="button button--primary" onClick={exportRows} disabled={filtered.length === 0}>Export CSV</button>
+          </div>
         </div>
         <div className="workspace-toolbar">
           <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search item, SKU, category…" />
