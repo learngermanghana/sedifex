@@ -33,6 +33,8 @@ For most client websites, use these pages/components:
 /services/[slug]
 /cart or cart drawer
 /checkout
+/checkout/success
+/checkout/failed
 /order/[reference]
 ```
 
@@ -273,6 +275,302 @@ When the customer clicks checkout, send the full cart to your website API route.
 
 The website should not calculate final trusted totals in the browser. Use the browser cart for display, but let the backend/Sedifex confirm prices, fees, payment split, and checkout total.
 
+## Critical checkout path: match product IDs before payment
+
+When a client website pulls products from Sedifex, product IDs can appear in one of two shapes:
+
+```text
+Raw Sedifex product ID:
+draft-2b188221-828f-4229-8d7d-3ab6eea4448f
+
+Store-prefixed website/marketplace ID:
+rQYE4FQGVZPcUpdptdgeRo5A80G2_draft-2b188221-828f-4229-8d7d-3ab6eea4448f
+```
+
+Both can be useful in the website UI, but checkout must send the raw Sedifex item ID to Sedifex. If the website sends the prefixed ID, the product can show correctly in the website while checkout, order lookup, inventory update, or payment reconciliation can fail later.
+
+Use this helper in the website API route before calling Sedifex checkout/create:
+
+```ts
+function normalizeSedifexItemId(rawId: string, storeId: string) {
+  const id = rawId.trim()
+  const storePrefix = `${storeId}_`
+
+  if (storeId && id.startsWith(storePrefix)) {
+    return id.slice(storePrefix.length)
+  }
+
+  return id
+}
+```
+
+Then use the normalized ID in both `cart` and `items`:
+
+```ts
+cart: validatedItems.map(item => {
+  const productId = normalizeSedifexItemId(item.product.id, storeId)
+
+  return {
+    productId,
+    item_id: productId,
+    originalProductId: item.product.id,
+    merchantId: storeId,
+    merchant_id: storeId,
+    storeId,
+    store_id: storeId,
+    quantity: item.qty,
+    qty: item.qty,
+    type: 'PRODUCT',
+    item_type: 'product',
+  }
+}),
+items: validatedItems.map(item => {
+  const productId = normalizeSedifexItemId(item.product.id, storeId)
+
+  return {
+    id: productId,
+    item_id: productId,
+    productId,
+    originalProductId: item.product.id,
+    name: item.product.name,
+    unitPrice: item.product.price,
+    price: item.product.price,
+    qty: item.qty,
+    quantity: item.qty,
+    type: 'PRODUCT',
+    item_type: 'product',
+  }
+})
+```
+
+Keep `originalProductId` for debugging, but do not rely on it for Sedifex checkout item matching.
+
+### Why this matters
+
+A site can successfully pull and display products with the same integration key, but payment/order matching can still break if the checkout route sends a different item ID shape than the product route. The checkout path must match the product path by using:
+
+```text
+storeId = Sedifex store ID
+item_id/productId = raw Sedifex product or service ID without the store prefix
+```
+
+This is the same pattern used by Sedifex Market-style carts where the display ID may include the merchant/store prefix, but the backend checkout payload strips the prefix before sending the item to Sedifex.
+
+## Client website API route pattern
+
+The customer-facing website should never call Sedifex checkout directly from browser code. Use a server route such as:
+
+```text
+POST /api/sedifex/checkout/create
+```
+
+The route should:
+
+1. Read cart/customer/delivery details from the browser request.
+2. Load trusted product data from Sedifex or the website’s synced catalog.
+3. Validate product existence and stock.
+4. Strip `storeId_` from item IDs before sending to Sedifex.
+5. Send `storeId`, `store_id`, `merchantId`, and `merchant_id` for compatibility.
+6. Send `clientOrderId` and `client_order_id` using a clear reference such as `HAJ-PAY-<timestamp>`.
+7. Send `returnUrl` pointing to `/checkout/success` and `cancelUrl` pointing to `/checkout/failed`.
+8. Return `authorizationUrl`, `checkoutUrl`, `reference`, and `clientOrderId` to the browser.
+
+Example server-side payload:
+
+```ts
+const payload = {
+  storeId,
+  store_id: storeId,
+  merchantId: storeId,
+  merchant_id: storeId,
+  clientOrderId,
+  client_order_id: clientOrderId,
+  sourceChannel: 'client_website',
+  source_channel: 'client_website',
+  sourceLabel: 'Client Website',
+  source_label: 'Client Website',
+  orderType: 'product',
+  currency: 'GHS',
+  cart,
+  items,
+  amount,
+  customer: {
+    name: customerName,
+    email: customerEmail,
+    phone: customerPhone,
+  },
+  delivery: {
+    location: deliveryLocation,
+    notes,
+  },
+  returnUrl,
+  cancelUrl,
+  syncStatus: 'pending',
+  syncRequestedAt: new Date().toISOString(),
+}
+```
+
+For Firebase Functions URLs, the route may map cleanly to:
+
+```text
+https://us-central1-<project>.cloudfunctions.net/integrationCheckoutCreate
+```
+
+For proxy/API deployments, it may map to:
+
+```text
+/integration/checkout/create
+```
+
+The client website should hide this difference inside its own server API route.
+
+## Paystack redirect snapshot and success fallback
+
+After the website API route returns a Paystack URL, store a small checkout snapshot in `sessionStorage` before redirecting the customer to Paystack. This protects the success page if the order-status API or webhook reconciliation is delayed.
+
+```ts
+const checkoutUrl = data.authorizationUrl ?? data.checkoutUrl
+
+if (checkoutUrl) {
+  const reference = data.reference ?? data.paymentReference ?? data.payment_reference ?? data.clientOrderId
+  const amountPaid = typeof data.amountPaid === 'number' ? data.amountPaid : subtotal
+
+  sessionStorage.setItem('checkout:last_customer', JSON.stringify({
+    name: name.trim(),
+    email: email.trim(),
+    phone: phone.trim(),
+    deliveryLocation: deliveryLocation.trim(),
+    reference,
+    amountPaid,
+    amount: amountPaid,
+    currency,
+    status: 'success',
+  }))
+
+  window.location.href = checkoutUrl
+}
+```
+
+This snapshot is not the source of truth for Sedifex. It is a customer-facing fallback so the success page can show a good receipt immediately after Paystack redirects back.
+
+## Success page retrieval pattern
+
+On `/checkout/success`, read the Paystack query reference first:
+
+```text
+/checkout/success?trxref=HAJ-PAY-1779044041118&reference=HAJ-PAY-1779044041118
+```
+
+Then call your own website API route:
+
+```text
+GET /api/sedifex/orders/:reference
+```
+
+That API route should call Sedifex order status server-side using the store integration key. The browser should not receive the Sedifex key.
+
+The success page should merge values in this order:
+
+```text
+1. Sedifex order-status response
+2. Paystack URL reference
+3. sessionStorage checkout snapshot
+4. safe display fallback such as Pending or Syncing
+```
+
+Example display mapping:
+
+```ts
+const receiptReference = firstValue(
+  details?.reference,
+  details?.paymentReference,
+  details?.payment_reference,
+  details?.paystackReference,
+  urlReference,
+  customerSnapshot?.reference,
+  'Pending'
+)
+
+const amountPaid = firstValue(
+  details?.amountPaid,
+  details?.amount_paid,
+  details?.amount,
+  customerSnapshot?.amountPaid,
+  customerSnapshot?.amount
+)
+
+const status = firstValue(
+  details?.status,
+  details?.orderStatus,
+  details?.order_status,
+  details?.paymentStatus,
+  details?.payment_status,
+  details?.syncStatus,
+  details?.sync_status,
+  customerSnapshot?.status
+)
+```
+
+Format friendly statuses for customers:
+
+```ts
+function formatStatus(value?: string) {
+  if (!value) return 'Syncing'
+  const normalized = value.trim().toLowerCase()
+  if (['success', 'paid', 'confirmed', 'captured'].includes(normalized)) return 'Confirmed'
+  if (['pending', 'pending_payment', 'syncing'].includes(normalized)) return 'Syncing'
+  if (['failed', 'payment_failed'].includes(normalized)) return 'Payment failed'
+  return value.replace(/_/g, ' ')
+}
+```
+
+A good customer-facing success page should still look complete even if Sedifex order-status is slow for a few seconds:
+
+```text
+Payment successful 🎉
+
+Thank you, Customer Name. Your order has been received.
+
+Receipt: HAJ-PAY-1779044041118
+Email: customer@example.com
+Phone: 0245038473
+Amount paid: GH₵120.00
+Status: Confirmed
+```
+
+## Phone and delivery field validation
+
+Always validate customer phone before redirecting to Paystack. Otherwise a customer can accidentally put the delivery location into the phone field and the success page will display the wrong value.
+
+Recommended validation:
+
+```ts
+function isValidPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  return digits.length >= 9 && digits.length <= 15
+}
+```
+
+Block checkout if the phone is invalid:
+
+```ts
+if (!isValidPhone(phone)) {
+  setStatus('Please enter a valid phone number, for example 024 000 0000 or +233 24 000 0000.')
+  return
+}
+```
+
+Also protect the success page:
+
+```ts
+function formatPhone(value?: string) {
+  const phone = typeof value === 'string' ? value.trim() : ''
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 9 || digits.length > 15) return 'Pending'
+  return phone
+}
+```
+
 ## Multi-merchant checkout
 
 Even if a client website currently sells for only one store, build the cart with `merchantId` now. This makes the design future-proof.
@@ -424,8 +722,11 @@ If you are starting from an existing website like `hajiaslayshop`, implement in 
 4. Add mobile floating cart button.
 5. Add cart drawer with quantity controls.
 6. Connect cart drawer to existing Sedifex checkout API route.
-7. Add product detail sticky purchase panel.
-8. Improve order status page language.
+7. Strip `storeId_` from product/service IDs before sending checkout payloads to Sedifex.
+8. Store Paystack redirect snapshot before leaving the website.
+9. Add success page fallback display from order-status response, URL reference, and session snapshot.
+10. Add product detail sticky purchase panel.
+11. Improve order status page language.
 
 ## Visual design checklist
 
@@ -441,6 +742,7 @@ Before handoff, confirm:
 - Checkout total is clear before Paystack opens.
 - Paystack button says `Pay securely with Paystack` or `Checkout with Paystack`.
 - Status page clearly says payment/order result.
+- Success page shows reference, amount, phone, and friendly status.
 - WhatsApp contact is secondary, not the main checkout path when online checkout is enabled.
 
 ## Copy examples
@@ -477,3 +779,5 @@ Contact seller only
 - Keep integration keys on the server only.
 - Do not expose Sedifex API keys in browser code.
 - Browser cart can show estimated totals, but backend/Sedifex must confirm trusted totals.
+- Product display IDs and checkout item IDs must be normalized before payment.
+- The success page should use a short-lived browser snapshot only as a display fallback, not as permanent payment truth.
