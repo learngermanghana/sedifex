@@ -8,6 +8,7 @@ import { normalizePublicSlugValue } from './utils/publicSlug'
 import type { ProductReadModel } from './types/product'
 import { normalizeCatalogPublicationFields, resolvePublicationTimestampCandidate } from './catalogPublication'
 export { checkSignupUnlock, createCheckout, paystackWebhook } from './paystack'
+export { handlePaystackWebhook } from './marketplacePaystackWebhook'
 export {
   createPaystackMerchantSubaccount,
   fetchPaystackMerchantSubaccount,
