@@ -18,7 +18,12 @@ import VolunteerApplications from './pages/VolunteerApplications'
 import SupportRequests from './pages/SupportRequests'
 import ReportsHome from './pages/reports/ReportsHome'
 import InventoryReport from './pages/reports/InventoryReport'
+import PosSalesReport from './pages/reports/PosSalesReport'
 import WebsiteSalesReport from './pages/reports/WebsiteSalesReport'
+import BookingsReport from './pages/reports/BookingsReport'
+import StudentRegistrationsReport from './pages/reports/StudentRegistrationsReport'
+import VolunteersReport from './pages/reports/VolunteersReport'
+import BlogReport from './pages/reports/BlogReport'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import CleanAccountOverview from './pages/CleanAccountOverview'
@@ -79,7 +84,12 @@ const router = createBrowserRouter([
       { path: 'dashboard', element: <DashboardHub />, children: [{ index: true, element: <Dashboard /> }] },
       { path: 'reports', element: <ReportsHome /> },
       { path: 'reports/inventory', element: <InventoryReport /> },
+      { path: 'reports/pos-sales', element: <PosSalesReport /> },
       { path: 'reports/website-sales', element: <WebsiteSalesReport /> },
+      { path: 'reports/bookings', element: <BookingsReport /> },
+      { path: 'reports/student-registrations', element: <StudentRegistrationsReport /> },
+      { path: 'reports/volunteers', element: <VolunteersReport /> },
+      { path: 'reports/blog', element: <BlogReport /> },
       { path: 'products', element: <Products /> },
       { path: 'sell', element: <Sell /> },
       { path: 'customers', element: <Customers /> },
