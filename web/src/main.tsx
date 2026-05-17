@@ -1,10 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
-
 import App from './App'
 import ShellLayout from './layout/ShellLayout'
-
 import Dashboard from './pages/Dashboard'
 import MarketplaceOrders from './pages/MarketplaceOrders'
 import DashboardHub from './pages/DashboardHub'
@@ -18,6 +16,9 @@ import BookingsAvailability from './pages/BookingsAvailability'
 import StudentRegistration from './pages/StudentRegistration'
 import VolunteerApplications from './pages/VolunteerApplications'
 import SupportRequests from './pages/SupportRequests'
+import ReportsHome from './pages/reports/ReportsHome'
+import InventoryReport from './pages/reports/InventoryReport'
+import WebsiteSalesReport from './pages/reports/WebsiteSalesReport'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
 import CleanAccountOverview from './pages/CleanAccountOverview'
@@ -45,11 +46,9 @@ import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
 import IntegrationEmailSettings from './pages/IntegrationEmailSettings'
 import BlogPage from './pages/BlogPage'
-
 import ReceiptView from './pages/ReceiptView'
 import CustomerDisplay from './pages/CustomerDisplay'
 import PublicCustomerIntake from './pages/PublicCustomerIntake'
-
 import PrivacyPage from './pages/legal/PrivacyPage'
 import CookiesPage from './pages/legal/CookiesPage'
 import RefundPage from './pages/legal/RefundPage'
@@ -61,7 +60,6 @@ import BulkEmailGoogleSheetsPage from './pages/docs/BulkEmailGoogleSheetsPage'
 import HowToUseSedifexPage from './pages/docs/HowToUseSedifexPage'
 import DonorWebsiteIntegrationPage from './pages/docs/DonorWebsiteIntegrationPage'
 import PublicBlogPage from './pages/PublicBlogPage'
-
 import { ToastProvider } from './components/ToastProvider'
 
 const router = createBrowserRouter([
@@ -75,83 +73,78 @@ const router = createBrowserRouter([
   { path: '/join-customers/:inviteId/:mode', element: <PublicCustomerIntake /> },
   { path: '/public-blog/:storeId', element: <PublicBlogPage /> },
   { path: '/public-blog/:storeId/:slug', element: <PublicBlogPage /> },
-
-  {
-    path: '/',
-    element: <App />,
-    children: [
-      {
-        element: <ShellLayout />,
-        children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: 'dashboard', element: <DashboardHub />, children: [{ index: true, element: <Dashboard /> }] },
-          { path: 'products', element: <Products /> },
-          { path: 'sell', element: <Sell /> },
-          { path: 'customers', element: <Customers /> },
-          { path: 'bookings', element: <Bookings /> },
-          { path: 'bookings/new', element: <BookingEditor /> },
-          { path: 'bookings/availability', element: <Navigate to="/upcoming-events" replace /> },
-          { path: 'upcoming-events', element: <BookingsAvailability /> },
-          { path: 'bookings/:bookingId', element: <BookingEditor /> },
-          { path: 'online-orders', element: <MarketplaceOrders /> },
-          { path: 'marketplace-orders', element: <MarketplaceOrders /> },
-          { path: 'product-engagement', element: <Navigate to="/dashboard" replace /> },
-          { path: 'student-registration', element: <StudentRegistration /> },
-          { path: 'volunteers', element: <VolunteerApplications /> },
-          { path: 'support-requests', element: <SupportRequests /> },
-          { path: 'data-transfer', element: <DataTransfer /> },
-          { path: 'bulk-messaging', element: <BulkMessaging /> },
-          { path: 'bulk-email', element: <BulkEmail /> },
-          { path: 'logi', element: <Logi /> },
-          { path: 'sell/invoice', element: <DocumentsGenerator /> },
-          { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
-          { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
-          { path: 'expenses', element: <Navigate to="/donor-management" replace /> },
-          { path: 'donor-management', element: <Expenses /> },
-          { path: 'funds-ledger', element: <FundsLedger /> },
-          { path: 'settlement', element: <PaymentSettlement /> },
-          { path: 'sell/close-day', element: <CloseDay /> },
-          { path: 'close-day', element: <Navigate to="/sell/close-day" replace /> },
-          { path: 'onboarding', element: <Onboarding /> },
-          { path: 'staff', element: <StaffManagement /> },
-          { path: 'account', element: <CleanAccountOverview /> },
-          { path: 'account/overview', element: <CleanAccountOverview /> },
-          { path: 'public-page', element: <Navigate to="/account" replace /> },
-          { path: 'promo', element: <PromoSettings /> },
-          { path: 'gallery', element: <GallerySettings /> },
-          { path: 'social-links', element: <SocialLinksSettings /> },
-          { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
-          { path: 'support', element: <Support /> },
-          { path: 'blog', element: <BlogPage /> },
-          { path: 'settings/integrations/booking-mapping', element: <BookingMappingSettings /> },
-          { path: 'settings/integrations/website', element: <IntegrationWebsiteSettings /> },
-          { path: 'settings/integrations/bookings', element: <IntegrationBookingsSettings /> },
-          { path: 'settings/integrations/email', element: <IntegrationEmailSettings /> },
-          { path: 'settings/integrations/google-business', element: <Navigate to="/account" replace /> },
-        ],
-      },
-      { path: 'reset-password', element: <ResetPassword /> },
-      { path: 'verify-email', element: <VerifyEmail /> },
-      { path: 'billing/verify', element: <BillingVerifyPage /> },
-      { path: 'inventory-system-ghana', element: <InventorySystemGhana /> },
-      { path: 'inventory-management-software-ghana', element: <InventoryManagementSoftwareGhana /> },
-      { path: 'pricing', element: <PricingPage /> },
-      { path: 'docs/integration-quickstart', element: <IntegrationQuickstartPage /> },
-      { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
-      { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
-      { path: 'docs/how-to-use-sedifex', element: <HowToUseSedifexPage /> },
-      { path: 'docs/donor-website-integration', element: <DonorWebsiteIntegrationPage /> },
-      { path: 'legal/privacy', element: <PrivacyPage /> },
-      { path: 'legal/cookies', element: <CookiesPage /> },
-      { path: 'legal/refund', element: <RefundPage /> },
-      { path: 'legal/terms', element: <TermsPage /> },
-      { path: 'privacy', element: <PrivacyPage /> },
-      { path: 'cookies', element: <CookiesPage /> },
-      { path: 'refund', element: <RefundPage /> },
-      { path: 'terms', element: <TermsPage /> },
-      { path: 'return-policy', element: <ReturnPolicyPage /> },
-    ],
-  },
+  { path: '/', element: <App />, children: [
+    { element: <ShellLayout />, children: [
+      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { path: 'dashboard', element: <DashboardHub />, children: [{ index: true, element: <Dashboard /> }] },
+      { path: 'reports', element: <ReportsHome /> },
+      { path: 'reports/inventory', element: <InventoryReport /> },
+      { path: 'reports/website-sales', element: <WebsiteSalesReport /> },
+      { path: 'products', element: <Products /> },
+      { path: 'sell', element: <Sell /> },
+      { path: 'customers', element: <Customers /> },
+      { path: 'bookings', element: <Bookings /> },
+      { path: 'bookings/new', element: <BookingEditor /> },
+      { path: 'bookings/availability', element: <Navigate to="/upcoming-events" replace /> },
+      { path: 'upcoming-events', element: <BookingsAvailability /> },
+      { path: 'bookings/:bookingId', element: <BookingEditor /> },
+      { path: 'online-orders', element: <MarketplaceOrders /> },
+      { path: 'marketplace-orders', element: <MarketplaceOrders /> },
+      { path: 'product-engagement', element: <Navigate to="/dashboard" replace /> },
+      { path: 'student-registration', element: <StudentRegistration /> },
+      { path: 'volunteers', element: <VolunteerApplications /> },
+      { path: 'support-requests', element: <SupportRequests /> },
+      { path: 'data-transfer', element: <DataTransfer /> },
+      { path: 'bulk-messaging', element: <BulkMessaging /> },
+      { path: 'bulk-email', element: <BulkEmail /> },
+      { path: 'logi', element: <Logi /> },
+      { path: 'sell/invoice', element: <DocumentsGenerator /> },
+      { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
+      { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
+      { path: 'expenses', element: <Navigate to="/donor-management" replace /> },
+      { path: 'donor-management', element: <Expenses /> },
+      { path: 'funds-ledger', element: <FundsLedger /> },
+      { path: 'settlement', element: <PaymentSettlement /> },
+      { path: 'sell/close-day', element: <CloseDay /> },
+      { path: 'close-day', element: <Navigate to="/sell/close-day" replace /> },
+      { path: 'onboarding', element: <Onboarding /> },
+      { path: 'staff', element: <StaffManagement /> },
+      { path: 'account', element: <CleanAccountOverview /> },
+      { path: 'account/overview', element: <CleanAccountOverview /> },
+      { path: 'public-page', element: <Navigate to="/account" replace /> },
+      { path: 'promo', element: <PromoSettings /> },
+      { path: 'gallery', element: <GallerySettings /> },
+      { path: 'social-links', element: <SocialLinksSettings /> },
+      { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
+      { path: 'support', element: <Support /> },
+      { path: 'blog', element: <BlogPage /> },
+      { path: 'settings/integrations/booking-mapping', element: <BookingMappingSettings /> },
+      { path: 'settings/integrations/website', element: <IntegrationWebsiteSettings /> },
+      { path: 'settings/integrations/bookings', element: <IntegrationBookingsSettings /> },
+      { path: 'settings/integrations/email', element: <IntegrationEmailSettings /> },
+      { path: 'settings/integrations/google-business', element: <Navigate to="/account" replace /> },
+    ]},
+    { path: 'reset-password', element: <ResetPassword /> },
+    { path: 'verify-email', element: <VerifyEmail /> },
+    { path: 'billing/verify', element: <BillingVerifyPage /> },
+    { path: 'inventory-system-ghana', element: <InventorySystemGhana /> },
+    { path: 'inventory-management-software-ghana', element: <InventoryManagementSoftwareGhana /> },
+    { path: 'pricing', element: <PricingPage /> },
+    { path: 'docs/integration-quickstart', element: <IntegrationQuickstartPage /> },
+    { path: 'docs/wordpress-install-guide', element: <WordpressInstallGuidePage /> },
+    { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
+    { path: 'docs/how-to-use-sedifex', element: <HowToUseSedifexPage /> },
+    { path: 'docs/donor-website-integration', element: <DonorWebsiteIntegrationPage /> },
+    { path: 'legal/privacy', element: <PrivacyPage /> },
+    { path: 'legal/cookies', element: <CookiesPage /> },
+    { path: 'legal/refund', element: <RefundPage /> },
+    { path: 'legal/terms', element: <TermsPage /> },
+    { path: 'privacy', element: <PrivacyPage /> },
+    { path: 'cookies', element: <CookiesPage /> },
+    { path: 'refund', element: <RefundPage /> },
+    { path: 'terms', element: <TermsPage /> },
+    { path: 'return-policy', element: <ReturnPolicyPage /> },
+  ]},
 ])
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
