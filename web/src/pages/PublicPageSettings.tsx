@@ -1,5 +1,5 @@
-import AccountOverview from './AccountOverview'
+import { Navigate } from 'react-router-dom'
 
 export default function PublicPageSettings() {
-  return <AccountOverview headingLevel="h2" viewMode="promotions" />
+  return <Navigate to="/account" replace />
 }
