@@ -19,7 +19,6 @@ import VolunteerApplications from './pages/VolunteerApplications'
 import SupportRequests from './pages/SupportRequests'
 import Logi from './pages/Logi'
 import Onboarding from './pages/Onboarding'
-import AccountOverview from './pages/AccountOverview'
 import CleanAccountOverview from './pages/CleanAccountOverview'
 import PaymentSettlement from './pages/PaymentSettlement'
 import BulkMessaging from './pages/BulkMessaging'
@@ -38,6 +37,8 @@ import PricingPage from './pages/PricingPage'
 import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
 import PublicPageSettings from './pages/PublicPageSettings'
+import PromoSettings from './pages/PromoSettings'
+import GallerySettings from './pages/GallerySettings'
 import BookingMappingSettings from './pages/BookingMappingSettings'
 import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
@@ -129,6 +130,8 @@ const router = createBrowserRouter([
           { path: 'account', element: <CleanAccountOverview /> },
           { path: 'account/overview', element: <CleanAccountOverview /> },
           { path: 'public-page', element: <PublicPageSettings /> },
+          { path: 'promo', element: <PromoSettings /> },
+          { path: 'gallery', element: <GallerySettings /> },
           { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
           { path: 'support', element: <Support /> },
           { path: 'blog', element: <BlogPage /> },
