@@ -19,9 +19,13 @@ import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import type { ItemType, Product } from '../types/product'
 
+type ItemFormType = 'product' | 'service' | 'course'
+type ServiceKind = 'appointment' | 'consultation' | 'quote_request'
+type CourseMode = 'online' | 'in_person' | 'hybrid'
+
 type Draft = {
   name: string
-  itemType: ItemType
+  itemType: ItemFormType
   category: string
   price: string
   costPrice: string
@@ -32,6 +36,19 @@ type Draft = {
   expiryDate: string
   imageUrl: string
   imageAlt: string
+  serviceKind: ServiceKind
+  durationMinutes: string
+  location: string
+  requiresDateTime: boolean
+  requiresNotes: boolean
+  requiresDestinationOrTopic: boolean
+  allowDepositPayment: boolean
+  depositAmount: string
+  courseLevel: string
+  registrationFee: string
+  duration: string
+  courseMode: CourseMode
+  classTimes: string
 }
 
 const PRODUCT_CATEGORY = 'General Products'
@@ -72,6 +89,19 @@ const blankDraft: Draft = {
   expiryDate: '',
   imageUrl: '',
   imageAlt: '',
+  serviceKind: 'appointment',
+  durationMinutes: '',
+  location: '',
+  requiresDateTime: false,
+  requiresNotes: false,
+  requiresDestinationOrTopic: false,
+  allowDepositPayment: false,
+  depositAmount: '',
+  courseLevel: '',
+  registrationFee: '',
+  duration: '',
+  courseMode: 'in_person',
+  classTimes: '',
 }
 
 function titleCase(value: string) {
@@ -106,7 +136,7 @@ function formatMoney(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? `GHS ${value.toFixed(2)}` : '—'
 }
 
-function normalizeCategory(value: unknown, itemType: ItemType) {
+function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
   const raw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
   const lowered = raw.toLowerCase()
   if (itemType === 'service') {
@@ -118,7 +148,7 @@ function normalizeCategory(value: unknown, itemType: ItemType) {
 }
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
-  const itemType: ItemType = data.itemType === 'service' ? 'service' : 'product'
+  const itemType: ItemType = data.itemType === 'service' || data.itemType === 'made_to_order' ? 'service' : 'product'
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
   return {
@@ -151,25 +181,46 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
 
 function buildSavePayload(draft: Draft, storeId: string) {
   const isService = draft.itemType === 'service'
+  const isCourse = draft.itemType === 'course'
+  const behavesLikeService = isService || isCourse
   const name = titleCase(draft.name)
-  const category = normalizeCategory(draft.category, draft.itemType)
+  const category = normalizeCategory(draft.category, behavesLikeService ? 'service' : 'product')
   const price = cleanNumber(draft.price)
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
 
+  const serviceKind: ServiceKind = isCourse ? 'quote_request' : draft.serviceKind
+  const salesMode = isCourse ? 'register' : serviceKind === 'quote_request' ? 'request_quote' : 'book_now'
+
   return {
     storeId,
     name,
-    itemType: draft.itemType,
+    itemType: behavesLikeService ? 'service' : 'product',
+    listingType: isCourse ? 'course' : behavesLikeService ? 'service' : 'product',
+    serviceKind: isCourse ? 'course_enrollment' : serviceKind,
+    salesMode,
+    enrollmentMode: isCourse ? 'always_open' : null,
     category,
     description: draft.description.trim() || null,
     price,
-    costPrice: isService ? null : cleanNumber(draft.costPrice),
-    sku: isService ? null : draft.sku.trim() || null,
-    barcode: isService ? null : draft.sku.trim() || null,
-    stockCount: isService ? null : cleanNumber(draft.openingStock),
-    reorderPoint: isService ? null : cleanNumber(draft.reorderPoint),
-    expiryDate: isService || !draft.expiryDate ? null : new Date(draft.expiryDate),
+    costPrice: behavesLikeService ? null : cleanNumber(draft.costPrice),
+    sku: behavesLikeService ? null : draft.sku.trim() || null,
+    barcode: behavesLikeService ? null : draft.sku.trim() || null,
+    stockCount: behavesLikeService ? null : cleanNumber(draft.openingStock),
+    reorderPoint: behavesLikeService ? null : cleanNumber(draft.reorderPoint),
+    expiryDate: behavesLikeService || !draft.expiryDate ? null : new Date(draft.expiryDate),
+    durationMinutes: isService ? cleanNumber(draft.durationMinutes) : null,
+    location: behavesLikeService ? draft.location.trim() || null : null,
+    requiresDateTime: isService ? draft.requiresDateTime : null,
+    requiresNotes: isService ? draft.requiresNotes : null,
+    requiresDestinationOrTopic: isService ? draft.requiresDestinationOrTopic : null,
+    allowDepositPayment: behavesLikeService ? draft.allowDepositPayment : null,
+    depositAmount: behavesLikeService ? cleanNumber(draft.depositAmount) : null,
+    courseLevel: isCourse ? draft.courseLevel.trim() || null : null,
+    registrationFee: isCourse ? cleanNumber(draft.registrationFee) : null,
+    duration: isCourse ? draft.duration.trim() || null : null,
+    courseMode: isCourse ? draft.courseMode : null,
+    classTimes: isCourse ? draft.classTimes.trim() || null : null,
     productionDate: null,
     manufacturerName: null,
     batchNumber: null,
@@ -195,7 +246,9 @@ export default function ProductsServiceFirst() {
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
   const isService = draft.itemType === 'service'
-  const categoryOptions = isService ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES
+  const isCourse = draft.itemType === 'course'
+  const behavesLikeService = isService || isCourse
+  const categoryOptions = behavesLikeService ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES
 
   useEffect(() => {
     if (!storeId) {
@@ -212,16 +265,16 @@ export default function ProductsServiceFirst() {
   function updateDraft(key: keyof Draft, value: string) {
     setDraft(current => {
       if (key === 'itemType') {
-        const nextItemType = value as ItemType
+        const nextItemType = value as ItemFormType
         return {
           ...current,
           itemType: nextItemType,
           category: normalizeCategory(current.category, nextItemType),
-          sku: nextItemType === 'service' ? '' : current.sku,
-          openingStock: nextItemType === 'service' ? '' : current.openingStock,
-          reorderPoint: nextItemType === 'service' ? '' : current.reorderPoint,
-          expiryDate: nextItemType === 'service' ? '' : current.expiryDate,
-          costPrice: nextItemType === 'service' ? '' : current.costPrice,
+          sku: nextItemType === 'product' ? current.sku : '',
+          openingStock: nextItemType === 'product' ? current.openingStock : '',
+          reorderPoint: nextItemType === 'product' ? current.reorderPoint : '',
+          expiryDate: nextItemType === 'product' ? current.expiryDate : '',
+          costPrice: nextItemType === 'product' ? current.costPrice : '',
         }
       }
       return { ...current, [key]: value }
@@ -235,7 +288,7 @@ export default function ProductsServiceFirst() {
   }
 
   function editItem(item: Product) {
-    const itemType = item.itemType === 'service' ? 'service' : 'product'
+    const itemType: ItemFormType = item.itemType === 'service' ? ((item as any).listingType === 'course' ? 'course' : 'service') : 'product'
     setEditingId(item.id)
     setDraft({
       name: item.name,
@@ -250,6 +303,19 @@ export default function ProductsServiceFirst() {
       expiryDate: itemType === 'product' ? formatDateInput(item.expiryDate) : '',
       imageUrl: item.imageUrl ?? '',
       imageAlt: item.imageAlt ?? item.name,
+      serviceKind: ((item as any).serviceKind as ServiceKind) ?? 'appointment',
+      durationMinutes: typeof (item as any).durationMinutes === 'number' ? String((item as any).durationMinutes) : '',
+      location: typeof (item as any).location === 'string' ? (item as any).location : '',
+      requiresDateTime: (item as any).requiresDateTime === true,
+      requiresNotes: (item as any).requiresNotes === true,
+      requiresDestinationOrTopic: (item as any).requiresDestinationOrTopic === true,
+      allowDepositPayment: (item as any).allowDepositPayment === true,
+      depositAmount: typeof (item as any).depositAmount === 'number' ? String((item as any).depositAmount) : '',
+      courseLevel: typeof (item as any).courseLevel === 'string' ? (item as any).courseLevel : '',
+      registrationFee: typeof (item as any).registrationFee === 'number' ? String((item as any).registrationFee) : '',
+      duration: typeof (item as any).duration === 'string' ? (item as any).duration : '',
+      courseMode: ((item as any).courseMode as CourseMode) ?? 'in_person',
+      classTimes: typeof (item as any).classTimes === 'string' ? (item as any).classTimes : '',
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -261,7 +327,7 @@ export default function ProductsServiceFirst() {
     setMessage('')
     setError('')
     try {
-      const payload = buildSavePayload(draft, storeId)
+      const payload = buildSavePayload(draft as any, storeId)
       if (editingId) {
         await updateDoc(doc(db, 'products', editingId), payload)
         setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} updated.`)
@@ -299,7 +365,7 @@ export default function ProductsServiceFirst() {
       <header className="page__header products-page__header">
         <div>
           <h2 className="page__title">Items</h2>
-          <p className="page__subtitle">Manage physical products and services with the right fields for each type.</p>
+          <p className="page__subtitle">Manage products, services, and courses/programmes with the right fields for each type.</p>
         </div>
       </header>
 
@@ -307,8 +373,10 @@ export default function ProductsServiceFirst() {
         <section className="card products-page__add-card">
           <h3 className="card__title">{editingId ? 'Edit item' : 'Add item'}</h3>
           <p className="card__subtitle">
-            {isService
-              ? 'Service mode keeps the form simple: name, category, price, description, and image. Stock fields are hidden.'
+            {isCourse
+              ? 'Course/programme mode is for always-open enrollments. Use Upcoming events to create specific batches/intakes for this course.'
+              : isService
+              ? 'Service mode supports booking and quote requests. Stock fields are hidden.'
               : 'Product mode includes inventory fields like SKU, opening stock, reorder point, and expiry date.'}
           </p>
           {!canManage ? <p className="products__message products__message--error">Only the workspace owner can manage items.</p> : null}
@@ -321,16 +389,17 @@ export default function ProductsServiceFirst() {
               <select id="item-type" value={draft.itemType} onChange={event => updateDraft('itemType', event.target.value)}>
                 <option value="product">Physical product</option>
                 <option value="service">Service</option>
+                <option value="course">Course / Programme</option>
               </select>
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="item-name">{isService ? 'Service name' : 'Product name'}</label>
+              <label className="field__label" htmlFor="item-name">{isCourse ? 'Course / programme name' : isService ? 'Service name' : 'Product name'}</label>
               <input id="item-name" value={draft.name} onChange={event => updateDraft('name', event.target.value)} required />
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="item-category">{isService ? 'Service category' : 'Product category'}</label>
+              <label className="field__label" htmlFor="item-category">{behavesLikeService ? 'Category' : 'Product category'}</label>
               <input
                 id="item-category"
                 value={draft.category}
@@ -344,11 +413,11 @@ export default function ProductsServiceFirst() {
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="item-price">{isService ? 'Service price' : 'Selling price'}</label>
+              <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
               <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
             </div>
 
-            {!isService ? (
+            {!behavesLikeService ? (
               <>
                 <div className="field">
                   <label className="field__label" htmlFor="item-sku">SKU / Barcode</label>
@@ -373,8 +442,16 @@ export default function ProductsServiceFirst() {
               </>
             ) : null}
 
+            {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="appointment">Appointment</option><option value="consultation">Consultation</option><option value="quote_request">Quote request</option></select></div> : null}
+            {isService ? <div className="field"><label className="field__label" htmlFor="service-duration">Duration minutes</label><input id="service-duration" type="number" min="0" step="1" value={draft.durationMinutes} onChange={event => updateDraft('durationMinutes', event.target.value)} /></div> : null}
+            {behavesLikeService ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-level">Course level</label><input id="course-level" value={draft.courseLevel} onChange={event => updateDraft('courseLevel', event.target.value)} /></div> : null}
+            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-regfee">Registration fee / deposit</label><input id="course-regfee" type="number" min="0" step="0.01" value={draft.registrationFee} onChange={event => updateDraft('registrationFee', event.target.value)} /></div> : null}
+            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-duration">Duration</label><input id="course-duration" value={draft.duration} onChange={event => updateDraft('duration', event.target.value)} /></div> : null}
+            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-mode">Mode</label><select id="course-mode" value={draft.courseMode} onChange={event => updateDraft('courseMode', event.target.value)}><option value="online">Online</option><option value="in_person">In person</option><option value="hybrid">Hybrid</option></select></div> : null}
+            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-times">Class times</label><input id="course-times" value={draft.classTimes} onChange={event => updateDraft('classTimes', event.target.value)} /></div> : null}
             <div className="field">
-              <label className="field__label" htmlFor="item-description">{isService ? 'Service description' : 'Product description'}</label>
+              <label className="field__label" htmlFor="item-description">{behavesLikeService ? 'Description' : 'Product description'}</label>
               <textarea id="item-description" rows={4} value={draft.description} onChange={event => updateDraft('description', event.target.value)} />
             </div>
             <div className="field">
