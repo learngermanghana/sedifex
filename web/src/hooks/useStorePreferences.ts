@@ -16,6 +16,7 @@ export type StorePreferences = {
     labelPolicy: NavigationLabelPolicy
     enabledModules: string[]
     dashboardModules: string[]
+    primaryMetrics: string[]
     customLabels: Partial<Record<string, string>>
     customNavItems: CustomNavItem[]
     showCustomizationBanner?: boolean
@@ -34,6 +35,7 @@ const DEFAULT_PREFERENCES: StorePreferences = {
     labelPolicy: 'shared',
     enabledModules: [],
     dashboardModules: [],
+    primaryMetrics: [],
     customLabels: {},
     customNavItems: [],
   },
@@ -127,6 +129,15 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
 
   const dashboardModules = stringListFrom(dashboardModulesSource)
 
+  const primaryMetricsSource =
+    navigation && Array.isArray(navigation.primary_metrics)
+      ? navigation.primary_metrics
+      : navigation && Array.isArray(navigation.primaryMetrics)
+      ? navigation.primaryMetrics
+      : []
+
+  const primaryMetrics = stringListFrom(primaryMetricsSource)
+
   const customNavItemsSource =
     navigation && Array.isArray(navigation.custom_nav_items)
       ? navigation.custom_nav_items
@@ -175,6 +186,7 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
       labelPolicy,
       enabledModules,
       dashboardModules,
+      primaryMetrics,
       customLabels,
       customNavItems,
       showCustomizationBanner: explicitIndustry == null,

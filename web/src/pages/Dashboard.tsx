@@ -1,6 +1,8 @@
 // web/src/pages/Dashboard.tsx
 import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useStorePreferences } from '../hooks/useStorePreferences'
 import { useMemberships } from '../hooks/useMemberships'
@@ -20,6 +22,20 @@ type DashboardProfile = {
   title: string
   subtitle: string
   defaultModules: string[]
+}
+
+type PrimaryMetric = {
+  id: string
+  label: string
+  value: string
+  hint: string
+}
+
+type PrimaryMetricValue = {
+  id: string
+  label: string
+  value: number
+  hint: string
 }
 
 const moduleRegistry: Record<string, DashboardCard> = {
@@ -135,6 +151,14 @@ const moduleRegistry: Record<string, DashboardCard> = {
     eyebrow: 'Donors',
     action: 'Open donors',
   },
+  'marketplace-orders': {
+    id: 'marketplace-orders',
+    title: 'Online orders',
+    description: 'Track upcoming orders and website-received orders from Sedifex Market, public pages, and connected sites.',
+    href: '/marketplace-orders',
+    eyebrow: 'Orders',
+    action: 'View online orders',
+  },
   'public-page': {
     id: 'public-page',
     title: 'Public page',
@@ -165,7 +189,7 @@ const industryProfiles: Record<Industry, DashboardProfile> = {
     title: 'Keep inventory, selling, customers, bookings, and settlement close to the front.',
     subtitle:
       'Your shop home focuses on daily work. You can add bookings when you also take appointments or service reservations.',
-    defaultModules: ['products', 'sell', 'customers', 'settlement'],
+    defaultModules: ['products', 'sell', 'customers', 'marketplace-orders', 'settlement'],
   },
   travel: {
     eyebrow: 'Travel workspace',
@@ -191,8 +215,20 @@ const optionalModuleIds = [
   'bulk-messaging',
   'bulk-email',
   'donor-management',
+  'marketplace-orders',
   'public-page',
 ]
+
+const primaryMetricOptions: Array<{ id: string; label: string }> = [
+  { id: 'internal-sales', label: 'Internal sales today' },
+  { id: 'online-orders', label: 'Online orders today' },
+  { id: 'bookings', label: 'Bookings today' },
+  { id: 'volunteers', label: 'Volunteers today' },
+  { id: 'student-registrations', label: 'Student registrations today' },
+  { id: 'blog-posts', label: 'New blog posts today' },
+]
+
+const defaultPrimaryMetricIds = primaryMetricOptions.map(option => option.id)
 
 const pageStyle = { display: 'grid', gap: 20 }
 const heroStyle = {
@@ -238,6 +274,16 @@ function uniqueModules(moduleIds: string[]) {
   return [...new Set(moduleIds)].filter(id => moduleRegistry[id])
 }
 
+function uniquePrimaryMetrics(metricIds: string[]) {
+  const allowed = new Set(primaryMetricOptions.map(option => option.id))
+  return [...new Set(metricIds)].filter(id => allowed.has(id))
+}
+
+function startOfToday() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 export default function Dashboard() {
   const { storeId } = useActiveStore()
   const { memberships } = useMemberships()
@@ -256,7 +302,74 @@ export default function Dashboard() {
       ? preferences.navigation.dashboardModules
       : profile.defaultModules,
   )
+  const selectedPrimaryMetricIds = uniquePrimaryMetrics(
+    preferences.navigation.primaryMetrics.length > 0
+      ? preferences.navigation.primaryMetrics
+      : defaultPrimaryMetricIds,
+  )
   const cards = selectedModuleIds.map(id => moduleRegistry[id])
+  const [primaryMetricMap, setPrimaryMetricMap] = useState<Record<string, PrimaryMetricValue>>({})
+
+  useEffect(() => {
+    if (!storeId) {
+      setPrimaryMetricMap({})
+      return undefined
+    }
+
+    const createdAtCutoff = startOfToday()
+    const unsubscribers = [
+      onSnapshot(query(collection(db, 'sales'), where('storeId', '==', storeId), where('createdAt', '>=', createdAtCutoff)), snapshot => {
+        setPrimaryMetricMap(current => ({
+          ...current,
+          'internal-sales': { id: 'internal-sales', label: 'Internal sales today', value: snapshot.size, hint: 'Recorded in Sell (POS)' },
+        }))
+      }),
+      onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId), where('createdAt', '>=', createdAtCutoff)), snapshot => {
+        setPrimaryMetricMap(current => ({
+          ...current,
+          'online-orders': { id: 'online-orders', label: 'Online orders today', value: snapshot.size, hint: 'From Sedifex Market and websites' },
+        }))
+      }),
+      onSnapshot(query(collection(db, 'stores', storeId, 'integrationBookings'), where('createdAt', '>=', createdAtCutoff)), snapshot => {
+        setPrimaryMetricMap(current => ({
+          ...current,
+          bookings: { id: 'bookings', label: 'Bookings today', value: snapshot.size, hint: 'New booking entries' },
+        }))
+      }),
+      onSnapshot(query(collection(db, 'volunteer_applications'), where('storeId', '==', storeId), where('createdAt', '>=', createdAtCutoff)), snapshot => {
+        setPrimaryMetricMap(current => ({
+          ...current,
+          volunteers: { id: 'volunteers', label: 'Volunteers today', value: snapshot.size, hint: 'New volunteer applications' },
+        }))
+      }),
+      onSnapshot(query(collection(db, 'student_registrations'), where('storeId', '==', storeId), where('createdAt', '>=', createdAtCutoff)), snapshot => {
+        setPrimaryMetricMap(current => ({
+          ...current,
+          'student-registrations': { id: 'student-registrations', label: 'Student registrations today', value: snapshot.size, hint: 'New registrations submitted' },
+        }))
+      }),
+      onSnapshot(query(collection(db, 'blogPosts'), where('storeId', '==', storeId), where('createdAt', '>=', createdAtCutoff)), snapshot => {
+        setPrimaryMetricMap(current => ({
+          ...current,
+          'blog-posts': { id: 'blog-posts', label: 'New blog posts today', value: snapshot.size, hint: 'Published or drafted today' },
+        }))
+      }),
+    ]
+
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe())
+    }
+  }, [storeId])
+
+  const primaryMetrics: PrimaryMetric[] = selectedPrimaryMetricIds.map(metricId => {
+    const metric = primaryMetricMap[metricId]
+    return {
+      id: metricId,
+      label: metric?.label ?? primaryMetricOptions.find(option => option.id === metricId)?.label ?? metricId,
+      value: String(metric?.value ?? 0),
+      hint: metric?.hint ?? 'Daily primary metric',
+    }
+  })
 
   async function saveDashboardModules(nextModules: string[]) {
     setIsSaving(true)
@@ -281,6 +394,27 @@ export default function Dashboard() {
 
   async function resetDashboardModules() {
     await saveDashboardModules([])
+  }
+
+  async function savePrimaryMetrics(nextMetrics: string[]) {
+    setIsSaving(true)
+    try {
+      await updatePreferences({
+        navigation: {
+          ...preferences.navigation,
+          primaryMetrics: uniquePrimaryMetrics(nextMetrics),
+        },
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function togglePrimaryMetric(metricId: string) {
+    const nextMetrics = selectedPrimaryMetricIds.includes(metricId)
+      ? selectedPrimaryMetricIds.filter(id => id !== metricId)
+      : [...selectedPrimaryMetricIds, metricId]
+    await savePrimaryMetrics(nextMetrics)
   }
 
   return (
@@ -360,8 +494,49 @@ export default function Dashboard() {
               )
             })}
           </div>
+
+          <h3 style={{ margin: '18px 0 8px', color: '#0f172a' }}>Primary metrics on top</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+            {primaryMetricOptions.map(metric => {
+              const checked = selectedPrimaryMetricIds.includes(metric.id)
+              return (
+                <label
+                  key={metric.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                    border: checked ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+                    borderRadius: 16,
+                    background: checked ? '#eef2ff' : '#fff',
+                    padding: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input type="checkbox" checked={checked} disabled={isSaving} onChange={() => void togglePrimaryMetric(metric.id)} style={{ marginTop: 4 }} />
+                  <span>
+                    <strong style={{ display: 'block', color: '#0f172a' }}>{metric.label}</strong>
+                    <span style={{ display: 'block', fontSize: 13, color: '#64748b' }}>Primary KPI card</span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
         </section>
       ) : null}
+
+      <section aria-label="Primary metrics" style={cardGridStyle}>
+        {primaryMetrics.map((metric, index) => (
+          <article key={metric.id} style={{ ...cardStyle, minHeight: 140, borderTop: `5px solid ${cardAccent(index)}` }}>
+            <p style={{ margin: 0, color: cardAccent(index), fontWeight: 900, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              Primary metric
+            </p>
+            <h2 style={{ margin: '8px 0 4px', fontSize: 30, letterSpacing: '-0.03em' }}>{metric.value}</h2>
+            <p style={{ margin: '0 0 4px', fontWeight: 700, color: '#0f172a' }}>{metric.label}</p>
+            <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>{metric.hint}</p>
+          </article>
+        ))}
+      </section>
 
       <section aria-label="Recommended workspace actions" style={cardGridStyle}>
         {cards.map((card, index) => (
