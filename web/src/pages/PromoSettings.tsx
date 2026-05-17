@@ -17,9 +17,6 @@ type StorePromoProfile = {
   promoStartDate?: string | null
   promoEndDate?: string | null
   promoSlug?: string | null
-  promoWebsiteUrl?: string | null
-  promoYoutubeUrl?: string | null
-  promoTiktokUrl?: string | null
   promoImageUrl?: string | null
   promoImageAlt?: string | null
 }
@@ -46,9 +43,6 @@ export default function PromoSettings() {
   const [summary, setSummary] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [websiteUrl, setWebsiteUrl] = useState('')
-  const [youtubeUrl, setYoutubeUrl] = useState('')
-  const [tiktokUrl, setTiktokUrl] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [imageAlt, setImageAlt] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -87,9 +81,6 @@ export default function PromoSettings() {
         setSummary(text(data?.promoSummary))
         setStartDate(text(data?.promoStartDate))
         setEndDate(text(data?.promoEndDate))
-        setWebsiteUrl(text(data?.promoWebsiteUrl))
-        setYoutubeUrl(text(data?.promoYoutubeUrl))
-        setTiktokUrl(text(data?.promoTiktokUrl))
         setImageUrl(text(data?.promoImageUrl))
         setImageAlt(text(data?.promoImageAlt))
       } catch (loadError) {
@@ -136,9 +127,6 @@ export default function PromoSettings() {
         promoStartDate: nullable(startDate),
         promoEndDate: nullable(endDate),
         promoSlug: slug,
-        promoWebsiteUrl: nullable(websiteUrl),
-        promoYoutubeUrl: nullable(youtubeUrl),
-        promoTiktokUrl: nullable(tiktokUrl),
         promoImageUrl: nullable(imageUrl),
         promoImageAlt: nullable(imageAlt),
         updatedAt: Timestamp.now(),
@@ -161,7 +149,7 @@ export default function PromoSettings() {
       <header className="account-overview__section-header">
         <div>
           <h1>Promo</h1>
-          <p className="account-overview__subtitle">Create the main offer customers should see on your Sedifex public link and connected website.</p>
+          <p className="account-overview__subtitle">Create a simple promo with title, message, and duration for your Sedifex public link.</p>
         </div>
       </header>
 
@@ -186,9 +174,6 @@ export default function PromoSettings() {
                 <label><span>Start date</span><input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} /></label>
                 <label><span>End date</span><input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} /></label>
               </div>
-              <label><span>Website link</span><input type="url" value={websiteUrl} onChange={event => setWebsiteUrl(event.target.value)} placeholder="https://..." /></label>
-              <label><span>YouTube link</span><input type="url" value={youtubeUrl} onChange={event => setYoutubeUrl(event.target.value)} placeholder="https://youtube.com/..." /></label>
-              <label><span>TikTok link</span><input type="url" value={tiktokUrl} onChange={event => setTiktokUrl(event.target.value)} placeholder="https://tiktok.com/..." /></label>
               <button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save promo'}</button>
             </form>
           </section>

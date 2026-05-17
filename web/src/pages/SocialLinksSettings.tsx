@@ -96,8 +96,9 @@ export default function SocialLinksSettings() {
   if (error) return <div role="alert">{error}</div>
   return (
     <main className="account-overview">
-      <header className="account-overview__section-header"><div><h1>Social links</h1><p className="account-overview__subtitle">Save public contact and social data once so your public page and website integrations can reuse it.</p></div></header>
+      <header className="account-overview__section-header"><div><h1>Public contact hub</h1><p className="account-overview__subtitle">Save logo, phone, WhatsApp, Telegram, and social handles once so Sedifex public pages and website integrations can pull the same data everywhere.</p></div></header>
       <div className="account-overview__banner" role="note"><p><strong>Account stays internal.</strong> This page is for customer-facing brand and contact details only.</p></div>
+      <div className="account-overview__banner" role="note"><p><strong>No duplicate account records.</strong> This page only updates your workspace public profile fields and reuses the same source for integrations.</p></div>
       {isLoading || loadingProfile ? <p>Loading social links…</p> : null}
       {!storeId && !isLoading ? <p>Select a workspace first.</p> : null}
       {storeId && !canEdit ? <p className="account-overview__error">You do not have permission to edit social links.</p> : null}
