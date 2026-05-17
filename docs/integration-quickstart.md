@@ -57,13 +57,39 @@ Promo data fields (store promo profile)
 
     promoSlug
 
-    promoWebsiteUrl
-
 Also used with:
 
     displayName / name (store name fallback shown on promo page).
 
-The same promo field set is defined in the account/store profile typing too, so these are the right canonical keys to use
+The dedicated Promo settings page is intentionally simplified to promo title, promo summary, and promo duration dates.
+
+Public contact hub fields (shared customer-facing profile for websites and public pages)
+
+    logoUrl
+
+    publicPhone
+
+    whatsappNumber
+
+    telegramNumber
+
+    publicEmail
+
+    websiteUrl
+
+    instagramHandle
+
+    facebookUrl
+
+    tiktokHandle
+
+    youtubeUrl
+
+    xHandle
+
+    linkedinUrl
+
+Sedifex stores these in `stores/{storeId}.publicProfile` (and mirrors key fields such as `logoUrl`, `phoneNumber`, `whatsappNumber`, `telegramNumber`, `websiteUrl` at top-level store fields). Treat this as the single source of truth for website/footer/contact blocks.
 
 Promo gallery data fields (stores/{storeId}/promoGallery/{itemId})
 
@@ -137,6 +163,7 @@ Base URL:
    - **Products:** normalize image fields, dedupe products, and filter to service-type products when available.
    - **Promo:** search nested payloads and map flexible key variants (`promoTitle`, `promo_title`, etc.) into a unified promo object.
    - **Gallery:** normalize image/alt fields, keep published items only, and sort by `sortOrder`.
+   - **Store profile/contact hub (if you include it in your integration layer):** map from `publicProfile` first, then fallback to top-level store fields (`logoUrl`, `phoneNumber`, `whatsappNumber`, `telegramNumber`, `websiteUrl`) for backwards compatibility.
 5. **Apply resilience fallback logic**
    - If config is missing, fetch fails, or data is incomplete, fall back to local curated data:
      - `fallbackProducts`
