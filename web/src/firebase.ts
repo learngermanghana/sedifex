@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, RecaptchaVerifier } from 'firebase/auth'
 import {
   initializeFirestore,
-  enableIndexedDbPersistence,
+  enableMultiTabIndexedDbPersistence,
   type Firestore,
 } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
@@ -74,8 +74,8 @@ export const db: Firestore = initializeFirestore(app, FIRESTORE_SETTINGS)
 
 // ----- Offline persistence (browser only) -----
 if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch(() => {
-    // Multi-tab or unsupported browser; safe to ignore.
+  enableMultiTabIndexedDbPersistence(db).catch(() => {
+    // Persistence may be unsupported in this browser; safe to ignore.
   })
 }
 
