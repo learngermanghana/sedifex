@@ -590,12 +590,22 @@ Recommended donor metadata:
 - `metadata.project` or `metadata.campaign`
 - `clientOrderId` as your website donation reference
 
+Required body fields for donation checkout:
+
+- `storeId`
+- `clientOrderId`
+- `orderType: "custom"` (recommended for open/free-range donor amounts)
+- `amount` (major units, e.g. `150` for GHS 150)
+- `currency` (for Ghana use `GHS`)
+- `customer.email` (Paystack receipt target)
+
 Minimal example:
 
 ```json
 {
   "storeId": "store_123",
   "clientOrderId": "donation_web_00045",
+  "orderType": "custom",
   "amount": 150,
   "currency": "GHS",
   "customer": {
@@ -609,6 +619,28 @@ Minimal example:
   }
 }
 ```
+
+Implementation checklist (website server + frontend):
+
+1. **Create checkout session on your server**
+   - Your backend calls `POST /integration/checkout/create` with `x-api-key`.
+   - Include donor metadata and your website donation id in `clientOrderId`.
+2. **Redirect donor to Paystack**
+   - Read `authorizationUrl` from Sedifex response.
+   - Redirect browser to that URL immediately.
+3. **Handle return page safely**
+   - Use `returnUrl` in the checkout request.
+   - On return, show a "processing/verification" state first; do not mark paid from URL return alone.
+4. **Confirm final payment state from server**
+   - Prefer webhook-driven confirmation.
+   - Optionally poll `GET /integration/orders/:reference` until `paymentStatus` is final.
+5. **Write donor receipt/thank-you only after confirmation**
+   - Persist `reference`, `sedifexOrderId`, and `clientOrderId` for reconciliation and audits.
+
+Free-range donor amount note:
+
+- If donors choose any amount on your form, validate min/max in your UI and send the final numeric value as `amount`.
+- Keep `orderType: "custom"` and `metadata.pageType: "donation"` so Sedifex routes it as donation checkout.
 
 ### C) Volunteer form intake (public endpoint, no integration key)
 
