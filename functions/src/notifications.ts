@@ -111,7 +111,8 @@ async function postToWebhook(payload: Record<string, unknown>, settings: Notific
   const url = customUrl || centralUrl
   if (!url) return { attempted: false, ok: false, status: null }
   const secret = SEDIFEX_NOTIFICATION_SHARED_SECRET.value()?.trim() || process.env.SEDIFEX_NOTIFICATION_SHARED_SECRET?.trim() || ''
-  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(secret ? { 'x-sedifex-notification-secret': secret } : {}) }, body: JSON.stringify(payload) })
+  const webhookPayload = secret ? { ...payload, secret } : payload
+  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(secret ? { 'x-sedifex-notification-secret': secret } : {}) }, body: JSON.stringify(webhookPayload) })
   return { attempted: true, ok: response.ok, status: response.status }
 }
 
