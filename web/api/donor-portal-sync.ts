@@ -20,6 +20,15 @@ function resolveReturnUrl(req: VercelRequest) {
   return undefined
 }
 
+function getPaystackSecret() {
+  return (
+    process.env.PAYSTACK_SECRET ||
+    process.env.PAYSTACK_SECRET_KEY ||
+    process.env.PAYSTACK_SECRET_KEY_LIVE ||
+    ''
+  ).trim()
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' })
 
@@ -101,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     donationTransactionId = txRef.id
 
-    const secret = process.env.PAYSTACK_SECRET || ''
+    const secret = getPaystackSecret()
     if (secret) {
       const response = await fetch('https://api.paystack.co/transaction/initialize', {
         method: 'POST',
@@ -123,25 +132,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }),
       })
       const body = await response.json().catch(() => ({}))
+      const authorizationUrl = body?.data?.authorization_url ?? null
       payment = {
         provider: 'paystack',
         reference,
-        ok: response.ok,
-        authorizationUrl: body?.data?.authorization_url ?? null,
+        ok: response.ok && Boolean(authorizationUrl),
+        authorizationUrl,
         accessCode: body?.data?.access_code ?? null,
         feePolicy,
+        error: response.ok && authorizationUrl ? null : body?.message || 'Paystack did not return a checkout URL',
       }
 
       await txRef.set({
-        'payment.initializeOk': response.ok,
-        'payment.authorizationUrl': body?.data?.authorization_url ?? null,
+        'payment.initializeOk': response.ok && Boolean(authorizationUrl),
+        'payment.authorizationUrl': authorizationUrl,
         'payment.accessCode': body?.data?.access_code ?? null,
-        'payment.initializeRaw': response.ok ? null : body,
+        'payment.initializeRaw': response.ok && authorizationUrl ? null : body,
+        'payment.initializeError': response.ok && authorizationUrl ? null : body?.message || 'Paystack did not return a checkout URL',
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true })
+
+      if (!response.ok || !authorizationUrl) {
+        return res.status(502).json({
+          ok: false,
+          error: body?.message || 'Unable to start Paystack checkout.',
+          donorId: donorRef.id,
+          donationTransactionId,
+          payment,
+        })
+      }
     } else {
-      payment = { provider: 'paystack', reference, ok: false, authorizationUrl: null, accessCode: null, feePolicy, error: 'PAYSTACK_SECRET missing' }
-      await txRef.set({ 'payment.initializeOk': false, 'payment.initializeError': 'PAYSTACK_SECRET missing', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+      payment = { provider: 'paystack', reference, ok: false, authorizationUrl: null, accessCode: null, feePolicy, error: 'PAYSTACK_SECRET or PAYSTACK_SECRET_KEY missing' }
+      await txRef.set({ 'payment.initializeOk': false, 'payment.initializeError': 'PAYSTACK_SECRET or PAYSTACK_SECRET_KEY missing', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+      return res.status(500).json({
+        ok: false,
+        error: 'Paystack secret is not configured on Sedifex.',
+        donorId: donorRef.id,
+        donationTransactionId,
+        payment,
+      })
     }
   }
 
