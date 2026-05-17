@@ -37,16 +37,15 @@ import InventoryManagementSoftwareGhana from './pages/InventoryManagementSoftwar
 import PricingPage from './pages/PricingPage'
 import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
-import PublicPageSettings from './pages/PublicPageSettings'
 import PromoSettings from './pages/PromoSettings'
 import GallerySettings from './pages/GallerySettings'
+import SocialLinksSettings from './pages/SocialLinksSettings'
 import BookingMappingSettings from './pages/BookingMappingSettings'
 import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
 import IntegrationEmailSettings from './pages/IntegrationEmailSettings'
 import BlogPage from './pages/BlogPage'
 
-// ✅ NEW: public receipt page used by QR/share
 import ReceiptView from './pages/ReceiptView'
 import CustomerDisplay from './pages/CustomerDisplay'
 import PublicCustomerIntake from './pages/PublicCustomerIntake'
@@ -66,7 +65,6 @@ import PublicBlogPage from './pages/PublicBlogPage'
 import { ToastProvider } from './components/ToastProvider'
 
 const router = createBrowserRouter([
-  // Public receipt route bypasses App-level redirects
   { path: '/receipt/:saleId', element: <ReceiptView /> },
   { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/login', element: <Navigate to="/" replace /> },
@@ -86,13 +84,7 @@ const router = createBrowserRouter([
         element: <ShellLayout />,
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
-          {
-            path: 'dashboard',
-            element: <DashboardHub />,
-            children: [
-              { index: true, element: <Dashboard /> },
-            ],
-          },
+          { path: 'dashboard', element: <DashboardHub />, children: [{ index: true, element: <Dashboard /> }] },
           { path: 'products', element: <Products /> },
           { path: 'sell', element: <Sell /> },
           { path: 'customers', element: <Customers /> },
@@ -111,8 +103,6 @@ const router = createBrowserRouter([
           { path: 'bulk-messaging', element: <BulkMessaging /> },
           { path: 'bulk-email', element: <BulkEmail /> },
           { path: 'logi', element: <Logi /> },
-
-          // Finance
           { path: 'sell/invoice', element: <DocumentsGenerator /> },
           { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
           { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
@@ -120,19 +110,16 @@ const router = createBrowserRouter([
           { path: 'donor-management', element: <Expenses /> },
           { path: 'funds-ledger', element: <FundsLedger /> },
           { path: 'settlement', element: <PaymentSettlement /> },
-
-          // Close day
           { path: 'sell/close-day', element: <CloseDay /> },
           { path: 'close-day', element: <Navigate to="/sell/close-day" replace /> },
-
-          // Other authenticated pages
           { path: 'onboarding', element: <Onboarding /> },
           { path: 'staff', element: <StaffManagement /> },
           { path: 'account', element: <CleanAccountOverview /> },
           { path: 'account/overview', element: <CleanAccountOverview /> },
-          { path: 'public-page', element: <PublicPageSettings /> },
+          { path: 'public-page', element: <Navigate to="/account" replace /> },
           { path: 'promo', element: <PromoSettings /> },
           { path: 'gallery', element: <GallerySettings /> },
+          { path: 'social-links', element: <SocialLinksSettings /> },
           { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
           { path: 'support', element: <Support /> },
           { path: 'blog', element: <BlogPage /> },
@@ -143,8 +130,6 @@ const router = createBrowserRouter([
           { path: 'settings/integrations/google-business', element: <Navigate to="/account" replace /> },
         ],
       },
-
-      // Public routes (still under App)
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'verify-email', element: <VerifyEmail /> },
       { path: 'billing/verify', element: <BillingVerifyPage /> },
@@ -156,8 +141,6 @@ const router = createBrowserRouter([
       { path: 'docs/bulk-email-google-sheets-guide', element: <BulkEmailGoogleSheetsPage /> },
       { path: 'docs/how-to-use-sedifex', element: <HowToUseSedifexPage /> },
       { path: 'docs/donor-website-integration', element: <DonorWebsiteIntegrationPage /> },
-
-      // Legal pages
       { path: 'legal/privacy', element: <PrivacyPage /> },
       { path: 'legal/cookies', element: <CookiesPage /> },
       { path: 'legal/refund', element: <RefundPage /> },
