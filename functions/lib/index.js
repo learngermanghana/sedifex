@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyDonationCaptured = exports.notifySupportRequestCreated = exports.notifyVolunteerApplicationCreated = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
+exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyDonationCaptured = exports.notifySupportRequestCreated = exports.notifyVolunteerApplicationCreated = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
 const params_1 = require("firebase-functions/params");
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
@@ -28,6 +28,7 @@ Object.defineProperty(exports, "fetchPaystackMerchantSubaccount", { enumerable: 
 Object.defineProperty(exports, "fetchPaystackSettlementBanks", { enumerable: true, get: function () { return paystackSubaccounts_1.fetchPaystackSettlementBanks; } });
 var integrationCheckout_1 = require("./integrationCheckout");
 Object.defineProperty(exports, "integrationCheckoutCreate", { enumerable: true, get: function () { return integrationCheckout_1.integrationCheckoutCreate; } });
+Object.defineProperty(exports, "integrationCheckoutPreview", { enumerable: true, get: function () { return integrationCheckout_1.integrationCheckoutPreview; } });
 Object.defineProperty(exports, "integrationOrderStatus", { enumerable: true, get: function () { return integrationCheckout_1.integrationOrderStatus; } });
 var integrationAvailability_1 = require("./integrationAvailability");
 Object.defineProperty(exports, "v1IntegrationAvailability", { enumerable: true, get: function () { return integrationAvailability_1.v1IntegrationAvailability; } });
