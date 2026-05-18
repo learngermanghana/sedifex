@@ -15,6 +15,8 @@ type BookingRecord = {
   paymentAmount: string | null
   paymentMethod: string | null
   status: string
+  bookingStatus: string
+  syncStatus: string
   paymentStatus: string
   customerName: string | null
   customerPhone: string | null
@@ -65,7 +67,8 @@ const normalizeSource = (raw: unknown) => {
 }
 
 const statusLabel = (status: string) => ({
-  pending: 'Pending approval',
+  pending_approval: 'Needs approval',
+  pending: 'Needs approval',
   confirmed: 'Confirmed',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -120,7 +123,9 @@ export default function Bookings() {
       preferredBranch: pickString(data, ['preferredBranch', 'branch', 'location']),
       paymentAmount: pickString(data, ['paymentAmount', 'amount', 'total']),
       paymentMethod: pickString(data, ['paymentMethod']),
+      bookingStatus: normalizeStatus(data.bookingStatus ?? data.status),
       status: normalizeStatus(data.status),
+      syncStatus: normalizeStatus(data.syncStatus ?? data.sync_status, 'not_ready'),
       paymentStatus: normalizePaymentStatus(data.paymentStatus),
       customerName: pickString(data, ['customerName', 'name']) ?? pickString(customer, ['name']),
       customerPhone: pickString(data, ['customerPhone', 'phone']) ?? pickString(customer, ['phone']),
@@ -202,7 +207,7 @@ export default function Bookings() {
   const todayStr = new Date().toDateString()
   const summary = {
     newToday: bookings.filter(b => b.createdAt?.toDateString() === todayStr).length,
-    pending: bookings.filter(b => b.status === 'pending' || b.status === 'manual_review').length,
+    pending: bookings.filter(b => ['pending','pending_approval','manual_review'].includes(b.status) || b.bookingStatus === 'pending_approval').length,
     paymentPending: bookings.filter(b => ['pending', 'payment_pending', 'manual_review'].includes(b.paymentStatus)).length,
     confirmed: bookings.filter(b => b.status === 'confirmed').length,
     completed: bookings.filter(b => b.status === 'completed').length,
@@ -217,13 +222,13 @@ export default function Bookings() {
       const d = b.bookingDate ? new Date(b.bookingDate) : null
       return !!d && d > new Date() && !['cancelled', 'deleted', 'completed'].includes(b.status)
     }
-    return b.status === 'pending' || b.status === 'manual_review' || ['pending', 'payment_pending', 'manual_review'].includes(b.paymentStatus)
+    return ['pending','pending_approval','manual_review'].includes(b.status) || b.bookingStatus === 'pending_approval' || ['pending', 'payment_pending', 'manual_review'].includes(b.paymentStatus)
   }), [activeTab, bookings, todayStr])
 
   const actionsFor = (b: BookingRecord) => {
     if (['completed', 'cancelled', 'deleted'].includes(b.status)) return ['open']
     const actions = ['open']
-    if (['pending', 'manual_review'].includes(b.status)) actions.push('confirm', 'cancel')
+    if (['pending', 'pending_approval', 'manual_review'].includes(b.status) || b.bookingStatus === 'pending_approval') actions.push('confirm', 'cancel')
     if (b.status === 'confirmed') actions.push('reschedule', 'complete', 'cancel')
     if (['pending', 'payment_pending', 'manual_review'].includes(b.paymentStatus)) actions.push('mark_paid')
     return actions
@@ -252,7 +257,7 @@ export default function Bookings() {
 
     {loading ? <p>Loading bookings…</p> : errorMessage ? <p className="form__error">{errorMessage}</p> : <div className="bookings-table-wrap"><table className="table bookings-table"><thead><tr><th>Booking</th><th>Customer</th><th>Schedule</th><th>Source</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead><tbody>{visible.map(b => {
       const acts = actionsFor(b)
-      return <tr key={b.id}><td><strong>{b.serviceName}</strong><small>{b.reference || b.bookingId || 'No reference'}</small>{b.serviceName === 'Service not named' ? <small className="muted">Service ID: {b.serviceId}</small> : null}{b.duplicateMerged ? <span className="bookings-badge">Duplicate records merged</span> : null}</td><td><strong>{b.customerName || 'Customer'}</strong><small>{b.customerPhone || b.customerEmail || 'No contact'}</small></td><td><strong>{b.bookingDate || 'Date not set'}</strong><small>{b.bookingTime || 'Time not set'}</small><small>{b.preferredBranch || 'Main branch'}</small></td><td><span className="bookings-badge">{b.sourceLabel}</span></td><td><strong>{b.paymentAmount || '—'}</strong><small>{paymentLabel(b.paymentStatus)}</small><small>{b.paymentMethod || 'Method not set'}</small></td><td><span className={`bookings-page__status bookings-page__status--${b.status}`}>{statusLabel(b.status)}</span></td><td><div className="bookings-page__row-actions"><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link>{acts.includes('confirm') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{status:'confirmed'})} disabled={updatingBookingId===b.id}>Confirm</button>}{acts.includes('mark_paid') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{paymentStatus:'paid'})} disabled={updatingBookingId===b.id}>Mark paid</button>}{acts.includes('reschedule') && <Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Reschedule</Link>}{acts.includes('complete') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{status:'completed'})} disabled={updatingBookingId===b.id}>Complete</button>}{acts.includes('cancel') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{status:'cancelled'})} disabled={updatingBookingId===b.id}>Cancel</button>}</div></td></tr>
+      return <tr key={b.id}><td><strong>{b.serviceName}</strong><small>{b.reference || b.bookingId || 'No reference'}</small>{b.serviceName === 'Service not named' ? <small className="muted">Service ID: {b.serviceId}</small> : null}{b.duplicateMerged ? <span className="bookings-badge">Duplicate records merged</span> : null}</td><td><strong>{b.customerName || 'Customer'}</strong><small>{b.customerPhone || b.customerEmail || 'No contact'}</small></td><td><strong>{b.bookingDate || 'Date not set'}</strong><small>{b.bookingTime || 'Time not set'}</small><small>{b.preferredBranch || 'Main branch'}</small></td><td><span className="bookings-badge">{b.sourceLabel}</span></td><td><strong>{b.paymentAmount || '—'}</strong><small>{paymentLabel(b.paymentStatus)}</small><small>{b.paymentMethod || 'Method not set'}</small></td><td><span className={`bookings-page__status bookings-page__status--${b.bookingStatus}`}>{statusLabel(b.bookingStatus)}</span><small>{b.paymentStatus === 'paid' && b.bookingStatus !== 'confirmed' ? 'Paid - waiting for store confirmation' : ''}</small><small>{b.syncStatus === 'pending' ? 'Sync pending' : b.syncStatus === 'synced' ? 'Synced' : ''}</small></td><td><div className="bookings-page__row-actions"><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link>{acts.includes('confirm') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'confirmed',status:'confirmed',confirmedAt:Timestamp.now(),confirmedBy:'staff_admin',syncStatus:'pending',syncReason:'booking_confirmed',syncRequestedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Confirm</button>}{acts.includes('mark_paid') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{paymentStatus:'paid'})} disabled={updatingBookingId===b.id}>Mark paid</button>}{acts.includes('reschedule') && <Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Reschedule</Link>}{acts.includes('complete') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'completed',status:'completed',completedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Complete</button>}{acts.includes('cancel') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'cancelled',status:'cancelled',cancelledAt:Timestamp.now(),syncStatus:'pending',syncReason:'booking_cancelled',syncRequestedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Cancel</button>}</div></td></tr>
     })}</tbody></table><div className="bookings-cards">{visible.map(b => <article key={`${b.id}-card`} className="bookings-card"><h3>{b.serviceName}</h3><p>{b.customerName || 'Customer'} • {b.bookingDate || 'Date not set'} {b.bookingTime || ''}</p><p>{statusLabel(b.status)} • {paymentLabel(b.paymentStatus)}</p><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link></article>)}</div></div>}
   </section></main>
 }
