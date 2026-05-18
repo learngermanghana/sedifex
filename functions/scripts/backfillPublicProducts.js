@@ -89,8 +89,6 @@ function pickStoreCity(storeData) {
 
 function buildStorePublicMeta(storeData) {
   const promoSlug = toTrimmedStringOrNull(storeData.promoSlug)
-  const publication = normalizePublicationFields(data, { fallbackCreatedAt: existingDocData?.createdAt, fallbackUpdatedAt: existingDocData?.updatedAt })
-
   return {
     storeName: toTrimmedStringOrNull(storeData.displayName) || toTrimmedStringOrNull(storeData.name),
     storeCity: pickStoreCity(storeData),
@@ -399,6 +397,10 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
     publicProductsWritten: 0,
     publicServicesWritten: 0,
     skippedUnpublished: 0,
+    deletedOrphanCount: 0,
+    repairedCount: 0,
+    sourceProductCount: productsSnapshot.size,
+    publicServicesCount: publicServicesSnapshot.size,
     errors: 0,
   }
 
@@ -416,6 +418,7 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
     if (Object.keys(sourceUpdates).length) {
       queueSet(batchState, productDoc.ref, sourceUpdates, { merge: true })
       summary.repairedPublishedProducts += 1
+      summary.repairedCount += 1
       Object.assign(productData, sourcePublication.updates)
       if (sourcePublication.removeUnpublishedAt) delete productData.unpublishedAt
     }
@@ -439,11 +442,14 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
         queueSet(batchState, expectedRef, payload, { merge: true })
         if (expectedCollection === 'publicServices') summary.publicServicesWritten += 1
         else summary.publicProductsWritten += 1
+        summary.repairedCount += 1
       }
     }
 
     if (existingOpposite) {
       queueDelete(batchState, oppositeRef)
+      summary.deletedOrphanCount += 1
+      summary.repairedCount += 1
     }
 
     if (existingExpected && existingOpposite) {
@@ -467,13 +473,21 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
       const normalizedCategory = normalizeCategory(expectedData.category)
       const needsCategoryRepair = expectedData.category !== normalizedCategory
       const needsPublishedAtRepair = !hasPublishedAt(expectedData.publishedAt)
+      const hasUnpublishedAt = expectedData.unpublishedAt !== undefined && expectedData.unpublishedAt !== null
       const needsUpdatedAtRepair = !isFirestoreTimestampLike(expectedData.updatedAt) && !hasPublishedAt(expectedData.updatedAt)
-      if (needsCategoryRepair || needsPublishedAtRepair || needsUpdatedAtRepair) {
-        queueSet(batchState, expectedRef, {
+      const needsPublishedFlagRepair = expectedData.isPublished !== true
+      if (needsCategoryRepair || needsPublishedAtRepair || hasUnpublishedAt || needsUpdatedAtRepair || needsPublishedFlagRepair) {
+        const expectedUpdates = {
           category: normalizedCategory,
+          isPublished: true,
           publishedAt: needsPublishedAtRepair ? resolvePublishedAtValue(expectedData) : expectedData.publishedAt,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true })
+        }
+        if (hasUnpublishedAt) {
+          expectedUpdates.unpublishedAt = admin.firestore.FieldValue.delete()
+        }
+        queueSet(batchState, expectedRef, expectedUpdates, { merge: true })
+        summary.repairedCount += 1
       }
     }
 
@@ -483,6 +497,8 @@ async function reconcileStore(storeId, storeMetaByStoreId) {
   for (const publicDoc of [...publicProductsSnapshot.docs, ...publicServicesSnapshot.docs]) {
     if (publishedIds.has(publicDoc.id)) continue
     queueDelete(batchState, publicDoc.ref)
+    summary.deletedOrphanCount += 1
+    summary.repairedCount += 1
     await maybeFlushBatch(batchState)
   }
 
@@ -535,14 +551,18 @@ async function runReconciliation(targetStoreId) {
   }
 
   const summaries = []
+  const isOneStoreReconcile = Boolean(targetStoreId)
   for (const storeId of [...storeIds]) {
     const summary = await reconcileStore(storeId, storeMetaByStoreId)
     summaries.push(summary)
     console.log(
       `[reconcile] store=${summary.storeId} scannedProducts=${summary.scannedProducts} repairedPublishedProducts=${summary.repairedPublishedProducts} ` +
       `removedExpiredUnpublishedAt=${summary.removedExpiredUnpublishedAt} publicProductsWritten=${summary.publicProductsWritten} ` +
-      `publicServicesWritten=${summary.publicServicesWritten} skippedUnpublished=${summary.skippedUnpublished} errors=${summary.errors}`,
+      `publicServicesWritten=${summary.publicServicesWritten} deletedOrphanCount=${summary.deletedOrphanCount} repairedCount=${summary.repairedCount} skippedUnpublished=${summary.skippedUnpublished} errors=${summary.errors}`,
     )
+    if (isOneStoreReconcile) {
+      console.log(`[reconcile][one-store] sourceProductCount=${summary.sourceProductCount} publicServicesCount=${summary.publicServicesCount} repairedCount=${summary.repairedCount} deletedOrphanCount=${summary.deletedOrphanCount}`)
+    }
   }
 
   console.log('[reconcile] summary report by store:')
