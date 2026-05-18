@@ -14,6 +14,7 @@ import {
   where,
 } from 'firebase/firestore'
 import './Products.css'
+import { useToast } from '../components/ToastProvider'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
@@ -301,6 +302,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
 }
 
 export default function ProductsServiceFirst() {
+  const { publish } = useToast()
   const { storeId } = useActiveStore()
   const { memberships } = useMemberships()
   const [items, setItems] = useState<Product[]>([])
@@ -409,6 +411,7 @@ export default function ProductsServiceFirst() {
       if (editingId) {
         await updateDoc(doc(db, 'products', editingId), payload)
         setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} updated.`)
+        publish({ tone: 'success', message: `${draft.itemType === 'service' ? 'Service' : 'Product'} updated.` })
       } else {
         await setDoc(doc(collection(db, 'products')), {
           ...payload,
@@ -416,10 +419,13 @@ export default function ProductsServiceFirst() {
           sortOrder: items.length + 1,
         })
         setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} added.`)
+        publish({ tone: 'success', message: `${draft.itemType === 'service' ? 'Service' : 'Product'} added.` })
       }
       resetForm()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save item.')
+      const nextError = err instanceof Error ? err.message : 'Unable to save item.'
+      setError(nextError)
+      publish({ tone: 'error', message: nextError })
     } finally {
       setSaving(false)
     }
@@ -576,10 +582,20 @@ export default function ProductsServiceFirst() {
                 onChange={event => {
                   const file = event.target.files?.[0]
                   if (!file) return
+                  if (file.size > 900_000) {
+                    const warning = 'Image is too large for direct save. Use Image URL or pick a smaller file (under 900KB).'
+                    setError(warning)
+                    publish({ tone: 'error', message: warning })
+                    return
+                  }
                   const reader = new FileReader()
                   reader.onload = () => {
                     const result = typeof reader.result === 'string' ? reader.result : ''
-                    if (result) updateDraft('imageUrl', result)
+                    if (result) {
+                      updateDraft('imageUrl', result)
+                      setError('')
+                      publish({ tone: 'success', message: 'Image uploaded to form. Click Add item / Save changes to finish.' })
+                    }
                   }
                   reader.readAsDataURL(file)
                 }}
