@@ -1,21 +1,27 @@
 # Booking Apps Script Template (Sedifex + Google Sheets)
 
-Use this template when a store wants Sedifex booking actions to update a Google Sheet and send booking emails/reminders.
+Use this template when a store wants Sedifex booking actions to update a Google Sheet and send follow-up emails/reminders.
 
-This version supports the simplified Sedifex workflow:
+## Notification flow
+
+Sedifex Market or the connected website can send the first **booking received** notification when the customer submits a booking.
+
+This Apps Script should normally take over only after the store/admin acts inside Sedifex:
 
 - **Confirm booking** = client has paid + store accepts the booking
 - **Cancel booking** = booking is cancelled/rejected
 - **Complete booking** = service/class/appointment is done
 - **Save changes** = edits booking details only
 
-When Sedifex queues sync for a configured store, this template upserts the booking by `booking_id`, updates the row, sends payment/confirmation/cancellation/update emails once, and sends reminders at 3 days, 2 days, and 1 day before the appointment only after payment is confirmed.
+By default, this template does **not** send a first booking-received email. That avoids duplicate emails when Sedifex Market or the website already notified the customer and store.
+
+After store confirmation, this script sends the confirmation email, updates the Sheet, and handles reminders at 3 days, 2 days, and 1 day before the appointment.
 
 ## Existing stores should update
 
 Stores that already installed an older version should update their Apps Script with this template if they want Sedifex admin actions such as **Confirm booking**, **Cancel booking**, and **Complete booking** to sync correctly.
 
-The important compatibility change is payment status mapping. Sedifex may store payment internally as `paid`, while the reminder workflow expects a confirmed payment. This template treats all of these as confirmed payment:
+This template treats all of these payment states as confirmed payment:
 
 ```text
 paid
@@ -35,25 +41,6 @@ completed
 5. Save the Web App URL in the store's Sedifex booking sync settings.
 6. Run **Sedifex Automation → Install 5-minute trigger** from the Sheet menu.
 
-## Minimal payload from Sedifex confirm booking
-
-```json
-{
-  "bookingId": "booking_123",
-  "storeId": "store_123",
-  "customer": { "name": "Jane Doe", "phone": "0200000000", "email": "jane@example.com" },
-  "booking": { "serviceName": "Airport Pickup", "preferredDate": "2026-05-11", "preferredTime": "14:00" },
-  "payment": { "amount": 200, "method": "mobile_money", "reference": "MOMO123", "status": "paid", "confirmed": true },
-  "bookingStatus": "confirmed",
-  "status": "confirmed",
-  "paymentStatus": "paid",
-  "paymentConfirmed": true,
-  "paymentConfirmedAt": "2026-05-11T10:00:00.000Z",
-  "source": "website_booking_form",
-  "eventType": "booking_confirmed"
-}
-```
-
 ## Apps Script code
 
 ```javascript
@@ -63,6 +50,10 @@ const CONFIG = {
   requireSecret: false,
   secretProperty: 'BOOKING_WEBHOOK_SECRET',
   fromName: 'Booking Team',
+
+  // Keep false when Sedifex Market/website already sends the first booking notification.
+  // Set true only for stores that want this Sheet script to send the first booking-received email too.
+  sendInitialBookingReceivedEmail: false,
 };
 
 const BRANDING = {
@@ -146,9 +137,10 @@ function doPost(e) {
 
     const row = p.booking_id ? findRowByBookingId_(sheet, p.booking_id) : 0;
     const nowIso = new Date().toISOString();
+    const status = canonicalBookingStatus_(p);
 
-    if (canonicalBookingStatus_(p) === 'cancelled' && !p.cancelled_at) p.cancelled_at = nowIso;
-    if (canonicalBookingStatus_(p) === 'completed' && !p.completed_at) p.completed_at = nowIso;
+    if (status === 'cancelled' && !p.cancelled_at) p.cancelled_at = nowIso;
+    if (status === 'completed' && !p.completed_at) p.completed_at = nowIso;
 
     if (row) {
       const old = rowObjectFromSheet_(sheet, row);
@@ -156,10 +148,6 @@ function doPost(e) {
 
       const oldStatus = canonicalBookingStatus_(old);
       const newStatus = canonicalBookingStatus_(p);
-      const wasCancelled = oldStatus === 'cancelled';
-      const isCancelled = newStatus === 'cancelled';
-      const wasCompleted = oldStatus === 'completed';
-      const isCompleted = newStatus === 'completed';
       const apptChanged = (old.appointment_iso || '') !== (p.appointment_iso || '');
       const detailsChanged = bookingDetailsChanged_(old, p);
 
@@ -176,9 +164,9 @@ function doPost(e) {
 
       handleStateEmails_(sheet, row, p, old);
 
-      if (!wasCancelled && isCancelled) {
+      if (oldStatus !== 'cancelled' && newStatus === 'cancelled') {
         sendOnce_(sheet, row, p, 'cancellation', 'cancellation_sent_at');
-      } else if (!wasCompleted && isCompleted) {
+      } else if (oldStatus !== 'completed' && newStatus === 'completed') {
         sendOnce_(sheet, row, p, 'completion', 'completion_sent_at');
       } else if (apptChanged) {
         sendImmediateEmail_(sheet, row, p, 'reschedule');
@@ -196,6 +184,7 @@ function doPost(e) {
 
     const createdRow = sheet.getLastRow();
     handleStateEmails_(sheet, createdRow, p, null);
+
     return json_(201, { ok: true, action: 'created', row: createdRow, bookingId: p.booking_id || '' });
   } catch (err) {
     return json_(500, { ok: false, error: String(err && err.message ? err.message : err) });
@@ -212,7 +201,10 @@ function processScheduledMessages() {
   values.forEach(function (r, idx) {
     const row = objFromRow_(r);
     const rowNum = idx + 2;
-    if (canonicalBookingStatus_(row) === 'cancelled') return;
+    const bookingStatus = canonicalBookingStatus_(row);
+
+    if (bookingStatus === 'cancelled') return;
+    if (bookingStatus !== 'confirmed' && bookingStatus !== 'completed') return;
     if (canonicalPaymentStatus_(row) !== 'confirmed') return;
     if (!row.customer_email || !row.customer_name || !row.appointment_iso) return;
 
@@ -285,6 +277,38 @@ function normalizePayload_(body) {
   };
 }
 
+function handleStateEmails_(sheet, rowNum, row, oldRow) {
+  const bookingStatus = canonicalBookingStatus_(row);
+  const paymentStatus = canonicalPaymentStatus_(row);
+
+  if (bookingStatus === 'cancelled') return;
+
+  if (paymentStatus === 'pending') {
+    if (CONFIG.sendInitialBookingReceivedEmail) {
+      sendOnce_(sheet, rowNum, row, 'booking_received_pending', 'booking_received_sent_at', 'payment_pending_sent_at');
+    }
+    return;
+  }
+
+  if (paymentStatus === 'awaiting_verification') {
+    if (CONFIG.sendInitialBookingReceivedEmail) {
+      sendOnce_(sheet, rowNum, row, 'booking_received_awaiting_verification', 'awaiting_verification_sent_at');
+    }
+    return;
+  }
+
+  if (paymentStatus === 'partial') {
+    if (CONFIG.sendInitialBookingReceivedEmail) {
+      sendOnce_(sheet, rowNum, row, 'partial_payment_received', 'partial_payment_sent_at');
+    }
+    return;
+  }
+
+  if (paymentStatus === 'confirmed' && bookingStatus === 'confirmed') {
+    sendOnce_(sheet, rowNum, row, 'payment_confirmed', 'payment_confirmation_sent_at', 'confirmation_sent_at');
+  }
+}
+
 function normalizeIncomingPaymentStatus_(value) {
   const s = str_(value).toLowerCase();
   if (!s) return 'pending';
@@ -317,28 +341,6 @@ function canonicalPaymentStatus_(row) {
 
 function canonicalBookingStatus_(row) {
   return normalizeIncomingBookingStatus_(row.booking_status || row.status || 'booked');
-}
-
-function handleStateEmails_(sheet, rowNum, row, oldRow) {
-  const bookingStatus = canonicalBookingStatus_(row);
-  const paymentStatus = canonicalPaymentStatus_(row);
-  if (bookingStatus === 'cancelled') return;
-
-  if (paymentStatus === 'pending') {
-    sendOnce_(sheet, rowNum, row, 'booking_received_pending', 'booking_received_sent_at', 'payment_pending_sent_at');
-    return;
-  }
-  if (paymentStatus === 'awaiting_verification') {
-    sendOnce_(sheet, rowNum, row, 'booking_received_awaiting_verification', 'awaiting_verification_sent_at');
-    return;
-  }
-  if (paymentStatus === 'partial') {
-    sendOnce_(sheet, rowNum, row, 'partial_payment_received', 'partial_payment_sent_at');
-    return;
-  }
-  if (paymentStatus === 'confirmed') {
-    sendOnce_(sheet, rowNum, row, 'payment_confirmed', 'payment_confirmation_sent_at', 'confirmation_sent_at');
-  }
 }
 
 function sendStageIfDue_(sheet, rowNum, row, appt, stage) {
