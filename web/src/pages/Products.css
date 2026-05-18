@@ -722,3 +722,23 @@
     text-align: left;
   }
 }
+
+.products-page__label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.products-page__description-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.products-page__helper-button {
+  padding: 4px 10px;
+  font-size: 12px;
+}

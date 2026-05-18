@@ -53,6 +53,7 @@ type Draft = {
 
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
+const EDUCATION_CATEGORY = 'Education'
 
 const PRODUCT_CATEGORIES = [
   PRODUCT_CATEGORY,
@@ -74,6 +75,17 @@ const SERVICE_CATEGORIES = [
   'Consultation',
   'Repairs',
   'Delivery Services',
+]
+
+const COURSE_CATEGORIES = [
+  EDUCATION_CATEGORY,
+  'Language Classes',
+  'Beauty Training',
+  'Professional Training',
+  'Online Course',
+  'In-Person Course',
+  'Workshop',
+  'Certification',
 ]
 
 const blankDraft: Draft = {
@@ -139,23 +151,79 @@ function formatMoney(value: number | null | undefined) {
 function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
   const raw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
   const lowered = raw.toLowerCase()
+  if (itemType === 'course') {
+    if (!raw || lowered === 'general product' || lowered === 'general products' || lowered === 'general service' || lowered === 'general services') return EDUCATION_CATEGORY
+    return titleCase(raw)
+  }
   if (itemType === 'service') {
     if (!raw || lowered === 'general product' || lowered === 'general products') return SERVICE_CATEGORY
     return titleCase(raw)
   }
-  if (!raw || lowered === 'general service' || lowered === 'general services') return PRODUCT_CATEGORY
+  if (!raw || lowered === 'general service' || lowered === 'general services' || lowered === 'education') return PRODUCT_CATEGORY
   return titleCase(raw)
+}
+
+function splitSentences(text: string) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean)
+}
+
+function generateItemDescription(draft: Draft): string {
+  const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'service' ? 'This service' : 'This product')
+  const category = normalizeCategory(draft.category, draft.itemType)
+  const locationText = draft.location.trim()
+
+  if (draft.itemType === 'course') {
+    const level = draft.courseLevel.trim() || 'all levels'
+    const duration = draft.duration.trim()
+    const mode = draft.courseMode === 'online' ? 'online' : draft.courseMode === 'hybrid' ? 'in online and in-person formats' : 'in person'
+    const classTimes = draft.classTimes.trim()
+    const fee = cleanNumber(draft.price)
+    const feeText = fee !== null ? ` The course fee is GHS ${fee.toFixed(2)}.` : ''
+    return `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical and structured progress. It includes guided lessons and class support to help students build confidence step by step${duration ? ` over ${duration}` : ''}. Classes are offered ${mode}${locationText ? ` at ${locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}.${feeText}`.replace(/\s+/g, ' ').trim()
+  }
+
+  if (draft.itemType === 'service') {
+    const duration = cleanNumber(draft.durationMinutes)
+    const kind = draft.serviceKind === 'consultation' ? 'consultation service' : draft.serviceKind === 'quote_request' ? 'service available by quote request' : 'service designed for booked appointments'
+    return `${itemName} is a ${kind} that supports customers who want professional and reliable support. ${duration ? `Typical session time is about ${duration} minutes. ` : ''}${locationText ? `It is offered at ${locationText}, and ` : ''}customers can request a preferred date and time while the store confirms availability.`.replace(/\s+/g, ' ').trim()
+  }
+
+  const fee = cleanNumber(draft.price)
+  const feeText = fee !== null ? ` The current listed price is GHS ${fee.toFixed(2)}.` : ''
+  return `${itemName} is available from the store for customers who want a reliable and convenient purchase option. It belongs to the ${category.toLowerCase()} category and can be ordered based on availability.${feeText}`.replace(/\s+/g, ' ').trim()
+}
+
+function improveDescription(text: string): string {
+  const cleaned = text
+    .replace(/\*\*/g, '')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/---+/g, ' ')
+    .replace(/[•·▪◦]/g, ' ')
+    .replace(/\s*\n+\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!cleaned) return ''
+  const sentences = splitSentences(cleaned)
+  if (sentences.length >= 2) return sentences.slice(0, 4).join(' ')
+  const chunks = cleaned.split(/,\s+/).map(chunk => chunk.trim()).filter(Boolean).slice(0, 4)
+  const rebuilt = chunks.join('. ')
+  return rebuilt.endsWith('.') ? rebuilt : `${rebuilt}.`
 }
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
   const itemType: ItemType = data.itemType === 'service' ? 'service' : 'product'
+  const itemFormType: ItemFormType = itemType === 'service' && data.listingType === 'course' ? 'course' : itemType
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
   return {
     id,
     name,
     itemType,
-    category: normalizeCategory(data.category, itemType),
+    category: normalizeCategory(data.category, itemFormType),
     description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
     sku: itemType === 'product' && typeof data.sku === 'string' && data.sku.trim() ? data.sku.trim() : null,
     barcode: itemType === 'product' && typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : null,
@@ -184,7 +252,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const isCourse = draft.itemType === 'course'
   const behavesLikeService = isService || isCourse
   const name = titleCase(draft.name)
-  const category = normalizeCategory(draft.category, behavesLikeService ? 'service' : 'product')
+  const category = normalizeCategory(draft.category, isCourse ? 'course' : isService ? 'service' : 'product')
   const price = cleanNumber(draft.price)
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
@@ -248,7 +316,7 @@ export default function ProductsServiceFirst() {
   const isService = draft.itemType === 'service'
   const isCourse = draft.itemType === 'course'
   const behavesLikeService = isService || isCourse
-  const categoryOptions = behavesLikeService ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES
+  const categoryOptions = draft.itemType === 'course' ? COURSE_CATEGORIES : draft.itemType === 'service' ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES
 
   useEffect(() => {
     if (!storeId) {
@@ -266,10 +334,20 @@ export default function ProductsServiceFirst() {
     setDraft(current => {
       if (key === 'itemType') {
         const nextItemType = value as ItemFormType
+        const currentCategory = normalizeCategory(current.category, current.itemType)
+        const shouldSwitchToProduct = nextItemType === 'product' && (currentCategory === SERVICE_CATEGORY || currentCategory === EDUCATION_CATEGORY)
+        const shouldSwitchToService = nextItemType === 'service' && (currentCategory === PRODUCT_CATEGORY || currentCategory === EDUCATION_CATEGORY)
+        const shouldSwitchToCourse = nextItemType === 'course' && (currentCategory === PRODUCT_CATEGORY || currentCategory === SERVICE_CATEGORY)
         return {
           ...current,
           itemType: nextItemType,
-          category: normalizeCategory(current.category, nextItemType),
+          category: shouldSwitchToProduct
+            ? PRODUCT_CATEGORY
+            : shouldSwitchToService
+            ? SERVICE_CATEGORY
+            : shouldSwitchToCourse
+            ? EDUCATION_CATEGORY
+            : normalizeCategory(current.category, nextItemType),
           sku: nextItemType === 'product' ? current.sku : '',
           openingStock: nextItemType === 'product' ? current.openingStock : '',
           reorderPoint: nextItemType === 'product' ? current.reorderPoint : '',
@@ -451,12 +529,61 @@ export default function ProductsServiceFirst() {
             {isCourse ? <div className="field"><label className="field__label" htmlFor="course-mode">Mode</label><select id="course-mode" value={draft.courseMode} onChange={event => updateDraft('courseMode', event.target.value)}><option value="online">Online</option><option value="in_person">In person</option><option value="hybrid">Hybrid</option></select></div> : null}
             {isCourse ? <div className="field"><label className="field__label" htmlFor="course-times">Class times</label><input id="course-times" value={draft.classTimes} onChange={event => updateDraft('classTimes', event.target.value)} /></div> : null}
             <div className="field">
-              <label className="field__label" htmlFor="item-description">{behavesLikeService ? 'Description' : 'Product description'}</label>
+              <div className="products-page__label-row">
+                <label className="field__label" htmlFor="item-description">{behavesLikeService ? 'Description' : 'Product description'}</label>
+                <div className="products-page__description-actions">
+                  <button
+                    type="button"
+                    className="button button--ghost products-page__helper-button"
+                    onClick={() => {
+                      if (!draft.name.trim()) {
+                        setError('Enter the item name first.')
+                        return
+                      }
+                      if (draft.description.trim() && !window.confirm('Replace the current description with a generated one?')) return
+                      setError('')
+                      updateDraft('description', generateItemDescription(draft))
+                    }}
+                  >
+                    Generate with AI
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--ghost products-page__helper-button"
+                    onClick={() => {
+                      const improved = improveDescription(draft.description)
+                      if (!improved) return
+                      setError('')
+                      updateDraft('description', improved)
+                    }}
+                  >
+                    Improve text
+                  </button>
+                </div>
+              </div>
               <textarea id="item-description" rows={4} value={draft.description} onChange={event => updateDraft('description', event.target.value)} />
             </div>
             <div className="field">
               <label className="field__label" htmlFor="item-image">Image URL</label>
               <input id="item-image" type="url" value={draft.imageUrl} onChange={event => updateDraft('imageUrl', event.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor="item-image-file">Browse image</label>
+              <input
+                id="item-image-file"
+                type="file"
+                accept="image/*"
+                onChange={event => {
+                  const file = event.target.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = () => {
+                    const result = typeof reader.result === 'string' ? reader.result : ''
+                    if (result) updateDraft('imageUrl', result)
+                  }
+                  reader.readAsDataURL(file)
+                }}
+              />
             </div>
             <div className="field">
               <label className="field__label" htmlFor="item-image-alt">Image alt text</label>
