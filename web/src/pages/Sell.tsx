@@ -1745,9 +1745,6 @@ export default function Sell() {
         <Link to="/sell/close-day" className="sell-page__workspace-tab">
           Close day
         </Link>
-        <Link to="/sell/invoice" className="sell-page__workspace-tab">
-          Invoice
-        </Link>
       </nav>
 
       {reachedDailySalesLimit && (

@@ -196,6 +196,18 @@ describe('Sell page', () => {
     onSnapshotMock.mockClear()
   })
 
+  it('does not show the invoice page in the sell workspace tabs', async () => {
+    renderWithProviders(<Sell />)
+
+    await screen.findByRole('link', { name: /^sell$/i })
+
+    expect(screen.getByRole('link', { name: /close day/i })).toHaveAttribute(
+      'href',
+      '/sell/close-day',
+    )
+    expect(screen.queryByRole('link', { name: /invoice/i })).not.toBeInTheDocument()
+  })
+
   it('records a cash sale and shows a success message', async () => {
     const user = userEvent.setup()
 
