@@ -414,8 +414,6 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
       bookingUpdate.paymentStatus = 'paid'
       bookingUpdate.payment_status = 'paid'
       bookingUpdate.paymentConfirmedAt = now
-      bookingUpdate.syncStatus = 'pending'
-      bookingUpdate.syncRequestedAt = now
     } else {
       bookingUpdate.paymentStatus = 'failed'
       bookingUpdate.payment_status = 'failed'

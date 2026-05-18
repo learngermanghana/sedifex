@@ -163,9 +163,11 @@ export default function BookingEditor() {
     const targetId = isCreateMode ? doc(db, 'stores', storeId, 'integrationBookings').id : bookingId
 
     try {
-      await setDoc(
-        doc(db, 'stores', storeId, 'integrationBookings', targetId),
-        {
+      const now = Timestamp.now()
+      const normalizedStatus = (form.status.trim() || 'pending_approval').toLowerCase()
+      const isConfirmed = normalizedStatus === 'confirmed'
+      const syncReason = normalizedStatus === 'rescheduled' ? 'booking_rescheduled' : normalizedStatus === 'cancelled' ? 'booking_cancelled' : isConfirmed ? 'booking_confirmed' : null
+      const payload = {
           name: form.fullName.trim(),
           fullName: form.fullName.trim(),
           phone: form.phone.trim(),
@@ -178,7 +180,8 @@ export default function BookingEditor() {
           bookingTime: normalizeTimeInput(form.bookingTime),
           preferredBranch: form.preferredBranch.trim(),
           preferredContactMethod: form.preferredContactMethod.trim(),
-          status: form.status.trim() || 'confirmed',
+          bookingStatus: normalizedStatus,
+          status: normalizedStatus === 'pending_approval' ? 'pending' : normalizedStatus,
           quantity: quantityValue,
           notes: form.notes.trim(),
           paymentAmount: form.paymentAmount.trim(),
@@ -191,14 +194,24 @@ export default function BookingEditor() {
           },
           bookingId: targetId,
           booking_id: targetId,
-          source: isCreateMode ? 'manual' : 'manual-edit',
-          syncStatus: 'pending',
-          syncRequestedAt: Timestamp.now(),
+          source: isCreateMode ? 'manual_admin' : 'manual-edit',
+          sourceChannel: 'manual_admin',
+          source_channel: 'manual_admin',
+          syncStatus: syncReason ? 'pending' : 'not_ready',
+          syncReason,
+          syncRequestedAt: syncReason ? now : null,
+          confirmedAt: isConfirmed ? now : null,
+          confirmedBy: isConfirmed ? 'staff_admin' : null,
+          rescheduledAt: normalizedStatus === 'rescheduled' ? now : null,
+          cancelledAt: normalizedStatus === 'cancelled' ? now : null,
+          completedAt: normalizedStatus === 'completed' ? now : null,
           updatedAt: serverTimestamp(),
           createdAt: isCreateMode ? serverTimestamp() : undefined,
-        },
-        { merge: true },
-      )
+        }
+      await Promise.all([
+        setDoc(doc(db, 'stores', storeId, 'integrationBookings', targetId), payload, { merge: true }),
+        setDoc(doc(db, 'integrationBookings', targetId), payload, { merge: true }),
+      ])
 
       navigate('/bookings')
     } catch (error) {
@@ -216,19 +229,19 @@ export default function BookingEditor() {
     setErrorMessage(null)
     try {
       const now = Timestamp.now()
-      await setDoc(
-        doc(db, 'stores', storeId, 'integrationBookings', bookingId),
-        {
+      const payload = {
           paymentStatus: 'confirmed',
           paymentConfirmedAt: now,
           paymentVerifiedAt: now,
           paymentVerifiedBy: 'staff_admin',
-          syncStatus: 'pending',
-          syncRequestedAt: now,
+          syncStatus: 'not_ready',
+          syncRequestedAt: null,
           updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      )
+        }
+      await Promise.all([
+        setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), payload, { merge: true }),
+        setDoc(doc(db, 'integrationBookings', bookingId), payload, { merge: true }),
+      ])
       navigate('/bookings')
     } catch (error) {
       console.error('[booking-editor] Failed to confirm payment', error)
