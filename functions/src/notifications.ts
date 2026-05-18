@@ -202,7 +202,33 @@ function isSettled(value: unknown) { const normalized = text(value, 80).toLowerC
 function hasAlreadySettled(before: Record<string, unknown> | null) { if (!before) return false; return isSettled(before.paymentStatus) || isSettled(before.payment_status) || isSettled(before.orderStatus) || isSettled(before.order_status) || isSettled(before.status) }
 function paymentFromOrder(data: Record<string, unknown>): PaymentInfo { return { status: text(data.paymentStatus ?? data.payment_status ?? data.orderStatus ?? data.order_status ?? data.status, 80) || null, amount: numberValue(data.amountPaid ?? data.amount), currency: text(data.currency, 20) || 'GHS', method: text(data.paymentCollectionMode ?? data.paymentMethod ?? data.sourceChannel, 80) || null, reference: text(data.paymentReference ?? data.payment_reference ?? data.paystackReference ?? data.reference, 220) || null } }
 function customerFromRecord(data: Record<string, unknown>): CustomerInfo { const customer = getNestedRecord(data, 'customer'); const person = getNestedRecord(data, 'person'); return { name: text(customer.name ?? person.name ?? data.customerName ?? data.name, 160) || null, email: email(customer.email ?? person.email ?? data.customerEmail ?? data.email) || null, phone: text(customer.phone ?? person.phone ?? data.customerPhone ?? data.phone, 80) || null } }
-function orderData(data: Record<string, unknown>) { const firstItem = Array.isArray(data.items) && data.items.length ? getRecord(data.items[0]) : {}; const nestedData = getNestedRecord(data, 'data'); return { itemName: getFirstText(firstItem, ['name', 'title', 'serviceName', 'productName'], 220) || getFirstText(nestedData, ['itemName', 'serviceName', 'course'], 220) || getFirstText(data, ['itemName', 'serviceName', 'productName', 'sourceLabel'], 220), notes: getFirstText(nestedData, ['notes', 'message'], 1000) || getFirstText(data, ['notes'], 1000) } }
+function isGenericSourceLabel(value: string) {
+  const normalized = value.toLowerCase().trim().replace(/\s+/g, ' ')
+  return ['sedifex checkout', 'sedifex market', 'checkout', 'marketplace checkout'].includes(normalized)
+}
+
+function orderData(data: Record<string, unknown>) {
+  const firstItem = Array.isArray(data.items) && data.items.length ? getRecord(data.items[0]) : {}
+  const pricingSnapshot = getNestedRecord(data, 'pricingSnapshot')
+  const pricingSnapshotLegacy = getNestedRecord(data, 'pricing_snapshot')
+  const snapshotItem = Array.isArray(pricingSnapshot.items) && pricingSnapshot.items.length ? getRecord(pricingSnapshot.items[0]) : {}
+  const snapshotLegacyItem = Array.isArray(pricingSnapshotLegacy.items) && pricingSnapshotLegacy.items.length ? getRecord(pricingSnapshotLegacy.items[0]) : {}
+  const nestedData = getNestedRecord(data, 'data')
+  const directName = getFirstText(firstItem, ['name', 'title', 'serviceName', 'productName', 'itemName'], 220)
+    || getFirstText(snapshotItem, ['name', 'title', 'serviceName', 'productName', 'itemName'], 220)
+    || getFirstText(snapshotLegacyItem, ['name', 'title', 'serviceName', 'productName', 'itemName'], 220)
+    || getFirstText(data, ['itemName', 'serviceName', 'productName'], 220)
+    || getFirstText(nestedData, ['itemName', 'serviceName', 'productName', 'course'], 220)
+
+  const sourceLabel = getFirstText(data, ['sourceLabel', 'source_label'], 220)
+  const sourceFallback = sourceLabel && !isGenericSourceLabel(sourceLabel) ? sourceLabel : ''
+  const finalFallback = getFirstText(data, ['serviceName'], 220) ? 'your service' : 'your item'
+
+  return {
+    itemName: directName || sourceFallback || finalFallback,
+    notes: getFirstText(nestedData, ['notes', 'message'], 1000) || getFirstText(data, ['notes'], 1000),
+  }
+}
 
 export const notifyIntegrationOrderStatus = functions.firestore.document('integrationOrders/{reference}').onWrite(async (change, context) => {
   if (!change.after.exists) return
