@@ -653,6 +653,14 @@ export default function Products() {
     [activeStoreId, products, workspaceName],
   )
 
+  const addPhotoPreviewUrls = useMemo(
+    () =>
+      [imageUrlInput, imageUrlInput2, imageUrlInput3]
+        .map(url => normalizeImageUrl(url))
+        .filter((url): url is string => Boolean(url)),
+    [imageUrlInput, imageUrlInput2, imageUrlInput3],
+  )
+
   /**
    * Load products for the active store
    */
@@ -1892,6 +1900,127 @@ export default function Products() {
               />
             </div>
 
+            <section className="products-page__photo-section" aria-label="Product photos">
+              <h3>Product photos</h3>
+              <p className="field__hint">
+                Upload up to 3 images. The first image is used as the main product photo.
+              </p>
+
+              <div className="products-page__photo-grid">
+                {addPhotoPreviewUrls.length ? (
+                  addPhotoPreviewUrls.map((url, index) => (
+                    <article key={`${url}-${index}`} className="products-page__photo-preview">
+                      <img src={url} alt={index === 0 ? 'Main image preview' : `Image ${index + 1} preview`} />
+                      <p>{index === 0 ? 'Main image' : `Image ${index + 1}`}</p>
+                    </article>
+                  ))
+                ) : (
+                  <article className="products-page__photo-placeholder">No image yet</article>
+                )}
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-file">
+                  Upload image <span className="field__optional">(optional)</span>
+                </label>
+                <input
+                  id="add-image-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={event => {
+                    const file = event.target.files?.[0] ?? null
+                    setImageFileInput(file)
+                    setImageUploadError(null)
+                  }}
+                />
+                <div className="products-page__upload-actions">
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    disabled={!imageFileInput || isUploadingImage}
+                    onClick={() => {
+                      void handleImageUpload()
+                    }}
+                  >
+                    {isUploadingImage ? 'Uploading…' : 'Upload and use URL'}
+                  </button>
+                  {imageUploadError ? (
+                    <p className="products-page__upload-error">{imageUploadError}</p>
+                  ) : null}
+                </div>
+                <p className="field__hint">
+                  Uploads to your backend and auto-fills the next empty image URL slot (up to 3).
+                </p>
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-url">
+                  Image URL 1 <span className="field__optional">(optional)</span>
+                </label>
+                <div className="products-page__field-inline">
+                  <input
+                    id="add-image-url"
+                    type="url"
+                    placeholder="https://example.com/product-image.jpg"
+                    value={imageUrlInput}
+                    onChange={e => setImageUrlInput(e.target.value)}
+                  />
+                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput('')}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-url-2">
+                  Image URL 2 <span className="field__optional">(optional)</span>
+                </label>
+                <div className="products-page__field-inline">
+                  <input
+                    id="add-image-url-2"
+                    type="url"
+                    placeholder="https://example.com/product-image-side.jpg"
+                    value={imageUrlInput2}
+                    onChange={e => setImageUrlInput2(e.target.value)}
+                  />
+                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput2('')}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-url-3">
+                  Image URL 3 <span className="field__optional">(optional)</span>
+                </label>
+                <div className="products-page__field-inline">
+                  <input
+                    id="add-image-url-3"
+                    type="url"
+                    placeholder="https://example.com/product-image-back.jpg"
+                    value={imageUrlInput3}
+                    onChange={e => setImageUrlInput3(e.target.value)}
+                  />
+                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput3('')}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="add-image-alt">
+                  Image alt text <span className="field__optional">(optional)</span>
+                </label>
+                <input
+                  id="add-image-alt"
+                  type="text"
+                  value={imageAltInput}
+                  onChange={e => setImageAltInput(e.target.value)}
+                />
+                <p className="field__hint">Defaults to the item name when left empty.</p>
+              </div>
+            </section>
+
             <details className="products-page__optional-expander">
               <summary>Optional item details</summary>
 
@@ -1994,108 +2123,6 @@ export default function Products() {
                   </label>
                 </>
               )}
-
-              <div className="field">
-                <label className="field__label" htmlFor="add-image-file">
-                  Upload image <span className="field__optional">(optional)</span>
-                </label>
-                <input
-                  id="add-image-file"
-                  type="file"
-                  accept="image/*"
-                  onChange={event => {
-                    const file = event.target.files?.[0] ?? null
-                    setImageFileInput(file)
-                    setImageUploadError(null)
-                  }}
-                />
-                <div className="products-page__upload-actions">
-                  <button
-                    type="button"
-                    className="button button--secondary"
-                    disabled={!imageFileInput || isUploadingImage}
-                    onClick={() => {
-                      void handleImageUpload()
-                    }}
-                  >
-                    {isUploadingImage ? 'Uploading…' : 'Upload and use URL'}
-                  </button>
-                  {imageUploadError ? (
-                    <p className="products-page__upload-error">{imageUploadError}</p>
-                  ) : null}
-                </div>
-                <p className="field__hint">
-                  Uploads to your backend and auto-fills the next empty image URL slot (up to 3).
-                </p>
-              </div>
-
-              <div className="field">
-                <label className="field__label" htmlFor="add-image-url">
-                  Image URL 1 <span className="field__optional">(optional)</span>
-                </label>
-                <div className="products-page__field-inline">
-                  <input
-                    id="add-image-url"
-                    type="url"
-                    placeholder="https://example.com/product-image.jpg"
-                    value={imageUrlInput}
-                    onChange={e => setImageUrlInput(e.target.value)}
-                  />
-                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput('')}>
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              <div className="field">
-                <label className="field__label" htmlFor="add-image-url-2">
-                  Image URL 2 <span className="field__optional">(optional)</span>
-                </label>
-                <div className="products-page__field-inline">
-                  <input
-                    id="add-image-url-2"
-                    type="url"
-                    placeholder="https://example.com/product-image-side.jpg"
-                    value={imageUrlInput2}
-                    onChange={e => setImageUrlInput2(e.target.value)}
-                  />
-                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput2('')}>
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              <div className="field">
-                <label className="field__label" htmlFor="add-image-url-3">
-                  Image URL 3 <span className="field__optional">(optional)</span>
-                </label>
-                <div className="products-page__field-inline">
-                  <input
-                    id="add-image-url-3"
-                    type="url"
-                    placeholder="https://example.com/product-image-back.jpg"
-                    value={imageUrlInput3}
-                    onChange={e => setImageUrlInput3(e.target.value)}
-                  />
-                  <button type="button" className="button button--ghost" onClick={() => setImageUrlInput3('')}>
-                    Clear
-                  </button>
-                </div>
-                <p className="field__hint">Add up to 3 photos for website galleries.</p>
-              </div>
-
-              <div className="field">
-                <label className="field__label" htmlFor="add-image-alt">
-                  Image alt text <span className="field__optional">(optional)</span>
-                </label>
-                <input
-                  id="add-image-alt"
-                  type="text"
-                  value={imageAltInput}
-                  onChange={e => setImageAltInput(e.target.value)}
-                />
-                <p className="field__hint">Defaults to the item name when left empty.</p>
-              </div>
             </details>
 
             <button
@@ -2353,10 +2380,27 @@ export default function Products() {
                         </div>
                       )}
 
-                      <div className="products-page__list-field">
-                        <label className="field__label">Image URLs</label>
+                      <div className="products-page__list-field products-page__photo-section">
+                        <label className="field__label">Product photos</label>
                         {isEditing ? (
                           <>
+                            <div className="products-page__photo-grid">
+                              {([editImageUrlInput, editImageUrlInput2, editImageUrlInput3]
+                                .map(url => normalizeImageUrl(url))
+                                .filter((url): url is string => Boolean(url)).length ? (
+                                [editImageUrlInput, editImageUrlInput2, editImageUrlInput3]
+                                  .map(url => normalizeImageUrl(url))
+                                  .filter((url): url is string => Boolean(url))
+                                  .map((url, index) => (
+                                    <article key={`${url}-${index}`} className="products-page__photo-preview">
+                                      <img src={url} alt={index === 0 ? 'Main image preview' : `Image ${index + 1} preview`} />
+                                      <p>{index === 0 ? 'Main image' : `Image ${index + 1}`}</p>
+                                    </article>
+                                  ))
+                              ) : (
+                                <article className="products-page__photo-placeholder">No image yet</article>
+                              ))}
+                            </div>
                             <div className="products-page__upload-actions">
                               <input
                                 type="file"
@@ -2372,12 +2416,15 @@ export default function Products() {
                                 onClick={() => void handleEditImageUpload(product)}
                                 disabled={isUploadingEditImage}
                               >
-                                {isUploadingEditImage ? 'Uploading…' : 'Upload image'}
+                                {isUploadingEditImage ? 'Uploading…' : 'Upload and use URL'}
                               </button>
                             </div>
                             {editImageUploadError ? (
                               <p className="products-page__upload-error">{editImageUploadError}</p>
                             ) : null}
+                            <p className="field__hint">
+                              Upload up to 3 images. The first image is used as the main product photo.
+                            </p>
                             <input
                               type="url"
                               value={editImageUrlInput}
