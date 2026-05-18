@@ -138,16 +138,32 @@ async function handleMarketplaceMasterEvent(evtType: string, data: PaystackEvent
     : update.paymentStatus === 'failed'
       ? 'payment_failed'
       : 'pending_payment'
+  const paidAt = update.paidAt ?? null
+  const paymentConfirmedAt = update.paymentConfirmedAt ?? null
+  const normalizedMerchantOrders = merchantOrders.map((merchantOrder) => ({
+    ...merchantOrder,
+    settlementStatus,
+    paymentStatus: update.paymentStatus,
+    payment_status: update.payment_status,
+    orderStatus: update.orderStatus,
+    order_status: update.order_status,
+    paymentReference: reference,
+    payment_reference: reference,
+    paidAt,
+    paymentConfirmedAt,
+  }))
 
   const batch = defaultDb.batch()
   batch.set(masterRef, {
     ...update,
+    merchantOrders: normalizedMerchantOrders,
     paymentReference: reference,
     payment_reference: reference,
     paystackReference: reference,
   }, { merge: true })
   batch.set(defaultDb.collection('sedifexAdmin').doc('marketplace').collection('orders').doc(reference), {
     ...update,
+    merchantOrders: normalizedMerchantOrders,
     paymentReference: reference,
     payment_reference: reference,
     paystackReference: reference,
@@ -156,6 +172,7 @@ async function handleMarketplaceMasterEvent(evtType: string, data: PaystackEvent
   if (customerUid) {
     batch.set(defaultDb.collection('marketCustomers').doc(customerUid).collection('orders').doc(reference), {
       ...update,
+      merchantOrders: normalizedMerchantOrders,
       paymentReference: reference,
       payment_reference: reference,
       paystackReference: reference,
