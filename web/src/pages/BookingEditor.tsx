@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Timestamp, deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './BookingEditor.css'
@@ -21,6 +21,8 @@ type BookingFormState = {
   paymentAmount: string
   depositAmount: string
   paymentMethod: string
+  paymentReference: string
+  paymentStatus: string
 }
 
 const DEFAULT_FORM: BookingFormState = {
@@ -39,14 +41,67 @@ const DEFAULT_FORM: BookingFormState = {
   paymentAmount: '',
   depositAmount: '',
   paymentMethod: '',
+  paymentReference: '',
+  paymentStatus: 'payment_pending',
 }
 
 function stringValue(value: unknown): string {
   if (typeof value === 'string') return value
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (value instanceof Date) return value.toISOString()
+  if (value && typeof value === 'object' && typeof (value as Timestamp).toDate === 'function') {
+    return (value as Timestamp).toDate().toISOString()
+  }
   return ''
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
+function firstStringValue(...values: unknown[]): string {
+  for (const value of values) {
+    const str = stringValue(value).trim()
+    if (str) return str
+  }
+  return ''
+}
+
+function normalizePaymentStatus(data: Record<string, unknown>, payment: Record<string, unknown>): string {
+  if (payment.confirmed === true) return 'paid'
+  const raw = firstStringValue(data.paymentStatus, data.payment_status, payment.status).toLowerCase()
+  if (!raw) return 'payment_pending'
+  if (['paid', 'confirmed', 'success', 'succeeded', 'complete', 'completed'].includes(raw)) return 'paid'
+  if (['pending', 'payment_pending', 'unpaid'].includes(raw)) return 'payment_pending'
+  return raw
+}
+
+function normalizeBookingForm(data: Record<string, unknown>): BookingFormState {
+  const customer = recordValue(data.customer)
+  const booking = recordValue(data.booking)
+  const payment = recordValue(data.payment)
+  const status = firstStringValue(data.bookingStatus, data.status) || 'confirmed'
+
+  return {
+    fullName: firstStringValue(data.fullName, data.name, data.customerName, customer.name),
+    phone: firstStringValue(data.phone, data.customerPhone, customer.phone),
+    email: firstStringValue(data.email, data.customerEmail, customer.email),
+    serviceName: firstStringValue(data.serviceName, data.internalServiceName, booking.serviceName, data.itemName, data.productName),
+    serviceId: firstStringValue(data.serviceId, booking.serviceId),
+    bookingDate: normalizeDateInput(firstStringValue(data.bookingDate, data.date, booking.preferredDate, booking.date, booking.startAt)),
+    bookingTime: normalizeTimeInput(firstStringValue(data.bookingTime, data.time, booking.preferredTime, booking.time, booking.startAt)),
+    preferredBranch: firstStringValue(data.preferredBranch, data.branchName, data.branch, data.location),
+    preferredContactMethod: firstStringValue(data.preferredContactMethod, data.contactMethod),
+    status,
+    quantity: String(typeof data.quantity === 'number' && Number.isFinite(data.quantity) ? data.quantity : 1),
+    notes: firstStringValue(data.notes),
+    paymentAmount: firstStringValue(data.paymentAmount, data.amount, data.total, data.price, payment.amount),
+    depositAmount: firstStringValue(data.depositAmount, data.depositPaid, data.amountPaid, payment.depositAmount, payment.amountPaid),
+    paymentMethod: firstStringValue(data.paymentMethod, payment.method),
+    paymentReference: firstStringValue(data.paymentReference, data.reference, payment.reference),
+    paymentStatus: normalizePaymentStatus(data, payment),
+  }
+}
 
 function normalizeDateInput(value: unknown): string {
   const raw = stringValue(value).trim()
@@ -101,33 +156,30 @@ export default function BookingEditor() {
       setLoading(true)
       setErrorMessage(null)
       try {
-        const bookingRef = doc(db, 'stores', storeId, 'integrationBookings', bookingId)
-        const snap = await getDoc(bookingRef)
-        if (!snap.exists()) {
+        const storeBookingRef = doc(db, 'stores', storeId, 'integrationBookings', bookingId)
+        const storeSnap = await getDoc(storeBookingRef)
+        let data: Record<string, unknown> | null = null
+
+        if (storeSnap.exists()) {
+          data = storeSnap.data() as Record<string, unknown>
+        } else {
+          const rootBookingRef = doc(db, 'integrationBookings', bookingId)
+          const rootSnap = await getDoc(rootBookingRef)
+          if (rootSnap.exists()) {
+            data = rootSnap.data() as Record<string, unknown>
+            await setDoc(storeBookingRef, { ...data, storeId }, { merge: true })
+          }
+        }
+
+        if (!data) {
           if (!cancelled) {
             setErrorMessage('Booking not found.')
           }
           return
         }
-        const data = snap.data() as Record<string, unknown>
+
         if (cancelled) return
-        setForm({
-          fullName: stringValue(data.fullName || data.name || data.customerName),
-          phone: stringValue(data.phone || data.customerPhone),
-          email: stringValue(data.email || data.customerEmail),
-          serviceName: stringValue(data.serviceName || data.internalServiceName),
-          serviceId: stringValue(data.serviceId),
-          bookingDate: normalizeDateInput(data.bookingDate || data.date),
-          bookingTime: normalizeTimeInput(data.bookingTime || data.time),
-          preferredBranch: stringValue(data.preferredBranch || data.branchName),
-          preferredContactMethod: stringValue(data.preferredContactMethod || data.contactMethod),
-          status: stringValue(data.status) || 'confirmed',
-          quantity: String(typeof data.quantity === 'number' ? data.quantity : 1),
-          notes: stringValue(data.notes),
-          paymentAmount: stringValue(data.paymentAmount || data.amount || data.total || data.price),
-          depositAmount: stringValue(data.depositAmount || data.depositPaid || data.amountPaid),
-          paymentMethod: stringValue(data.paymentMethod),
-        })
+        setForm(normalizeBookingForm(data))
       } catch (error) {
         console.error('[booking-editor] Failed to load booking', error)
         if (!cancelled) {
@@ -187,6 +239,23 @@ export default function BookingEditor() {
           paymentAmount: form.paymentAmount.trim(),
           depositAmount: form.depositAmount.trim(),
           paymentMethod: form.paymentMethod.trim(),
+          paymentReference: form.paymentReference.trim(),
+          reference: form.paymentReference.trim(),
+          paymentStatus: form.paymentStatus.trim() || 'payment_pending',
+          payment: {
+            amount: form.paymentAmount.trim(),
+            depositAmount: form.depositAmount.trim(),
+            method: form.paymentMethod.trim(),
+            reference: form.paymentReference.trim(),
+            status: form.paymentStatus.trim() || 'payment_pending',
+            confirmed: ['paid', 'confirmed'].includes((form.paymentStatus.trim() || '').toLowerCase()),
+          },
+          booking: {
+            serviceId: form.serviceId.trim(),
+            serviceName: form.serviceName.trim(),
+            preferredDate: normalizeDateInput(form.bookingDate),
+            preferredTime: normalizeTimeInput(form.bookingTime),
+          },
           customer: {
             name: form.fullName.trim(),
             phone: form.phone.trim(),
@@ -206,7 +275,7 @@ export default function BookingEditor() {
           cancelledAt: normalizedStatus === 'cancelled' ? now : null,
           completedAt: normalizedStatus === 'completed' ? now : null,
           updatedAt: serverTimestamp(),
-          createdAt: isCreateMode ? serverTimestamp() : undefined,
+          ...(isCreateMode ? { createdAt: serverTimestamp() } : {}),
         }
       await Promise.all([
         setDoc(doc(db, 'stores', storeId, 'integrationBookings', targetId), payload, { merge: true }),
@@ -222,34 +291,76 @@ export default function BookingEditor() {
     }
   }
 
-  async function handleConfirmPayment() {
+  async function updateExistingBooking(payload: Record<string, unknown>, failureMessage: string) {
     if (!storeId || isCreateMode) return
 
     setSaving(true)
     setErrorMessage(null)
     try {
-      const now = Timestamp.now()
-      const payload = {
-          paymentStatus: 'confirmed',
-          paymentConfirmedAt: now,
-          paymentVerifiedAt: now,
-          paymentVerifiedBy: 'staff_admin',
-          syncStatus: 'not_ready',
-          syncRequestedAt: null,
-          updatedAt: serverTimestamp(),
-        }
       await Promise.all([
         setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), payload, { merge: true }),
         setDoc(doc(db, 'integrationBookings', bookingId), payload, { merge: true }),
       ])
-      navigate('/bookings')
+      setForm(prev => ({
+        ...prev,
+        status: typeof payload.status === 'string' ? payload.status : prev.status,
+        paymentStatus: typeof payload.paymentStatus === 'string' ? payload.paymentStatus : prev.paymentStatus,
+      }))
     } catch (error) {
-      console.error('[booking-editor] Failed to confirm payment', error)
-      setErrorMessage('Unable to confirm payment right now.')
+      console.error('[booking-editor] Failed to update booking', error)
+      setErrorMessage(failureMessage)
     } finally {
       setSaving(false)
     }
   }
+
+  function handleConfirmBooking() {
+    const now = Timestamp.now()
+    return updateExistingBooking({
+      bookingStatus: 'confirmed',
+      status: 'confirmed',
+      confirmedAt: now,
+      confirmedBy: 'staff_admin',
+      syncStatus: 'pending',
+      syncReason: 'booking_confirmed',
+      syncRequestedAt: now,
+      updatedAt: serverTimestamp(),
+    }, 'Unable to confirm booking right now.')
+  }
+
+  function handleConfirmPayment() {
+    const now = Timestamp.now()
+    return updateExistingBooking({
+      paymentStatus: 'paid',
+      paymentConfirmedAt: now,
+      paymentVerifiedAt: now,
+      paymentVerifiedBy: 'staff_admin',
+      updatedAt: serverTimestamp(),
+    }, 'Unable to confirm payment right now.')
+  }
+
+  function handleCancelBooking() {
+    const now = Timestamp.now()
+    return updateExistingBooking({
+      bookingStatus: 'cancelled',
+      status: 'cancelled',
+      cancelledAt: now,
+      syncStatus: 'pending',
+      syncReason: 'booking_cancelled',
+      syncRequestedAt: now,
+      updatedAt: serverTimestamp(),
+    }, 'Unable to cancel booking right now.')
+  }
+
+  function handleCompleteBooking() {
+    return updateExistingBooking({
+      bookingStatus: 'completed',
+      status: 'completed',
+      completedAt: Timestamp.now(),
+      updatedAt: serverTimestamp(),
+    }, 'Unable to complete booking right now.')
+  }
+
 
   return (
     <main className="page booking-editor-page">
@@ -285,6 +396,8 @@ export default function BookingEditor() {
             <label>
               <span>Status</span>
               <select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}>
+                <option value="pending_approval">Pending approval</option>
+                <option value="pending">Pending</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="rescheduled">Rescheduled</option>
                 <option value="completed">Completed</option>
@@ -295,22 +408,38 @@ export default function BookingEditor() {
             <label><span>Payment amount</span><input value={form.paymentAmount} onChange={event => setForm(prev => ({ ...prev, paymentAmount: event.target.value }))} /></label>
             <label><span>Deposit amount</span><input value={form.depositAmount} onChange={event => setForm(prev => ({ ...prev, depositAmount: event.target.value }))} /></label>
             <label><span>Payment method</span><input value={form.paymentMethod} onChange={event => setForm(prev => ({ ...prev, paymentMethod: event.target.value }))} /></label>
+            <label><span>Payment reference</span><input value={form.paymentReference} onChange={event => setForm(prev => ({ ...prev, paymentReference: event.target.value }))} /></label>
+            <label>
+              <span>Payment status</span>
+              <select value={form.paymentStatus} onChange={event => setForm(prev => ({ ...prev, paymentStatus: event.target.value }))}>
+                <option value="payment_pending">Payment pending</option>
+                <option value="paid">Paid</option>
+                <option value="manual_review">Manual review</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </label>
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
 
             <div className="booking-editor-page__actions">
+              {!isCreateMode && (
+                <>
+                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleConfirmBooking()}>
+                    Confirm booking
+                  </button>
+                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleConfirmPayment()}>
+                    Confirm payment / Mark paid
+                  </button>
+                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleCancelBooking()}>
+                    Cancel booking
+                  </button>
+                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleCompleteBooking()}>
+                    Complete booking
+                  </button>
+                </>
+              )}
               <button type="submit" className="button button--primary" disabled={saving}>
                 {saving ? 'Saving…' : 'Save and sync'}
               </button>
-              {!isCreateMode && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={saving}
-                  onClick={() => void handleConfirmPayment()}
-                >
-                  {saving ? 'Saving…' : 'Confirm payment'}
-                </button>
-              )}
             </div>
           </form>
         )}

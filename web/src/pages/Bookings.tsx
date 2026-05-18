@@ -28,12 +28,14 @@ type BookingRecord = {
   bookingId: string | null
   paymentReference: string | null
   duplicateMerged: boolean
+  sourcePath: 'store' | 'root'
 }
 
 function pickString(data: Record<string, unknown>, keys: string[]): string | null {
   for (const key of keys) {
     const value = data[key]
     if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   }
   return null
 }
@@ -93,10 +95,12 @@ export default function Bookings() {
   const [activeTab, setActiveTab] = useState<'needs_action' | 'today' | 'upcoming' | 'all' | 'cancelled'>('needs_action')
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null)
 
-  const hydrateBooking = useCallback((id: string, data: Record<string, unknown>, serviceMap: Map<string, string>) => {
+  const hydrateBooking = useCallback((id: string, data: Record<string, unknown>, serviceMap: Map<string, string>, sourcePath: 'store' | 'root') => {
     const nestedData = data.data && typeof data.data === 'object' ? (data.data as Record<string, unknown>) : {}
     const customer = data.customer && typeof data.customer === 'object' ? (data.customer as Record<string, unknown>) : {}
-    const serviceId = pickString(data, ['serviceId']) ?? '—'
+    const booking = data.booking && typeof data.booking === 'object' ? (data.booking as Record<string, unknown>) : {}
+    const payment = data.payment && typeof data.payment === 'object' ? (data.payment as Record<string, unknown>) : {}
+    const serviceId = pickString(data, ['serviceId']) ?? pickString(booking, ['serviceId']) ?? '—'
     const snapshotA = data.pricingSnapshot && typeof data.pricingSnapshot === 'object' ? (data.pricingSnapshot as Record<string, unknown>) : {}
     const snapshotB = data.pricing_snapshot && typeof data.pricing_snapshot === 'object' ? (data.pricing_snapshot as Record<string, unknown>) : {}
     const pickSnapshotName = (snapshot: Record<string, unknown>) => {
@@ -106,9 +110,9 @@ export default function Bookings() {
       return typeof first.name === 'string' && first.name.trim() ? first.name.trim() : null
     }
     const serviceName =
-      pickString(data, ['serviceName', 'itemName', 'productName']) ??
+      pickString(data, ['serviceName', 'internalServiceName', 'itemName', 'productName']) ??
+      pickString(booking, ['serviceName']) ??
       pickString(nestedData, ['serviceName', 'itemName']) ??
-      pickString(data, ['booking.serviceName']) ??
       pickSnapshotName(snapshotA) ??
       pickSnapshotName(snapshotB) ??
       serviceMap.get(serviceId) ??
@@ -118,25 +122,26 @@ export default function Bookings() {
       id,
       serviceId,
       serviceName,
-      bookingDate: pickString(data, ['bookingDate', 'date']),
-      bookingTime: pickString(data, ['bookingTime', 'time']),
+      bookingDate: pickString(data, ['bookingDate', 'date']) ?? pickString(booking, ['preferredDate', 'date']),
+      bookingTime: pickString(data, ['bookingTime', 'time']) ?? pickString(booking, ['preferredTime', 'time']),
       preferredBranch: pickString(data, ['preferredBranch', 'branch', 'location']),
-      paymentAmount: pickString(data, ['paymentAmount', 'amount', 'total']),
-      paymentMethod: pickString(data, ['paymentMethod']),
+      paymentAmount: pickString(data, ['paymentAmount', 'amount', 'total', 'price']) ?? pickString(payment, ['amount']),
+      paymentMethod: pickString(data, ['paymentMethod']) ?? pickString(payment, ['method']),
       bookingStatus: normalizeStatus(data.bookingStatus ?? data.status),
       status: normalizeStatus(data.status),
       syncStatus: normalizeStatus(data.syncStatus ?? data.sync_status, 'not_ready'),
-      paymentStatus: normalizePaymentStatus(data.paymentStatus),
+      paymentStatus: payment.confirmed === true ? 'paid' : normalizePaymentStatus(data.paymentStatus ?? data.payment_status ?? payment.status),
       customerName: pickString(data, ['customerName', 'name']) ?? pickString(customer, ['name']),
       customerPhone: pickString(data, ['customerPhone', 'phone']) ?? pickString(customer, ['phone']),
       customerEmail: pickString(data, ['customerEmail', 'email']) ?? pickString(customer, ['email']),
       createdAt: pickTimestamp(data, ['createdAt', 'createdAtServer', 'updatedAt', 'syncRequestedAt']),
       updatedAt: pickTimestamp(data, ['updatedAt']),
       sourceLabel: normalizeSource(data.sourceChannel ?? data.source_channel ?? data.source ?? data.channel),
-      reference: pickString(data, ['reference']),
+      reference: pickString(data, ['reference']) ?? pickString(payment, ['reference']),
       bookingId: pickString(data, ['bookingId']),
-      paymentReference: pickString(data, ['paymentReference']),
+      paymentReference: pickString(data, ['paymentReference']) ?? pickString(payment, ['reference']),
       duplicateMerged: false,
+      sourcePath,
     } satisfies BookingRecord
   }, [])
 
@@ -166,11 +171,11 @@ export default function Bookings() {
         `${(b.customerPhone || b.customerEmail || 'unknown').toLowerCase()}|${b.serviceId}|${b.bookingDate || ''}|${b.bookingTime || ''}`
 
       storeSnapshot.forEach(docSnap => {
-        const booking = hydrateBooking(docSnap.id, docSnap.data() as Record<string, unknown>, serviceMap)
+        const booking = hydrateBooking(docSnap.id, docSnap.data() as Record<string, unknown>, serviceMap, 'store')
         merged.set(makeKey(booking), booking)
       })
       rootSnapshot.forEach(docSnap => {
-        const booking = hydrateBooking(docSnap.id, docSnap.data() as Record<string, unknown>, serviceMap)
+        const booking = hydrateBooking(docSnap.id, docSnap.data() as Record<string, unknown>, serviceMap, 'root')
         const key = makeKey(booking)
         if (merged.has(key)) {
           const kept = merged.get(key)
@@ -257,7 +262,7 @@ export default function Bookings() {
 
     {loading ? <p>Loading bookings…</p> : errorMessage ? <p className="form__error">{errorMessage}</p> : <div className="bookings-table-wrap"><table className="table bookings-table"><thead><tr><th>Booking</th><th>Customer</th><th>Schedule</th><th>Source</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead><tbody>{visible.map(b => {
       const acts = actionsFor(b)
-      return <tr key={b.id}><td><strong>{b.serviceName}</strong><small>{b.reference || b.bookingId || 'No reference'}</small>{b.serviceName === 'Service not named' ? <small className="muted">Service ID: {b.serviceId}</small> : null}{b.duplicateMerged ? <span className="bookings-badge">Duplicate records merged</span> : null}</td><td><strong>{b.customerName || 'Customer'}</strong><small>{b.customerPhone || b.customerEmail || 'No contact'}</small></td><td><strong>{b.bookingDate || 'Date not set'}</strong><small>{b.bookingTime || 'Time not set'}</small><small>{b.preferredBranch || 'Main branch'}</small></td><td><span className="bookings-badge">{b.sourceLabel}</span></td><td><strong>{b.paymentAmount || '—'}</strong><small>{paymentLabel(b.paymentStatus)}</small><small>{b.paymentMethod || 'Method not set'}</small></td><td><span className={`bookings-page__status bookings-page__status--${b.bookingStatus}`}>{statusLabel(b.bookingStatus)}</span><small>{b.paymentStatus === 'paid' && b.bookingStatus !== 'confirmed' ? 'Paid - waiting for store confirmation' : ''}</small><small>{b.syncStatus === 'pending' ? 'Sync pending' : b.syncStatus === 'synced' ? 'Synced' : ''}</small></td><td><div className="bookings-page__row-actions"><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link>{acts.includes('confirm') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'confirmed',status:'confirmed',confirmedAt:Timestamp.now(),confirmedBy:'staff_admin',syncStatus:'pending',syncReason:'booking_confirmed',syncRequestedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Confirm</button>}{acts.includes('mark_paid') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{paymentStatus:'paid'})} disabled={updatingBookingId===b.id}>Mark paid</button>}{acts.includes('reschedule') && <Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Reschedule</Link>}{acts.includes('complete') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'completed',status:'completed',completedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Complete</button>}{acts.includes('cancel') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'cancelled',status:'cancelled',cancelledAt:Timestamp.now(),syncStatus:'pending',syncReason:'booking_cancelled',syncRequestedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Cancel</button>}</div></td></tr>
+      return <tr key={b.id}><td><strong>{b.serviceName}</strong><small>{b.reference || b.bookingId || 'No reference'}</small>{b.serviceName === 'Service not named' ? <small className="muted">Service ID: {b.serviceId}</small> : null}{b.duplicateMerged ? <span className="bookings-badge">Duplicate records merged</span> : null}</td><td><strong>{b.customerName || 'Customer'}</strong><small>{b.customerPhone || b.customerEmail || 'No contact'}</small></td><td><strong>{b.bookingDate || 'Date not set'}</strong><small>{b.bookingTime || 'Time not set'}</small><small>{b.preferredBranch || 'Main branch'}</small></td><td><span className="bookings-badge">{b.sourceLabel}</span><small>{b.sourcePath === 'root' ? 'Root booking' : 'Store booking'}</small></td><td><strong>{b.paymentAmount || '—'}</strong><small>{paymentLabel(b.paymentStatus)}</small><small>{b.paymentMethod || 'Method not set'}</small></td><td><span className={`bookings-page__status bookings-page__status--${b.bookingStatus}`}>{statusLabel(b.bookingStatus)}</span><small>{b.paymentStatus === 'paid' && b.bookingStatus !== 'confirmed' ? 'Paid - waiting for store confirmation' : ''}</small><small>{b.syncStatus === 'pending' ? 'Sync pending' : b.syncStatus === 'synced' ? 'Synced' : ''}</small></td><td><div className="bookings-page__row-actions"><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link>{acts.includes('confirm') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'confirmed',status:'confirmed',confirmedAt:Timestamp.now(),confirmedBy:'staff_admin',syncStatus:'pending',syncReason:'booking_confirmed',syncRequestedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Confirm</button>}{acts.includes('mark_paid') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{paymentStatus:'paid'})} disabled={updatingBookingId===b.id}>Mark paid</button>}{acts.includes('reschedule') && <Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Reschedule</Link>}{acts.includes('complete') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'completed',status:'completed',completedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Complete</button>}{acts.includes('cancel') && <button className="btn btn-secondary" onClick={() => void updateBooking(b,{bookingStatus:'cancelled',status:'cancelled',cancelledAt:Timestamp.now(),syncStatus:'pending',syncReason:'booking_cancelled',syncRequestedAt:Timestamp.now()})} disabled={updatingBookingId===b.id}>Cancel</button>}</div></td></tr>
     })}</tbody></table><div className="bookings-cards">{visible.map(b => <article key={`${b.id}-card`} className="bookings-card"><h3>{b.serviceName}</h3><p>{b.customerName || 'Customer'} • {b.bookingDate || 'Date not set'} {b.bookingTime || ''}</p><p>{statusLabel(b.status)} • {paymentLabel(b.paymentStatus)}</p><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link></article>)}</div></div>}
   </section></main>
 }
