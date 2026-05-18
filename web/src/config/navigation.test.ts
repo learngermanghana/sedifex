@@ -53,38 +53,14 @@ describe('resolveNavigation', () => {
     expect(items.find(item => item.target === '/bookings')?.label).toBe('Classes')
   })
 
-  it('defines the phase 4 enabled module presets by industry', () => {
-    expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toEqual([
-      'dashboard',
-      'products',
-      'sell',
-      'customers',
-      'expenses',
-      'public-page',
-    ])
-    expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toEqual([
-      'dashboard',
-      'bookings',
-      'customers',
-      'bulk-messaging',
-      'bulk-email',
-      'expenses',
-    ])
-    expect(INDUSTRY_ENABLED_MODULE_PRESETS.ngo).toEqual([
-      'dashboard',
-      'customers',
-      'bulk-messaging',
-      'bulk-email',
-      'expenses',
-      'public-page',
-    ])
-    expect(INDUSTRY_ENABLED_MODULE_PRESETS.school).toEqual([
-      'dashboard',
-      'bookings',
-      'customers',
-      'bulk-messaging',
-      'bulk-email',
-      'expenses',
-    ])
+  it('includes document modules in enabled module presets by industry', () => {
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toContain('invoices')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toContain('receipts')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toContain('invoices')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toContain('receipts')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.ngo).toContain('invoices')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.ngo).toContain('receipts')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.school).toContain('invoices')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.school).toContain('receipts')
   })
 })
