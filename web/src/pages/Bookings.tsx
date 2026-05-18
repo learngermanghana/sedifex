@@ -1,19 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   collection,
-  deleteDoc,
   doc,
   setDoc,
   getDocs,
-  limit,
-  orderBy,
   query,
-  startAfter,
   Timestamp,
-  updateDoc,
+  getDoc,
   where,
-  type DocumentData,
-  type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
 import { db } from '../firebase'
@@ -53,6 +47,9 @@ type BookingRecord = {
   paymentConfirmedAt: Date | null
   paymentVerifiedAt: Date | null
   paymentVerifiedBy: string | null
+  sourceLabel: string
+  reference: string | null
+  bookingId: string | null
 }
 
 type ServiceRecord = {
@@ -60,7 +57,6 @@ type ServiceRecord = {
   name: string
 }
 
-const PAGE_SIZE = 25
 const STATUS_ALL = 'all'
 const SERVICE_ALL = 'all'
 
@@ -99,6 +95,15 @@ function paymentStatusLabel(status: string): string {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function normalizeSource(raw: unknown): string {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  if (value.includes('market')) return 'Sedifex Market'
+  if (value.includes('website')) return 'Client Website'
+  if (value.includes('manual')) return 'Manual'
+  if (value.includes('custom')) return 'Custom Page'
+  return 'Integration'
 }
 
 function dateToTimestamp(date: string, useDayEnd = false): Timestamp {
@@ -153,14 +158,9 @@ export default function Bookings() {
   const [searchTerm, setSearchTerm] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [lastCursor, setLastCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null)
-  const [cursorStack, setCursorStack] = useState<Array<QueryDocumentSnapshot<DocumentData> | null>>([])
-  const [hasNextPage, setHasNextPage] = useState(false)
-  const [pageNumber, setPageNumber] = useState(1)
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null)
 
-  const hydrateBooking = useCallback((docSnap: QueryDocumentSnapshot<DocumentData>, serviceMap: Map<string, string>) => {
-    const data = docSnap.data() as Record<string, unknown>
+  const hydrateBooking = useCallback((id: string, data: Record<string, unknown>, serviceMap: Map<string, string>) => {
     const customer =
       data.customer && typeof data.customer === 'object'
         ? (data.customer as Record<string, unknown>)
@@ -196,7 +196,7 @@ export default function Bookings() {
         : null
 
     return {
-      id: docSnap.id,
+      id,
       bookingName,
       bookingPhone,
       bookingEmail,
@@ -234,6 +234,9 @@ export default function Bookings() {
       paymentConfirmedAt: paymentConfirmedAtValue,
       paymentVerifiedAt: paymentVerifiedAtValue,
       paymentVerifiedBy: pickString(data, ['paymentVerifiedBy']),
+      sourceLabel: normalizeSource(data.sourceChannel ?? data.source_channel ?? data.source ?? data.channel),
+      reference: pickString(data, ['reference']),
+      bookingId: pickString(data, ['bookingId']),
     } satisfies BookingRecord
   }, [])
 
@@ -261,39 +264,8 @@ export default function Bookings() {
     return serviceMap
   }, [])
 
-  const buildBookingsQuery = useCallback(
-    (activeStoreId: string, serviceFilterValue: string, statusFilterValue: string, startAfterDoc: QueryDocumentSnapshot<DocumentData> | null) => {
-      const queryConstraints: Array<
-        ReturnType<typeof where> | ReturnType<typeof orderBy> | ReturnType<typeof limit> | ReturnType<typeof startAfter>
-      > = [orderBy('createdAt', 'desc'), limit(PAGE_SIZE + 1)]
-
-      if (statusFilterValue !== STATUS_ALL) {
-        queryConstraints.unshift(where('status', '==', statusFilterValue))
-      }
-
-      if (serviceFilterValue !== SERVICE_ALL) {
-        queryConstraints.unshift(where('serviceId', '==', serviceFilterValue))
-      }
-
-      if (startDate) {
-        queryConstraints.unshift(where('createdAt', '>=', dateToTimestamp(startDate)))
-      }
-
-      if (endDate) {
-        queryConstraints.unshift(where('createdAt', '<=', dateToTimestamp(endDate, true)))
-      }
-
-      if (startAfterDoc) {
-        queryConstraints.push(startAfter(startAfterDoc))
-      }
-
-      return query(collection(db, 'stores', activeStoreId, 'integrationBookings'), ...queryConstraints)
-    },
-    [endDate, startDate],
-  )
-
   const loadBookingsPage = useCallback(
-    async (startAfterDoc: QueryDocumentSnapshot<DocumentData> | null, nextPageNumber: number, nextCursorStack: Array<QueryDocumentSnapshot<DocumentData> | null>) => {
+    async () => {
       if (!storeId) return
 
       setLoading(true)
@@ -302,18 +274,22 @@ export default function Bookings() {
 
       try {
         const serviceMap = await loadServices(storeId)
-        const bookingsQuery = buildBookingsQuery(storeId, serviceFilter, statusFilter, startAfterDoc)
-        const snapshot = await getDocs(bookingsQuery)
-        const docs = snapshot.docs
-        const hasMore = docs.length > PAGE_SIZE
-        const pageDocs = hasMore ? docs.slice(0, PAGE_SIZE) : docs
-        const nextLastCursor = pageDocs.length ? pageDocs[pageDocs.length - 1] : null
-
-        setBookings(pageDocs.map(docSnap => hydrateBooking(docSnap, serviceMap)))
-        setLastCursor(nextLastCursor)
-        setHasNextPage(hasMore)
-        setCursorStack(nextCursorStack)
-        setPageNumber(nextPageNumber)
+        const [storeSnapshot, rootSnapshot] = await Promise.all([
+          getDocs(collection(db, 'stores', storeId, 'integrationBookings')),
+          getDocs(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId))),
+        ])
+        const merged = new Map<string, BookingRecord>()
+        storeSnapshot.docs.forEach(docSnap => {
+          const booking = hydrateBooking(docSnap.id, docSnap.data() as Record<string, unknown>, serviceMap)
+          const dedupeKey = booking.bookingId ?? booking.reference ?? booking.id
+          merged.set(dedupeKey, booking)
+        })
+        rootSnapshot.docs.forEach(docSnap => {
+          const booking = hydrateBooking(docSnap.id, docSnap.data() as Record<string, unknown>, serviceMap)
+          const dedupeKey = booking.bookingId ?? booking.reference ?? booking.id
+          if (!merged.has(dedupeKey)) merged.set(dedupeKey, booking)
+        })
+        setBookings(Array.from(merged.values()).sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)))
       } catch (error) {
         console.error('[bookings] Failed to load bookings', error)
         const diagCode = `BK-${Date.now()}-${Math.random().toString(16).slice(2, 8).toUpperCase()}`
@@ -323,7 +299,7 @@ export default function Bookings() {
         setLoading(false)
       }
     },
-    [buildBookingsQuery, hydrateBooking, loadServices, serviceFilter, statusFilter, storeId],
+    [hydrateBooking, loadServices, storeId],
   )
 
   useEffect(() => {
@@ -335,37 +311,24 @@ export default function Bookings() {
       return
     }
 
-    void loadBookingsPage(null, 1, [])
+    void loadBookingsPage()
   }, [loadBookingsPage, storeId])
 
-  const handleNextPage = useCallback(() => {
-    if (!hasNextPage || !lastCursor) return
-    const nextStack = [...cursorStack, lastCursor]
-    void loadBookingsPage(lastCursor, pageNumber + 1, nextStack)
-  }, [cursorStack, hasNextPage, lastCursor, loadBookingsPage, pageNumber])
-
-  const handlePreviousPage = useCallback(() => {
-    if (pageNumber <= 1) return
-    const previousStack = cursorStack.slice(0, -1)
-    const previousCursor = previousStack.length ? previousStack[previousStack.length - 1] : null
-    void loadBookingsPage(previousCursor, pageNumber - 1, previousStack)
-  }, [cursorStack, loadBookingsPage, pageNumber])
-
   const handleRetry = useCallback(() => {
-    void loadBookingsPage(pageNumber <= 1 ? null : cursorStack[cursorStack.length - 1] ?? null, pageNumber, cursorStack)
-  }, [cursorStack, loadBookingsPage, pageNumber])
+    void loadBookingsPage()
+  }, [loadBookingsPage])
 
   const handleStatusUpdate = useCallback(
     async (bookingId: string, nextStatus: string) => {
       if (!storeId) return
       setUpdatingBookingId(bookingId)
       try {
-        await updateDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), {
+        const updates = {
           status: nextStatus,
-          syncStatus: 'pending',
-          syncRequestedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
-        })
+        }
+        await setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), updates, { merge: true })
+        await setDoc(doc(db, 'integrationBookings', bookingId), updates, { merge: true })
 
         setBookings(previous =>
           previous.map(booking =>
@@ -390,26 +353,17 @@ export default function Bookings() {
   const handleDeleteBooking = useCallback(
     async (bookingId: string) => {
       if (!storeId) return
-      const shouldDelete = window.confirm('Delete this booking? This cannot be undone.')
+      const shouldDelete = window.confirm('Cancel this booking?')
       if (!shouldDelete) return
 
       setUpdatingBookingId(bookingId)
       setErrorMessage(null)
 
       try {
-        const bookingRef = doc(db, 'stores', storeId, 'integrationBookings', bookingId)
-        await setDoc(
-          doc(db, 'stores', storeId, 'integrationBookingDeletes', bookingId),
-          {
-            bookingId,
-            storeId,
-            deletedAt: Timestamp.now(),
-          },
-          { merge: true },
-        )
-        await deleteDoc(bookingRef)
-
-        setBookings(previous => previous.filter(booking => booking.id !== bookingId))
+        const payload = { status: 'cancelled', deletedAt: Timestamp.now(), deletedBy: 'staff_admin', updatedAt: Timestamp.now() }
+        await setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), payload, { merge: true })
+        await setDoc(doc(db, 'integrationBookings', bookingId), payload, { merge: true })
+        setBookings(previous => previous.map(booking => (booking.id === bookingId ? { ...booking, status: 'cancelled' } : booking)))
       } catch (error) {
         console.error('[bookings] Failed to delete booking', error)
         setErrorMessage('Delete failed. Please retry.')
@@ -450,7 +404,8 @@ export default function Bookings() {
           }
         }
 
-        await updateDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), updates)
+        await setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), updates, { merge: true })
+        await setDoc(doc(db, 'integrationBookings', bookingId), updates, { merge: true })
         setBookings(previous =>
           previous.map(booking =>
             booking.id === bookingId
@@ -486,15 +441,23 @@ export default function Bookings() {
 
   const filteredBookings = useMemo(() => {
     const queryText = searchTerm.trim().toLowerCase()
-    if (!queryText) return bookings
-
     return bookings.filter(booking => {
+      if (statusFilter !== STATUS_ALL && booking.status !== statusFilter && booking.paymentStatus !== statusFilter) return false
+      if (serviceFilter !== SERVICE_ALL && booking.serviceId !== serviceFilter) return false
+      if (startDate && (!booking.createdAt || booking.createdAt < dateToTimestamp(startDate).toDate())) return false
+      if (endDate && (!booking.createdAt || booking.createdAt > dateToTimestamp(endDate, true).toDate())) return false
+      if (!queryText) return true
       const fields = [booking.customerName, booking.customerPhone, booking.customerEmail]
       return fields.some(value => typeof value === 'string' && value.toLowerCase().includes(queryText))
     })
-  }, [bookings, searchTerm])
+  }, [bookings, endDate, searchTerm, serviceFilter, startDate, statusFilter])
 
   const confirmedCount = useMemo(() => bookings.filter(booking => booking.status === 'confirmed').length, [bookings])
+  const today = new Date().toDateString()
+  const newToday = bookings.filter(b => b.createdAt?.toDateString() === today).length
+  const pendingApproval = bookings.filter(b => b.status === 'pending').length
+  const confirmedToday = bookings.filter(b => b.status === 'confirmed' && b.createdAt?.toDateString() === today).length
+  const paymentPending = bookings.filter(b => b.paymentStatus.includes('pending')).length
 
   return (
     <main className="page bookings-page">
@@ -521,10 +484,14 @@ export default function Bookings() {
             <span>Status</span>
             <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
               <option value={STATUS_ALL}>All statuses</option>
+              <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="rescheduled">Rescheduled</option>
               <option value="cancelled">Cancelled</option>
               <option value="completed">Completed</option>
+              <option value="paid">Paid</option>
+              <option value="payment_pending">Payment pending</option>
+              <option value="manual_review">Manual review</option>
             </select>
           </label>
           <label>
@@ -555,7 +522,7 @@ export default function Bookings() {
               onChange={event => setSearchTerm(event.target.value)}
             />
           </label>
-          <button className="btn btn-secondary" type="button" onClick={() => void loadBookingsPage(null, 1, [])}>
+          <button className="btn btn-secondary" type="button" onClick={() => void loadBookingsPage()}>
             Apply filters
           </button>
         </div>
@@ -573,7 +540,7 @@ export default function Bookings() {
         {!loading && !errorMessage && (
           <>
             <p className="bookings-page__summary">
-              Total bookings: <strong>{bookings.length}</strong> • Confirmed: <strong>{confirmedCount}</strong> • Page: <strong>{pageNumber}</strong>
+              Total bookings: <strong>{bookings.length}</strong> • Confirmed: <strong>{confirmedCount}</strong> • New today: <strong>{newToday}</strong> • Pending approval: <strong>{pendingApproval}</strong> • Confirmed today: <strong>{confirmedToday}</strong> • Payment pending: <strong>{paymentPending}</strong>
             </p>
             {filteredBookings.length ? (
               <>
@@ -583,11 +550,12 @@ export default function Bookings() {
                     <thead>
                       <tr>
                         <th>Created</th>
+                        <th>Source</th>
                         <th>Service</th>
                         <th>Customer</th>
-                        <th>Qty</th>
-                        <th>Booking</th>
+                        <th>Booking date/time</th>
                         <th>Payment</th>
+                        <th>Status</th>
                         <th>Amount</th>
                         <th>Actions</th>
                       </tr>
@@ -599,23 +567,22 @@ export default function Bookings() {
                           className="bookings-page__row"
                         >
                           <td>{formatDate(booking.createdAt)}</td>
+                          <td>{booking.sourceLabel}</td>
                           <td>{booking.serviceName || booking.serviceId}</td>
                           <td>
                             {[booking.customerName, booking.customerPhone, booking.customerEmail]
                               .filter(Boolean)
                               .join(' • ') || '—'}
                           </td>
-                          <td>{booking.quantity}</td>
                           <td>
-                            <span className={`bookings-page__status bookings-page__status--${booking.status}`}>
-                              {statusLabel(booking.status)}
-                            </span>
+                            {[booking.bookingDate, booking.bookingTime].filter(Boolean).join(' ') || '—'}
                           </td>
                           <td>
                             <span className={`bookings-page__status bookings-page__status--payment-${booking.paymentStatus}`}>
                               {paymentStatusLabel(booking.paymentStatus)}
                             </span>
                           </td>
+                          <td><span className={`bookings-page__status bookings-page__status--${booking.status}`}>{statusLabel(booking.status)}</span></td>
                           <td>{booking.paymentAmount ?? booking.depositAmount ?? '—'}</td>
                           <td>
                             <div className="bookings-page__row-actions">
@@ -635,14 +602,6 @@ export default function Bookings() {
                     </tbody>
                   </table>
                 </div>
-                </div>
-                <div className="bookings-page__pagination">
-                  <button className="btn btn-secondary" type="button" disabled={pageNumber <= 1} onClick={handlePreviousPage}>
-                    Previous
-                  </button>
-                  <button className="btn btn-secondary" type="button" disabled={!hasNextPage} onClick={handleNextPage}>
-                    Next
-                  </button>
                 </div>
               </>
             ) : (

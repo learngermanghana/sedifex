@@ -22,6 +22,9 @@ type BookingRequestBody = {
   serviceName?: unknown
   attributes?: unknown
   status?: unknown
+  source?: unknown
+  sourceChannel?: unknown
+  source_channel?: unknown
 }
 
 function clean(value: unknown, max = 500) {
@@ -179,6 +182,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     const requestedStatus = clean(body.status, 80).toLowerCase()
     const status = requestedStatus || 'pending'
     const paymentAmount = toNumber(body.paymentAmount, 0)
+    const sourceChannel = clean(body.sourceChannel ?? body.source_channel ?? body.source, 120) || 'integration'
     const attributes = asObject(body.attributes)
     const customer = asObject(body.customer)
     const customerName = clean(customer.name, 240)
@@ -248,10 +252,14 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
       branchLocationName: branchLocationName || null,
       paymentMethod: paymentMethod || null,
       paymentAmount,
+      paymentStatus: 'pending',
       attributes,
       status,
       source: 'integration',
+      sourceChannel,
+      source_channel: sourceChannel,
       channel: 'BuySedifex',
+      recordType: 'service_booking',
       createdAt: now,
       updatedAt: now,
     }
