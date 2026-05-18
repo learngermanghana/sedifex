@@ -208,8 +208,6 @@ function toPublicProduct(productDoc, storeMetaByStoreId, existingDocData = null)
 
   const category = normalizeCategory(data.category)
 
-  const publication = normalizePublicationFields(data, { fallbackCreatedAt: existingDocData?.createdAt, fallbackUpdatedAt: existingDocData?.updatedAt })
-
   return {
     sourceProductId: productDoc.id,
     storeId,
