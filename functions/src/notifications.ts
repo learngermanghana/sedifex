@@ -18,7 +18,6 @@ const REQUIRED_STORE_ALERT_EVENTS = new Set(['order.created', 'order.confirmed',
 function text(value: unknown, max = 500) { return typeof value === 'string' ? value.trim().slice(0, max) : '' }
 function email(value: unknown) { const cleaned = text(value, 220).toLowerCase(); return cleaned.includes('@') ? cleaned : '' }
 function numberValue(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null }
-function minorToMajor(value: unknown) { const amountMinor = numberValue(value); return amountMinor === null ? null : amountMinor / 100 }
 function getRecord(value: unknown) { return value && typeof value === 'object' ? value as Record<string, unknown> : {} }
 function getNestedRecord(record: Record<string, unknown>, key: string) { return getRecord(record[key]) }
 function titleCase(value: string) { return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()) }
@@ -50,23 +49,15 @@ function detailRows(payload: NotificationPayload, itemName: string) {
   const rows: Array<[string, string | null]> = []
   const customer = payload.customer ?? {}
   const payment = payload.payment ?? {}
-  const data = payload.data ?? {}
-  const paymentMethod = text(payment.method, 80)
-  const paymentMethodNormalized = paymentMethod.toLowerCase()
-  const isMasterChildMethod = paymentMethodNormalized === 'online_checkout_master_child'
   rows.push(['Reference', text(payload.reference ?? payment.reference, 220) || null])
-  if (text(data.masterReference, 220)) rows.push(['Master reference', text(data.masterReference, 220)])
   rows.push(['Item / service', itemName || null])
   rows.push(['Customer', text(customer.name, 180) || null])
   rows.push(['Phone', text(customer.phone, 80) || null])
   rows.push(['Email', email(customer.email) || null])
   rows.push(['Amount', formatMoney(payment)])
   rows.push(['Payment', text(payment.status, 80) ? titleCase(text(payment.status, 80)) : null])
-  rows.push(['Method', isMasterChildMethod ? 'Sedifex Market multi-store checkout' : (paymentMethod ? titleCase(paymentMethod) : null)])
-  if (isMasterChildMethod && numberValue(data.merchantCount) && numberValue(payment.amount) !== null) {
-    rows.push(['Note', `Customer paid one Sedifex Market checkout containing ${Number(data.merchantCount)} stores.`])
-    rows.push(['Store amount', `${payment.currency || 'GHS'} ${Number(payment.amount).toFixed(2)}`])
-  }
+  rows.push(['Method', text(payment.method, 80) ? titleCase(text(payment.method, 80)) : null])
+  const data = payload.data ?? {}
   for (const key of ['bookingDate', 'bookingTime', 'preferredClassTime', 'branch', 'location', 'skill', 'availability', 'notes', 'needSummary']) {
     const value = text(data[key], 1000)
     if (value) rows.push([titleCase(key), value])
@@ -209,34 +200,9 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
 export const initializeStoreNotificationDefaults = functions.firestore.document('stores/{storeId}').onWrite(async (_change, context) => { const storeId = text(context.params.storeId, 180); if (storeId) await ensureNotificationSettings(storeId) })
 function isSettled(value: unknown) { const normalized = text(value, 80).toLowerCase().replace(/\s+/g, '_'); return ['paid', 'success', 'confirmed', 'captured', 'completed'].includes(normalized) }
 function hasAlreadySettled(before: Record<string, unknown> | null) { if (!before) return false; return isSettled(before.paymentStatus) || isSettled(before.payment_status) || isSettled(before.orderStatus) || isSettled(before.order_status) || isSettled(before.status) }
-function moneyAmountFromOrder(data: Record<string, unknown>) {
-  const orderScope = text(data.orderScope, 80)
-  const paymentMode = text(data.paymentCollectionMode, 120).toLowerCase()
-  const pricingSnapshot = getNestedRecord(data, 'pricingSnapshot')
-  const pricingSnapshotSnake = getNestedRecord(data, 'pricing_snapshot')
-  const isMasterChild = orderScope === 'multi_merchant_child' || paymentMode.includes('master_child')
-  if (isMasterChild) {
-    return numberValue(data.amount) ?? minorToMajor(data.amountMinor) ?? minorToMajor(pricingSnapshot.final_total) ?? minorToMajor(pricingSnapshot.pre_processing_total) ?? minorToMajor(pricingSnapshotSnake.final_total) ?? minorToMajor(pricingSnapshotSnake.pre_processing_total) ?? numberValue(data.amountPaid)
-  }
-  return numberValue(data.amountPaid ?? data.amount)
-}
-function paymentFromOrder(data: Record<string, unknown>): PaymentInfo { return { status: text(data.paymentStatus ?? data.payment_status ?? data.orderStatus ?? data.order_status ?? data.status, 80) || null, amount: moneyAmountFromOrder(data), currency: text(data.currency, 20) || 'GHS', method: text(data.paymentCollectionMode ?? data.paymentMethod ?? data.sourceChannel, 80) || null, reference: text(data.paymentReference ?? data.payment_reference ?? data.paystackReference ?? data.reference, 220) || null } }
+function paymentFromOrder(data: Record<string, unknown>): PaymentInfo { return { status: text(data.paymentStatus ?? data.payment_status ?? data.orderStatus ?? data.order_status ?? data.status, 80) || null, amount: numberValue(data.amountPaid ?? data.amount), currency: text(data.currency, 20) || 'GHS', method: text(data.paymentCollectionMode ?? data.paymentMethod ?? data.sourceChannel, 80) || null, reference: text(data.paymentReference ?? data.payment_reference ?? data.paystackReference ?? data.reference, 220) || null } }
 function customerFromRecord(data: Record<string, unknown>): CustomerInfo { const customer = getNestedRecord(data, 'customer'); const person = getNestedRecord(data, 'person'); return { name: text(customer.name ?? person.name ?? data.customerName ?? data.name, 160) || null, email: email(customer.email ?? person.email ?? data.customerEmail ?? data.email) || null, phone: text(customer.phone ?? person.phone ?? data.customerPhone ?? data.phone, 80) || null } }
-function orderData(data: Record<string, unknown>) {
-  const firstItem = Array.isArray(data.items) && data.items.length ? getRecord(data.items[0]) : {}
-  const nestedData = getNestedRecord(data, 'data')
-  const pricingSnapshot = getNestedRecord(data, 'pricingSnapshot')
-  const pricingSnapshotSnake = getNestedRecord(data, 'pricing_snapshot')
-  const pricingItems = Array.isArray(pricingSnapshot.items) ? pricingSnapshot.items : (Array.isArray(pricingSnapshotSnake.items) ? pricingSnapshotSnake.items : [])
-  const pricingNames = pricingItems.map(item => getFirstText(getRecord(item), ['name', 'productName', 'itemName', 'title'], 220)).filter(Boolean)
-  const pricedItemName = pricingNames.length > 1 ? `${pricingNames[0]} + ${pricingNames.length - 1} more items` : (pricingNames[0] || '')
-  return {
-    itemName: getFirstText(firstItem, ['name', 'title', 'serviceName', 'productName'], 220) || pricedItemName || getFirstText(nestedData, ['itemName', 'serviceName', 'course'], 220) || getFirstText(data, ['itemName', 'serviceName', 'productName', 'sourceLabel'], 220),
-    notes: getFirstText(nestedData, ['notes', 'message'], 1000) || getFirstText(data, ['notes'], 1000),
-    masterReference: text(data.masterReference ?? data.parentReference ?? data.paymentReference ?? data.payment_reference, 220) || '',
-    merchantCount: numberValue(data.marketplaceStoreCount ?? data.storeCount),
-  }
-}
+function orderData(data: Record<string, unknown>) { const firstItem = Array.isArray(data.items) && data.items.length ? getRecord(data.items[0]) : {}; const nestedData = getNestedRecord(data, 'data'); return { itemName: getFirstText(firstItem, ['name', 'title', 'serviceName', 'productName'], 220) || getFirstText(nestedData, ['itemName', 'serviceName', 'course'], 220) || getFirstText(data, ['itemName', 'serviceName', 'productName', 'sourceLabel'], 220), notes: getFirstText(nestedData, ['notes', 'message'], 1000) || getFirstText(data, ['notes'], 1000) } }
 
 export const notifyIntegrationOrderStatus = functions.firestore.document('integrationOrders/{reference}').onWrite(async (change, context) => {
   if (!change.after.exists) return
@@ -245,7 +211,7 @@ export const notifyIntegrationOrderStatus = functions.firestore.document('integr
   const storeId = text(data.storeId ?? data.merchantId, 180)
   if (!storeId) return
   const payment = paymentFromOrder(data)
-  const reference = text(data.reference ?? data.paymentReference ?? data.payment_reference ?? data.clientOrderId ?? data.client_order_id, 220) || payment.reference || text(context.params.reference, 220)
+  const reference = text(context.params.reference, 220) || payment.reference
   const orderStatus = text(data.orderStatus ?? data.order_status ?? data.status, 80).toLowerCase()
   const paymentMode = text(data.paymentCollectionMode ?? data.paymentMethod, 80).toLowerCase()
   if ((paymentMode.includes('delivery') || orderStatus.includes('cash_collection')) && !change.before.exists) {
