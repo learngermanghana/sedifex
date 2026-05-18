@@ -73,6 +73,61 @@ function getSubaccount(body: CheckoutBody) {
   )
 }
 
+
+function getRecord(value: unknown) {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function getFirstText(record: Record<string, unknown>, keys: string[], max = 220) {
+  for (const key of keys) {
+    const value = clean(record[key], max)
+    if (value) return value
+  }
+  return ''
+}
+
+function getSnapshotItems(body: CheckoutBody) {
+  const snapshot = getRecord(body.pricing_snapshot)
+  return Array.isArray(snapshot.items) ? snapshot.items : []
+}
+
+function enrichCheckoutItems(body: CheckoutBody) {
+  const rawItems = Array.isArray(body.items) ? body.items : []
+  const snapshotItems = getSnapshotItems(body).map(getRecord)
+  const metadata = getRecord(body.metadata)
+
+  const enrichedItems = rawItems.map((item) => {
+    const base = getRecord(item)
+    const itemId = clean(base.item_id ?? base.itemId, 220)
+    const snapshotMatch = snapshotItems.find(snapshotItem => clean(snapshotItem.item_id ?? snapshotItem.itemId, 220) === itemId)
+    const name = getFirstText(base, ['name', 'title', 'itemName', 'serviceName', 'productName'])
+      || getFirstText(snapshotMatch ?? {}, ['name', 'title', 'itemName', 'serviceName', 'productName'])
+    const itemName = getFirstText(base, ['itemName']) || getFirstText(snapshotMatch ?? {}, ['itemName'])
+    const productName = getFirstText(base, ['productName']) || getFirstText(snapshotMatch ?? {}, ['productName'])
+    const serviceName = getFirstText(base, ['serviceName']) || getFirstText(snapshotMatch ?? {}, ['serviceName'])
+    return {
+      ...base,
+      ...(name ? { name } : {}),
+      ...(itemName ? { itemName } : {}),
+      ...(productName ? { productName } : {}),
+      ...(serviceName ? { serviceName } : {}),
+    }
+  })
+
+  const firstItem = enrichedItems.length ? getRecord(enrichedItems[0]) : {}
+  const firstSnapshotItem = snapshotItems.length ? snapshotItems[0] : {}
+  const itemName = getFirstText(firstItem, ['itemName', 'name', 'title'])
+    || getFirstText(firstSnapshotItem, ['itemName', 'name', 'title'])
+    || getFirstText(metadata, ['itemName'])
+  const productName = getFirstText(firstItem, ['productName'])
+    || getFirstText(firstSnapshotItem, ['productName'])
+    || getFirstText(metadata, ['productName'])
+  const serviceName = getFirstText(firstItem, ['serviceName'])
+    || getFirstText(firstSnapshotItem, ['serviceName'])
+    || getFirstText(metadata, ['serviceName'])
+
+  return { enrichedItems, itemName, productName, serviceName }
+}
 function getTransactionChargeMinor(body: CheckoutBody) {
   const split = body.splitPayment && typeof body.splitPayment === 'object' ? body.splitPayment as Record<string, unknown> : {}
   const value = numberValue(split.transactionChargeMinor ?? split.transaction_charge ?? split.transactionCharge)
@@ -642,6 +697,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
 
     const paystack = await initializePaystack(paystackPayload)
     const authorizationUrl = paystack.data?.authorization_url ?? null
+    const { enrichedItems, itemName, productName, serviceName } = enrichCheckoutItems(body)
     const now = admin.firestore.FieldValue.serverTimestamp()
     const record = {
       storeId,
@@ -656,7 +712,11 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       amount: amountMajor,
       amountMinor: Math.round(amountMajor * 100),
       currency,
-      items: Array.isArray(body.items) ? body.items : [],
+      itemName: itemName || null,
+      productName: productName || null,
+      serviceName: serviceName || null,
+      data: { itemName: itemName || null, productName: productName || null, serviceName: serviceName || null },
+      items: enrichedItems,
       pricingSnapshot: body.pricing_snapshot ?? null,
       marketplaceFees: body.marketplace_fees ?? null,
       paymentProvider: 'paystack',
