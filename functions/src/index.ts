@@ -39,6 +39,7 @@ export {
 } from './googleAds'
 export * from './googleShopping'
 export * from './reporting'
+export * from './publicCatalogSync'
 
 /**
  * SINGLE FIRESTORE INSTANCE

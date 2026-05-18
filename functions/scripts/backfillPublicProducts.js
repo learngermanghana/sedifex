@@ -89,8 +89,6 @@ function pickStoreCity(storeData) {
 
 function buildStorePublicMeta(storeData) {
   const promoSlug = toTrimmedStringOrNull(storeData.promoSlug)
-  const publication = normalizePublicationFields(data, { fallbackCreatedAt: existingDocData?.createdAt, fallbackUpdatedAt: existingDocData?.updatedAt })
-
   return {
     storeName: toTrimmedStringOrNull(storeData.displayName) || toTrimmedStringOrNull(storeData.name),
     storeCity: pickStoreCity(storeData),
@@ -209,8 +207,6 @@ function toPublicProduct(productDoc, storeMetaByStoreId, existingDocData = null)
   }
 
   const category = normalizeCategory(data.category)
-
-  const publication = normalizePublicationFields(data, { fallbackCreatedAt: existingDocData?.createdAt, fallbackUpdatedAt: existingDocData?.updatedAt })
 
   return {
     sourceProductId: productDoc.id,
