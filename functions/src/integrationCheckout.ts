@@ -184,10 +184,20 @@ function getSedifexMarketMerchantTokenMap(): Record<string, string> {
   }
 }
 
+function normalizeMerchantTokenPrefix(token: string) {
+  const trimmed = clean(token, 1000)
+  if (!trimmed) return ''
+  if (trimmed.startsWith('sdfx_')) return `sedx_${trimmed.slice('sdfx_'.length)}`
+  return trimmed
+}
+
 function isAuthorizedBySedifexMarketToken(storeId: string, apiKey: string) {
   const map = getSedifexMarketMerchantTokenMap()
   const expected = map[storeId]
-  return Boolean(expected && apiKey && expected === apiKey)
+  if (!expected || !apiKey) return false
+  const normalizedExpected = normalizeMerchantTokenPrefix(expected)
+  const normalizedApiKey = normalizeMerchantTokenPrefix(apiKey)
+  return normalizedExpected === normalizedApiKey
 }
 
 async function isAuthorizedByExistingProductEndpoint(req: functions.https.Request, storeId: string, apiKey: string) {
