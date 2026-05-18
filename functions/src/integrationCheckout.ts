@@ -8,6 +8,8 @@ const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION'
   default: '2026-04-13',
 })
 const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', { default: '' })
+const SEDIFEX_MARKET_MERCHANT_TOKENS_JSON = defineString('SEDIFEX_MARKET_MERCHANT_TOKENS_JSON', { default: '' })
+const SEDIFEX_MERCHANT_TOKENS_JSON = defineString('SEDIFEX_MERCHANT_TOKENS_JSON', { default: '' })
 
 type CheckoutBody = {
   store_id?: unknown
@@ -154,6 +156,40 @@ function getRequestApiKey(req: functions.https.Request) {
   return clean(req.get('x-api-key'), 1000) || bearer
 }
 
+
+function getSedifexMarketMerchantTokenMap(): Record<string, string> {
+  const raw =
+    SEDIFEX_MARKET_MERCHANT_TOKENS_JSON.value()?.trim() ||
+    process.env.SEDIFEX_MARKET_MERCHANT_TOKENS_JSON?.trim() ||
+    SEDIFEX_MERCHANT_TOKENS_JSON.value()?.trim() ||
+    process.env.SEDIFEX_MERCHANT_TOKENS_JSON?.trim() ||
+    ''
+
+  if (!raw) return {}
+
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+
+    const map: Record<string, string> = {}
+    for (const [storeId, token] of Object.entries(parsed)) {
+      if (typeof token === 'string' && token.trim()) {
+        map[storeId.trim()] = token.trim()
+      }
+    }
+    return map
+  } catch (error) {
+    functions.logger.warn('Invalid Sedifex Market merchant token JSON')
+    return {}
+  }
+}
+
+function isAuthorizedBySedifexMarketToken(storeId: string, apiKey: string) {
+  const map = getSedifexMarketMerchantTokenMap()
+  const expected = map[storeId]
+  return Boolean(expected && apiKey && expected === apiKey)
+}
+
 async function isAuthorizedByExistingProductEndpoint(req: functions.https.Request, storeId: string, apiKey: string) {
   const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'sedifex-web'
   const contractVersion = INTEGRATION_CONTRACT_VERSION.value() || '2026-04-13'
@@ -207,6 +243,11 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
 
   const master = SEDIFEX_INTEGRATION_API_KEY.value()?.trim() || process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() || ''
   if (master && apiKey === master) return true
+
+  if (isAuthorizedBySedifexMarketToken(storeId, apiKey)) {
+    functions.logger.info('Sedifex Market merchant token authorized checkout request', { storeId })
+    return true
+  }
 
   try {
     const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
