@@ -39,6 +39,7 @@ import Support from './pages/Support'
 import Expenses from './pages/Expenses'
 import FundsLedger from './pages/FundsLedger'
 import DocumentsGenerator from './pages/DocumentsGenerator'
+import DocumentsBuilder from './pages/DocumentsBuilder'
 import ResetPassword from './pages/ResetPassword'
 import VerifyEmail from './pages/VerifyEmail'
 import InventorySystemGhana from './pages/InventorySystemGhana'
@@ -115,6 +116,8 @@ const router = createBrowserRouter([
       { path: 'bulk-email', element: <BulkEmail /> },
       { path: 'logi', element: <Logi /> },
       { path: 'sell/invoice', element: <DocumentsGenerator /> },
+      { path: 'invoices', element: <DocumentsBuilder mode="invoice" /> },
+      { path: 'receipts', element: <DocumentsBuilder mode="receipt" /> },
       { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
       { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
       { path: 'expenses', element: <Navigate to="/donor-management" replace /> },
