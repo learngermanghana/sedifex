@@ -20,6 +20,7 @@ export {
   integrationOrderStatus,
 } from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
+export { v1IntegrationBookings } from './integrationBookings'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
   initializeStoreNotificationDefaults,
