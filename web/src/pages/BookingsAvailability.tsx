@@ -8,7 +8,7 @@ import './BookingsAvailability.css'
 type ServiceRecord = {
   id: string
   name: string
-  itemType?: 'product' | 'service' | 'programme'
+  itemType?: 'product' | 'service' | 'course' | 'programme'
   imageUrl?: string | null
   imageAlt?: string | null
   source?: string
@@ -114,7 +114,7 @@ export default function BookingsAvailability() {
       map.set(docId, {
         id: docId,
         name: nameCandidate.trim(),
-        itemType: data.itemType === 'programme' ? 'programme' : data.itemType === 'service' ? 'service' : fallbackType,
+        itemType: data.itemType === 'course' ? 'course' : data.itemType === 'programme' ? 'programme' : data.itemType === 'service' ? 'service' : fallbackType,
         imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
         imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
         source,

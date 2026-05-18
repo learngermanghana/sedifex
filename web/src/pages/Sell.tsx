@@ -183,7 +183,7 @@ function mapFirestoreProduct(id: string, data: any): Product {
     barcode: normalizeBarcode(barcodeSource) || null,
     price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
     taxRate: typeof data.taxRate === 'number' && Number.isFinite(data.taxRate) ? data.taxRate : null,
-    itemType: data.itemType === 'service' ? 'service' : 'product',
+    itemType: data.itemType === 'course' ? 'course' : data.itemType === 'service' ? 'service' : 'product',
     manufacturerName:
       typeof data.manufacturerName === 'string' && data.manufacturerName.trim()
         ? data.manufacturerName.trim()
@@ -1380,7 +1380,7 @@ export default function Sell() {
     const labels = items.map(item => {
       const product = products.find(p => p.id === item.productId)
       const typeLabel =
-        item.itemType === 'service' ? 'service' : product?.itemType === 'service' ? 'service' : 'product'
+        item.itemType === 'service' || item.itemType === 'course' ? 'service' : product?.itemType === 'service' || product?.itemType === 'course' ? 'service' : 'product'
       const name = item.name || product?.name || 'Item'
       return typeLabel === 'service' ? `${name} (service)` : name
     })

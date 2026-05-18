@@ -84,7 +84,7 @@ type CatalogItem = {
   price: number | null
   imageUrl: string | null
   imageAlt: string | null
-  itemType: 'product' | 'service' | 'made_to_order'
+  itemType: 'product' | 'service' | 'course' | 'made_to_order'
 }
 
 type CatalogApiResponse = {
@@ -96,7 +96,7 @@ type CatalogApiResponse = {
     price?: number | null
     imageUrl?: string | null
     imageAlt?: string | null
-    itemType?: 'product' | 'service' | 'made_to_order'
+    itemType?: 'product' | 'service' | 'course' | 'made_to_order'
   }>
 }
 
@@ -362,7 +362,9 @@ export default function PromoLandingPage() {
               itemType:
                 item.itemType === 'service'
                   ? 'service'
-                  : item.itemType === 'made_to_order'
+                  : item.itemType === 'course'
+                    ? 'course'
+                    : item.itemType === 'made_to_order'
                     ? 'made_to_order'
                     : 'product',
             } satisfies CatalogItem
@@ -812,11 +814,11 @@ export default function PromoLandingPage() {
                         </>
                       ) : (
                         <p className="promo-summary">
-                          {`${item.itemType === 'service' ? 'Service' : 'Product'} available`}
+                          {`${item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'} available`}
                         </p>
                       )}
                       <p className="promo-meta">
-                        {item.category || 'General'} · {item.itemType === 'service' ? 'Service' : 'Product'}
+                        {item.category || 'General'} · {item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'}
                         {typeof item.price === 'number' ? ` · ${item.price.toFixed(2)}` : ''}
                       </p>
                       <p className="promo-meta">Part #: {item.id}</p>

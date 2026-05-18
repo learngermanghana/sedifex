@@ -49,7 +49,7 @@ const ITEM_OPTIONAL_HEADERS: HeaderSpec[] = [
   { key: 'barcode', description: 'Barcode for scanning (letters + digits are supported).' },
   { key: 'stock_count', description: 'Current stock quantity.' },
   { key: 'reorder_point', description: 'Restock alert level.' },
-  { key: 'item_type', description: 'product, service, or made_to_order.' },
+  { key: 'item_type', description: 'product, service, course, or made_to_order.' },
   { key: 'tax_rate', description: 'Tax rate as 7.5 or 0.075.' },
   { key: 'expiry_date', description: 'Use YYYY-MM-DD.' },
   { key: 'manufacturer_name', description: 'Brand or manufacturer name.' },
@@ -450,7 +450,9 @@ export default function DataTransfer() {
         const itemType =
           data.itemType === 'service'
             ? 'service'
-            : data.itemType === 'made_to_order'
+            : data.itemType === 'course'
+              ? 'course'
+              : data.itemType === 'made_to_order'
               ? 'made_to_order'
               : 'product'
         const taxRate = formatTaxRate(data.taxRate)
@@ -698,7 +700,9 @@ export default function DataTransfer() {
         const itemType =
           rawItemType === 'service'
             ? 'service'
-            : rawItemType === 'made_to_order'
+            : rawItemType === 'course'
+              ? 'course'
+              : rawItemType === 'made_to_order'
               ? 'made_to_order'
               : 'product'
         const sku = normalizeText(getRowValue(row, headerIndex, 'sku'))

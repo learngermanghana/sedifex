@@ -10,11 +10,24 @@ export interface IntegrationProduct {
   description: string | null
   price: number | null
   stockCount: number | null
-  itemType: 'product' | 'service'
+  itemType: 'product' | 'service' | 'course'
   imageUrl: string | null
   imageUrls: string[]
   imageAlt: string | null
   updatedAt: string | null
+  listingType?: 'product' | 'service' | 'course' | null
+  serviceKind?: string | null
+  duration?: string | null
+  branch?: string | null
+  preferredTimes?: string | null
+  startDate?: string | null
+  registrationFee?: number | null
+  fullFee?: number | null
+  capacity?: number | null
+  requirements?: string | null
+  starterItems?: string | null
+  certificateIncluded?: boolean | null
+  Agreement?: string | null
 }
 
 export interface IntegrationPromo {

@@ -164,7 +164,7 @@ function mapProduct(id: string, raw: Record<string, unknown>): ProductOption {
     description: typeof raw.description === 'string' ? raw.description.trim() : null,
     price: typeof raw.price === 'number' && Number.isFinite(raw.price) ? raw.price : null,
     imageUrl: typeof raw.imageUrl === 'string' && raw.imageUrl.trim() ? raw.imageUrl.trim() : null,
-    itemType: raw.itemType === 'service' || raw.itemType === 'made_to_order' ? raw.itemType : 'product',
+    itemType: raw.itemType === 'service' || raw.itemType === 'course' || raw.itemType === 'made_to_order' ? raw.itemType : 'product',
   }
 }
 

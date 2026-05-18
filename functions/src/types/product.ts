@@ -1,4 +1,4 @@
-export type ProductItemType = 'product' | 'service' | 'made_to_order'
+export type ProductItemType = 'product' | 'service' | 'course' | 'made_to_order'
 
 export type ProductReadModel = {
   id: string
@@ -13,4 +13,17 @@ export type ProductReadModel = {
   imageUrls: string[]
   imageAlt: string | null
   updatedAt: FirebaseFirestore.Timestamp | null
+  listingType?: 'product' | 'service' | 'course' | null
+  serviceKind?: string | null
+  duration?: string | null
+  branch?: string | null
+  preferredTimes?: string | null
+  startDate?: FirebaseFirestore.Timestamp | string | null
+  registrationFee?: number | null
+  fullFee?: number | null
+  capacity?: number | null
+  requirements?: string | null
+  starterItems?: string | null
+  certificateIncluded?: boolean | null
+  Agreement?: string | null
 }
