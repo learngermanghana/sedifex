@@ -406,6 +406,176 @@ async function initializePaystack(payload: Record<string, unknown>) {
   return json
 }
 
+
+
+type CheckoutPreviewItem = {
+  item_id?: unknown
+  itemId?: unknown
+  productId?: unknown
+  serviceId?: unknown
+  qty?: unknown
+  quantity?: unknown
+  type?: unknown
+  item_type?: unknown
+}
+
+function normalizeCheckoutItemType(value: unknown) {
+  const normalized = clean(value, 50).toUpperCase()
+  if (normalized === 'SERVICE') return 'SERVICE'
+  return 'PRODUCT'
+}
+
+function getItemPriceMinor(record: Record<string, unknown>) {
+  const minor = numberValue(record.priceMinor ?? record.amountMinor)
+  if (minor !== null && minor >= 0) return Math.round(minor)
+
+  const major = numberValue(record.price ?? record.sellingPrice ?? record.salePrice ?? record.amount ?? record.fee)
+  if (major === null || major < 0) return null
+  return Math.round(major * 100)
+}
+
+async function resolveCatalogItem(storeId: string, itemId: string, hintedType: string) {
+  const directRefs = [
+    defaultDb.collection('stores').doc(storeId).collection('products').doc(itemId),
+    defaultDb.collection('stores').doc(storeId).collection('services').doc(itemId),
+    defaultDb.collection('products').doc(itemId),
+    defaultDb.collection('services').doc(itemId),
+    defaultDb.collection('publicProducts').doc(itemId),
+    defaultDb.collection('publicServices').doc(itemId),
+  ]
+
+  for (const ref of directRefs) {
+    const snap = await ref.get()
+    if (!snap.exists) continue
+    const data = (snap.data() ?? {}) as Record<string, unknown>
+    return {
+      item: data,
+      type: normalizeCheckoutItemType(data.type ?? data.item_type ?? hintedType ?? (ref.parent.id.toUpperCase().includes('SERVICE') ? 'SERVICE' : 'PRODUCT')),
+    }
+  }
+
+  const queryCollections = ['publicProducts', 'publicServices', 'v1IntegrationProducts']
+  const queryFields = ['id', 'productId', 'sourceProductId']
+
+  for (const collectionName of queryCollections) {
+    for (const field of queryFields) {
+      const snap = await defaultDb
+        .collection(collectionName)
+        .where(field, '==', itemId)
+        .where('storeId', '==', storeId)
+        .limit(1)
+        .get()
+      if (snap.empty) continue
+      const data = (snap.docs[0].data() ?? {}) as Record<string, unknown>
+      return {
+        item: data,
+        type: normalizeCheckoutItemType(data.type ?? data.item_type ?? hintedType),
+      }
+    }
+  }
+
+  return null
+}
+
+export const integrationCheckoutPreview = functions.https.onRequest(async (req, res): Promise<void> => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+  if (!assertContract(req, res)) return
+
+  try {
+    const body = (req.body ?? {}) as CheckoutBody
+    const storeId = getStoreId(body)
+    if (!storeId) {
+      res.status(400).json({ error: 'missing-store-id' })
+      return
+    }
+
+    const authorized = await isAuthorized(req, storeId)
+    if (!authorized) {
+      functions.logger.warn('integrationCheckoutPreview auth failed', {
+        storeId,
+        hasApiKey: Boolean(getRequestApiKey(req)),
+      })
+      res.status(401).json({ error: 'invalid-api-key' })
+      return
+    }
+
+    const items = Array.isArray(body.items) ? body.items as CheckoutPreviewItem[] : []
+    if (!items.length) {
+      res.status(400).json({ error: 'items-required' })
+      return
+    }
+
+    functions.logger.info('integrationCheckoutPreview authorized', { storeId, itemCount: items.length })
+
+    const responseItems: Array<Record<string, unknown>> = []
+    let subtotal = 0
+
+    for (const rawItem of items) {
+      const item = rawItem && typeof rawItem === 'object' ? rawItem as CheckoutPreviewItem : {}
+      const itemId = clean(item.item_id ?? item.itemId ?? item.productId ?? item.serviceId, 220)
+      const qtyRaw = numberValue(item.qty ?? item.quantity)
+      const qty = qtyRaw && qtyRaw > 0 ? Math.round(qtyRaw) : 1
+      const type = normalizeCheckoutItemType(item.type ?? item.item_type ?? (item.serviceId ? 'SERVICE' : 'PRODUCT'))
+
+      if (!itemId) {
+        res.status(404).json({ error: 'checkout-item-not-found', item_id: itemId, storeId })
+        return
+      }
+
+      const resolved = await resolveCatalogItem(storeId, itemId, type)
+      if (!resolved) {
+        res.status(404).json({ error: 'checkout-item-not-found', item_id: itemId, storeId })
+        return
+      }
+
+      const unitPrice = getItemPriceMinor(resolved.item)
+      if (unitPrice === null) {
+        res.status(400).json({ error: 'checkout-item-price-missing', item_id: itemId, storeId })
+        return
+      }
+
+      const lineTotal = unitPrice * qty
+      subtotal += lineTotal
+
+      responseItems.push({
+        item_id: itemId,
+        name: clean(resolved.item.name ?? resolved.item.productName ?? resolved.item.title, 220) || itemId,
+        qty,
+        unit_price: unitPrice,
+        line_total: lineTotal,
+        type: resolved.type,
+      })
+    }
+
+    const payload = {
+      pricing_version: '2026-05-12-v1',
+      currency: 'GHS',
+      subtotal,
+      tax_total: 0,
+      delivery_fee: 0,
+      pre_processing_total: subtotal,
+      processing_fee_to_add: 0,
+      final_total: subtotal,
+      breakdown: [
+        { code: 'SUBTOTAL', amount: subtotal },
+      ],
+      items: responseItems,
+    }
+
+    res.status(200).json(payload)
+  } catch (error) {
+    functions.logger.error('integrationCheckoutPreview failed', { error })
+    res.status(500).json({ error: 'checkout-preview-failed' })
+  }
+})
 export const integrationCheckoutCreate = functions.https.onRequest(async (req, res): Promise<void> => {
   setCors(res)
   if (req.method === 'OPTIONS') {

@@ -14,7 +14,11 @@ export {
   fetchPaystackMerchantSubaccount,
   fetchPaystackSettlementBanks,
 } from './paystackSubaccounts'
-export { integrationCheckoutCreate, integrationOrderStatus } from './integrationCheckout'
+export {
+  integrationCheckoutCreate,
+  integrationCheckoutPreview,
+  integrationOrderStatus,
+} from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {

@@ -36,6 +36,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizeHeader = normalizeHeader;
 exports.fetchClientRowByEmail = fetchClientRowByEmail;
 exports.getDefaultSpreadsheetId = getDefaultSpreadsheetId;
+exports.getNotificationOutboxRange = getNotificationOutboxRange;
+exports.appendNotificationOutboxRow = appendNotificationOutboxRow;
 const params_1 = require("firebase-functions/params");
 const DEFAULT_SPREADSHEET_ID = '1_oqRHePaZnpULD9zRUtxBIHQUaHccGAxSP3SPCJ0o7g';
 const DEFAULT_RANGE = 'Clients!A:ZZ';
@@ -49,6 +51,7 @@ const EMAIL_HEADER_MATCHERS = new Set([
 const SHEETS_SERVICE_ACCOUNT = (0, params_1.defineString)('SHEETS_SERVICE_ACCOUNT', { default: '' });
 const SHEETS_SPREADSHEET_ID = (0, params_1.defineString)('SHEETS_SPREADSHEET_ID', { default: '' });
 const SHEETS_RANGE = (0, params_1.defineString)('SHEETS_RANGE', { default: '' });
+const NOTIFICATION_OUTBOX_SHEET_RANGE = (0, params_1.defineString)('NOTIFICATION_OUTBOX_SHEET_RANGE', { default: 'NotificationOutbox!A:Z' });
 let sheetsClientPromise = null;
 async function loadSheetsClientFactory() {
     // googleapis is large; load it lazily to keep function module import fast.
@@ -108,7 +111,7 @@ async function getSheetsClient() {
         const google = await loadSheetsClientFactory();
         const auth = new google.auth.GoogleAuth({
             credentials,
-            scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
         });
         const authClientPromise = auth.getClient();
         sheetsClientPromise = (async () => {
@@ -210,4 +213,21 @@ async function fetchClientRowByEmail(sheetId, email) {
 function getDefaultSpreadsheetId() {
     const config = readConfig();
     return resolveSpreadsheetId(config, null);
+}
+function getNotificationOutboxRange() {
+    const configured = NOTIFICATION_OUTBOX_SHEET_RANGE.value()?.trim();
+    return configured || 'NotificationOutbox!A:Z';
+}
+async function appendNotificationOutboxRow(row, spreadsheetId) {
+    const config = readConfig();
+    const resolvedSpreadsheetId = resolveSpreadsheetId(config, spreadsheetId ?? null);
+    const sheets = await getSheetsClient();
+    await sheets.spreadsheets.values.append({
+        spreadsheetId: resolvedSpreadsheetId,
+        range: getNotificationOutboxRange(),
+        valueInputOption: 'RAW',
+        requestBody: {
+            values: [row.map(value => (value === null || value === undefined ? '' : String(value)))],
+        },
+    });
 }
