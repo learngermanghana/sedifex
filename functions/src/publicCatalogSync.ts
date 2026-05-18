@@ -11,6 +11,35 @@ function text(value: unknown): string | null {
   return trimmed || null
 }
 
+function itemType(value: unknown): 'product' | 'service' | 'course' {
+  return value === 'course' ? 'course' : value === 'service' ? 'service' : 'product'
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function boolOrNull(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
+function timestampOrIso(value: unknown): string | null {
+  try {
+    if (typeof (value as { toDate?: unknown })?.toDate === 'function') {
+      const date = (value as { toDate: () => Date }).toDate()
+      return Number.isNaN(date.getTime()) ? null : date.toISOString()
+    }
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString()
+    if (typeof value === 'string' && value.trim()) {
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? value.trim() : date.toISOString()
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
 function toArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   const out: string[] = []
@@ -41,6 +70,7 @@ function buildStoreMeta(store: StoreData): Record<string, unknown> {
 }
 
 function publicPayload(productId: string, data: ProductData, storeMeta: Record<string, unknown>): Record<string, unknown> {
+  const normalizedItemType = itemType(data.itemType)
   return {
     sourceProductId: productId,
     storeId: text(data.storeId),
@@ -52,11 +82,24 @@ function publicPayload(productId: string, data: ProductData, storeMeta: Record<s
     imageUrl: text(data.imageUrl),
     imageUrls: toArray(data.imageUrls),
     imageAlt: text(data.imageAlt),
-    itemType: data.itemType === 'service' ? 'service' : 'product',
+    itemType: normalizedItemType,
     isPublished: true,
     publishedAt: resolvePublicationTimestampCandidate(data.publishedAt, data.createdAt, data.updatedAt),
     unpublishedAt: admin.firestore.FieldValue.delete(),
     sourceUpdatedAt: data.updatedAt ?? null,
+    listingType: normalizedItemType === 'course' ? 'course' : text(data.listingType),
+    serviceKind: text(data.serviceKind),
+    duration: text(data.duration),
+    branch: text(data.branch) ?? text(data.location),
+    preferredTimes: text(data.preferredTimes) ?? text(data.classTimes),
+    startDate: timestampOrIso(data.startDate),
+    registrationFee: numberOrNull(data.registrationFee),
+    fullFee: numberOrNull(data.fullFee) ?? numberOrNull(data.price),
+    capacity: numberOrNull(data.capacity),
+    requirements: text(data.requirements),
+    starterItems: text(data.starterItems),
+    certificateIncluded: boolOrNull(data.certificateIncluded),
+    Agreement: text(data.Agreement),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }
 }
@@ -120,9 +163,9 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
 
   for (const productDoc of productsSnap.docs) {
     const data = (productDoc.data() ?? {}) as ProductData
-    const itemType = data.itemType === 'service' ? 'service' : 'product'
-    const targetCollection = itemType === 'service' ? 'publicServices' : 'publicProducts'
-    const oppositeCollection = itemType === 'service' ? 'publicProducts' : 'publicServices'
+    const normalizedItemType = itemType(data.itemType)
+    const targetCollection = normalizedItemType === 'product' ? 'publicProducts' : 'publicServices'
+    const oppositeCollection = normalizedItemType === 'product' ? 'publicServices' : 'publicProducts'
     const payload = publicPayload(productDoc.id, data, storeMeta)
 
     batch.set(db.collection(targetCollection).doc(productDoc.id), payload, { merge: true })
@@ -130,7 +173,7 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
     writes += 2
     removed += 1
 
-    if (itemType === 'service') writtenServices += 1
+    if (normalizedItemType !== 'product') writtenServices += 1
     else writtenProducts += 1
 
     if (writes >= 450) {
@@ -234,9 +277,10 @@ export const syncPublicCatalogOnProductWrite = functions.firestore
     }
 
     const payload = publicPayload(productId, afterData, buildStoreMeta(storeData))
-    const isService = afterData.itemType === 'service'
-    const target = isService ? 'publicServices' : 'publicProducts'
-    const opposite = isService ? 'publicProducts' : 'publicServices'
+    const normalizedItemType = itemType(afterData.itemType)
+    const isPublicProduct = normalizedItemType === 'product'
+    const target = isPublicProduct ? 'publicProducts' : 'publicServices'
+    const opposite = isPublicProduct ? 'publicServices' : 'publicProducts'
 
     await Promise.all([
       db.collection(target).doc(productId).set(payload, { merge: true }),
@@ -246,8 +290,8 @@ export const syncPublicCatalogOnProductWrite = functions.firestore
     functions.logger.info('product synced to public catalog', {
       storeId,
       productId,
-      publicProductsWritten: isService ? 0 : 1,
-      publicServicesWritten: isService ? 1 : 0,
+      publicProductsWritten: isPublicProduct ? 1 : 0,
+      publicServicesWritten: isPublicProduct ? 0 : 1,
       publicDocsRemoved: 1,
     })
   })

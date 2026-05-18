@@ -1,4 +1,4 @@
-export type ItemType = 'product' | 'service' | 'made_to_order'
+export type ItemType = 'product' | 'service' | 'course' | 'made_to_order'
 
 export type Product = {
   id: string
@@ -25,4 +25,19 @@ export type Product = {
   createdAt?: unknown
   updatedAt?: unknown
   sortOrder?: number | null
+  listingType?: 'product' | 'service' | 'course' | null
+  serviceKind?: string | null
+  duration?: string | null
+  branch?: string | null
+  preferredTimes?: string | null
+  startDate?: Date | null
+  registrationFee?: number | null
+  fullFee?: number | null
+  capacity?: number | null
+  requirements?: string | null
+  starterItems?: string | null
+  certificateIncluded?: boolean | null
+  Agreement?: string | null
+  courseLevel?: string | null
+  courseMode?: string | null
 }

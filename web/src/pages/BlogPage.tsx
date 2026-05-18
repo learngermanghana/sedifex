@@ -23,7 +23,7 @@ import { requestAiAdvisor } from '../api/aiAdvisor'
 type CatalogItem = {
   id: string
   name: string
-  itemType: 'product' | 'service'
+  itemType: 'product' | 'service' | 'course'
   price: number | null
   description: string | null
   imageUrl: string | null
@@ -172,7 +172,7 @@ export default function BlogPage() {
         return {
           id: docSnap.id,
           name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Untitled item',
-          itemType: data.itemType === 'service' ? 'service' : 'product',
+          itemType: data.itemType === 'course' ? 'course' : data.itemType === 'service' ? 'service' : 'product',
           price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
           description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
           imageUrl: getCatalogImageUrl(data),

@@ -12,7 +12,7 @@ export type SocialPostProductPayload = {
   description?: string | null
   price?: number | null
   imageUrl?: string | null
-  itemType?: 'product' | 'service' | 'made_to_order'
+  itemType?: 'product' | 'service' | 'course' | 'made_to_order'
 }
 
 export type GenerateSocialPostPayload = {
@@ -100,7 +100,7 @@ async function requestSocialPostFallback(payload: GenerateSocialPostPayload): Pr
       description: typeof product.description === 'string' ? product.description : null,
       price: typeof product.price === 'number' ? product.price : null,
       imageUrl: typeof product.imageUrl === 'string' ? product.imageUrl : null,
-      itemType: product.itemType === 'service' || product.itemType === 'made_to_order' ? product.itemType : 'product',
+      itemType: product.itemType === 'service' || product.itemType === 'course' || product.itemType === 'made_to_order' ? product.itemType : 'product',
     },
     post: {
       platform:

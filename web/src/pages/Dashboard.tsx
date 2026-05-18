@@ -112,7 +112,7 @@ export default function Dashboard() {
   const todayBlogPosts = blogPosts.filter(item => isToday(item.createdAtServer ?? item.createdAt))
 
   const inventory = useMemo(() => {
-    const inventoryItems = products.filter(item => item.itemType !== 'service')
+    const inventoryItems = products.filter(item => item.itemType === 'product')
     const totalStock = inventoryItems.reduce((sum, item) => sum + asNumber(item.stockCount, 0), 0)
     const stockValue = inventoryItems.reduce((sum, item) => sum + (asNumber(item.stockCount, 0) * asNumber(item.price, 0)), 0)
     const lowStock = inventoryItems.filter(item => {

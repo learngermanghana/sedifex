@@ -47,6 +47,15 @@ type Draft = {
   courseLevel: string
   registrationFee: string
   duration: string
+  branch: string
+  preferredTimes: string
+  startDate: string
+  fullFee: string
+  capacity: string
+  requirements: string
+  starterItems: string
+  certificateIncluded: boolean
+  Agreement: string
   courseMode: CourseMode
   classTimes: string
 }
@@ -112,6 +121,15 @@ const blankDraft: Draft = {
   courseLevel: '',
   registrationFee: '',
   duration: '',
+  branch: '',
+  preferredTimes: '',
+  startDate: '',
+  fullFee: '',
+  capacity: '',
+  requirements: '',
+  starterItems: '',
+  certificateIncluded: false,
+  Agreement: '',
   courseMode: 'in_person',
   classTimes: '',
 }
@@ -124,6 +142,10 @@ function cleanNumber(value: unknown): number | null {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed < 0) return null
   return parsed
+}
+
+function cleanText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function toDate(value: unknown): Date | null {
@@ -179,10 +201,10 @@ function generateItemDescription(draft: Draft): string {
     const level = draft.courseLevel.trim() || 'all levels'
     const duration = draft.duration.trim()
     const mode = draft.courseMode === 'online' ? 'online' : draft.courseMode === 'hybrid' ? 'in online and in-person formats' : 'in person'
-    const classTimes = draft.classTimes.trim()
+    const classTimes = draft.preferredTimes.trim() || draft.classTimes.trim()
     const fee = cleanNumber(draft.price)
     const feeText = fee !== null ? ` The course fee is GHS ${fee.toFixed(2)}.` : ''
-    return `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical and structured progress. It includes guided lessons and class support to help students build confidence step by step${duration ? ` over ${duration}` : ''}. Classes are offered ${mode}${locationText ? ` at ${locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}.${feeText}`.replace(/\s+/g, ' ').trim()
+    return `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical and structured progress. It includes guided lessons and class support to help students build confidence step by step${duration ? ` over ${duration}` : ''}. Classes are offered ${mode}${(draft.branch.trim() || locationText) ? ` at ${draft.branch.trim() || locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}.${feeText}`.replace(/\s+/g, ' ').trim()
   }
 
   if (draft.itemType === 'service') {
@@ -215,8 +237,8 @@ function improveDescription(text: string): string {
 }
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
-  const itemType: ItemType = data.itemType === 'service' ? 'service' : 'product'
-  const itemFormType: ItemFormType = itemType === 'service' && data.listingType === 'course' ? 'course' : itemType
+  const itemType: ItemType = data.itemType === 'course' ? 'course' : data.itemType === 'service' ? 'service' : 'product'
+  const itemFormType: ItemFormType = itemType === 'course' || (itemType === 'service' && data.listingType === 'course') ? 'course' : itemType
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
   return {
@@ -240,6 +262,21 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     imageUrl,
     imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls.filter((item): item is string => typeof item === 'string') : imageUrl ? [imageUrl] : [],
     imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : name,
+    listingType: cleanText(data.listingType) as Product['listingType'],
+    serviceKind: cleanText(data.serviceKind),
+    duration: cleanText(data.duration),
+    branch: cleanText(data.branch ?? data.location),
+    preferredTimes: cleanText(data.preferredTimes ?? data.classTimes),
+    startDate: toDate(data.startDate),
+    registrationFee: cleanNumber(data.registrationFee),
+    fullFee: cleanNumber(data.fullFee),
+    capacity: cleanNumber(data.capacity),
+    requirements: cleanText(data.requirements),
+    starterItems: cleanText(data.starterItems),
+    certificateIncluded: typeof data.certificateIncluded === 'boolean' ? data.certificateIncluded : null,
+    Agreement: cleanText(data.Agreement),
+    courseLevel: cleanText(data.courseLevel),
+    courseMode: cleanText(data.courseMode),
     lastReceiptAt: data.lastReceiptAt,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -263,7 +300,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
   return {
     storeId,
     name,
-    itemType: behavesLikeService ? 'service' : 'product',
+    itemType: isCourse ? 'course' : isService ? 'service' : 'product',
     listingType: isCourse ? 'course' : behavesLikeService ? 'service' : 'product',
     serviceKind: isCourse ? 'course_enrollment' : serviceKind,
     salesMode,
@@ -278,7 +315,8 @@ function buildSavePayload(draft: Draft, storeId: string) {
     reorderPoint: behavesLikeService ? null : cleanNumber(draft.reorderPoint),
     expiryDate: behavesLikeService || !draft.expiryDate ? null : new Date(draft.expiryDate),
     durationMinutes: isService ? cleanNumber(draft.durationMinutes) : null,
-    location: behavesLikeService ? draft.location.trim() || null : null,
+    location: behavesLikeService ? (draft.branch.trim() || draft.location.trim() || null) : null,
+    branch: isCourse ? draft.branch.trim() || null : null,
     requiresDateTime: isService ? draft.requiresDateTime : null,
     requiresNotes: isService ? draft.requiresNotes : null,
     requiresDestinationOrTopic: isService ? draft.requiresDestinationOrTopic : null,
@@ -287,8 +325,16 @@ function buildSavePayload(draft: Draft, storeId: string) {
     courseLevel: isCourse ? draft.courseLevel.trim() || null : null,
     registrationFee: isCourse ? cleanNumber(draft.registrationFee) : null,
     duration: isCourse ? draft.duration.trim() || null : null,
+    preferredTimes: isCourse ? draft.preferredTimes.trim() || null : null,
+    startDate: isCourse && draft.startDate ? new Date(draft.startDate) : null,
+    fullFee: isCourse ? cleanNumber(draft.fullFee) ?? price : null,
+    capacity: isCourse ? cleanNumber(draft.capacity) : null,
+    requirements: isCourse ? draft.requirements.trim() || null : null,
+    starterItems: isCourse ? draft.starterItems.trim() || null : null,
+    certificateIncluded: isCourse ? draft.certificateIncluded : null,
+    Agreement: isCourse ? draft.Agreement.trim() || null : null,
     courseMode: isCourse ? draft.courseMode : null,
-    classTimes: isCourse ? draft.classTimes.trim() || null : null,
+    classTimes: isCourse ? draft.preferredTimes.trim() || draft.classTimes.trim() || null : null,
     productionDate: null,
     manufacturerName: null,
     batchNumber: null,
@@ -352,9 +398,12 @@ export default function ProductsServiceFirst() {
           openingStock: nextItemType === 'product' ? current.openingStock : '',
           reorderPoint: nextItemType === 'product' ? current.reorderPoint : '',
           expiryDate: nextItemType === 'product' ? current.expiryDate : '',
+          branch: nextItemType === 'course' ? current.branch || current.location : current.branch,
+          preferredTimes: nextItemType === 'course' ? current.preferredTimes || current.classTimes : current.preferredTimes,
           costPrice: nextItemType === 'product' ? current.costPrice : '',
         }
       }
+      if (key === 'certificateIncluded') return { ...current, certificateIncluded: value === 'true' }
       return { ...current, [key]: value }
     })
   }
@@ -366,7 +415,7 @@ export default function ProductsServiceFirst() {
   }
 
   function editItem(item: Product) {
-    const itemType: ItemFormType = item.itemType === 'service' ? ((item as any).listingType === 'course' ? 'course' : 'service') : 'product'
+    const itemType: ItemFormType = item.itemType === 'course' || (item.itemType === 'service' && item.listingType === 'course') ? 'course' : item.itemType === 'service' ? 'service' : 'product'
     setEditingId(item.id)
     setDraft({
       name: item.name,
@@ -390,10 +439,19 @@ export default function ProductsServiceFirst() {
       allowDepositPayment: (item as any).allowDepositPayment === true,
       depositAmount: typeof (item as any).depositAmount === 'number' ? String((item as any).depositAmount) : '',
       courseLevel: typeof (item as any).courseLevel === 'string' ? (item as any).courseLevel : '',
-      registrationFee: typeof (item as any).registrationFee === 'number' ? String((item as any).registrationFee) : '',
-      duration: typeof (item as any).duration === 'string' ? (item as any).duration : '',
+      registrationFee: typeof item.registrationFee === 'number' ? String(item.registrationFee) : '',
+      duration: typeof item.duration === 'string' ? item.duration : '',
+      branch: item.branch ?? (typeof (item as any).location === 'string' ? (item as any).location : ''),
+      preferredTimes: item.preferredTimes ?? (typeof (item as any).classTimes === 'string' ? (item as any).classTimes : ''),
+      startDate: formatDateInput(item.startDate),
+      fullFee: typeof item.fullFee === 'number' ? String(item.fullFee) : typeof item.price === 'number' ? String(item.price) : '',
+      capacity: typeof item.capacity === 'number' ? String(item.capacity) : '',
+      requirements: item.requirements ?? '',
+      starterItems: item.starterItems ?? '',
+      certificateIncluded: item.certificateIncluded === true,
+      Agreement: item.Agreement ?? '',
       courseMode: ((item as any).courseMode as CourseMode) ?? 'in_person',
-      classTimes: typeof (item as any).classTimes === 'string' ? (item as any).classTimes : '',
+      classTimes: item.preferredTimes ?? (typeof (item as any).classTimes === 'string' ? (item as any).classTimes : ''),
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -408,14 +466,14 @@ export default function ProductsServiceFirst() {
       const payload = buildSavePayload(draft as any, storeId)
       if (editingId) {
         await updateDoc(doc(db, 'products', editingId), payload)
-        setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} updated.`)
+        setMessage(`${draft.itemType === 'course' ? 'Course' : draft.itemType === 'service' ? 'Service' : 'Product'} updated.`)
       } else {
         await setDoc(doc(collection(db, 'products')), {
           ...payload,
           createdAt: serverTimestamp(),
           sortOrder: items.length + 1,
         })
-        setMessage(`${draft.itemType === 'service' ? 'Service' : 'Product'} added.`)
+        setMessage(`${draft.itemType === 'course' ? 'Course' : draft.itemType === 'service' ? 'Service' : 'Product'} added.`)
       }
       resetForm()
     } catch (err) {
@@ -429,7 +487,7 @@ export default function ProductsServiceFirst() {
     if (!canManage) return
     if (!window.confirm(`Delete ${item.name}?`)) return
     await deleteDoc(doc(db, 'products', item.id))
-    setMessage(`${item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
+    setMessage(`${item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
   }
 
   const visibleItems = useMemo(() => {
@@ -522,12 +580,24 @@ export default function ProductsServiceFirst() {
 
             {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="appointment">Appointment</option><option value="consultation">Consultation</option><option value="quote_request">Quote request</option></select></div> : null}
             {isService ? <div className="field"><label className="field__label" htmlFor="service-duration">Duration minutes</label><input id="service-duration" type="number" min="0" step="1" value={draft.durationMinutes} onChange={event => updateDraft('durationMinutes', event.target.value)} /></div> : null}
-            {behavesLikeService ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
-            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-level">Course level</label><input id="course-level" value={draft.courseLevel} onChange={event => updateDraft('courseLevel', event.target.value)} /></div> : null}
-            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-regfee">Registration fee / deposit</label><input id="course-regfee" type="number" min="0" step="0.01" value={draft.registrationFee} onChange={event => updateDraft('registrationFee', event.target.value)} /></div> : null}
-            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-duration">Duration</label><input id="course-duration" value={draft.duration} onChange={event => updateDraft('duration', event.target.value)} /></div> : null}
-            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-mode">Mode</label><select id="course-mode" value={draft.courseMode} onChange={event => updateDraft('courseMode', event.target.value)}><option value="online">Online</option><option value="in_person">In person</option><option value="hybrid">Hybrid</option></select></div> : null}
-            {isCourse ? <div className="field"><label className="field__label" htmlFor="course-times">Class times</label><input id="course-times" value={draft.classTimes} onChange={event => updateDraft('classTimes', event.target.value)} /></div> : null}
+            {behavesLikeService && !isCourse ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+            {isCourse ? (
+              <>
+                <div className="field"><label className="field__label" htmlFor="course-branch">Branch</label><input id="course-branch" value={draft.branch} onChange={event => updateDraft('branch', event.target.value)} placeholder="e.g. Accra campus or Online" /></div>
+                <div className="field"><label className="field__label" htmlFor="course-times">Preferred times</label><input id="course-times" value={draft.preferredTimes} onChange={event => updateDraft('preferredTimes', event.target.value)} placeholder="e.g. Weekdays 6pm, Saturdays 10am" /></div>
+                <div className="field"><label className="field__label" htmlFor="course-start-date">Start date</label><input id="course-start-date" type="date" value={draft.startDate} onChange={event => updateDraft('startDate', event.target.value)} /></div>
+                <div className="field"><label className="field__label" htmlFor="course-regfee">Registration fee</label><input id="course-regfee" type="number" min="0" step="0.01" value={draft.registrationFee} onChange={event => updateDraft('registrationFee', event.target.value)} /></div>
+                <div className="field"><label className="field__label" htmlFor="course-fullfee">Full fee</label><input id="course-fullfee" type="number" min="0" step="0.01" value={draft.fullFee} onChange={event => updateDraft('fullFee', event.target.value)} placeholder="Defaults to Fee when blank" /></div>
+                <div className="field"><label className="field__label" htmlFor="course-duration">Duration</label><input id="course-duration" value={draft.duration} onChange={event => updateDraft('duration', event.target.value)} placeholder="e.g. 8 weeks" /></div>
+                <div className="field"><label className="field__label" htmlFor="course-capacity">Capacity</label><input id="course-capacity" type="number" min="0" step="1" value={draft.capacity} onChange={event => updateDraft('capacity', event.target.value)} /></div>
+                <div className="field"><label className="field__label" htmlFor="course-requirements">Requirements</label><textarea id="course-requirements" rows={3} value={draft.requirements} onChange={event => updateDraft('requirements', event.target.value)} /></div>
+                <div className="field"><label className="field__label" htmlFor="course-starter-items">Starter items</label><textarea id="course-starter-items" rows={3} value={draft.starterItems} onChange={event => updateDraft('starterItems', event.target.value)} /></div>
+                <label className="checkbox"><input type="checkbox" checked={draft.certificateIncluded} onChange={event => updateDraft('certificateIncluded', event.target.checked ? 'true' : '')} /><span>Certificate included</span></label>
+                <div className="field"><label className="field__label" htmlFor="course-agreement">Agreement</label><textarea id="course-agreement" rows={3} value={draft.Agreement} onChange={event => updateDraft('Agreement', event.target.value)} /></div>
+                <div className="field"><label className="field__label" htmlFor="course-level">Course level</label><input id="course-level" value={draft.courseLevel} onChange={event => updateDraft('courseLevel', event.target.value)} /></div>
+                <div className="field"><label className="field__label" htmlFor="course-mode">Mode</label><select id="course-mode" value={draft.courseMode} onChange={event => updateDraft('courseMode', event.target.value)}><option value="online">Online</option><option value="in_person">In person</option><option value="hybrid">Hybrid</option></select></div>
+              </>
+            ) : null}
             <div className="field">
               <div className="products-page__label-row">
                 <label className="field__label" htmlFor="item-description">{behavesLikeService ? 'Description' : 'Product description'}</label>
@@ -606,7 +676,9 @@ export default function ProductsServiceFirst() {
 
           <div className="products-page__list" aria-live="polite">
             {visibleItems.map(item => {
+              const itemIsCourse = item.itemType === 'course' || item.listingType === 'course'
               const itemIsService = item.itemType === 'service'
+              const itemIsServiceLike = itemIsService || itemIsCourse
               return (
                 <article key={item.id} className="products-page__list-card">
                   <header className="products-page__list-card__header">
@@ -615,7 +687,7 @@ export default function ProductsServiceFirst() {
                     </div>
                     <div className="products-page__list-title">
                       <h4>{item.name}</h4>
-                      <span className="products-page__badge products-page__badge--muted">{itemIsService ? 'Service' : 'Product'}</span>
+                      <span className="products-page__badge products-page__badge--muted">{itemIsCourse ? 'Course' : itemIsService ? 'Service' : 'Product'}</span>
                       <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
                     </div>
                     <div className="products-page__list-meta">
@@ -625,10 +697,21 @@ export default function ProductsServiceFirst() {
                   </header>
 
                   <div className="products-page__list-grid">
-                    {itemIsService ? (
+                    {itemIsServiceLike ? (
                       <>
-                        <div className="products-page__list-field"><label className="field__label">Service category</label><p className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</p></div>
-                        <div className="products-page__list-field"><label className="field__label">Booking / service item</label><p className="products-page__list-value">No stock tracking</p></div>
+                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course category' : 'Service category'}</label><p className="products-page__list-value">{normalizeCategory(item.category, itemIsCourse ? 'course' : item.itemType)}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course item' : 'Booking / service item'}</label><p className="products-page__list-value">No stock tracking</p></div>
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Duration</label><p className="products-page__list-value">{item.duration || '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Branch</label><p className="products-page__list-value">{item.branch || '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Preferred times</label><p className="products-page__list-value">{item.preferredTimes || '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Start date</label><p className="products-page__list-value">{item.startDate ? item.startDate.toLocaleDateString() : '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Registration fee</label><p className="products-page__list-value">{formatMoney(item.registrationFee)}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Full fee</label><p className="products-page__list-value">{formatMoney(item.fullFee ?? item.price)}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Capacity</label><p className="products-page__list-value">{item.capacity ?? '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Certificate</label><p className="products-page__list-value">{item.certificateIncluded ? 'Included' : '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Requirements</label><p className="products-page__list-value">{item.requirements || '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Starter items</label><p className="products-page__list-value">{item.starterItems || '—'}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Agreement</label><p className="products-page__list-value">{item.Agreement || '—'}</p></div> : null}
                       </>
                     ) : (
                       <>
