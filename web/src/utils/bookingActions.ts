@@ -53,11 +53,11 @@ export function hasAppScriptBookingSyncConfigured(storeData: Record<string, unkn
 }
 
 function syncPayload(syncReason: string, now: Timestamp, shouldQueueSync: boolean) {
-  if (!shouldQueueSync) return {}
   return {
     syncStatus: 'pending',
     syncReason,
     syncRequestedAt: now,
+    syncConfigDetected: shouldQueueSync,
   }
 }
 
