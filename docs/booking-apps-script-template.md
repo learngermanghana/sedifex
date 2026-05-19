@@ -2,26 +2,67 @@
 
 Use this template when a store wants Sedifex booking actions to update a Google Sheet and send follow-up emails/reminders.
 
-## Notification flow
+## Unified booking workflow
 
-Sedifex Market or the connected website can send the first **booking received** notification when the customer submits a booking.
+Sedifex now treats bookings from these sources as one booking system:
 
-This Apps Script should normally take over only after the store/admin acts inside Sedifex:
+- **Sedifex Market** bookings
+- **Client website** bookings
+- **Sedifex public/custom page** bookings
+- **Manual/admin** bookings created inside Sedifex
 
-- **Confirm booking** = client has paid + store accepts the booking
-- **Cancel booking** = booking is cancelled/rejected
-- **Complete booking** = service/class/appointment is done
-- **Save changes** = edits booking details only
+All of them should appear in **Sedifex → Bookings** and **Reports → Bookings**. The store can open the booking from either page and take the same actions.
 
-By default, this template does **not** send a first booking-received email. That avoids duplicate emails when Sedifex Market or the website already notified the customer and store.
+Recommended flow:
 
-After store confirmation, this script sends the confirmation email, updates the Sheet, and handles reminders at 3 days, 2 days, and 1 day before the appointment.
+```text
+Booking comes in from Market / website / public page / manual admin
+↓
+Customer and store receive the first booking-received notification from Sedifex Market or the connected website flow
+↓
+Booking appears in Sedifex admin
+↓
+Store opens the booking
+↓
+Store clicks Confirm booking, Cancel booking, or Complete booking
+↓
+Sedifex updates the booking and queues sync if App Script sync is configured
+↓
+The store's Apps Script updates the Sheet and sends follow-up emails/reminders
+```
 
-## Existing stores should update
+## Notification ownership
 
-Stores that already installed an older version should update their Apps Script with this template if they want Sedifex admin actions such as **Confirm booking**, **Cancel booking**, and **Complete booking** to sync correctly.
+To avoid duplicate emails, each part of the system has a clear job.
 
-This template treats all of these payment states as confirmed payment:
+| Stage | Owner | Notes |
+| --- | --- | --- |
+| Booking received | Sedifex Market / connected website | First notification to customer and store when the booking is submitted. |
+| Confirm booking | Store admin in Sedifex + store Apps Script | Means the client has paid and the store accepts the booking. Sends confirmation and starts reminder flow. |
+| Cancel booking | Store admin in Sedifex + store Apps Script | Sends cancellation/update to customer and updates the Sheet. |
+| Complete booking | Store admin in Sedifex + store Apps Script | Marks the appointment/class/service done and can send completion/thank-you follow-up. |
+| Reminders | Store Apps Script | Sends 3-day, 2-day, and 1-day reminders after confirmation/payment. |
+
+By default, this template does **not** send the first booking-received email. That first email should already come from Sedifex Market or the connected website flow. This avoids duplicate customer emails.
+
+Set this to `true` only if a store wants the Google Sheet script to send the first booking-received email too:
+
+```javascript
+sendInitialBookingReceivedEmail: false
+```
+
+## Sedifex admin action meanings
+
+| Button in Sedifex | Business meaning | Payment meaning | Sync behavior |
+| --- | --- | --- | --- |
+| Confirm booking | Store accepts the booking/date/time | Client has paid | Queue App Script sync when configured |
+| Cancel booking | Store rejects/cancels booking | No payment action required | Queue cancellation sync when configured |
+| Complete booking | Service/class/appointment is done | Payment should already be confirmed | Queue completion sync when configured |
+| Save changes | Save edited booking details only | Does not change payment automatically | Does not replace Confirm/Cancel/Complete |
+
+## Status mapping
+
+The Apps Script treats these payment statuses as confirmed payment:
 
 ```text
 paid
@@ -31,6 +72,100 @@ succeeded
 complete
 completed
 ```
+
+This matters because Sedifex may store payment internally as `paid`, while older scripts expected `confirmed`. This template maps both to the same confirmed reminder flow.
+
+Booking statuses supported:
+
+```text
+booked
+pending
+pending_approval
+confirmed
+cancelled
+completed
+rescheduled
+```
+
+## Booking Reports in Sedifex
+
+The improved **Reports → Bookings** page is now a source and sync report, not only a booking table.
+
+It shows:
+
+- Source: Sedifex Market, Client website, Sedifex public page, or Manual/admin
+- Whether the record came from the root booking collection or the store subcollection
+- Booking status
+- Payment status
+- Sync status
+- Sync reason
+- Reminder status
+- Booking value
+- Confirmed/cancelled/completed tracking
+- Date filters
+- Source filters
+- Sync filters
+- Open booking action
+
+Important Firestore fields used by the report:
+
+```text
+source / sourceChannel / source_channel
+bookingStatus / status
+paymentStatus / payment_status / payment.status
+syncStatus / sync_status
+syncReason / sync_reason
+confirmedAt
+cancelledAt
+completedAt
+reminder_3d_sent_at
+reminder_2d_sent_at
+reminder_1d_sent_at
+thank_you_sent_at
+```
+
+`syncStatus` and `syncReason` are mainly Sedifex-side tracking fields. The Sheet script receives the booking payload, updates the Sheet, and sends emails/reminders. If a future sync worker marks records as `synced`, the Bookings Report will show that as well.
+
+## Expected sync payload from Sedifex admin
+
+When the store clicks **Confirm booking**, Sedifex should send or queue data like this:
+
+```json
+{
+  "bookingId": "booking_123",
+  "storeId": "store_123",
+  "customer": {
+    "name": "Jane Doe",
+    "phone": "0200000000",
+    "email": "jane@example.com"
+  },
+  "booking": {
+    "serviceName": "Airport Pickup",
+    "preferredDate": "2026-05-11",
+    "preferredTime": "14:00"
+  },
+  "payment": {
+    "amount": 200,
+    "method": "mobile_money",
+    "reference": "MOMO123",
+    "status": "paid",
+    "confirmed": true
+  },
+  "bookingStatus": "confirmed",
+  "status": "confirmed",
+  "paymentStatus": "paid",
+  "paymentConfirmed": true,
+  "paymentConfirmedAt": "2026-05-11T10:00:00.000Z",
+  "source": "website_booking_form",
+  "sourceChannel": "client_website",
+  "syncReason": "booking_confirmed",
+  "eventType": "booking_confirmed"
+}
+```
+
+## Existing stores should update
+
+Stores that already installed an older version should update their Apps Script with this template if they want Sedifex admin actions such as **Confirm booking**, **Cancel booking**, and **Complete booking** to sync correctly.
 
 ## Sheet setup
 
