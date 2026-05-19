@@ -21,6 +21,7 @@ export {
 } from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationBookings } from './integrationBookings'
+export { v1IntegrationStudentRegistrations } from './integrationStudentRegistrations'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
   initializeStoreNotificationDefaults,
