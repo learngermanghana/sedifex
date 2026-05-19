@@ -64,7 +64,7 @@ https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
 So a website should not assume that:
 
 ```txt
-/integration/checkout/create
+/integrationCheckoutCreate
 ```
 
 will automatically route to the new function unless a hosting rewrite/router has been added. Until a router is introduced, use the dedicated URL directly.
@@ -195,7 +195,7 @@ Redeploy the website after adding the env.
 Later, Sedifex can add a router/hosting rewrite so websites can use:
 
 ```txt
-/integration/checkout/create
+/integrationCheckoutCreate
 ```
 
 For now, use the dedicated function URL for online checkout create.

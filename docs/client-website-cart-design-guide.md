@@ -243,7 +243,7 @@ For signed-in customer accounts later, you can move cart storage to Firestore or
 
 ## Checkout payload
 
-When the customer clicks checkout, send the full cart to your website API route. The API route should then call Sedifex checkout/create.
+When the customer clicks checkout, send the full cart to your website API route. The API route should then call Sedifex integrationCheckoutCreate.
 
 ```json
 {
@@ -289,7 +289,7 @@ rQYE4FQGVZPcUpdptdgeRo5A80G2_draft-2b188221-828f-4229-8d7d-3ab6eea4448f
 
 Both can be useful in the website UI, but checkout must send the raw Sedifex item ID to Sedifex. If the website sends the prefixed ID, the product can show correctly in the website while checkout, order lookup, inventory update, or payment reconciliation can fail later.
 
-Use this helper in the website API route before calling Sedifex checkout/create:
+Use this helper in the website API route before calling Sedifex integrationCheckoutCreate:
 
 ```ts
 function normalizeSedifexItemId(rawId: string, storeId: string) {
@@ -361,7 +361,7 @@ This is the same pattern used by Sedifex Market-style carts where the display ID
 The customer-facing website should never call Sedifex checkout directly from browser code. Use a server route such as:
 
 ```text
-POST /api/sedifex/checkout/create
+POST /api/sedifex/integrationCheckoutCreate
 ```
 
 The route should:
@@ -419,7 +419,7 @@ https://us-central1-<project>.cloudfunctions.net/integrationCheckoutCreate
 For proxy/API deployments, it may map to:
 
 ```text
-/integration/checkout/create
+/integrationCheckoutCreate
 ```
 
 The client website should hide this difference inside its own server API route.
