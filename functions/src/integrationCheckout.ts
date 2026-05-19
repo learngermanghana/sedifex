@@ -283,6 +283,12 @@ function getRequestApiKey(req: functions.https.Request) {
   return clean(req.get('x-api-key'), 1000) || bearer
 }
 
+function redactApiKey(apiKey: string) {
+  if (!apiKey) return null
+  if (apiKey.length <= 8) return `${apiKey.slice(0, 2)}***${apiKey.slice(-2)}`
+  return `${apiKey.slice(0, 4)}***${apiKey.slice(-4)}`
+}
+
 
 function getSedifexMarketMerchantTokenMap(): Record<string, string> {
   const raw =
@@ -635,9 +641,12 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
 
     const authorized = await isAuthorized(req, storeId)
     if (!authorized) {
+      const requestApiKey = getRequestApiKey(req)
       functions.logger.warn('integrationCheckoutPreview auth failed', {
         storeId,
-        hasApiKey: Boolean(getRequestApiKey(req)),
+        hasApiKey: Boolean(requestApiKey),
+        apiKeyHint: redactApiKey(requestApiKey),
+        hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
       })
       res.status(401).json({ error: 'invalid-api-key' })
       return
@@ -883,6 +892,14 @@ export const integrationOrderStatus = functions.https.onRequest(async (req, res)
 
     const authorized = await isAuthorized(req, storeId)
     if (!authorized) {
+      const requestApiKey = getRequestApiKey(req)
+      functions.logger.warn('integrationOrderStatus auth failed', {
+        storeId,
+        reference,
+        hasApiKey: Boolean(requestApiKey),
+        apiKeyHint: redactApiKey(requestApiKey),
+        hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
+      })
       res.status(401).json({ error: 'unauthorized' })
       return
     }
