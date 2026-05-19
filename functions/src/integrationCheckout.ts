@@ -99,6 +99,43 @@ function getAmountMajor(body: CheckoutBody) {
   return finalTotalMinor && finalTotalMinor > 0 ? finalTotalMinor / 100 : null
 }
 
+type CanonicalCheckoutInput = {
+  storeId: string
+  customer: {
+    email: string
+    name: string
+    phone: string
+  }
+  amountMajor: number | null
+  sourceChannel: string
+}
+
+function normalizeCheckoutBody(body: CheckoutBody): CanonicalCheckoutInput {
+  const storeId = getStoreId(body)
+  const customer = getCustomer(body)
+  const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
+  return {
+    storeId,
+    customer: {
+      email: clean(customer.email, 220).toLowerCase(),
+      name: clean(customer.name, 220),
+      phone: clean(customer.phone, 80),
+    },
+    amountMajor: getAmountMajor(body),
+    sourceChannel,
+  }
+}
+
+type ValidationDetail = {
+  field: string
+  acceptedAliases: string[]
+  message: string
+}
+
+function respondValidationError(res: functions.Response, error: string, details: ValidationDetail[]) {
+  res.status(400).json({ error, details })
+}
+
 function getSubaccount(body: CheckoutBody) {
   const split = body.splitPayment && typeof body.splitPayment === 'object' ? body.splitPayment as Record<string, unknown> : {}
   const routing = body.paymentRouting && typeof body.paymentRouting === 'object' ? body.paymentRouting as Record<string, unknown> : {}
@@ -679,29 +716,47 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
 
   try {
     const body = (req.body ?? {}) as CheckoutBody
-    const storeId = getStoreId(body)
-    const customer = getCustomer(body)
-    const email = clean(customer.email, 220).toLowerCase()
-    const phone = clean(customer.phone, 80)
-    const amountMajor = getAmountMajor(body)
+    const normalized = normalizeCheckoutBody(body)
+    const storeId = normalized.storeId
+    const email = normalized.customer.email
+    const phone = normalized.customer.phone
+    const amountMajor = normalized.amountMajor
     const reference = clean(body.payment_reference ?? body.reference, 220) || clean(body.client_order_id ?? body.clientOrderId, 220) || `${storeId}_${Date.now()}`
     const currency = clean(body.currency, 20) || 'GHS'
     const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
-    const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
+    const sourceChannel = normalized.sourceChannel
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
     const subaccount = getSubaccount(body)
     const transactionChargeMinor = getTransactionChargeMinor(body)
 
     if (!storeId) {
-      res.status(400).json({ error: 'missing-store-id' })
+      respondValidationError(res, 'missing-store-id', [
+        {
+          field: 'storeId',
+          acceptedAliases: ['store_id', 'merchant_id', 'storeId', 'merchantId', 'selectedBranchStoreId', 'selected_branch_store_id', 'branchLocationId', 'branch_location_id'],
+          message: 'A valid store identifier is required.',
+        },
+      ])
       return
     }
     if (!email) {
-      res.status(400).json({ error: 'customer-email-required' })
+      respondValidationError(res, 'customer-email-required', [
+        {
+          field: 'customer.email',
+          acceptedAliases: ['customer.email', 'customerEmail', 'customer_email', 'email'],
+          message: 'A customer email is required to initialize Paystack checkout.',
+        },
+      ])
       return
     }
     if (!amountMajor || amountMajor <= 0) {
-      res.status(400).json({ error: 'amount-required' })
+      respondValidationError(res, 'amount-required', [
+        {
+          field: 'amount',
+          acceptedAliases: ['amount', 'servicePrice', 'service_price', 'totalAmount', 'total_amount', 'pricing_snapshot.final_total (minor units)'],
+          message: 'A positive amount is required.',
+        },
+      ])
       return
     }
 
