@@ -37,6 +37,23 @@ type CheckoutBody = {
   sourceLabel?: unknown
   source_label?: unknown
   metadata?: unknown
+  branchLocationId?: unknown
+  branch_location_id?: unknown
+  selectedBranchStoreId?: unknown
+  selected_branch_store_id?: unknown
+  customerEmail?: unknown
+  customer_email?: unknown
+  customerName?: unknown
+  customer_name?: unknown
+  customerPhone?: unknown
+  customer_phone?: unknown
+  email?: unknown
+  name?: unknown
+  phone?: unknown
+  servicePrice?: unknown
+  service_price?: unknown
+  totalAmount?: unknown
+  total_amount?: unknown
 }
 
 function clean(value: unknown, max = 500) {
@@ -49,16 +66,34 @@ function numberValue(value: unknown) {
 }
 
 function getStoreId(body: CheckoutBody) {
-  return clean(body.store_id ?? body.merchant_id ?? body.storeId ?? body.merchantId, 180)
+  return clean(
+    body.store_id
+      ?? body.merchant_id
+      ?? body.storeId
+      ?? body.merchantId
+      ?? body.selectedBranchStoreId
+      ?? body.selected_branch_store_id
+      ?? body.branchLocationId
+      ?? body.branch_location_id,
+    180,
+  )
 }
 
 function getCustomer(body: CheckoutBody) {
-  return body.customer && typeof body.customer === 'object' ? (body.customer as Record<string, unknown>) : {}
+  const nested = body.customer && typeof body.customer === 'object' ? (body.customer as Record<string, unknown>) : {}
+  return {
+    ...nested,
+    email: nested.email ?? body.customerEmail ?? body.customer_email ?? body.email,
+    name: nested.name ?? body.customerName ?? body.customer_name ?? body.name,
+    phone: nested.phone ?? body.customerPhone ?? body.customer_phone ?? body.phone,
+  }
 }
 
 function getAmountMajor(body: CheckoutBody) {
   const direct = numberValue(body.amount)
   if (direct && direct > 0) return direct
+  const fallbackAmount = numberValue(body.servicePrice ?? body.service_price ?? body.totalAmount ?? body.total_amount)
+  if (fallbackAmount && fallbackAmount > 0) return fallbackAmount
   const snapshot = body.pricing_snapshot && typeof body.pricing_snapshot === 'object' ? body.pricing_snapshot as Record<string, unknown> : {}
   const finalTotalMinor = numberValue(snapshot.final_total)
   return finalTotalMinor && finalTotalMinor > 0 ? finalTotalMinor / 100 : null
