@@ -386,6 +386,8 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
     return true
   }
 
+  let authLookupFailed = false
+
   try {
     const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
     const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
@@ -416,9 +418,16 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
       if (!snapshot.empty) return true
     }
 
-    if (await isAuthorizedByExistingProductEndpoint(req, storeId, apiKey)) return true
   } catch (error) {
+    authLookupFailed = true
     functions.logger.warn('integration order status auth lookup failed', { storeId, error })
+  }
+
+  if (await isAuthorizedByExistingProductEndpoint(req, storeId, apiKey)) {
+    if (authLookupFailed) {
+      functions.logger.info('integration checkout authorized via product endpoint fallback after auth lookup failure', { storeId })
+    }
+    return true
   }
 
   return false
