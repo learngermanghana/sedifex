@@ -1,5 +1,5 @@
-import AccountOverview from './AccountOverview'
+import IntegrationSettingsHub from './IntegrationSettingsHub'
 
 export default function IntegrationBookingsSettings() {
-  return <AccountOverview headingLevel="h2" defaultAccountTab="integrations" defaultIntegrationTab="booking" />
+  return <IntegrationSettingsHub defaultTab="booking" />
 }
