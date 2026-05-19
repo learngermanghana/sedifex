@@ -228,6 +228,11 @@ function assertContract(req: functions.https.Request, res: functions.Response) {
   return true
 }
 
+function getResponseRequestId(res: functions.Response) {
+  const value = res.getHeader('x-sedifex-request-id')
+  return typeof value === 'string' ? value : null
+}
+
 async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReference, field: string, apiKey: string) {
   const snapshot = await collectionPath.where(field, '==', apiKey).limit(1).get()
   return !snapshot.empty
@@ -648,7 +653,6 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         apiKeyHint: redactApiKey(requestApiKey),
         hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
       })
-      res.status(401).json({ error: 'invalid-api-key' })
       return
     }
 
