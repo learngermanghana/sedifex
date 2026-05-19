@@ -652,12 +652,6 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         hasApiKey: Boolean(requestApiKey),
         apiKeyHint: redactApiKey(requestApiKey),
         hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
-        requestId: getResponseRequestId(res),
-      })
-      res.status(401).json({
-        error: 'invalid-api-key',
-        requestId: getResponseRequestId(res),
-        help: 'Share requestId with Sedifex support to diagnose authorization failures.',
       })
       return
     }
@@ -909,13 +903,8 @@ export const integrationOrderStatus = functions.https.onRequest(async (req, res)
         hasApiKey: Boolean(requestApiKey),
         apiKeyHint: redactApiKey(requestApiKey),
         hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
-        requestId: getResponseRequestId(res),
       })
-      res.status(401).json({
-        error: 'unauthorized',
-        requestId: getResponseRequestId(res),
-        help: 'Share requestId with Sedifex support to diagnose authorization failures.',
-      })
+      res.status(401).json({ error: 'unauthorized' })
       return
     }
 
