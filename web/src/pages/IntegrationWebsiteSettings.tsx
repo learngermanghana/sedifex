@@ -1,5 +1,5 @@
-import AccountOverview from './AccountOverview'
+import IntegrationSettingsHub from './IntegrationSettingsHub'
 
 export default function IntegrationWebsiteSettings() {
-  return <AccountOverview headingLevel="h2" defaultAccountTab="integrations" defaultIntegrationTab="keys" />
+  return <IntegrationSettingsHub defaultTab="website" />
 }
