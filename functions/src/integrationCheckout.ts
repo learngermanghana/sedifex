@@ -228,6 +228,11 @@ function assertContract(req: functions.https.Request, res: functions.Response) {
   return true
 }
 
+function getResponseRequestId(res: functions.Response) {
+  const value = res.getHeader('x-sedifex-request-id')
+  return typeof value === 'string' ? value : null
+}
+
 async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReference, field: string, apiKey: string) {
   const snapshot = await collectionPath.where(field, '==', apiKey).limit(1).get()
   return !snapshot.empty
@@ -281,6 +286,12 @@ function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
 function getRequestApiKey(req: functions.https.Request) {
   const bearer = clean(req.get('authorization'), 1000).replace(/^Bearer\s+/i, '')
   return clean(req.get('x-api-key'), 1000) || bearer
+}
+
+function redactApiKey(apiKey: string) {
+  if (!apiKey) return null
+  if (apiKey.length <= 8) return `${apiKey.slice(0, 2)}***${apiKey.slice(-2)}`
+  return `${apiKey.slice(0, 4)}***${apiKey.slice(-4)}`
 }
 
 
@@ -386,6 +397,8 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
     return true
   }
 
+  let authLookupFailed = false
+
   try {
     const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
     const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
@@ -416,9 +429,16 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
       if (!snapshot.empty) return true
     }
 
-    if (await isAuthorizedByExistingProductEndpoint(req, storeId, apiKey)) return true
   } catch (error) {
+    authLookupFailed = true
     functions.logger.warn('integration order status auth lookup failed', { storeId, error })
+  }
+
+  if (await isAuthorizedByExistingProductEndpoint(req, storeId, apiKey)) {
+    if (authLookupFailed) {
+      functions.logger.info('integration checkout authorized via product endpoint fallback after auth lookup failure', { storeId })
+    }
+    return true
   }
 
   return false
@@ -626,11 +646,19 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
 
     const authorized = await isAuthorized(req, storeId)
     if (!authorized) {
+      const requestApiKey = getRequestApiKey(req)
       functions.logger.warn('integrationCheckoutPreview auth failed', {
         storeId,
-        hasApiKey: Boolean(getRequestApiKey(req)),
+        hasApiKey: Boolean(requestApiKey),
+        apiKeyHint: redactApiKey(requestApiKey),
+        hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
+        requestId: getResponseRequestId(res),
       })
-      res.status(401).json({ error: 'invalid-api-key' })
+      res.status(401).json({
+        error: 'invalid-api-key',
+        requestId: getResponseRequestId(res),
+        help: 'Share requestId with Sedifex support to diagnose authorization failures.',
+      })
       return
     }
 
@@ -874,7 +902,20 @@ export const integrationOrderStatus = functions.https.onRequest(async (req, res)
 
     const authorized = await isAuthorized(req, storeId)
     if (!authorized) {
-      res.status(401).json({ error: 'unauthorized' })
+      const requestApiKey = getRequestApiKey(req)
+      functions.logger.warn('integrationOrderStatus auth failed', {
+        storeId,
+        reference,
+        hasApiKey: Boolean(requestApiKey),
+        apiKeyHint: redactApiKey(requestApiKey),
+        hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
+        requestId: getResponseRequestId(res),
+      })
+      res.status(401).json({
+        error: 'unauthorized',
+        requestId: getResponseRequestId(res),
+        help: 'Share requestId with Sedifex support to diagnose authorization failures.',
+      })
       return
     }
 
