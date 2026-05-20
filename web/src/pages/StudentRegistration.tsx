@@ -42,29 +42,29 @@ const initialManualForm: ManualForm = {
 }
 
 const pageStyles = {
-  page: { display: 'grid', gap: 22, color: '#0f172a' },
-  hero: { borderRadius: 26, padding: '28px 30px', background: 'linear-gradient(135deg, #312e81 0%, #4f46e5 52%, #7c3aed 100%)', color: '#fff', boxShadow: '0 28px 70px -42px rgba(49, 46, 129, 0.8)' },
+  page: { display: 'grid', gap: 18, color: '#0f172a', width: '100%', maxWidth: 'min(100%, 1440px)', minWidth: 0, margin: '0 auto', padding: '12px clamp(10px, 1.5vw, 18px) 32px', boxSizing: 'border-box' as const, overflowX: 'hidden' as const },
+  hero: { borderRadius: 22, padding: '22px clamp(18px, 3vw, 28px)', background: 'linear-gradient(135deg, #312e81 0%, #4f46e5 52%, #7c3aed 100%)', color: '#fff', boxShadow: '0 24px 60px -42px rgba(49, 46, 129, 0.8)', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' as const },
   eyebrow: { margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: 'rgba(255,255,255,0.74)' },
-  title: { margin: '8px 0 0', fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.05, letterSpacing: '-0.04em' },
-  subtitle: { margin: '12px 0 0', maxWidth: 780, color: 'rgba(255,255,255,0.82)', fontSize: 16, lineHeight: 1.65 },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14 },
-  statCard: { borderRadius: 22, border: '1px solid #e2e8f0', background: '#ffffff', padding: 18, boxShadow: '0 20px 50px -38px rgba(15, 23, 42, 0.55)' },
-  statLabel: { margin: '6px 0 0', color: '#64748b', fontWeight: 700, fontSize: 13 },
-  statValue: { margin: 0, fontSize: 34, lineHeight: 1, fontWeight: 900, letterSpacing: '-0.05em' },
-  card: { borderRadius: 24, border: '1px solid #e2e8f0', background: '#ffffff', padding: 22, boxShadow: '0 24px 60px -42px rgba(15, 23, 42, 0.5)' },
-  cardHeader: { display: 'flex', flexWrap: 'wrap' as const, gap: 12, alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  cardTitle: { margin: 0, fontSize: 21, letterSpacing: '-0.02em' },
+  title: { margin: '8px 0 0', fontSize: 'clamp(25px, 4vw, 38px)', lineHeight: 1.05, letterSpacing: '-0.04em' },
+  subtitle: { margin: '12px 0 0', maxWidth: 760, color: 'rgba(255,255,255,0.82)', fontSize: 15, lineHeight: 1.65 },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12, minWidth: 0 },
+  statCard: { borderRadius: 18, border: '1px solid #e2e8f0', background: '#ffffff', padding: 15, boxShadow: '0 18px 42px -36px rgba(15, 23, 42, 0.55)', minWidth: 0, boxSizing: 'border-box' as const },
+  statLabel: { margin: '6px 0 0', color: '#64748b', fontWeight: 700, fontSize: 12 },
+  statValue: { margin: 0, fontSize: 30, lineHeight: 1, fontWeight: 900, letterSpacing: '-0.05em' },
+  card: { borderRadius: 22, border: '1px solid #e2e8f0', background: '#ffffff', padding: 'clamp(15px, 2vw, 22px)', boxShadow: '0 22px 52px -42px rgba(15, 23, 42, 0.5)', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' as const, overflow: 'hidden' as const },
+  cardHeader: { display: 'flex', flexWrap: 'wrap' as const, gap: 12, alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  cardTitle: { margin: 0, fontSize: 20, letterSpacing: '-0.02em' },
   muted: { color: '#64748b', margin: '5px 0 0', lineHeight: 1.6 },
-  formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 },
-  label: { display: 'grid', gap: 7, color: '#334155', fontSize: 13, fontWeight: 800 },
-  input: { width: '100%', border: '1px solid #cbd5e1', borderRadius: 14, padding: '12px 13px', fontSize: 14, background: '#ffffff', color: '#0f172a', outline: 'none' },
+  formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(210px, 100%), 1fr))', gap: 12, minWidth: 0 },
+  label: { display: 'grid', gap: 7, color: '#334155', fontSize: 13, fontWeight: 800, minWidth: 0 },
+  input: { width: '100%', maxWidth: '100%', border: '1px solid #cbd5e1', borderRadius: 13, padding: '11px 12px', fontSize: 14, background: '#ffffff', color: '#0f172a', outline: 'none', boxSizing: 'border-box' as const },
   actions: { display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 10, marginTop: 16 },
-  primaryButton: { border: 0, borderRadius: 14, padding: '12px 18px', background: 'linear-gradient(135deg, #4338ca, #4f46e5)', color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: '0 18px 36px -24px rgba(67, 56, 202, 0.85)' },
-  secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 14, padding: '11px 16px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
-  tableWrap: { overflowX: 'auto' as const, borderRadius: 18, border: '1px solid #e2e8f0' },
-  table: { width: '100%', minWidth: 1040, borderCollapse: 'collapse' as const },
-  th: { textAlign: 'left' as const, padding: '13px 14px', fontSize: 12, color: '#64748b', background: '#f8fafc', textTransform: 'uppercase' as const, letterSpacing: '0.08em' },
-  td: { padding: '14px 14px', borderTop: '1px solid #e2e8f0', verticalAlign: 'top' as const, color: '#334155', fontSize: 14 },
+  primaryButton: { border: 0, borderRadius: 13, padding: '11px 17px', background: 'linear-gradient(135deg, #4338ca, #4f46e5)', color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: '0 18px 36px -24px rgba(67, 56, 202, 0.85)' },
+  secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 13, padding: '10px 15px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  tableWrap: { width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto' as const, borderRadius: 16, border: '1px solid #e2e8f0', boxSizing: 'border-box' as const },
+  table: { width: '100%', minWidth: 860, borderCollapse: 'collapse' as const, tableLayout: 'auto' as const },
+  th: { textAlign: 'left' as const, padding: '12px 12px', fontSize: 11, color: '#64748b', background: '#f8fafc', textTransform: 'uppercase' as const, letterSpacing: '0.07em', whiteSpace: 'nowrap' as const },
+  td: { padding: '12px 12px', borderTop: '1px solid #e2e8f0', verticalAlign: 'top' as const, color: '#334155', fontSize: 13, overflowWrap: 'anywhere' as const },
   alert: { borderRadius: 16, padding: '12px 14px', fontWeight: 800 },
 }
 
@@ -88,8 +88,8 @@ function PrintableIdCard({ student, onClose }: { student: RegistrationDoc; onClo
   const code = studentCodeOf(student)
   const photo = studentPhotoOf(student)
   const status = studentStatusOf(student)
-  return <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.72)', display: 'grid', placeItems: 'center', padding: 20 }}>
-    <div style={{ background: '#fff', borderRadius: 24, padding: 22, width: 'min(680px, 100%)' }}>
+  return <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.72)', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box' }}>
+    <div style={{ background: '#fff', borderRadius: 24, padding: 22, width: 'min(680px, 100%)', boxSizing: 'border-box' }}>
       <div id="student-id-card-print-area" style={{ width: 420, maxWidth: '100%', margin: '0 auto', border: '1px solid #cbd5e1', borderRadius: 22, overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif' }}>
         <div style={{ background: 'linear-gradient(135deg, #312e81, #7c3aed)', color: '#fff', padding: 18 }}>
           <p style={{ margin: 0, fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase', fontWeight: 800 }}>Student ID Card</p>
@@ -190,7 +190,7 @@ export default function StudentRegistration() {
       <label style={pageStyles.label}>Payment status<input style={pageStyles.input} value={manualForm.paymentStatus} onChange={event => updateManualForm('paymentStatus', event.target.value)} /></label>
       <label style={pageStyles.label}>Amount<input style={pageStyles.input} inputMode="decimal" value={manualForm.amount} onChange={event => updateManualForm('amount', event.target.value)} placeholder="0.00" /></label>
       <label style={pageStyles.label}>Reference<input style={pageStyles.input} value={manualForm.reference} onChange={event => updateManualForm('reference', event.target.value)} placeholder="Optional" /></label>
-    </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 90, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : 'Add student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving}>Clear form</button></div>{saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}</form></section>
+    </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : 'Add student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving}>Clear form</button></div>{saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}</form></section>
     <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Latest registrations</h2><p style={pageStyles.muted}>Website submissions and manual entries appear here.</p></div><button type="button" style={pageStyles.secondaryButton} onClick={() => void loadRegistrations(true)} disabled={loading}>Refresh</button></div>{loading ? <p style={pageStyles.muted}>Loading registrations…</p> : null}{error ? <p style={{ ...pageStyles.alert, background: '#fef2f2', color: '#b91c1c' }}>{error}</p> : null}{!loading && !error && registrations.length === 0 ? <div style={{ border: '1px dashed #cbd5e1', borderRadius: 18, padding: 24, textAlign: 'center', color: '#64748b' }}><strong style={{ color: '#334155' }}>No student registrations yet.</strong><p style={{ margin: '6px 0 0' }}>Add one manually or wait for the connected website to submit a registration.</p></div> : null}{registrations.length > 0 ? <div style={pageStyles.tableWrap}><table style={pageStyles.table}><thead><tr><th style={pageStyles.th}>Student</th><th style={pageStyles.th}>Student ID</th><th style={pageStyles.th}>Course</th><th style={pageStyles.th}>Class time</th><th style={pageStyles.th}>Status</th><th style={pageStyles.th}>Payment</th><th style={pageStyles.th}>Reference</th><th style={pageStyles.th}>Actions</th></tr></thead><tbody>{registrations.map(item => <tr key={item.id}><td style={pageStyles.td}><strong style={{ color: '#0f172a' }}>{item.customer?.name ?? 'Unnamed student'}</strong><br /><small>{item.customer?.phone ?? item.customer?.email ?? 'No contact'}</small></td><td style={pageStyles.td}><strong>{studentCodeOf(item)}</strong></td><td style={pageStyles.td}>{item.data?.course ?? '—'}</td><td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td><td style={pageStyles.td}><span style={{ ...statusStyle(studentStatusOf(item)), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(studentStatusOf(item))}</span></td><td style={pageStyles.td}><span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(item.payment?.status)}</span><br /><small>{formatAmount(item.payment)}</small></td><td style={pageStyles.td}>{item.payment?.reference ?? '—'}<br /><small>{formatDate(item.createdAt)}</small></td><td style={pageStyles.td}><button type="button" style={pageStyles.secondaryButton} onClick={() => void handlePrintCard(item)}>Print ID</button></td></tr>)}</tbody></table></div> : null}</section>
   </div>
 }
