@@ -30,6 +30,7 @@ type Draft = {
 const DEFAULT_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
 const DEFAULT_CHECKOUT_CREATE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate'
 const DEFAULT_CONTRACT_VERSION = '2026-04-13'
+const API_KEY_PLACEHOLDER = 'PASTE_CREATED_SEDIFEX_API_KEY_HERE'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : ''
@@ -83,15 +84,23 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
 
   const envBlock = useMemo(() => {
     if (!storeId) return ''
+    const apiKeyValue = latestToken || API_KEY_PLACEHOLDER
+    const apiBaseUrl = draft.apiBaseUrl || DEFAULT_BASE_URL
+    const checkoutCreateUrl = draft.checkoutCreateUrl || DEFAULT_CHECKOUT_CREATE_URL
+    const returnUrl = draft.checkoutReturnUrl || 'https://yourwebsite.com/payment/return'
     return [
-      `SEDIFEX_API_BASE_URL=${draft.apiBaseUrl || DEFAULT_BASE_URL}`,
-      `SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=${draft.checkoutCreateUrl || DEFAULT_CHECKOUT_CREATE_URL}`,
+      `SEDIFEX_API_BASE_URL=${apiBaseUrl}`,
+      `SEDIFEX_INTEGRATION_API_BASE_URL=${apiBaseUrl}`,
+      `SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=${checkoutCreateUrl}`,
       `SEDIFEX_BOOKING_TARGET_STORE_ID=${storeId}`,
-      `NEXT_PUBLIC_SEDIFEX_STORE_ID=${storeId}`,
+      `SEDIFEX_STORE_ID=${storeId}`,
+      `SEDIFEX_BOOKING_API_KEY=${apiKeyValue}`,
+      `SEDIFEX_CHECKOUT_API_KEY=${apiKeyValue}`,
       `SEDIFEX_CONTRACT_VERSION=${draft.contractVersion || DEFAULT_CONTRACT_VERSION}`,
-      `SEDIFEX_CHECKOUT_RETURN_URL=${draft.checkoutReturnUrl || 'https://yourwebsite.com/payment/return'}`,
+      `SEDIFEX_CHECKOUT_RETURN_URL=${returnUrl}`,
+      `NEXT_PUBLIC_SEDIFEX_STORE_ID=${storeId}`,
     ].join('\n')
-  }, [draft.apiBaseUrl, draft.checkoutCreateUrl, draft.checkoutReturnUrl, draft.contractVersion, storeId])
+  }, [draft.apiBaseUrl, draft.checkoutCreateUrl, draft.checkoutReturnUrl, draft.contractVersion, latestToken, storeId])
 
   function update(key: keyof Draft, value: string | boolean) {
     setDraft(current => ({ ...current, [key]: value }))
@@ -281,6 +290,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       if (token) {
         setLatestToken(token)
         await copy(token, 'New API key')
+        publish({ message: 'New API key copied. The developer env block now includes it.', tone: 'success' })
       }
       await refreshKeys()
     } catch (err) {
@@ -316,7 +326,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'website' && (
         <div className="account-overview__website-sync">
           <h2>Website + checkout setup</h2>
-          <p className="account-overview__hint">Use these values on Glittering, Kwaku, or any client website that connects to Sedifex.</p>
+          <p className="account-overview__hint">Use these values on Glittering, Kwaku, Pirus, or any client website that connects to Sedifex. Create an API key in the API keys tab first if you want this block to include the actual key.</p>
           <div className="account-overview__form-grid">
             <label><span>Website domain</span><input value={draft.websiteDomain} onChange={event => update('websiteDomain', event.target.value)} placeholder="https://www.example.com" /></label>
             <label><span>Checkout return URL</span><input value={draft.checkoutReturnUrl} onChange={event => update('checkoutReturnUrl', event.target.value)} placeholder="https://www.example.com/payment/return" /></label>
@@ -326,12 +336,13 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
             <label><span>Contract version</span><input value={draft.contractVersion} onChange={event => update('contractVersion', event.target.value)} /></label>
           </div>
           <div className="account-overview__integration-token-notice">
-            <p><strong>Copy to website env</strong></p>
+            <p><strong>Developer env block</strong></p>
+            <p className="account-overview__hint">Give this to the website developer. API keys must stay server-side in Vercel or the website backend.</p>
             <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{envBlock}</pre>
           </div>
           <div className="account-overview__website-sync-actions">
             <button type="button" className="button button--secondary" onClick={() => copy(storeId, 'Store ID')}>Copy Store ID</button>
-            <button type="button" className="button button--secondary" onClick={() => copy(envBlock, 'Website env block')}>Copy env block</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(envBlock, latestToken ? 'Developer env block with key' : 'Developer env block')}>Copy developer env block</button>
             <button type="button" className="button" onClick={saveWebsite} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save website setup'}</button>
           </div>
         </div>
@@ -366,12 +377,12 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'keys' && (
         <div className="account-overview__website-sync">
           <h2>Website API keys</h2>
-          <p className="account-overview__hint">Create a key, copy it once, and put it in the website environment as SEDIFEX_CHECKOUT_API_KEY or SEDIFEX_INTEGRATION_API_KEY.</p>
+          <p className="account-overview__hint">Create a key, copy it once, and put it in the website environment as SEDIFEX_BOOKING_API_KEY and SEDIFEX_CHECKOUT_API_KEY. The full key is shown once only.</p>
           <div className="account-overview__website-sync-test">
             <label><span>New key name</span><input value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="Website production key" /></label>
             <button type="button" className="button" onClick={createKey} disabled={isSaving}>{isSaving ? 'Creating…' : 'Create and copy key'}</button>
           </div>
-          {latestToken ? <div className="account-overview__integration-token-notice"><p><strong>Save this key now. It is shown once.</strong></p><code className="account-overview__integration-token-value">{latestToken}</code></div> : null}
+          {latestToken ? <div className="account-overview__integration-token-notice"><p><strong>Save this key now. It is shown once.</strong></p><code className="account-overview__integration-token-value">{latestToken}</code><div className="account-overview__website-sync-actions"><button type="button" className="button button--secondary" onClick={() => copy(envBlock, 'Developer env block with new key')}>Copy full developer env block with key</button></div></div> : null}
           {keysLoading ? <p>Loading keys…</p> : <ul className="account-overview__integration-key-list">{keys.map(item => <li key={item.id} className="account-overview__integration-key-item"><div><strong>{item.name}</strong><p className="account-overview__hint">{item.keyPreview} · {item.status} · Created {formatTimestamp(item.createdAt)}</p></div></li>)}</ul>}
         </div>
       )}
