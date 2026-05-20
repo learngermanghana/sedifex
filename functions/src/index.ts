@@ -24,12 +24,15 @@ export { v1IntegrationBookings } from './integrationBookings'
 export { v1IntegrationStudentRegistrations } from './integrationStudentRegistrations'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
+  notifyNgoVolunteerApplicationReceived,
+  notifyNgoSupportRequestReceived,
+  notifyNgoDonationSubmitted,
+  notifyNgoDonationConfirmed,
+} from './ngoNotificationAlerts'
+export {
   initializeStoreNotificationDefaults,
   notifyIntegrationOrderStatus,
   notifyStudentRegistrationCreated,
-  notifyVolunteerApplicationCreated,
-  notifySupportRequestCreated,
-  notifyDonationCaptured,
   sendBrandedNotificationPreview,
 } from './notifications'
 export {
@@ -226,3 +229,5 @@ const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID'
 
 let openAiConfigWarned = false
 let integrationApiKeyWarned = false
+
+function placeholder() { return null }
