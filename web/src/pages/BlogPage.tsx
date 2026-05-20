@@ -20,6 +20,8 @@ import { useActiveStore } from '../hooks/useActiveStore'
 import { requestAiAdvisor } from '../api/aiAdvisor'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 
+const BLOG_AUTOSAVE_VERSION = 1
+const BLOG_AUTOSAVE_DELAY_MS = 4000
 
 type CatalogItem = {
   id: string
@@ -48,6 +50,21 @@ type BlogPost = {
   updatedAt: string | null
 }
 
+type BlogAutoSaveDraft = {
+  version: number
+  editingPostId: string | null
+  title: string
+  content: string
+  metaTitle: string
+  metaDescription: string
+  publishAt: string
+  status: 'draft' | 'published' | 'scheduled'
+  selectedCatalogItemId: string
+  imageUrl: string | null
+  customImageSelected: boolean
+  selectedFileName: string | null
+  updatedAt: number
+}
 
 function formatPastedContent(value: string): string {
   return value
@@ -81,6 +98,74 @@ function getCatalogImageUrl(data: Record<string, unknown>): string | null {
   return null
 }
 
+function getBlogAutoSaveKey(storeId: string): string {
+  return `sedifex:blog-editor-draft:${storeId}`
+}
+
+function isValidAutoSaveStatus(value: unknown): value is BlogAutoSaveDraft['status'] {
+  return value === 'draft' || value === 'published' || value === 'scheduled'
+}
+
+function hasAutoSaveContent(draft: Pick<BlogAutoSaveDraft, 'title' | 'content' | 'metaTitle' | 'metaDescription' | 'publishAt' | 'selectedCatalogItemId' | 'imageUrl'>): boolean {
+  return Boolean(
+    draft.title.trim() ||
+      draft.content.trim() ||
+      draft.metaTitle.trim() ||
+      draft.metaDescription.trim() ||
+      draft.publishAt.trim() ||
+      draft.selectedCatalogItemId.trim() ||
+      draft.imageUrl,
+  )
+}
+
+function readAutoSavedDraft(storeId: string): BlogAutoSaveDraft | null {
+  try {
+    const raw = window.localStorage.getItem(getBlogAutoSaveKey(storeId))
+    if (!raw) return null
+    const draft = JSON.parse(raw) as Partial<BlogAutoSaveDraft>
+    if (draft.version !== BLOG_AUTOSAVE_VERSION) return null
+    if (!isValidAutoSaveStatus(draft.status)) return null
+
+    return {
+      version: BLOG_AUTOSAVE_VERSION,
+      editingPostId: typeof draft.editingPostId === 'string' ? draft.editingPostId : null,
+      title: typeof draft.title === 'string' ? draft.title : '',
+      content: typeof draft.content === 'string' ? draft.content : '',
+      metaTitle: typeof draft.metaTitle === 'string' ? draft.metaTitle : '',
+      metaDescription: typeof draft.metaDescription === 'string' ? draft.metaDescription : '',
+      publishAt: typeof draft.publishAt === 'string' ? draft.publishAt : '',
+      status: draft.status,
+      selectedCatalogItemId: typeof draft.selectedCatalogItemId === 'string' ? draft.selectedCatalogItemId : '',
+      imageUrl: typeof draft.imageUrl === 'string' && draft.imageUrl.trim() ? draft.imageUrl : null,
+      customImageSelected: draft.customImageSelected === true,
+      selectedFileName: typeof draft.selectedFileName === 'string' && draft.selectedFileName.trim() ? draft.selectedFileName : null,
+      updatedAt: typeof draft.updatedAt === 'number' ? draft.updatedAt : Date.now(),
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveAutoSavedDraft(storeId: string, draft: BlogAutoSaveDraft): void {
+  try {
+    if (!hasAutoSaveContent(draft)) {
+      window.localStorage.removeItem(getBlogAutoSaveKey(storeId))
+      return
+    }
+    window.localStorage.setItem(getBlogAutoSaveKey(storeId), JSON.stringify(draft))
+  } catch {
+    // Local storage may be unavailable or full. Ignore so the editor remains usable.
+  }
+}
+
+function clearAutoSavedDraft(storeId: string): void {
+  try {
+    window.localStorage.removeItem(getBlogAutoSaveKey(storeId))
+  } catch {
+    // Ignore local storage errors.
+  }
+}
+
 export default function BlogPage() {
   const { storeId } = useActiveStore()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -102,6 +187,8 @@ export default function BlogPage() {
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [autoSaveReady, setAutoSaveReady] = useState(false)
+  const [autoSaveMessage, setAutoSaveMessage] = useState<string | null>(null)
   const [dailyShareEnabled, setDailyShareEnabled] = useState(false)
 
   async function loadPosts() {
@@ -135,6 +222,77 @@ export default function BlogPage() {
   useEffect(() => {
     void loadPosts()
   }, [storeId])
+
+  useEffect(() => {
+    setAutoSaveReady(false)
+    setAutoSaveMessage(null)
+    if (!storeId) return
+
+    const draft = readAutoSavedDraft(storeId)
+    if (draft && hasAutoSaveContent(draft)) {
+      setEditingPostId(draft.editingPostId)
+      setTitle(draft.title)
+      setContent(draft.content)
+      setMetaTitle(draft.metaTitle)
+      setMetaDescription(draft.metaDescription)
+      setPublishAt(draft.publishAt)
+      setStatus(draft.status)
+      setSelectedCatalogItemId(draft.selectedCatalogItemId)
+      setImageUrl(draft.imageUrl)
+      setCustomImageSelected(draft.customImageSelected)
+      setSelectedFileName(draft.selectedFileName)
+      setAutoSaveMessage(`Recovered auto-saved draft from ${new Date(draft.updatedAt).toLocaleString()}.`)
+    }
+
+    setAutoSaveReady(true)
+  }, [storeId])
+
+  useEffect(() => {
+    if (!storeId || !autoSaveReady || saving || uploadingImage) return undefined
+
+    const draft: BlogAutoSaveDraft = {
+      version: BLOG_AUTOSAVE_VERSION,
+      editingPostId,
+      title,
+      content,
+      metaTitle,
+      metaDescription,
+      publishAt,
+      status,
+      selectedCatalogItemId,
+      imageUrl,
+      customImageSelected,
+      selectedFileName,
+      updatedAt: Date.now(),
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      saveAutoSavedDraft(storeId, draft)
+      if (hasAutoSaveContent(draft)) {
+        setAutoSaveMessage(`Auto-saved ${new Date(draft.updatedAt).toLocaleTimeString()}.`)
+      } else {
+        setAutoSaveMessage(null)
+      }
+    }, BLOG_AUTOSAVE_DELAY_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [
+    storeId,
+    autoSaveReady,
+    saving,
+    uploadingImage,
+    editingPostId,
+    title,
+    content,
+    metaTitle,
+    metaDescription,
+    publishAt,
+    status,
+    selectedCatalogItemId,
+    imageUrl,
+    customImageSelected,
+    selectedFileName,
+  ])
 
   useEffect(() => {
     async function loadAutomationSettings() {
@@ -247,6 +405,24 @@ export default function BlogPage() {
     if (selectedCatalogItem?.imageUrl) setImageUrl(selectedCatalogItem.imageUrl)
   }
 
+  function discardAutoSavedDraft() {
+    if (!storeId) return
+    clearAutoSavedDraft(storeId)
+    setTitle('')
+    setContent('')
+    setMetaTitle('')
+    setMetaDescription('')
+    setPublishAt('')
+    setStatus('draft')
+    setSelectedCatalogItemId('')
+    setImageUrl(null)
+    setCustomImageSelected(false)
+    setSelectedFileName(null)
+    setEditingPostId(null)
+    setAutoSaveMessage('Auto-saved draft cleared.')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   async function generateBlogWithAi() {
     if (!storeId) return
     setIsAiGenerating(true)
@@ -348,6 +524,7 @@ export default function BlogPage() {
       if (editingPostId) await updateDoc(doc(db, 'blogPosts', editingPostId), payload)
       else await addDoc(collection(db, 'blogPosts'), { ...payload, createdAt: serverTimestamp() })
 
+      clearAutoSavedDraft(storeId)
       setTitle('')
       setContent('')
       setMetaTitle('')
@@ -357,6 +534,7 @@ export default function BlogPage() {
       setImageUrl(null)
       setCustomImageSelected(false)
       setSelectedFileName(null)
+      setAutoSaveMessage(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
       setEditingPostId(null)
       setMessage(editingPostId ? 'Post updated.' : 'Post saved.')
@@ -379,6 +557,7 @@ export default function BlogPage() {
     setImageUrl(post.imageUrl ?? post.ogImage ?? null)
     setCustomImageSelected(false)
     setSelectedFileName(null)
+    setAutoSaveMessage(null)
   }
 
   async function archivePost(postId: string) {
@@ -506,9 +685,13 @@ export default function BlogPage() {
                 <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || uploadingImage || !storeId}>
                   {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
                 </button>
+                <button type="button" className="button button--ghost" onClick={discardAutoSavedDraft} disabled={!storeId || saving || uploadingImage}>
+                  Clear draft
+                </button>
                 <button type="submit" disabled={saving || uploadingImage || !storeId}>{saving ? 'Saving…' : uploadingImage ? 'Uploading image…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
               </div>
             </form>
+            {autoSaveMessage ? <p className="blog-page__upload-status">{autoSaveMessage}</p> : null}
             {message ? <p>{message}</p> : null}
           </article>
         </div>
