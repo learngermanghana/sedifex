@@ -58,6 +58,30 @@ function isStoreEligible(store: StoreData | undefined): boolean {
   return store.verified === true && store.eligibleForBuy === true && store.buyOptOut !== true && store.status === 'active'
 }
 
+function isDraftStatus(status: unknown): boolean {
+  return text(status)?.toLowerCase() === 'draft'
+}
+
+function isPublishedStatus(status: unknown): boolean {
+  return text(status)?.toLowerCase() === 'published'
+}
+
+function hasLegacyPublicationFields(data: ProductData): boolean {
+  return data.isPublished === null
+    || data.isPublished === undefined
+    || data.status === null
+    || data.status === undefined
+}
+
+function shouldIncludeProduct(data: ProductData, eligibleStore: boolean): boolean {
+  if (data.isMarketplaceVisible === false) return false
+  if (data.isPublished === false) return false
+  if (isDraftStatus(data.status)) return false
+  if (data.isPublished === true) return true
+  if (isPublishedStatus(data.status)) return true
+  return eligibleStore && hasLegacyPublicationFields(data)
+}
+
 function buildStoreMeta(store: StoreData): Record<string, unknown> {
   return {
     storeName: text(store.displayName) ?? text(store.name),
@@ -141,13 +165,13 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   }
 
   const storeMeta = buildStoreMeta(storeData)
-  const productsSnap = await db.collection('products').where('storeId', '==', storeId).where('isPublished', '==', true).get()
+  const productsSnap = await db.collection('products').where('storeId', '==', storeId).get()
   let batch = db.batch()
   let writes = 0
   let writtenListings = 0
   for (const productDoc of productsSnap.docs) {
     const data = (productDoc.data() ?? {}) as ProductData
-    if (data.isMarketplaceVisible !== true) continue
+    if (!shouldIncludeProduct(data, true)) continue
     batch.set(db.collection('publicListings').doc(productDoc.id), publicPayload(productDoc.id, data, storeMeta), { merge: true })
     writes += 1
     writtenListings += 1
@@ -184,17 +208,18 @@ export const syncPublicCatalogOnProductWrite = functions.firestore.document('pro
   }
   const afterData = (change.after.data() ?? {}) as ProductData
   const storeId = text(afterData.storeId)
-  if (!storeId || afterData.isPublished !== true) {
-    await db.collection('publicListings').doc(productId).delete()
-    return
-  }
-  if (afterData.isMarketplaceVisible !== true) {
+  if (!storeId) {
     await db.collection('publicListings').doc(productId).delete()
     return
   }
   const storeSnap = await db.collection('stores').doc(storeId).get()
   const storeData = (storeSnap.data() ?? {}) as StoreData
-  if (!isStoreEligible(storeData)) {
+  const eligibleStore = isStoreEligible(storeData)
+  if (!eligibleStore) {
+    await db.collection('publicListings').doc(productId).delete()
+    return
+  }
+  if (!shouldIncludeProduct(afterData, eligibleStore)) {
     await db.collection('publicListings').doc(productId).delete()
     return
   }
@@ -214,9 +239,7 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
   }
 
   const dryRun = data?.dryRun === true
-  const productsSnap = await db.collection('products')
-    .where('isPublished', '==', true)
-    .get()
+  const productsSnap = await db.collection('products').get()
 
   const storeCache = new Map<string, StoreData | undefined>()
   let scannedCount = 0
@@ -236,12 +259,6 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
       continue
     }
 
-    if (productData.isMarketplaceVisible === false) {
-      skippedCount += 1
-      explicitHiddenCount += 1
-      continue
-    }
-
     let storeData = storeCache.get(storeId)
     if (!storeCache.has(storeId)) {
       const storeSnap = await db.collection('stores').doc(storeId).get()
@@ -250,23 +267,23 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
     }
 
     const eligibleStore = !!storeData && isStoreEligible(storeData)
-    const isExplicitVisible = productData.isMarketplaceVisible === true
-    const isLegacyCandidate = productData.isMarketplaceVisible === null || productData.isMarketplaceVisible === undefined
-    const includeExplicit = isExplicitVisible && eligibleStore
-    const includeLegacy = isLegacyCandidate && eligibleStore
-    if (!includeExplicit && !includeLegacy) {
+    const includeProduct = shouldIncludeProduct(productData, eligibleStore)
+    if (!includeProduct) {
       skippedCount += 1
+      if (productData.isMarketplaceVisible === false || productData.isPublished === false || isDraftStatus(productData.status)) {
+        explicitHiddenCount += 1
+      }
       continue
     }
     const eligibleStoreData = storeData as StoreData
 
     syncedCount += 1
-    if (includeLegacy) {
+    if (hasLegacyPublicationFields(productData)) {
       legacyIncludedCount += 1
     }
     if (dryRun) continue
 
-    if (includeLegacy) {
+    if (hasLegacyPublicationFields(productData) && productData.isMarketplaceVisible !== true) {
       batch.set(
         db.collection('products').doc(productDoc.id),
         {
