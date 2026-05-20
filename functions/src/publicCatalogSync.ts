@@ -53,12 +53,16 @@ function toArray(value: unknown): string[] {
   return [...new Set(out)]
 }
 
-function getFieldValueDelete(): unknown {
-  try {
-    return admin?.firestore?.FieldValue?.delete?.() ?? null
-  } catch {
-    return null
-  }
+function safeServerTimestamp(): unknown {
+  return admin.firestore?.FieldValue?.serverTimestamp
+    ? admin.firestore.FieldValue.serverTimestamp()
+    : new Date()
+}
+
+function safeDeleteField(): unknown {
+  return admin.firestore?.FieldValue?.delete
+    ? admin.firestore.FieldValue.delete()
+    : null
 }
 
 function isStoreEligible(store: StoreData | undefined): boolean {
@@ -130,7 +134,7 @@ function publicPayload(
 ): Record<string, unknown> {
   const normalizedItemType = itemType(data.itemType)
   const status = data.isPublished === true ? 'published' : 'draft'
-  const deleteSentinel = getFieldValueDelete()
+  const deleteSentinel = safeDeleteField()
   const category = text(data.category) ?? 'General'
   const metadata = (typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {}) as Record<string, unknown>
   const payload: Record<string, unknown> = {
@@ -173,7 +177,7 @@ function publicPayload(
     starterItems: text(data.starterItems),
     certificateIncluded: boolOrNull(data.certificateIncluded),
     Agreement: text(data.Agreement),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: safeServerTimestamp(),
   }
 
   if (deleteSentinel !== null) payload.unpublishedAt = deleteSentinel
@@ -197,7 +201,7 @@ export async function removeStorePublicCatalog(storeId: string): Promise<void> {
   if (writes > 0) await batch.commit()
 
   await db.collection('stores').doc(storeId).set({
-    publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+    publicCatalogLastSyncedAt: safeServerTimestamp(),
     publicCatalogDocCount: { listings: 0 },
   }, { merge: true })
 }
@@ -234,7 +238,7 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   if (writes > 0) await batch.commit()
 
   await storeRef.set({
-    publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+    publicCatalogLastSyncedAt: safeServerTimestamp(),
     publicCatalogDocCount: { listings: writtenListings },
     publicCatalogOutOfSyncCount: 0,
   }, { merge: true })
