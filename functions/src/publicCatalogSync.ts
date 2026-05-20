@@ -53,6 +53,14 @@ function toArray(value: unknown): string[] {
   return [...new Set(out)]
 }
 
+function getFieldValueDelete(): unknown {
+  try {
+    return admin?.firestore?.FieldValue?.delete?.() ?? null
+  } catch {
+    return null
+  }
+}
+
 function isStoreEligible(store: StoreData | undefined): boolean {
   if (!store) return false
   return store.verified === true && store.eligibleForBuy === true && store.buyOptOut !== true && store.status === 'active'
@@ -94,17 +102,22 @@ function buildStoreMeta(store: StoreData): Record<string, unknown> {
 function publicPayload(productId: string, data: ProductData, storeMeta: Record<string, unknown>): Record<string, unknown> {
   const normalizedItemType = itemType(data.itemType)
   const status = data.isPublished === true ? 'published' : 'draft'
-  return {
+  const deleteSentinel = getFieldValueDelete()
+  const category = text(data.category) ?? 'General'
+  const metadata = (typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {}) as Record<string, unknown>
+  const payload: Record<string, unknown> = {
     sourceProductId: productId,
     storeId: text(data.storeId),
     ...storeMeta,
     name: text(data.name),
     description: text(data.description),
-    category: text(data.category),
+    category,
     price: typeof data.price === 'number' ? data.price : null,
     imageUrl: text(data.imageUrl),
     imageUrls: toArray(data.imageUrls),
     imageAlt: text(data.imageAlt),
+    searchTokens: toArray(metadata.searchTokens),
+    rankingScore: numberOrNull(metadata.rankingScore) ?? 0,
     itemType: normalizedItemType,
     listingType: normalizedItemType,
     status,
@@ -113,10 +126,9 @@ function publicPayload(productId: string, data: ProductData, storeMeta: Record<s
     isWebsiteVisible: data.isWebsiteVisible === true,
     salesMode: text(data.salesMode),
     categoryKey: text(data.categoryKey),
-    categoryName: text(data.categoryName) ?? text(data.category),
+    categoryName: text(data.categoryName) ?? category,
     currency: text(data.currency) ?? 'GHS',
     publishedAt: resolvePublicationTimestampCandidate(data.publishedAt, data.createdAt, data.updatedAt),
-    unpublishedAt: admin.firestore.FieldValue.delete(),
     sourceUpdatedAt: data.updatedAt ?? null,
     serviceKind: text(data.serviceKind),
     duration: text(data.duration),
@@ -132,6 +144,10 @@ function publicPayload(productId: string, data: ProductData, storeMeta: Record<s
     Agreement: text(data.Agreement),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }
+
+  if (deleteSentinel !== null) payload.unpublishedAt = deleteSentinel
+
+  return payload
 }
 
 export async function removeStorePublicCatalog(storeId: string): Promise<void> {
