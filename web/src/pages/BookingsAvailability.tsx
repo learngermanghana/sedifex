@@ -74,6 +74,7 @@ export default function BookingsAvailability() {
   const [marketplaceEnabled, setMarketplaceEnabled] = useState(true)
   const [imageUrl, setImageUrl] = useState('')
   const [imageAlt, setImageAlt] = useState('')
+  const [autoLoadedImageItemId, setAutoLoadedImageItemId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -86,6 +87,17 @@ export default function BookingsAvailability() {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    if (serviceMode !== 'catalog' || !selectedService || photoFile) return
+    const selectedImageUrl = selectedService.imageUrl?.trim() || ''
+    if (!selectedImageUrl) return
+    const canAutoReplace = !imageUrl.trim() || Boolean(autoLoadedImageItemId)
+    if (!canAutoReplace) return
+    setImageUrl(selectedImageUrl)
+    setImageAlt(selectedService.imageAlt?.trim() || `${selectedService.name} photo`)
+    setAutoLoadedImageItemId(selectedService.id)
+  }, [autoLoadedImageItemId, imageUrl, photoFile, selectedService, serviceMode])
 
   const loadServices = useCallback(async (activeStoreId: string) => {
     const map = new Map<string, ServiceRecord>()
@@ -259,6 +271,7 @@ export default function BookingsAvailability() {
 
       setImageUrl('')
       setImageAlt('')
+      setAutoLoadedImageItemId('')
       setPhotoFile(null)
       setPhotoStatus('idle')
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -305,7 +318,7 @@ export default function BookingsAvailability() {
         <header className="stack gap-1"><h1>Upcoming events</h1><p className="bookings-page__intro">Create public events, classes, service sessions, intakes, or programmes that your connected website can display automatically.</p></header>
         <form className="availability-form" onSubmit={handleCreateSlot}>
           <label><span>Event source</span><select value={serviceMode} onChange={event => setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog')}><option value="catalog">Select existing service/product</option><option value="manual">Manual event/class name</option></select></label>
-          {serviceMode === 'catalog' ? <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label> : <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>}
+          {serviceMode === 'catalog' ? <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => { setServiceId(event.target.value); setAutoLoadedImageItemId('') }}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label> : <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>}
           <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
@@ -318,8 +331,8 @@ export default function BookingsAvailability() {
           <label><span>Location (optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>
           <label><span>Description (optional)</span><input value={description} onChange={event => setDescription(event.target.value)} /></label>
           <label><span>Marketplace enabled</span><select value={marketplaceEnabled ? 'yes' : 'no'} onChange={event => setMarketplaceEnabled(event.target.value === 'yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>
-          <div className="availability-photo-picker"><span>Photo upload</span><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => { const nextFile = event.target.files?.[0] ?? null; setPhotoFile(nextFile); setPhotoStatus(nextFile ? 'selected' : 'idle'); setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null) }} /><div className="availability-photo-actions"><button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>{photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}</div><p className="availability-photo-name">{photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : 'No file selected yet.'}</p>{previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}</div>
-          <label><span>Or image URL</span><input value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://..." /></label>
+          <div className="availability-photo-picker"><span>Photo upload</span><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => { const nextFile = event.target.files?.[0] ?? null; setPhotoFile(nextFile); setPhotoStatus(nextFile ? 'selected' : 'idle'); setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null) }} /><div className="availability-photo-actions"><button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>{photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}</div><p className="availability-photo-name">{photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : imageUrl.trim() ? 'Using image from selected item or image URL.' : 'No file selected yet.'}</p>{previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}{!previewUrl && imageUrl.trim() && <img className="availability-photo-preview" src={imageUrl.trim()} alt={imageAlt.trim() || selectedService?.name || 'Event image preview'} />}</div>
+          <label><span>Or image URL</span><input value={imageUrl} onChange={event => { setImageUrl(event.target.value); setAutoLoadedImageItemId('') }} placeholder="https://..." /></label>
           <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>
           <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? photoStatus === 'uploading' ? 'Uploading photo…' : 'Saving…' : 'Add event'}</button>
         </form>
