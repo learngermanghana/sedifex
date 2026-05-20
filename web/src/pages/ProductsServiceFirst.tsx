@@ -480,6 +480,8 @@ export default function ProductsServiceFirst() {
       itemType: current.itemType === 'service' ? 'service' : current.itemType === 'course' ? 'course' : 'product',
       category: current.itemType === 'service' ? SERVICE_CATEGORY : current.itemType === 'course' ? EDUCATION_CATEGORY : PRODUCT_CATEGORY,
       serviceKind: current.itemType === 'service' ? current.serviceKind : 'consultation',
+      isMarketplaceVisible: current.isMarketplaceVisible,
+      isWebsiteVisible: current.isWebsiteVisible,
     }))
     setError('')
     setImageUploadState('idle')
