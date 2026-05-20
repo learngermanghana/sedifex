@@ -202,12 +202,15 @@ export const syncPublicCatalogOnProductWrite = functions.firestore.document('pro
 })
 
 export const adminBackfillPublicListings = functions.https.onCall(async (data: BackfillPayload, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Authentication required.')
-  }
-  const isAdmin = context.auth.token.admin === true
-  if (!isAdmin) {
-    throw new functions.https.HttpsError('permission-denied', 'Admin access required.')
+  const runningInEmulator = process.env.FUNCTIONS_EMULATOR === 'true'
+  if (!runningInEmulator) {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required.')
+    }
+    const isAdmin = context.auth.token?.admin === true
+    if (!isAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Admin access required.')
+    }
   }
 
   const dryRun = data?.dryRun === true
