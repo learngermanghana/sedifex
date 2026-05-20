@@ -66,6 +66,7 @@ function buildStoreMeta(store: StoreData): Record<string, unknown> {
 
 function publicPayload(productId: string, data: ProductData, storeMeta: Record<string, unknown>): Record<string, unknown> {
   const normalizedItemType = itemType(data.itemType)
+  const status = data.isPublished === true ? 'published' : 'draft'
   return {
     sourceProductId: productId,
     storeId: text(data.storeId),
@@ -79,7 +80,14 @@ function publicPayload(productId: string, data: ProductData, storeMeta: Record<s
     imageAlt: text(data.imageAlt),
     itemType: normalizedItemType,
     listingType: normalizedItemType,
+    status,
     isPublished: true,
+    isMarketplaceVisible: data.isMarketplaceVisible === true,
+    isWebsiteVisible: data.isWebsiteVisible === true,
+    salesMode: text(data.salesMode),
+    categoryKey: text(data.categoryKey),
+    categoryName: text(data.categoryName) ?? text(data.category),
+    currency: text(data.currency) ?? 'GHS',
     publishedAt: resolvePublicationTimestampCandidate(data.publishedAt, data.createdAt, data.updatedAt),
     unpublishedAt: admin.firestore.FieldValue.delete(),
     sourceUpdatedAt: data.updatedAt ?? null,
@@ -136,6 +144,7 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   let writtenListings = 0
   for (const productDoc of productsSnap.docs) {
     const data = (productDoc.data() ?? {}) as ProductData
+    if (data.isMarketplaceVisible !== true) continue
     batch.set(db.collection('publicListings').doc(productDoc.id), publicPayload(productDoc.id, data, storeMeta), { merge: true })
     writes += 1
     writtenListings += 1
@@ -173,6 +182,10 @@ export const syncPublicCatalogOnProductWrite = functions.firestore.document('pro
   const afterData = (change.after.data() ?? {}) as ProductData
   const storeId = text(afterData.storeId)
   if (!storeId || afterData.isPublished !== true) {
+    await db.collection('publicListings').doc(productId).delete()
+    return
+  }
+  if (afterData.isMarketplaceVisible !== true) {
     await db.collection('publicListings').doc(productId).delete()
     return
   }

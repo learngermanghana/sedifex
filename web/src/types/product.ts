@@ -42,8 +42,12 @@ export type Product = {
   courseLevel?: string | null
   courseMode?: string | null
   isPublished?: boolean | null
+  status?: 'draft' | 'published' | null
   isMarketplaceVisible?: boolean | null
+  isWebsiteVisible?: boolean | null
   categoryKey?: string | null
   categoryName?: string | null
   currency?: string | null
+  storeId?: string | null
+  storeName?: string | null
 }

@@ -61,6 +61,7 @@ type Draft = {
   classTimes: string
   isPublished: boolean
   isMarketplaceVisible: boolean
+  isWebsiteVisible: boolean
 }
 
 type ListingType = 'product' | 'service' | 'course'
@@ -140,6 +141,7 @@ const blankDraft: Draft = {
   classTimes: '',
   isPublished: false,
   isMarketplaceVisible: false,
+  isWebsiteVisible: false,
 }
 
 function titleCase(value: string) {
@@ -301,6 +303,12 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const price = cleanNumber(draft.price)
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
+  if (isService && !category) throw new Error('Service category is required.')
+  if (isService && !['book_now', 'request_quote'].includes(draft.serviceKind === 'quote_request' ? 'request_quote' : 'book_now')) {
+    throw new Error('Service sales mode is required.')
+  }
+  if (isCourse && !category) throw new Error('Course category is required.')
+  if (isCourse && !draft.courseMode) throw new Error('Course enrollment mode is required.')
 
   const serviceKind: ServiceKind = isCourse ? 'consultation' : draft.serviceKind
   const listingType: ListingType = isCourse ? 'course' : isService ? 'service' : 'product'
@@ -316,6 +324,8 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const currency = 'GHS'
   const categoryName = category
   const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  const isPublished = draft.isPublished === true
+  const status: 'draft' | 'published' = isPublished ? 'published' : 'draft'
 
   return {
     storeId,
@@ -329,6 +339,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
     category,
     categoryKey,
     categoryName,
+    status,
     description: draft.description.trim() || null,
     price,
     currency,
@@ -366,8 +377,9 @@ function buildSavePayload(draft: Draft, storeId: string) {
     imageUrl: trimmedImageUrl || null,
     imageUrls,
     imageAlt: draft.imageAlt.trim() || name,
-    isPublished: draft.isPublished,
-    isMarketplaceVisible: draft.isMarketplaceVisible,
+    isPublished,
+    isMarketplaceVisible: isPublished ? draft.isMarketplaceVisible : false,
+    isWebsiteVisible: isPublished ? draft.isWebsiteVisible : false,
     featuredRank: null,
     rankingScore: null,
     updatedAt: serverTimestamp(),
@@ -507,6 +519,7 @@ export default function ProductsServiceFirst() {
       classTimes: item.preferredTimes ?? (typeof (item as any).classTimes === 'string' ? (item as any).classTimes : ''),
       isPublished: (item as any).isPublished !== false,
       isMarketplaceVisible: (item as any).isMarketplaceVisible === true,
+      isWebsiteVisible: (item as any).isWebsiteVisible !== false,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -810,6 +823,7 @@ export default function ProductsServiceFirst() {
             <div className="products-page__visibility-grid">
               <label className="checkbox"><input type="checkbox" checked={draft.isPublished} onChange={event => setDraft(current => ({ ...current, isPublished: event.target.checked }))} /><span>Publish item</span></label>
               <label className="checkbox"><input type="checkbox" checked={draft.isMarketplaceVisible} onChange={event => setDraft(current => ({ ...current, isMarketplaceVisible: event.target.checked }))} /><span>Show on SedifexMarket</span></label>
+              <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on website integrations</span></label>
             </div>
             <div className="products-page__list-actions">
               <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
