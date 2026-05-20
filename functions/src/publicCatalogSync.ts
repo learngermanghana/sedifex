@@ -4,6 +4,9 @@ import { resolvePublicationTimestampCandidate } from './catalogPublication'
 
 type StoreData = Record<string, unknown>
 type ProductData = Record<string, unknown>
+type BackfillPayload = {
+  dryRun?: unknown
+}
 
 function text(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -196,4 +199,86 @@ export const syncPublicCatalogOnProductWrite = functions.firestore.document('pro
     return
   }
   await db.collection('publicListings').doc(productId).set(publicPayload(productId, afterData, buildStoreMeta(storeData)), { merge: true })
+})
+
+export const adminBackfillPublicListings = functions.https.onCall(async (data: BackfillPayload, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required.')
+  }
+  const isAdmin = context.auth.token.admin === true
+  if (!isAdmin) {
+    throw new functions.https.HttpsError('permission-denied', 'Admin access required.')
+  }
+
+  const dryRun = data?.dryRun === true
+  const productsSnap = await db.collection('products')
+    .where('isPublished', '==', true)
+    .where('isMarketplaceVisible', '==', true)
+    .get()
+
+  const storeCache = new Map<string, StoreData | undefined>()
+  let syncedCount = 0
+  let skippedCount = 0
+  let ineligibleStoreCount = 0
+  let batch = db.batch()
+  let writes = 0
+
+  for (const productDoc of productsSnap.docs) {
+    const productData = (productDoc.data() ?? {}) as ProductData
+    const storeId = text(productData.storeId)
+    if (!storeId) {
+      skippedCount += 1
+      continue
+    }
+
+    let storeData = storeCache.get(storeId)
+    if (!storeCache.has(storeId)) {
+      const storeSnap = await db.collection('stores').doc(storeId).get()
+      storeData = (storeSnap.data() ?? {}) as StoreData
+      storeCache.set(storeId, storeData)
+    }
+
+    if (!storeData || !isStoreEligible(storeData)) {
+      skippedCount += 1
+      ineligibleStoreCount += 1
+      continue
+    }
+
+    syncedCount += 1
+    if (dryRun) continue
+
+    batch.set(
+      db.collection('publicListings').doc(productDoc.id),
+      publicPayload(productDoc.id, productData, buildStoreMeta(storeData)),
+      { merge: true },
+    )
+    writes += 1
+
+    if (writes >= 450) {
+      await batch.commit()
+      batch = db.batch()
+      writes = 0
+    }
+  }
+
+  if (!dryRun && writes > 0) {
+    await batch.commit()
+  }
+
+  functions.logger.info('adminBackfillPublicListings completed', {
+    dryRun,
+    syncedCount,
+    skippedCount,
+    ineligibleStoreCount,
+    scannedCount: productsSnap.size,
+  })
+
+  return {
+    ok: true,
+    dryRun,
+    scannedCount: productsSnap.size,
+    syncedCount,
+    skippedCount,
+    ineligibleStoreCount,
+  }
 })
