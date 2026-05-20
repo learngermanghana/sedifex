@@ -69,7 +69,7 @@ export type NavigationSettings = {
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   shop: ['dashboard', 'reports', 'products', 'sell', 'invoices', 'receipts', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'donor-management'],
-  travel: ['dashboard', 'reports', 'products', 'invoices', 'receipts', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  travel: ['dashboard', 'reports', 'products', 'invoices', 'receipts', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
   ngo: ['dashboard', 'reports', 'products', 'invoices', 'receipts', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
   school: ['dashboard', 'reports', 'products', 'invoices', 'receipts', 'bookings', 'upcoming-events', 'student-registration', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'customers', 'bulk-messaging', 'bulk-email'],
 }
