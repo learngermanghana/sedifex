@@ -23,6 +23,13 @@ function buildReference(storeId: string) {
   return `REG-${storeId.slice(0, 6).toUpperCase()}-${Date.now()}`
 }
 
+function buildStudentCode(storeId: string, docId: string) {
+  const year = new Date().getFullYear()
+  const prefix = text(process.env.SEDIFEX_STUDENT_ID_PREFIX, 12) || storeId.replace(/[^a-z0-9]/gi, '').slice(0, 4).toUpperCase() || 'STU'
+  const shortId = docId.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()
+  return `${prefix}-${year}-${shortId}`
+}
+
 async function initializePaystack(input: {
   email: string
   amount: number
@@ -79,6 +86,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const preferredClassTime = text(data.preferredClassTime || data.classTime, 120)
   const branch = text(data.branch || data.location, 120)
   const notes = text(data.notes, 1000)
+  const providedPhotoUrl = text(data.studentPhotoUrl || data.photoUrl || data.imageUrl, 500)
+  const providedStatus = text(data.studentStatus, 80) || 'pending'
 
   if (!storeId) return res.status(400).json({ error: 'storeId is required.' })
   if (!studentName) return res.status(400).json({ error: 'Student name is required.' })
@@ -99,6 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const firestore = db()
   const now = FieldValue.serverTimestamp()
   const submissionRef = firestore.collection('student_registrations').doc()
+  const studentCode = text(data.studentCode, 80) || buildStudentCode(storeId, submissionRef.id)
 
   const paymentStatus =
     paymentMode === 'online'
@@ -113,6 +123,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     pageType: 'student_registration',
     source,
     status: 'new',
+    studentCode,
+    studentStatus: providedStatus,
+    studentPhotoUrl: providedPhotoUrl || null,
+    idCardIssued: false,
+    idCardIssuedAt: null,
+    idCardExpiresAt: text(data.idCardExpiresAt, 80) || null,
     customer: {
       name: studentName,
       email: email || null,
@@ -124,6 +140,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       preferredClassTime: preferredClassTime || null,
       branch: branch || null,
       notes: notes || null,
+      studentCode,
+      studentStatus: providedStatus,
+      studentPhotoUrl: providedPhotoUrl || null,
     },
     payment: {
       mode: paymentMode,
@@ -150,6 +169,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     source: 'student-registration',
     tags: ['Student', course].filter(Boolean),
     studentRegistrationId: submissionRef.id,
+    studentCode,
+    studentStatus: providedStatus,
+    studentPhotoUrl: providedPhotoUrl || null,
     createdAt: now,
     updatedAt: now,
   })
@@ -166,6 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         storeId,
         pageType: 'student_registration',
         submissionId: submissionRef.id,
+        studentCode,
         studentName,
         course,
         source,
@@ -197,6 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     ok: true,
     submissionId: submissionRef.id,
+    studentCode,
     reference,
     paymentMode,
     paymentStatus,
