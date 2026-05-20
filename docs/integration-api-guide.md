@@ -620,7 +620,7 @@ Minimal example:
 
 ### B) Donor checkout (store-authenticated online payment)
 
-Endpoint: `POST /integration/checkout/create`
+Endpoint: `POST /integrationCheckoutCreate`
 
 Use this when a store website collects donations and wants Sedifex + Paystack to handle payment tracking.
 
@@ -664,7 +664,7 @@ Minimal example:
 Implementation checklist (website server + frontend):
 
 1. **Create checkout session on your server**
-   - Your backend calls `POST /integration/checkout/create` with `x-api-key`.
+   - Your backend calls `POST /integrationCheckoutCreate` with `x-api-key`.
    - Include donor metadata and your website donation id in `clientOrderId`.
 2. **Redirect donor to Paystack**
    - Read `authorizationUrl` from Sedifex response.
@@ -723,7 +723,7 @@ Minimal example:
 
 1. Choose flow by intent:
    - Student/course/event registration → `POST /v1IntegrationBookings`
-   - Donation with online payment → `POST /integration/checkout/create`
+   - Donation with online payment → `POST /integrationCheckoutCreate`
    - Volunteer application (non-payment intake) → `POST /volunteerIntake`
 2. Always include `storeId` from the store owner onboarding settings.
 3. For authenticated endpoints, send both headers:
@@ -822,7 +822,7 @@ All monetary fields must be integers in minor units (for example, NGN kobo).
 1. `POST /checkout/preview`
    - Website sends cart, fulfillment choice, and delivery context.
    - Sedifex calculates and returns full pricing breakdown.
-2. `POST /checkout/create`
+2. `POST /integrationCheckoutCreate`
    - Sedifex recalculates server-side, stores immutable `pricing_snapshot`, and initializes Paystack with `final_total`.
 3. `POST /payments/paystack/webhook`
    - Sedifex verifies signature/reference/amount and marks order paid.
@@ -880,7 +880,7 @@ All monetary fields must be integers in minor units (for example, NGN kobo).
 6. Compute:
    - `final_total = pre_processing_total + processing_fee_to_add`
 
-Sedifex must recompute these values on `checkout/create`; website-provided totals are never trusted.
+Sedifex must recompute these values on `integrationCheckoutCreate`; website-provided totals are never trusted.
 
 ### Website rendering rules
 
@@ -909,7 +909,7 @@ Sedifex must recompute these values on `checkout/create`; website-provided total
 6. Handle webhook-driven paid state before showing final success.
 7. Log `x-sedifex-request-id` on failures for support.
 
-### `POST /integration/checkout/create` (authenticated)
+### `POST /integrationCheckoutCreate` (authenticated)
 
 Purpose: client website server asks Sedifex to create a hosted checkout session.
 
@@ -1002,7 +1002,7 @@ For website bookings using Sedifex checkout, standardize state transitions like 
 Important naming rule:
 
 - Before checkout returns an order id, treat the local identifier as `bookingId` (not `sedifexOrderId`).
-- Only persist/use `sedifexOrderId` after `POST /integration/checkout/create` returns it.
+- Only persist/use `sedifexOrderId` after `POST /integrationCheckoutCreate` returns it.
 
 Support note:
 
@@ -1055,7 +1055,7 @@ Retry policy (when non-2xx or timeout): `1m`, `5m`, `30m`, `2h`, `12h`.
 
 1. Partner website fetches catalog via `/v1IntegrationProducts` (server-side).
 2. Buyer selects product/service.
-3. Partner server calls `POST /integration/checkout/create`.
+3. Partner server calls `POST /integrationCheckoutCreate`.
 4. Buyer completes payment on returned Paystack `authorizationUrl`.
 5. Paystack webhook updates Sedifex internal payment state.
 6. Sedifex emits `POST /integration/webhooks/payment-status` to partner website.
@@ -1093,7 +1093,7 @@ Store the returned `bookingId`.
 
 **Step 2: Create hosted checkout**
 
-`POST /integration/checkout/create`
+`POST /integrationCheckoutCreate`
 
 ```json
 {
@@ -1159,7 +1159,7 @@ Sedifex now tracks **independent** booking and payment states:
 - Authoritative payment truth is from webhook confirmation and/or `GET /integration/orders/:reference`.
 
 ### Service checkout linkage
-`POST /integration/checkout/create` supports `orderType=service` and metadata (`bookingId`, `clientOrderId`). Sedifex stores and reconciles: `bookingId`, `reference`, `sedifexOrderId`, `clientOrderId`.
+`POST /integrationCheckoutCreate` supports `orderType=service` and metadata (`bookingId`, `clientOrderId`). Sedifex stores and reconciles: `bookingId`, `reference`, `sedifexOrderId`, `clientOrderId`.
 
 ### Manual verification
 Use `POST /integration/booking/payment/verify` from trusted server/admin flows:
