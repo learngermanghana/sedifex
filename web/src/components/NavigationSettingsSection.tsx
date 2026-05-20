@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, NAV_ITEMS, type Industry } from '../config/navigation'
 import type { StorePreferences } from '../hooks/useStorePreferences'
+import MarketplaceCatalogSyncCard from './MarketplaceCatalogSyncCard'
 
 type Props = {
   preferences: StorePreferences['navigation']
@@ -151,6 +152,8 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
         Tick the pages you want in the sidebar. Click a page name or Open to visit it now.
       </p>
     </div>
+
+    <MarketplaceCatalogSyncCard canSync={canEdit} />
 
     <div className="account-overview__form-grid">
       <label><span>Business type</span>
