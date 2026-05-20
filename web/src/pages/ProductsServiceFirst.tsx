@@ -60,6 +60,9 @@ type Draft = {
   classTimes: string
 }
 
+type ListingType = 'product' | 'service' | 'course'
+type SalesMode = 'buy_now' | 'book_now' | 'register' | 'request_quote'
+
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
@@ -295,19 +298,35 @@ function buildSavePayload(draft: Draft, storeId: string) {
   if (price === null) throw new Error('Price is required.')
 
   const serviceKind: ServiceKind = isCourse ? 'consultation' : draft.serviceKind
-  const salesMode = isCourse ? 'register' : serviceKind === 'quote_request' ? 'request_quote' : 'book_now'
+  const listingType: ListingType = isCourse ? 'course' : isService ? 'service' : 'product'
+  const salesMode: SalesMode = isCourse
+    ? 'register'
+    : isService
+    ? serviceKind === 'quote_request'
+      ? 'request_quote'
+      : 'book_now'
+    : 'buy_now'
+  const trimmedImageUrl = draft.imageUrl.trim()
+  const imageUrls = trimmedImageUrl ? [trimmedImageUrl] : []
+  const currency = 'GHS'
+  const categoryName = category
+  const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 
   return {
     storeId,
+    storeName: null,
     name,
     itemType: isCourse ? 'course' : isService ? 'service' : 'product',
-    listingType: isCourse ? 'course' : behavesLikeService ? 'service' : 'product',
+    listingType,
     serviceKind: isCourse ? 'course_enrollment' : serviceKind,
     salesMode,
     enrollmentMode: isCourse ? 'always_open' : null,
     category,
+    categoryKey,
+    categoryName,
     description: draft.description.trim() || null,
     price,
+    currency,
     costPrice: behavesLikeService ? null : cleanNumber(draft.costPrice),
     sku: behavesLikeService ? null : draft.sku.trim() || null,
     barcode: behavesLikeService ? null : draft.sku.trim() || null,
@@ -339,11 +358,19 @@ function buildSavePayload(draft: Draft, storeId: string) {
     manufacturerName: null,
     batchNumber: null,
     showOnReceipt: false,
-    imageUrl: draft.imageUrl.trim() || null,
-    imageUrls: draft.imageUrl.trim() ? [draft.imageUrl.trim()] : [],
+    imageUrl: trimmedImageUrl || null,
+    imageUrls,
     imageAlt: draft.imageAlt.trim() || name,
+    isPublished: false,
+    isMarketplaceVisible: false,
+    featuredRank: null,
+    rankingScore: null,
     updatedAt: serverTimestamp(),
   }
+}
+
+function normalizeName(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 export default function ProductsServiceFirst() {
@@ -469,20 +496,47 @@ export default function ProductsServiceFirst() {
     setError('')
     try {
       const payload = buildSavePayload(draft as any, storeId)
+      if (payload.imageUrls.length > 0 && !payload.imageUrls.every(url => /^https?:\/\/\S+/i.test(url))) {
+        throw new Error('Image upload did not return a valid image URL.')
+      }
+      if (!editingId) {
+        const possibleDuplicate = items.find(item => {
+          const existingStoreId = typeof (item as Product & { storeId?: unknown }).storeId === 'string'
+            ? ((item as Product & { storeId?: string }).storeId as string)
+            : storeId
+          if (existingStoreId !== storeId) return false
+          const existingListingType = item.listingType ?? item.itemType
+          return (
+            normalizeName(item.name) === normalizeName(payload.name) &&
+            existingListingType === payload.listingType &&
+            normalizeName(item.category ?? '') === normalizeName(payload.categoryName ?? '') &&
+            Number(item.price ?? -1) === Number(payload.price)
+          )
+        })
+        if (possibleDuplicate) {
+          const shouldCreateAnyway = window.confirm(
+            'Possible duplicate found: this store already has a similar product/course/service. Review before creating another one.\n\nClick OK to "Create anyway", or Cancel to edit the existing item.',
+          )
+          if (!shouldCreateAnyway) {
+            editItem(possibleDuplicate)
+            throw new Error('Duplicate prevented. You can edit the existing item instead.')
+          }
+        }
+      }
       if (editingId) {
         await updateDoc(doc(db, 'products', editingId), payload)
-        setMessage(`${draft.itemType === 'course' ? 'Course' : draft.itemType === 'service' ? 'Service' : 'Product'} updated.`)
+        setMessage('Item saved successfully.')
       } else {
         await setDoc(doc(collection(db, 'products')), {
           ...payload,
           createdAt: serverTimestamp(),
           sortOrder: items.length + 1,
         })
-        setMessage(`${draft.itemType === 'course' ? 'Course' : draft.itemType === 'service' ? 'Service' : 'Product'} added.`)
+        setMessage('Item saved successfully.')
       }
       resetForm()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save item.')
+      setError(err instanceof Error ? err.message : 'Could not save item. Please check the details and try again.')
     } finally {
       setSaving(false)
     }
