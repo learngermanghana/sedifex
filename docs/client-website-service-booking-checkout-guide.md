@@ -49,6 +49,50 @@ const storeId =
 
 Keep all keys server-side. Never expose these variables with `NEXT_PUBLIC_`.
 
+## How a developer gets keys without Firebase access
+
+Developers should not need access to the Sedifex Firebase project. The store owner or store admin should use the Sedifex UI to create the key and save the website setup.
+
+Recommended owner/admin flow inside Sedifex:
+
+1. Sign in to Sedifex.
+2. Select the correct store/workspace.
+3. Open **Integrations**.
+4. Open **Website + checkout**.
+5. Enter the website domain, checkout return URL, checkout cancel URL, API base URL, checkout create URL, and contract version.
+6. Click **Save website setup**.
+7. This writes the website/checkout config to both:
+
+```txt
+stores/{storeId}
+storeSettings/{storeId}
+```
+
+8. Open **API keys**.
+9. Click **Create and copy key**.
+10. Copy the key immediately. The full key is shown once.
+11. Send the developer only:
+
+```txt
+storeId
+SEDIFEX_API_BASE_URL
+SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL
+SEDIFEX_BOOKING_TARGET_STORE_ID
+SEDIFEX_BOOKING_API_KEY
+SEDIFEX_CHECKOUT_API_KEY
+SEDIFEX_CHECKOUT_RETURN_URL
+SEDIFEX_CONTRACT_VERSION
+```
+
+Security rule: the raw API key should not be manually stored in plain text inside `storeSettings`. Sedifex should store key metadata/preview/hash internally, and the store owner should copy the generated key into the website host environment such as Vercel. If the key is lost, generate a new key from the UI and replace the website env vars.
+
+What the developer does:
+
+1. Add the copied values to the website backend environment variables.
+2. Keep the key server-side only.
+3. Deploy/redeploy the website.
+4. Test service loading, booking creation, checkout redirect, and payment return.
+
 ## Store id and key rule
 
 The integration key must be allowed for the same store id being used for booking and checkout.
@@ -284,8 +328,8 @@ Most common causes:
 Fix checklist:
 
 ```txt
-1. Confirm storeId copied from Firestore, not typed manually.
-2. Confirm the integration key is allowed for that same storeId.
+1. Confirm storeId copied from the Sedifex UI, not typed manually.
+2. Confirm the integration key was generated from the same store workspace.
 3. Add both headers: x-api-key and Authorization: Bearer.
 4. Use /v1IntegrationBookings first.
 5. Use /integrationCheckoutCreate second.
@@ -348,8 +392,10 @@ const redirectUrl = checkoutData.authorizationUrl || checkoutData.checkoutUrl
 
 ## Deployment checklist for a new store
 
-- [ ] Create or identify the correct Sedifex store id.
-- [ ] Generate a store integration key for that store.
+- [ ] Store owner/admin selects the correct store/workspace in Sedifex.
+- [ ] Store owner/admin saves Website + checkout settings in the Sedifex Integrations UI.
+- [ ] Store owner/admin generates a store integration key in the Sedifex API keys tab.
+- [ ] Developer receives Store ID, env block, and API key from the store owner/admin, not from Firebase.
 - [ ] Add website env vars on Vercel.
 - [ ] Redeploy the website after adding env vars.
 - [ ] Test service list loading.
