@@ -163,6 +163,53 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   }, { merge: true })
 }
 
+
+export const adminBackfillPublicListings = functions.https.onCall(async (_data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Login required')
+  if (context.auth.token?.admin !== true) {
+    throw new functions.https.HttpsError('permission-denied', 'Admin access required')
+  }
+
+  const productsSnap = await db.collection('products')
+    .where('isPublished', '==', true)
+    .where('isMarketplaceVisible', '==', true)
+    .get()
+
+  const storeCache = new Map<string, StoreData>()
+  let batch = db.batch()
+  let writes = 0
+  let synced = 0
+
+  for (const productDoc of productsSnap.docs) {
+    const data = (productDoc.data() ?? {}) as ProductData
+    const storeId = text(data.storeId)
+    if (!storeId) continue
+
+    let storeData = storeCache.get(storeId)
+    if (!storeData) {
+      const storeSnap = await db.collection('stores').doc(storeId).get()
+      storeData = (storeSnap.data() ?? {}) as StoreData
+      storeCache.set(storeId, storeData)
+    }
+
+    if (!isStoreEligible(storeData)) continue
+
+    batch.set(db.collection('publicListings').doc(productDoc.id), publicPayload(productDoc.id, data, buildStoreMeta(storeData)), { merge: true })
+    writes += 1
+    synced += 1
+
+    if (writes >= 450) {
+      await batch.commit()
+      batch = db.batch()
+      writes = 0
+    }
+  }
+
+  if (writes > 0) await batch.commit()
+
+  return { ok: true as const, synced }
+})
+
 export const syncPublicCatalogOnStoreEligibilityUpdate = functions.firestore.document('stores/{storeId}').onUpdate(async (change, context) => {
   const before = (change.before.data() ?? {}) as StoreData
   const after = (change.after.data() ?? {}) as StoreData
