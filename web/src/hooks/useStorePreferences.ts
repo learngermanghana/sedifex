@@ -49,6 +49,60 @@ function stringListFrom(value: unknown): string[] {
   }, [])
 }
 
+function normalizeCustomNavItems(value: unknown): CustomNavItem[] {
+  if (!Array.isArray(value)) return DEFAULT_PREFERENCES.navigation.customNavItems
+  return (value as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
+    const id = typeof item.id === 'string' ? item.id.trim() : ''
+    const label = typeof item.label === 'string' ? item.label.trim() : ''
+    const type = item.type
+    const target = typeof item.target === 'string' ? item.target.trim() : ''
+    const sortOrder =
+      typeof item.sort_order === 'number'
+        ? item.sort_order
+        : typeof item.sortOrder === 'number'
+        ? item.sortOrder
+        : 0
+    const rolesAllowed = Array.isArray(item.roles_allowed)
+      ? item.roles_allowed.filter(role => role === 'owner' || role === 'staff')
+      : Array.isArray(item.rolesAllowed)
+      ? item.rolesAllowed.filter(role => role === 'owner' || role === 'staff')
+      : []
+
+    if (!id || !label || !target || rolesAllowed.length === 0) return acc
+    if (type !== 'module' && type !== 'internal' && type !== 'external') return acc
+
+    acc.push({
+      id,
+      label,
+      type,
+      target,
+      sort_order: sortOrder,
+      roles_allowed: rolesAllowed as Array<'owner' | 'staff'>,
+    })
+    return acc
+  }, [])
+}
+
+function mirrorNavigationForLegacyFields(navigation: StorePreferences['navigation']) {
+  const customNavItems = Array.isArray(navigation.customNavItems) ? navigation.customNavItems : []
+  const enabledModules = Array.isArray(navigation.enabledModules) ? navigation.enabledModules : []
+  const dashboardModules = Array.isArray(navigation.dashboardModules) ? navigation.dashboardModules : []
+  const primaryMetrics = Array.isArray(navigation.primaryMetrics) ? navigation.primaryMetrics : []
+
+  return {
+    ...navigation,
+    enabledModules,
+    dashboardModules,
+    primaryMetrics,
+    customNavItems,
+    enabled_modules: enabledModules,
+    visible_modules: enabledModules,
+    dashboard_modules: dashboardModules,
+    primary_metrics: primaryMetrics,
+    custom_nav_items: customNavItems,
+  }
+}
+
 function mergePreferences(raw: Record<string, unknown> | undefined | null): StorePreferences {
   const navigation = (raw?.navigation as Record<string, unknown> | undefined) ?? undefined
   const productDefaults: ProductDefaults = {
@@ -106,11 +160,13 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
         ) as Partial<Record<string, string>>)
       : DEFAULT_PREFERENCES.navigation.customLabels
 
+  // Prefer the current camelCase fields saved by the Account UI. Fall back to
+  // legacy snake_case fields for older workspaces/templates.
   const enabledModulesSource =
-    navigation && Array.isArray(navigation.enabled_modules)
-      ? navigation.enabled_modules
-      : navigation && Array.isArray(navigation.enabledModules)
+    navigation && Array.isArray(navigation.enabledModules)
       ? navigation.enabledModules
+      : navigation && Array.isArray(navigation.enabled_modules)
+      ? navigation.enabled_modules
       : navigation && Array.isArray(navigation.visible_modules)
       ? navigation.visible_modules
       : null
@@ -121,63 +177,31 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
       : INDUSTRY_ENABLED_MODULE_PRESETS[industry]
 
   const dashboardModulesSource =
-    navigation && Array.isArray(navigation.dashboard_modules)
-      ? navigation.dashboard_modules
-      : navigation && Array.isArray(navigation.dashboardModules)
+    navigation && Array.isArray(navigation.dashboardModules)
       ? navigation.dashboardModules
+      : navigation && Array.isArray(navigation.dashboard_modules)
+      ? navigation.dashboard_modules
       : []
 
   const dashboardModules = stringListFrom(dashboardModulesSource)
 
   const primaryMetricsSource =
-    navigation && Array.isArray(navigation.primary_metrics)
-      ? navigation.primary_metrics
-      : navigation && Array.isArray(navigation.primaryMetrics)
+    navigation && Array.isArray(navigation.primaryMetrics)
       ? navigation.primaryMetrics
+      : navigation && Array.isArray(navigation.primary_metrics)
+      ? navigation.primary_metrics
       : []
 
   const primaryMetrics = stringListFrom(primaryMetricsSource)
 
   const customNavItemsSource =
-    navigation && Array.isArray(navigation.custom_nav_items)
-      ? navigation.custom_nav_items
-      : navigation && Array.isArray(navigation.customNavItems)
+    navigation && Array.isArray(navigation.customNavItems)
       ? navigation.customNavItems
+      : navigation && Array.isArray(navigation.custom_nav_items)
+      ? navigation.custom_nav_items
       : null
 
-  const customNavItems =
-    customNavItemsSource
-      ? (customNavItemsSource as Record<string, unknown>[]).reduce<CustomNavItem[]>((acc, item) => {
-          const id = typeof item.id === 'string' ? item.id.trim() : ''
-          const label = typeof item.label === 'string' ? item.label.trim() : ''
-          const type = item.type
-          const target = typeof item.target === 'string' ? item.target.trim() : ''
-          const sortOrder =
-            typeof item.sort_order === 'number'
-              ? item.sort_order
-              : typeof item.sortOrder === 'number'
-              ? item.sortOrder
-              : 0
-          const rolesAllowed = Array.isArray(item.roles_allowed)
-            ? item.roles_allowed.filter(role => role === 'owner' || role === 'staff')
-            : Array.isArray(item.rolesAllowed)
-            ? item.rolesAllowed.filter(role => role === 'owner' || role === 'staff')
-            : []
-
-          if (!id || !label || !target || rolesAllowed.length === 0) return acc
-          if (type !== 'module' && type !== 'internal' && type !== 'external') return acc
-
-          acc.push({
-            id,
-            label,
-            type,
-            target,
-            sort_order: sortOrder,
-            roles_allowed: rolesAllowed as Array<'owner' | 'staff'>,
-          })
-          return acc
-        }, [])
-      : DEFAULT_PREFERENCES.navigation.customNavItems
+  const customNavItems = customNavItemsSource ? normalizeCustomNavItems(customNavItemsSource) : DEFAULT_PREFERENCES.navigation.customNavItems
 
   return {
     productDefaults,
@@ -224,7 +248,11 @@ export function useStorePreferences(storeId: string | null) {
     () =>
       async (changes: Partial<StorePreferences>) => {
         if (!storeId) return
-        await setDoc(doc(db, 'storeSettings', storeId), changes, { merge: true })
+        const payload: Partial<StorePreferences> & { navigation?: unknown } = { ...changes }
+        if (changes.navigation) {
+          payload.navigation = mirrorNavigationForLegacyFields(changes.navigation)
+        }
+        await setDoc(doc(db, 'storeSettings', storeId), payload, { merge: true })
       },
     [storeId],
   )
