@@ -58,6 +58,8 @@ type Draft = {
   Agreement: string
   courseMode: CourseMode
   classTimes: string
+  isPublished: boolean
+  isMarketplaceVisible: boolean
 }
 
 type ListingType = 'product' | 'service' | 'course'
@@ -135,6 +137,8 @@ const blankDraft: Draft = {
   Agreement: '',
   courseMode: 'in_person',
   classTimes: '',
+  isPublished: true,
+  isMarketplaceVisible: false,
 }
 
 function titleCase(value: string) {
@@ -361,8 +365,8 @@ function buildSavePayload(draft: Draft, storeId: string) {
     imageUrl: trimmedImageUrl || null,
     imageUrls,
     imageAlt: draft.imageAlt.trim() || name,
-    isPublished: false,
-    isMarketplaceVisible: false,
+    isPublished: draft.isPublished,
+    isMarketplaceVisible: draft.isMarketplaceVisible,
     featuredRank: null,
     rankingScore: null,
     updatedAt: serverTimestamp(),
@@ -383,6 +387,8 @@ export default function ProductsServiceFirst() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [imageUploadState, setImageUploadState] = useState<'idle' | 'uploading' | 'success' | 'failed'>('idle')
+  const [imageStatusMessage, setImageStatusMessage] = useState('')
 
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
@@ -444,6 +450,8 @@ export default function ProductsServiceFirst() {
       serviceKind: current.itemType === 'service' ? current.serviceKind : 'consultation',
     }))
     setError('')
+    setImageUploadState('idle')
+    setImageStatusMessage('')
   }
 
   function editItem(item: Product) {
@@ -484,6 +492,8 @@ export default function ProductsServiceFirst() {
       Agreement: item.Agreement ?? '',
       courseMode: ((item as any).courseMode as CourseMode) ?? 'in_person',
       classTimes: item.preferredTimes ?? (typeof (item as any).classTimes === 'string' ? (item as any).classTimes : ''),
+      isPublished: (item as any).isPublished !== false,
+      isMarketplaceVisible: (item as any).isMarketplaceVisible === true,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -496,9 +506,6 @@ export default function ProductsServiceFirst() {
     setError('')
     try {
       const payload = buildSavePayload(draft as any, storeId)
-      if (payload.imageUrls.length > 0 && !payload.imageUrls.every(url => /^https?:\/\/\S+/i.test(url))) {
-        throw new Error('Image upload did not return a valid image URL.')
-      }
       if (!editingId) {
         const possibleDuplicate = items.find(item => {
           const existingStoreId = typeof (item as Product & { storeId?: unknown }).storeId === 'string'
@@ -578,7 +585,7 @@ export default function ProductsServiceFirst() {
           {message ? <p className="products__message products__message--success">{message}</p> : null}
           {error ? <p className="products__message products__message--error">{error}</p> : null}
 
-          <form className="form" onSubmit={saveItem}>
+          <form className="form products-page__form" onSubmit={saveItem}>
             <div className="field">
               <label className="field__label" htmlFor="item-type">Item type</label>
               <select id="item-type" value={draft.itemType} onChange={event => updateDraft('itemType', event.target.value)}>
@@ -705,18 +712,43 @@ export default function ProductsServiceFirst() {
                 onChange={event => {
                   const file = event.target.files?.[0]
                   if (!file) return
+                  setImageUploadState('uploading')
+                  setImageStatusMessage('Uploading image...')
                   const reader = new FileReader()
                   reader.onload = () => {
                     const result = typeof reader.result === 'string' ? reader.result : ''
-                    if (result) updateDraft('imageUrl', result)
+                    if (result) {
+                      updateDraft('imageUrl', result)
+                      setImageUploadState('success')
+                      setImageStatusMessage('Image uploaded successfully.')
+                    } else {
+                      setImageUploadState('failed')
+                      setImageStatusMessage('Image upload failed.')
+                    }
+                  }
+                  reader.onerror = () => {
+                    setImageUploadState('failed')
+                    setImageStatusMessage('Image upload failed.')
                   }
                   reader.readAsDataURL(file)
                 }}
               />
+              {imageStatusMessage ? <p className={`products-page__upload-state products-page__upload-state--${imageUploadState}`}>{imageStatusMessage}</p> : null}
+              {draft.imageUrl.startsWith('data:image/') ? <p className="products-page__upload-warning">Image selected locally but not uploaded to cloud storage yet.</p> : null}
             </div>
+            {draft.imageUrl ? (
+              <div className="products-page__image-preview-box">
+                <img className="products-page__image-preview" src={draft.imageUrl} alt={draft.imageAlt || draft.name || 'Preview'} />
+                <button type="button" className="button button--ghost" onClick={() => { updateDraft('imageUrl', ''); setImageUploadState('idle'); setImageStatusMessage('') }}>Remove image</button>
+              </div>
+            ) : null}
             <div className="field">
               <label className="field__label" htmlFor="item-image-alt">Image alt text</label>
               <input id="item-image-alt" value={draft.imageAlt} onChange={event => updateDraft('imageAlt', event.target.value)} />
+            </div>
+            <div className="products-page__visibility-grid">
+              <label className="checkbox"><input type="checkbox" checked={draft.isPublished} onChange={event => setDraft(current => ({ ...current, isPublished: event.target.checked }))} /><span>Publish item</span></label>
+              <label className="checkbox"><input type="checkbox" checked={draft.isMarketplaceVisible} onChange={event => setDraft(current => ({ ...current, isMarketplaceVisible: event.target.checked }))} /><span>Show on SedifexMarket</span></label>
             </div>
             <div className="products-page__list-actions">
               <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
@@ -747,6 +779,8 @@ export default function ProductsServiceFirst() {
                     <div className="products-page__list-title">
                       <h4>{item.name}</h4>
                       <span className="products-page__badge products-page__badge--muted">{itemIsCourse ? 'Course' : itemIsService ? 'Service' : 'Product'}</span>
+                      <span className={`products-page__badge ${(item as any).isPublished === false ? 'products-page__badge--draft' : 'products-page__badge--published'}`}>{(item as any).isPublished === false ? 'Draft' : 'Published'}</span>
+                      {(item as any).isMarketplaceVisible ? <span className="products-page__badge products-page__badge--market">Visible on Market</span> : null}
                       <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
                     </div>
                     <div className="products-page__list-meta">
