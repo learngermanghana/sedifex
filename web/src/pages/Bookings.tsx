@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { buildCancelBookingPayload, buildCompleteBookingPayload, buildConfirmBookingPayload, hasAppScriptBookingSyncConfigured } from '../utils/bookingActions'
+import { useToast } from '../components/ToastProvider'
+import { playSound } from '../utils/sound'
 import './Bookings.css'
 
 type BookingRecord = {
@@ -97,6 +99,7 @@ export default function Bookings() {
   const [activeTab, setActiveTab] = useState<'needs_action' | 'today' | 'upcoming' | 'all' | 'cancelled'>('needs_action')
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null)
   const [shouldQueueBookingSync, setShouldQueueBookingSync] = useState(false)
+  const { publish } = useToast()
 
   const hydrateBooking = useCallback((id: string, data: Record<string, unknown>, serviceMap: Map<string, string>, sourcePath: 'store' | 'root') => {
     const nestedData = data.data && typeof data.data === 'object' ? (data.data as Record<string, unknown>) : {}
@@ -203,7 +206,11 @@ export default function Bookings() {
 
   useEffect(() => { void loadBookings() }, [loadBookings])
 
-  const updateBooking = useCallback(async (booking: BookingRecord, updates: Record<string, unknown>) => {
+  const updateBooking = useCallback(async (
+    booking: BookingRecord,
+    updates: Record<string, unknown>,
+    options: { successMessage: string; errorMessage: string },
+  ) => {
     if (!storeId) return
     setUpdatingBookingId(booking.id)
     try {
@@ -213,10 +220,16 @@ export default function Bookings() {
         setDoc(doc(db, 'integrationBookings', booking.id), payload, { merge: true }),
       ])
       setBookings(prev => prev.map(b => (b.id === booking.id ? { ...b, ...updates } as BookingRecord : b)))
+      publish({ tone: 'success', message: options.successMessage })
+      void playSound('success')
+    } catch (error) {
+      console.error('[bookings] Failed to update booking', error)
+      publish({ tone: 'error', message: options.errorMessage })
+      void playSound('error')
     } finally {
       setUpdatingBookingId(null)
     }
-  }, [storeId])
+  }, [publish, storeId])
 
   const todayStr = new Date().toDateString()
   const summary = {
@@ -270,7 +283,7 @@ export default function Bookings() {
 
     {loading ? <p>Loading bookings…</p> : errorMessage ? <p className="form__error">{errorMessage}</p> : <div className="bookings-table-wrap"><table className="table bookings-table"><thead><tr><th>Booking</th><th>Customer</th><th>Schedule</th><th>Source</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead><tbody>{visible.map(b => {
       const acts = actionsFor(b)
-      return <tr key={b.id}><td><strong>{b.serviceName}</strong><small>{b.reference || b.bookingId || 'No reference'}</small>{b.serviceName === 'Service not named' ? <small className="muted">Service ID: {b.serviceId}</small> : null}{b.duplicateMerged ? <span className="bookings-badge">Duplicate records merged</span> : null}</td><td><strong>{b.customerName || 'Customer'}</strong><small>{b.customerPhone || b.customerEmail || 'No contact'}</small></td><td><strong>{b.bookingDate || 'Date not set'}</strong><small>{b.bookingTime || 'Time not set'}</small><small>{b.preferredBranch || 'Main branch'}</small></td><td><span className="bookings-badge">{b.sourceLabel}</span><small>{b.sourcePath === 'root' ? 'Root booking' : 'Store booking'}</small></td><td><strong>{b.paymentAmount || '—'}</strong><small>{paymentLabel(b.paymentStatus)}</small><small>{b.paymentMethod || 'Method not set'}</small></td><td><span className={`bookings-page__status bookings-page__status--${b.bookingStatus}`}>{statusLabel(b.bookingStatus)}</span><small>{b.paymentStatus === 'paid' && b.bookingStatus !== 'confirmed' ? 'Paid - waiting for store confirmation' : ''}</small><small>{b.syncStatus === 'pending' ? 'Sync pending' : b.syncStatus === 'synced' ? 'Synced' : ''}</small></td><td><div className="bookings-page__row-actions">{acts.includes('confirm') && <button className="btn btn-secondary" onClick={() => void updateBooking(b, buildConfirmBookingPayload(b.payment, shouldQueueBookingSync))} disabled={updatingBookingId===b.id}>Confirm booking</button>}{acts.includes('cancel') && <button className="btn btn-secondary" onClick={() => void updateBooking(b, buildCancelBookingPayload(shouldQueueBookingSync))} disabled={updatingBookingId===b.id}>Cancel booking</button>}{acts.includes('complete') && <button className="btn btn-secondary" onClick={() => void updateBooking(b, buildCompleteBookingPayload(shouldQueueBookingSync))} disabled={updatingBookingId===b.id}>Complete</button>}<Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link></div></td></tr>
+      return <tr key={b.id}><td><strong>{b.serviceName}</strong><small>{b.reference || b.bookingId || 'No reference'}</small>{b.serviceName === 'Service not named' ? <small className="muted">Service ID: {b.serviceId}</small> : null}{b.duplicateMerged ? <span className="bookings-badge">Duplicate records merged</span> : null}</td><td><strong>{b.customerName || 'Customer'}</strong><small>{b.customerPhone || b.customerEmail || 'No contact'}</small></td><td><strong>{b.bookingDate || 'Date not set'}</strong><small>{b.bookingTime || 'Time not set'}</small><small>{b.preferredBranch || 'Main branch'}</small></td><td><span className="bookings-badge">{b.sourceLabel}</span><small>{b.sourcePath === 'root' ? 'Root booking' : 'Store booking'}</small></td><td><strong>{b.paymentAmount || '—'}</strong><small>{paymentLabel(b.paymentStatus)}</small><small>{b.paymentMethod || 'Method not set'}</small></td><td><span className={`bookings-page__status bookings-page__status--${b.bookingStatus}`}>{statusLabel(b.bookingStatus)}</span><small>{b.paymentStatus === 'paid' && b.bookingStatus !== 'confirmed' ? 'Paid - waiting for store confirmation' : ''}</small><small>{b.syncStatus === 'pending' ? 'Sync pending' : b.syncStatus === 'synced' ? 'Synced' : ''}</small></td><td><div className="bookings-page__row-actions">{acts.includes('confirm') && <button className="btn btn-secondary" onClick={() => void updateBooking(b, buildConfirmBookingPayload(b.payment, shouldQueueBookingSync), { successMessage: 'Booking confirmed successfully.', errorMessage: 'Unable to confirm booking right now.' })} disabled={updatingBookingId===b.id}>Confirm booking</button>}{acts.includes('cancel') && <button className="btn btn-secondary" onClick={() => void updateBooking(b, buildCancelBookingPayload(shouldQueueBookingSync), { successMessage: 'Booking cancelled successfully.', errorMessage: 'Unable to cancel booking right now.' })} disabled={updatingBookingId===b.id}>Cancel booking</button>}{acts.includes('complete') && <button className="btn btn-secondary" onClick={() => void updateBooking(b, buildCompleteBookingPayload(shouldQueueBookingSync), { successMessage: 'Booking marked as completed.', errorMessage: 'Unable to complete booking right now.' })} disabled={updatingBookingId===b.id}>Complete</button>}<Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link></div></td></tr>
     })}</tbody></table><div className="bookings-cards">{visible.map(b => <article key={`${b.id}-card`} className="bookings-card"><h3>{b.serviceName}</h3><p>{b.customerName || 'Customer'} • {b.bookingDate || 'Date not set'} {b.bookingTime || ''}</p><p>{statusLabel(b.status)} • {paymentLabel(b.paymentStatus)}</p><Link className="btn btn-secondary" to={`/bookings/${b.id}`}>Open</Link></article>)}</div></div>}
   </section></main>
 }

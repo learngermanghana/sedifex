@@ -1238,6 +1238,12 @@ export default function Products() {
           ? 'Service added to catalogue'
           : `SKU ${trimmedSku || '—'} · Price ${finalPrice !== null ? `GHS ${finalPrice.toFixed(2)}` : '—'}`,
       )
+      publish({
+        tone: 'success',
+        message: isService
+          ? `${normalizedProductName} added to catalogue.`
+          : `${normalizedProductName} added. You can now sell it from the Sell page.`,
+      })
       void playSound('success')
     } catch (error) {
       console.error('[products] Failed to add item', error)
