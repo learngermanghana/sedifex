@@ -20,7 +20,7 @@ import { useMemberships } from '../hooks/useMemberships'
 import type { ItemType, Product } from '../types/product'
 
 type ItemFormType = 'product' | 'service' | 'course'
-type ServiceKind = 'appointment' | 'consultation' | 'quote_request'
+type ServiceKind = 'consultation' | 'quote_request'
 type CourseMode = 'online' | 'in_person' | 'hybrid'
 
 type Draft = {
@@ -110,7 +110,7 @@ const blankDraft: Draft = {
   expiryDate: '',
   imageUrl: '',
   imageAlt: '',
-  serviceKind: 'appointment',
+  serviceKind: 'consultation',
   durationMinutes: '',
   location: '',
   requiresDateTime: false,
@@ -209,7 +209,7 @@ function generateItemDescription(draft: Draft): string {
 
   if (draft.itemType === 'service') {
     const duration = cleanNumber(draft.durationMinutes)
-    const kind = draft.serviceKind === 'consultation' ? 'consultation service' : draft.serviceKind === 'quote_request' ? 'service available by quote request' : 'service designed for booked appointments'
+    const kind = draft.serviceKind === 'quote_request' ? 'service available by quote request' : 'consultation and appointment service'
     return `${itemName} is a ${kind} that supports customers who want professional and reliable support. ${duration ? `Typical session time is about ${duration} minutes. ` : ''}${locationText ? `It is offered at ${locationText}, and ` : ''}customers can request a preferred date and time while the store confirms availability.`.replace(/\s+/g, ' ').trim()
   }
 
@@ -294,7 +294,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
 
-  const serviceKind: ServiceKind = isCourse ? 'appointment' : draft.serviceKind
+  const serviceKind: ServiceKind = isCourse ? 'consultation' : draft.serviceKind
   const salesMode = isCourse ? 'register' : serviceKind === 'quote_request' ? 'request_quote' : 'book_now'
 
   return {
@@ -410,7 +410,12 @@ export default function ProductsServiceFirst() {
 
   function resetForm() {
     setEditingId(null)
-    setDraft(blankDraft)
+    setDraft(current => ({
+      ...blankDraft,
+      itemType: current.itemType === 'service' ? 'service' : current.itemType === 'course' ? 'course' : 'product',
+      category: current.itemType === 'service' ? SERVICE_CATEGORY : current.itemType === 'course' ? EDUCATION_CATEGORY : PRODUCT_CATEGORY,
+      serviceKind: current.itemType === 'service' ? current.serviceKind : 'consultation',
+    }))
     setError('')
   }
 
@@ -430,7 +435,7 @@ export default function ProductsServiceFirst() {
       expiryDate: itemType === 'product' ? formatDateInput(item.expiryDate) : '',
       imageUrl: item.imageUrl ?? '',
       imageAlt: item.imageAlt ?? item.name,
-      serviceKind: ((item as any).serviceKind as ServiceKind) ?? 'appointment',
+      serviceKind: ((item as any).serviceKind === 'quote_request' ? 'quote_request' : 'consultation') as ServiceKind,
       durationMinutes: typeof (item as any).durationMinutes === 'number' ? String((item as any).durationMinutes) : '',
       location: typeof (item as any).location === 'string' ? (item as any).location : '',
       requiresDateTime: (item as any).requiresDateTime === true,
@@ -578,7 +583,7 @@ export default function ProductsServiceFirst() {
               </>
             ) : null}
 
-            {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="appointment">Appointment</option><option value="consultation">Consultation</option><option value="quote_request">Quote request</option></select></div> : null}
+            {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="consultation">Consultation / appointment</option><option value="quote_request">Request quote</option></select></div> : null}
             {isService ? <div className="field"><label className="field__label" htmlFor="service-duration">Duration minutes</label><input id="service-duration" type="number" min="0" step="1" value={draft.durationMinutes} onChange={event => updateDraft('durationMinutes', event.target.value)} /></div> : null}
             {behavesLikeService && !isCourse ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
             {isCourse ? (
