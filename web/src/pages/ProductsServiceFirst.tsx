@@ -14,6 +14,7 @@ import {
   where,
 } from 'firebase/firestore'
 import './Products.css'
+import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
@@ -377,6 +378,18 @@ function normalizeName(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 export default function ProductsServiceFirst() {
   const { storeId } = useActiveStore()
   const { memberships } = useMemberships()
@@ -505,6 +518,9 @@ export default function ProductsServiceFirst() {
     setMessage('')
     setError('')
     try {
+      if (draft.imageUrl.startsWith('data:image/')) {
+        throw new Error('Image is still local. Please upload again or paste an image URL.')
+      }
       const payload = buildSavePayload(draft as any, storeId)
       if (!editingId) {
         const possibleDuplicate = items.find(item => {
@@ -531,14 +547,22 @@ export default function ProductsServiceFirst() {
         }
       }
       if (editingId) {
-        await updateDoc(doc(db, 'products', editingId), payload)
+        await withTimeout(
+          updateDoc(doc(db, 'products', editingId), payload),
+          20_000,
+          'Save timed out. Please check your internet and try again.',
+        )
         setMessage('Item saved successfully.')
       } else {
-        await setDoc(doc(collection(db, 'products')), {
-          ...payload,
-          createdAt: serverTimestamp(),
-          sortOrder: items.length + 1,
-        })
+        await withTimeout(
+          setDoc(doc(collection(db, 'products')), {
+            ...payload,
+            createdAt: serverTimestamp(),
+            sortOrder: items.length + 1,
+          }),
+          20_000,
+          'Save timed out. Please check your internet and try again.',
+        )
         setMessage('Item saved successfully.')
       }
       resetForm()
@@ -709,28 +733,37 @@ export default function ProductsServiceFirst() {
                 id="item-image-file"
                 type="file"
                 accept="image/*"
-                onChange={event => {
+                onChange={async event => {
                   const file = event.target.files?.[0]
                   if (!file) return
+                  if (!storeId) {
+                    setImageUploadState('failed')
+                    setImageStatusMessage('Select a store before uploading an image.')
+                    event.target.value = ''
+                    return
+                  }
+                  if (!file.type.startsWith('image/')) {
+                    setImageUploadState('failed')
+                    setImageStatusMessage('Please choose a valid image file.')
+                    event.target.value = ''
+                    return
+                  }
                   setImageUploadState('uploading')
                   setImageStatusMessage('Uploading image...')
-                  const reader = new FileReader()
-                  reader.onload = () => {
-                    const result = typeof reader.result === 'string' ? reader.result : ''
-                    if (result) {
-                      updateDraft('imageUrl', result)
-                      setImageUploadState('success')
-                      setImageStatusMessage('Image uploaded successfully.')
-                    } else {
-                      setImageUploadState('failed')
-                      setImageStatusMessage('Image upload failed.')
-                    }
-                  }
-                  reader.onerror = () => {
+                  try {
+                    const uploadedImageUrl = await uploadProductImage(file, { storagePath: `stores/${storeId}/products` })
+                    updateDraft('imageUrl', uploadedImageUrl)
+                    setImageUploadState('success')
+                    setImageStatusMessage('Image uploaded successfully.')
+                  } catch (uploadError) {
+                    const message = uploadError instanceof ProductImageUploadError
+                      ? uploadError.message
+                      : 'Image upload failed.'
                     setImageUploadState('failed')
-                    setImageStatusMessage('Image upload failed.')
+                    setImageStatusMessage(message)
+                  } finally {
+                    event.target.value = ''
                   }
-                  reader.readAsDataURL(file)
                 }}
               />
               {imageStatusMessage ? <p className={`products-page__upload-state products-page__upload-state--${imageUploadState}`}>{imageStatusMessage}</p> : null}
