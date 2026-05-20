@@ -213,21 +213,29 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
   const dryRun = data?.dryRun === true
   const productsSnap = await db.collection('products')
     .where('isPublished', '==', true)
-    .where('isMarketplaceVisible', '==', true)
     .get()
 
   const storeCache = new Map<string, StoreData | undefined>()
+  let scannedCount = 0
   let syncedCount = 0
   let skippedCount = 0
-  let ineligibleStoreCount = 0
+  let legacyIncludedCount = 0
+  let explicitHiddenCount = 0
   let batch = db.batch()
   let writes = 0
 
   for (const productDoc of productsSnap.docs) {
+    scannedCount += 1
     const productData = (productDoc.data() ?? {}) as ProductData
     const storeId = text(productData.storeId)
     if (!storeId) {
       skippedCount += 1
+      continue
+    }
+
+    if (productData.isMarketplaceVisible === false) {
+      skippedCount += 1
+      explicitHiddenCount += 1
       continue
     }
 
@@ -238,18 +246,39 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
       storeCache.set(storeId, storeData)
     }
 
-    if (!storeData || !isStoreEligible(storeData)) {
+    const eligibleStore = !!storeData && isStoreEligible(storeData)
+    const isExplicitVisible = productData.isMarketplaceVisible === true
+    const isLegacyCandidate = productData.isMarketplaceVisible === null || productData.isMarketplaceVisible === undefined
+    const includeExplicit = isExplicitVisible && eligibleStore
+    const includeLegacy = isLegacyCandidate && eligibleStore
+    if (!includeExplicit && !includeLegacy) {
       skippedCount += 1
-      ineligibleStoreCount += 1
       continue
     }
+    const eligibleStoreData = storeData as StoreData
 
     syncedCount += 1
+    if (includeLegacy) {
+      legacyIncludedCount += 1
+    }
     if (dryRun) continue
+
+    if (includeLegacy) {
+      batch.set(
+        db.collection('products').doc(productDoc.id),
+        {
+          isMarketplaceVisible: true,
+          migratedMarketplaceVisible: true,
+          marketplaceVisibilitySource: 'legacy_verified_store',
+        },
+        { merge: true },
+      )
+      writes += 1
+    }
 
     batch.set(
       db.collection('publicListings').doc(productDoc.id),
-      publicPayload(productDoc.id, productData, buildStoreMeta(storeData)),
+      publicPayload(productDoc.id, productData, buildStoreMeta(eligibleStoreData)),
       { merge: true },
     )
     writes += 1
@@ -267,18 +296,20 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
 
   functions.logger.info('adminBackfillPublicListings completed', {
     dryRun,
+    scannedCount,
     syncedCount,
     skippedCount,
-    ineligibleStoreCount,
-    scannedCount: productsSnap.size,
+    legacyIncludedCount,
+    explicitHiddenCount,
   })
 
   return {
     ok: true,
     dryRun,
-    scannedCount: productsSnap.size,
+    scannedCount,
     syncedCount,
     skippedCount,
-    ineligibleStoreCount,
+    legacyIncludedCount,
+    explicitHiddenCount,
   }
 })

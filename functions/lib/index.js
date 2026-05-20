@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyDonationCaptured = exports.notifySupportRequestCreated = exports.notifyVolunteerApplicationCreated = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationStudentRegistrations = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
+exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.notifyNgoDonationConfirmed = exports.notifyNgoDonationSubmitted = exports.notifyNgoSupportRequestReceived = exports.notifyNgoVolunteerApplicationReceived = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationStudentRegistrations = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
 const params_1 = require("firebase-functions/params");
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
@@ -39,13 +39,15 @@ Object.defineProperty(exports, "v1IntegrationStudentRegistrations", { enumerable
 var ngoIntake_1 = require("./ngoIntake");
 Object.defineProperty(exports, "volunteerIntake", { enumerable: true, get: function () { return ngoIntake_1.volunteerIntake; } });
 Object.defineProperty(exports, "supportRequestIntake", { enumerable: true, get: function () { return ngoIntake_1.supportRequestIntake; } });
+var ngoNotificationAlerts_1 = require("./ngoNotificationAlerts");
+Object.defineProperty(exports, "notifyNgoVolunteerApplicationReceived", { enumerable: true, get: function () { return ngoNotificationAlerts_1.notifyNgoVolunteerApplicationReceived; } });
+Object.defineProperty(exports, "notifyNgoSupportRequestReceived", { enumerable: true, get: function () { return ngoNotificationAlerts_1.notifyNgoSupportRequestReceived; } });
+Object.defineProperty(exports, "notifyNgoDonationSubmitted", { enumerable: true, get: function () { return ngoNotificationAlerts_1.notifyNgoDonationSubmitted; } });
+Object.defineProperty(exports, "notifyNgoDonationConfirmed", { enumerable: true, get: function () { return ngoNotificationAlerts_1.notifyNgoDonationConfirmed; } });
 var notifications_1 = require("./notifications");
 Object.defineProperty(exports, "initializeStoreNotificationDefaults", { enumerable: true, get: function () { return notifications_1.initializeStoreNotificationDefaults; } });
 Object.defineProperty(exports, "notifyIntegrationOrderStatus", { enumerable: true, get: function () { return notifications_1.notifyIntegrationOrderStatus; } });
 Object.defineProperty(exports, "notifyStudentRegistrationCreated", { enumerable: true, get: function () { return notifications_1.notifyStudentRegistrationCreated; } });
-Object.defineProperty(exports, "notifyVolunteerApplicationCreated", { enumerable: true, get: function () { return notifications_1.notifyVolunteerApplicationCreated; } });
-Object.defineProperty(exports, "notifySupportRequestCreated", { enumerable: true, get: function () { return notifications_1.notifySupportRequestCreated; } });
-Object.defineProperty(exports, "notifyDonationCaptured", { enumerable: true, get: function () { return notifications_1.notifyDonationCaptured; } });
 Object.defineProperty(exports, "sendBrandedNotificationPreview", { enumerable: true, get: function () { return notifications_1.sendBrandedNotificationPreview; } });
 var googleAds_1 = require("./googleAds");
 Object.defineProperty(exports, "googleAdsOAuthStart", { enumerable: true, get: function () { return googleAds_1.googleAdsOAuthStart; } });
