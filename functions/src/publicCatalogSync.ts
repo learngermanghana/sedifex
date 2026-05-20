@@ -74,6 +74,29 @@ function isPublishedStatus(status: unknown): boolean {
   return text(status)?.toLowerCase() === 'published'
 }
 
+function normalizeSlugPart(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '')
+}
+
+function shortId(value: string): string {
+  const cleaned = value.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return (cleaned || '000000').slice(-6)
+}
+
+function resolveSourceProductId(productId: string, data: ProductData): string {
+  return text(data.sourceProductId) ?? productId
+}
+
+function resolvePublicListingId(productId: string, data: ProductData): { publicListingId: string; sourceProductId: string; slug: string | null } {
+  const existingPublicListingId = text(data.publicListingId)
+  const sourceProductId = resolveSourceProductId(productId, data)
+  const listingType = itemType(data.itemType)
+  const slug = normalizeSlugPart(text(data.slug) ?? text(data.name) ?? '')
+  if (existingPublicListingId) return { publicListingId: existingPublicListingId, sourceProductId, slug: slug || null }
+  if (!sourceProductId.toLowerCase().startsWith('draft-')) return { publicListingId: sourceProductId, sourceProductId, slug: slug || null }
+  return { publicListingId: [listingType, slug || 'listing', shortId(sourceProductId)].join('-'), sourceProductId, slug: slug || null }
+}
+
 function hasLegacyPublicationFields(data: ProductData): boolean {
   return data.isPublished === null
     || data.isPublished === undefined
@@ -99,14 +122,22 @@ function buildStoreMeta(store: StoreData): Record<string, unknown> {
   }
 }
 
-function publicPayload(productId: string, data: ProductData, storeMeta: Record<string, unknown>): Record<string, unknown> {
+function publicPayload(
+  productId: string,
+  data: ProductData,
+  storeMeta: Record<string, unknown>,
+  identity: { publicListingId: string; sourceProductId: string; slug: string | null },
+): Record<string, unknown> {
   const normalizedItemType = itemType(data.itemType)
   const status = data.isPublished === true ? 'published' : 'draft'
   const deleteSentinel = getFieldValueDelete()
   const category = text(data.category) ?? 'General'
   const metadata = (typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {}) as Record<string, unknown>
   const payload: Record<string, unknown> = {
-    sourceProductId: productId,
+    id: identity.publicListingId,
+    publicListingId: identity.publicListingId,
+    sourceProductId: identity.sourceProductId,
+    slug: identity.slug,
     storeId: text(data.storeId),
     ...storeMeta,
     name: text(data.name),
@@ -188,7 +219,10 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   for (const productDoc of productsSnap.docs) {
     const data = (productDoc.data() ?? {}) as ProductData
     if (!shouldIncludeProduct(data, true)) continue
-    batch.set(db.collection('publicListings').doc(productDoc.id), publicPayload(productDoc.id, data, storeMeta), { merge: true })
+    const identity = resolvePublicListingId(productDoc.id, data)
+    batch.set(db.collection('products').doc(productDoc.id), identity, { merge: true })
+    writes += 1
+    batch.set(db.collection('publicListings').doc(identity.publicListingId), publicPayload(productDoc.id, data, storeMeta, identity), { merge: true })
     writes += 1
     writtenListings += 1
     if (writes >= 450) {
@@ -218,28 +252,39 @@ export const syncPublicCatalogOnStoreEligibilityUpdate = functions.firestore.doc
 
 export const syncPublicCatalogOnProductWrite = functions.firestore.document('products/{productId}').onWrite(async (change, context) => {
   const productId = String(context.params.productId || '')
+  const beforeData = (change.before.data() ?? {}) as ProductData
+  const beforeIdentity = resolvePublicListingId(productId, beforeData)
   if (!change.after.exists) {
-    await db.collection('publicListings').doc(productId).delete()
+    await db.collection('publicListings').doc(beforeIdentity.publicListingId).delete()
     return
   }
   const afterData = (change.after.data() ?? {}) as ProductData
+  const afterIdentity = resolvePublicListingId(productId, afterData)
+  await db.collection('products').doc(productId).set(afterIdentity, { merge: true })
   const storeId = text(afterData.storeId)
   if (!storeId) {
-    await db.collection('publicListings').doc(productId).delete()
+    await db.collection('publicListings').doc(afterIdentity.publicListingId).delete()
     return
   }
   const storeSnap = await db.collection('stores').doc(storeId).get()
   const storeData = (storeSnap.data() ?? {}) as StoreData
   const eligibleStore = isStoreEligible(storeData)
   if (!eligibleStore) {
-    await db.collection('publicListings').doc(productId).delete()
+    await db.collection('publicListings').doc(afterIdentity.publicListingId).delete()
     return
   }
   if (!shouldIncludeProduct(afterData, eligibleStore)) {
-    await db.collection('publicListings').doc(productId).delete()
+    await db.collection('publicListings').doc(afterIdentity.publicListingId).delete()
     return
   }
-  await db.collection('publicListings').doc(productId).set(publicPayload(productId, afterData, buildStoreMeta(storeData)), { merge: true })
+  await db.collection('publicListings').doc(afterIdentity.publicListingId).set(publicPayload(productId, afterData, buildStoreMeta(storeData), afterIdentity), { merge: true })
+  if (beforeIdentity.publicListingId !== afterIdentity.publicListingId) {
+    functions.logger.info('public listing id migrated; retaining prior listing for later cleanup', {
+      productId,
+      previousPublicListingId: beforeIdentity.publicListingId,
+      nextPublicListingId: afterIdentity.publicListingId,
+    })
+  }
 })
 
 export const adminBackfillPublicListings = functions.https.onCall(async (data: BackfillPayload, context) => {
@@ -298,15 +343,17 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
       legacyIncludedCount += 1
     }
     if (dryRun) continue
-
+    const identity = resolvePublicListingId(productDoc.id, productData)
+    const productUpdates: Record<string, unknown> = { ...identity }
     if (hasLegacyPublicationFields(productData) && productData.isMarketplaceVisible !== true) {
+      productUpdates.isMarketplaceVisible = true
+      productUpdates.migratedMarketplaceVisible = true
+      productUpdates.marketplaceVisibilitySource = 'legacy_verified_store'
+    }
+    if (Object.keys(productUpdates).length > 0) {
       batch.set(
         db.collection('products').doc(productDoc.id),
-        {
-          isMarketplaceVisible: true,
-          migratedMarketplaceVisible: true,
-          marketplaceVisibilitySource: 'legacy_verified_store',
-        },
+        productUpdates,
         { merge: true },
       )
       writes += 1
@@ -314,8 +361,8 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
 
     try {
       batch.set(
-        db.collection('publicListings').doc(productDoc.id),
-        publicPayload(productDoc.id, productData, buildStoreMeta(eligibleStoreData)),
+        db.collection('publicListings').doc(identity.publicListingId),
+        publicPayload(productDoc.id, productData, buildStoreMeta(eligibleStoreData), identity),
         { merge: true },
       )
       writes += 1
