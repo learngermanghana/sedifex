@@ -138,6 +138,18 @@ function normalizeTimeInput(value: unknown): string {
   }
   return ''
 }
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
 export default function BookingEditor() {
   const { storeId } = useActiveStore()
   const { bookingId = 'new' } = useParams()
@@ -300,10 +312,14 @@ export default function BookingEditor() {
             source_channel: 'manual_admin',
           } : {}),
         }
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId, 'integrationBookings', targetId), payload, { merge: true }),
-        setDoc(doc(db, 'integrationBookings', targetId), payload, { merge: true }),
-      ])
+      await withTimeout(
+        Promise.all([
+          setDoc(doc(db, 'stores', storeId, 'integrationBookings', targetId), payload, { merge: true }),
+          setDoc(doc(db, 'integrationBookings', targetId), payload, { merge: true }),
+        ]),
+        15000,
+        'Saving booking timed out. Please try again.',
+      )
 
       const saveMessage = 'Booking changes saved successfully.'
       setSuccessMessage(saveMessage)
@@ -328,10 +344,14 @@ export default function BookingEditor() {
     setErrorMessage(null)
     setSuccessMessage(null)
     try {
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), payload, { merge: true }),
-        setDoc(doc(db, 'integrationBookings', bookingId), payload, { merge: true }),
-      ])
+      await withTimeout(
+        Promise.all([
+          setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), payload, { merge: true }),
+          setDoc(doc(db, 'integrationBookings', bookingId), payload, { merge: true }),
+        ]),
+        15000,
+        'Saving booking timed out. Please try again.',
+      )
       setForm(prev => ({
         ...prev,
         status: typeof payload.status === 'string' ? payload.status : prev.status,
