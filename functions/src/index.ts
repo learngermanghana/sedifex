@@ -41,6 +41,7 @@ export {
 export * from './googleShopping'
 export * from './reporting'
 export * from './publicCatalogSync'
+export * from './blogAutomation'
 
 /**
  * SINGLE FIRESTORE INSTANCE
