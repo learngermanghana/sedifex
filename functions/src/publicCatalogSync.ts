@@ -7,6 +7,9 @@ type ProductData = Record<string, unknown>
 type BackfillPayload = {
   dryRun?: unknown
 }
+type SyncStorePayload = {
+  storeId?: unknown
+}
 
 function text(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -111,8 +114,12 @@ function hasLegacyPublicationFields(data: ProductData): boolean {
 function shouldIncludeProduct(data: ProductData, eligibleStore: boolean): boolean {
   if (data.isMarketplaceVisible === false) return false
   if (data.isPublished === false) return false
-  if (isDraftStatus(data.status)) return false
+
+  // Treat the canonical publication flag as stronger than a stale legacy status value.
+  // This prevents products with isPublished=true and status="draft" from being removed from the public catalog.
   if (data.isPublished === true) return true
+
+  if (isDraftStatus(data.status)) return false
   if (isPublishedStatus(data.status)) return true
   return eligibleStore && hasLegacyPublicationFields(data)
 }
@@ -133,7 +140,7 @@ function publicPayload(
   identity: { publicListingId: string; sourceProductId: string; slug: string | null },
 ): Record<string, unknown> {
   const normalizedItemType = itemType(data.itemType)
-  const status = data.isPublished === true ? 'published' : 'draft'
+  const status = data.isPublished === true || isPublishedStatus(data.status) ? 'published' : 'draft'
   const deleteSentinel = safeDeleteField()
   const category = text(data.category) ?? 'General'
   const metadata = (typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {}) as Record<string, unknown>
@@ -203,6 +210,7 @@ export async function removeStorePublicCatalog(storeId: string): Promise<void> {
   await db.collection('stores').doc(storeId).set({
     publicCatalogLastSyncedAt: safeServerTimestamp(),
     publicCatalogDocCount: { listings: 0 },
+    publicCatalogOutOfSyncCount: 0,
   }, { merge: true })
 }
 
@@ -288,6 +296,36 @@ export const syncPublicCatalogOnProductWrite = functions.firestore.document('pro
       previousPublicListingId: beforeIdentity.publicListingId,
       nextPublicListingId: afterIdentity.publicListingId,
     })
+  }
+})
+
+export const adminSyncStorePublicCatalog = functions.https.onCall(async (data: SyncStorePayload, context) => {
+  const runningInEmulator = process.env.FUNCTIONS_EMULATOR === 'true'
+  if (!runningInEmulator) {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required.')
+    }
+    const isAdmin = context.auth.token?.admin === true
+    if (!isAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Admin access required.')
+    }
+  }
+
+  const storeId = text(data?.storeId)
+  if (!storeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
+  }
+
+  await syncStorePublicCatalog(storeId)
+
+  const storeSnap = await db.collection('stores').doc(storeId).get()
+  const storeData = (storeSnap.data() ?? {}) as StoreData
+  return {
+    ok: true,
+    storeId,
+    publicCatalogDocCount: storeData.publicCatalogDocCount ?? null,
+    publicCatalogOutOfSyncCount: numberOrNull(storeData.publicCatalogOutOfSyncCount) ?? null,
+    publicCatalogLastSyncedAt: timestampOrIso(storeData.publicCatalogLastSyncedAt),
   }
 })
 
