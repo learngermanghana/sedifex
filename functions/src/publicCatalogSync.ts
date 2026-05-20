@@ -73,6 +73,20 @@ function isStoreEligible(store: StoreData | undefined): boolean {
   return store.verified === true && store.eligibleForBuy === true && store.buyOptOut !== true && store.status === 'active'
 }
 
+function canManageStoreCatalog(store: StoreData | undefined, auth: functions.https.CallableContext['auth']): boolean {
+  if (!auth || !store) return false
+  if (auth.token?.admin === true) return true
+
+  const uid = auth.uid
+  const email = typeof auth.token?.email === 'string' ? auth.token.email.trim().toLowerCase() : null
+  const ownerUid = text(store.ownerUid) ?? text(store.userId) ?? text(store.createdBy) ?? text(store.id)
+  const ownerEmail = text(store.ownerEmail) ?? text(store.email)
+
+  if (ownerUid && ownerUid === uid) return true
+  if (email && ownerEmail && ownerEmail.trim().toLowerCase() === email) return true
+  return false
+}
+
 function isDraftStatus(status: unknown): boolean {
   return text(status)?.toLowerCase() === 'draft'
 }
@@ -301,19 +315,21 @@ export const syncPublicCatalogOnProductWrite = functions.firestore.document('pro
 
 export const adminSyncStorePublicCatalog = functions.https.onCall(async (data: SyncStorePayload, context) => {
   const runningInEmulator = process.env.FUNCTIONS_EMULATOR === 'true'
+  const storeId = text(data?.storeId)
+  if (!storeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
+  }
+
+  const storeSnapBefore = await db.collection('stores').doc(storeId).get()
+  const storeDataBefore = (storeSnapBefore.data() ?? {}) as StoreData
+
   if (!runningInEmulator) {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Authentication required.')
     }
-    const isAdmin = context.auth.token?.admin === true
-    if (!isAdmin) {
-      throw new functions.https.HttpsError('permission-denied', 'Admin access required.')
+    if (!canManageStoreCatalog(storeDataBefore, context.auth)) {
+      throw new functions.https.HttpsError('permission-denied', 'Store owner or admin access required.')
     }
-  }
-
-  const storeId = text(data?.storeId)
-  if (!storeId) {
-    throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
   }
 
   await syncStorePublicCatalog(storeId)
