@@ -96,13 +96,18 @@ function buildDescriptionPrompt(input: {
     'General product'
 
   return [
-    'Write one product description for a store listing.',
+    'Write one creative, customer-facing product description for a store listing.',
     `Template: ${templateLabel}.`,
     `Product name: ${input.itemName || 'Not provided'}.`,
     `Item type: ${input.itemType}.`,
     `Category: ${input.category || 'Not provided'}.`,
-    `Keep it concise, engaging, and under ${MAX_DESCRIPTION_WORDS} words.`,
-    'Include key benefits, best use case, and a short call-to-action.',
+    'Use natural, simple English with a Ghana-friendly tone.',
+    'Format exactly as:',
+    '- One short opening paragraph.',
+    '- Three benefit bullets, each starting with "-".',
+    '- One line that starts with "Best for:".',
+    '- One short call-to-action line.',
+    `Keep it under ${MAX_DESCRIPTION_WORDS} words.`,
     'Return plain text only.',
   ].join(' ')
 }
@@ -1051,6 +1056,7 @@ export default function Products() {
    */
   async function handleAddItem(event: React.FormEvent) {
     event.preventDefault()
+    if (isSaving || isUploadingImage) return
     if (!activeStoreId) return
 
     setFormStatus('idle')
@@ -1167,9 +1173,11 @@ export default function Products() {
 
     setIsSaving(true)
     try {
-      const productRef = doc(collection(db, 'products'), draftProductKey)
+      const productRef = doc(collection(db, 'products'))
+      const productId = productRef.id
 
       await setDoc(productRef, {
+        productKey: productId,
         storeId: activeStoreId,
         storeName: productStoreMeta.storeName,
         storePhone: productStoreMeta.storePhone,
