@@ -1840,20 +1840,21 @@ export default function Products() {
                   onClick={handleGenerateDescription}
                   disabled={isGeneratingDescription}
                 >
-                  {isGeneratingDescription ? 'Generating…' : 'Generate by A.I'}
+                  {isGeneratingDescription ? 'Generating…' : 'Generate full description with A.I'}
                 </button>
               </div>
               <textarea
                 id="add-description"
                 value={descriptionInput}
                 onChange={e => setDescriptionInput(e.target.value)}
-                rows={4}
+                rows={6}
               />
               <p className="field__hint">
                 {countWords(descriptionInput)} / {MAX_DESCRIPTION_WORDS} words
               </p>
               <p className="field__hint">
-                Pick a template (Skin Care, food, and more) then tap Generate by A.I for a fast draft.
+                Pick a template (Skin Care, food, and more) then tap Generate full description with A.I for a richer,
+                more realistic draft.
               </p>
             </div>
 
@@ -1921,7 +1922,7 @@ export default function Products() {
 
               <div className="field">
                 <label className="field__label" htmlFor="add-image-file">
-                  Upload image <span className="field__optional">(optional)</span>
+                  Browse image <span className="field__optional">(optional)</span>
                 </label>
                 <input
                   id="add-image-file"
@@ -1949,7 +1950,8 @@ export default function Products() {
                   ) : null}
                 </div>
                 <p className="field__hint">
-                  Uploads to your backend and auto-fills the next empty image URL slot (up to 3).
+                  Uploads to your backend and auto-fills the next empty image URL slot (up to 3), so the saved URL can
+                  be shared by email before customers view the full product page.
                 </p>
               </div>
 
@@ -2423,7 +2425,8 @@ export default function Products() {
                               <p className="products-page__upload-error">{editImageUploadError}</p>
                             ) : null}
                             <p className="field__hint">
-                              Upload up to 3 images. The first image is used as the main product photo.
+                              Upload up to 3 images. Each upload auto-fills the next URL slot so you can save and share
+                              image links by email before publishing.
                             </p>
                             <input
                               type="url"
@@ -2539,13 +2542,15 @@ export default function Products() {
                                 onClick={() => handleGenerateEditDescription(product)}
                                 disabled={isGeneratingEditDescription}
                               >
-                                {isGeneratingEditDescription ? 'Generating…' : 'Generate by A.I'}
+                                {isGeneratingEditDescription
+                                  ? 'Generating…'
+                                  : 'Generate full description with A.I'}
                               </button>
                             </div>
                             <textarea
                               value={editDescriptionInput}
                               onChange={event => setEditDescriptionInput(event.target.value)}
-                              rows={4}
+                              rows={6}
                             />
                             <p className="field__hint">
                               {countWords(editDescriptionInput)} / {MAX_DESCRIPTION_WORDS} words
