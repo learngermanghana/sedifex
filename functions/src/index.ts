@@ -229,5 +229,3 @@ const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID'
 
 let openAiConfigWarned = false
 let integrationApiKeyWarned = false
-
-function placeholder() { return null }
