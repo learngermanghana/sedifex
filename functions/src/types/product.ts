@@ -14,6 +14,15 @@ export type ProductReadModel = {
   imageAlt: string | null
   updatedAt: FirebaseFirestore.Timestamp | null
   listingType?: 'product' | 'service' | 'course' | null
+  salesMode?: 'buy_now' | 'book_now' | 'register' | 'request_quote' | null
+  status?: 'draft' | 'published' | null
+  isPublished?: boolean | null
+  isMarketplaceVisible?: boolean | null
+  isWebsiteVisible?: boolean | null
+  categoryKey?: string | null
+  categoryName?: string | null
+  currency?: 'GHS' | null
+  storeName?: string | null
   serviceKind?: string | null
   duration?: string | null
   branch?: string | null
