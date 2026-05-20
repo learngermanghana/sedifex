@@ -296,12 +296,22 @@ export const adminBackfillPublicListings = functions.https.onCall(async (data: B
       writes += 1
     }
 
-    batch.set(
-      db.collection('publicListings').doc(productDoc.id),
-      publicPayload(productDoc.id, productData, buildStoreMeta(eligibleStoreData)),
-      { merge: true },
-    )
-    writes += 1
+    try {
+      batch.set(
+        db.collection('publicListings').doc(productDoc.id),
+        publicPayload(productDoc.id, productData, buildStoreMeta(eligibleStoreData)),
+        { merge: true },
+      )
+      writes += 1
+    } catch (error) {
+      skippedCount += 1
+      syncedCount -= 1
+      functions.logger.error('adminBackfillPublicListings failed to build public payload', {
+        productId: productDoc.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      continue
+    }
 
     if (writes >= 450) {
       await batch.commit()
