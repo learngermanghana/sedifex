@@ -1,17 +1,50 @@
 import * as admin from 'firebase-admin'
 
 function isTimestampLike(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as {
+    toDate?: unknown
+    seconds?: unknown
+    nanoseconds?: unknown
+    _seconds?: unknown
+    _nanoseconds?: unknown
+  }
+
   return (
-    value instanceof admin.firestore.Timestamp ||
-    (typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function')
+    typeof candidate.toDate === 'function'
+    || (typeof candidate.seconds === 'number' && typeof candidate.nanoseconds === 'number')
+    || (typeof candidate._seconds === 'number' && typeof candidate._nanoseconds === 'number')
   )
 }
 
 export function resolvePublicationTimestampCandidate(...candidates: unknown[]): unknown {
   for (const candidate of candidates) {
-    if (isTimestampLike(candidate) || typeof candidate === 'string') return candidate
+    if (candidate === null || candidate === undefined) continue
+
+    if (isTimestampLike(candidate)) return candidate
+
+    if (candidate instanceof Date) {
+      if (!Number.isNaN(candidate.getTime())) return candidate
+      continue
+    }
+
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim()
+      if (!trimmed) continue
+      const parsed = new Date(trimmed)
+      if (!Number.isNaN(parsed.getTime())) return trimmed
+    }
   }
-  return admin.firestore.FieldValue.serverTimestamp()
+
+  try {
+    if (admin?.firestore?.FieldValue?.serverTimestamp) {
+      return admin.firestore.FieldValue.serverTimestamp()
+    }
+  } catch {
+    return null
+  }
+
+  return null
 }
 
 export function normalizeCatalogPublicationFields(
