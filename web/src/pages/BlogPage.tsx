@@ -18,6 +18,7 @@ import {
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { requestAiAdvisor } from '../api/aiAdvisor'
+import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 
 
 type CatalogItem = {
@@ -100,6 +101,7 @@ export default function BlogPage() {
   const [customImageSelected, setCustomImageSelected] = useState(false)
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [dailyShareEnabled, setDailyShareEnabled] = useState(false)
 
   async function loadPosts() {
@@ -202,28 +204,38 @@ export default function BlogPage() {
     setUploadStatus(`${selectedCatalogItem.name} has no product image yet. You can browse and add one manually.`)
   }, [selectedCatalogItem, customImageSelected])
 
-  function handleBrowseImage(file: File | undefined) {
+  async function handleBrowseImage(file: File | undefined) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setUploadStatus('Please choose a valid image file.')
       return
     }
-    if (file.size > 2_500_000) {
-      setUploadStatus('Image is too large. Please choose an image below 2.5MB.')
-      return
-    }
+
     setSelectedFileName(file.name)
     setCustomImageSelected(true)
-    setUploadStatus(`Selected custom image: ${file.name}`)
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setImageUrl(reader.result)
-        setUploadStatus(`Custom image ready: ${file.name}`)
-      }
+    setImageUrl(null)
+    setUploadingImage(true)
+    setUploadStatus(`Uploading image: ${file.name}`)
+
+    try {
+      const uploadedUrl = await uploadProductImage(file, {
+        storagePath: storeId ? `stores/${storeId}/blog` : 'blog',
+      })
+      setImageUrl(uploadedUrl)
+      setUploadStatus(`Image uploaded: ${file.name}`)
+    } catch (error) {
+      setCustomImageSelected(false)
+      setSelectedFileName(null)
+      setImageUrl(selectedCatalogItem?.imageUrl ?? null)
+      setUploadStatus(
+        error instanceof ProductImageUploadError || error instanceof Error
+          ? error.message
+          : 'Could not upload image.',
+      )
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } finally {
+      setUploadingImage(false)
     }
-    reader.onerror = () => setUploadStatus(`Could not read image: ${file.name}`)
-    reader.readAsDataURL(file)
   }
 
   function clearFeaturedImage() {
@@ -301,6 +313,10 @@ export default function BlogPage() {
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!storeId) return
+    if (uploadingImage) {
+      setMessage('Please wait until the image upload finishes before saving the post.')
+      return
+    }
     setSaving(true)
     setMessage(null)
     try {
@@ -399,14 +415,14 @@ export default function BlogPage() {
                 className="blog-page__file-input"
                 type="file"
                 accept="image/*"
-                onChange={event => handleBrowseImage(event.currentTarget.files?.[0])}
+                onChange={event => void handleBrowseImage(event.currentTarget.files?.[0])}
               />
               <div className="blog-page__image-actions">
-                <button type="button" className="button button--ghost" onClick={() => fileInputRef.current?.click()}>
-                  Browse image
+                <button type="button" className="button button--ghost" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>
+                  {uploadingImage ? 'Uploading…' : 'Browse image'}
                 </button>
                 {imageUrl ? (
-                  <button type="button" className="button button--ghost" onClick={clearFeaturedImage}>
+                  <button type="button" className="button button--ghost" onClick={clearFeaturedImage} disabled={uploadingImage}>
                     Clear image
                   </button>
                 ) : null}
@@ -484,13 +500,13 @@ export default function BlogPage() {
                   <input type="checkbox" checked={dailyShareEnabled} onChange={e => setDailyShareEnabled(e.target.checked)} />
                   <span>Auto-publish one product daily (opt-in)</span>
                 </label>
-                <button type="button" className="button button--ghost" onClick={() => void saveDailyShareSetting()} disabled={!storeId || saving}>
+                <button type="button" className="button button--ghost" onClick={() => void saveDailyShareSetting()} disabled={!storeId || saving || uploadingImage}>
                   Save daily share setting
                 </button>
-                <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || !storeId}>
+                <button type="button" className="button button--ghost" onClick={() => void generateBlogWithAi()} disabled={isAiGenerating || saving || uploadingImage || !storeId}>
                   {isAiGenerating ? 'Generating…' : 'Generate with A.I'}
                 </button>
-                <button type="submit" disabled={saving || !storeId}>{saving ? 'Saving…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
+                <button type="submit" disabled={saving || uploadingImage || !storeId}>{saving ? 'Saving…' : uploadingImage ? 'Uploading image…' : editingPostId ? 'Update Post' : 'Save Post'}</button>
               </div>
             </form>
             {message ? <p>{message}</p> : null}
