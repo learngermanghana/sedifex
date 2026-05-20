@@ -26,6 +26,7 @@ export type Product = {
   updatedAt?: unknown
   sortOrder?: number | null
   listingType?: 'product' | 'service' | 'course' | null
+  salesMode?: 'buy_now' | 'book_now' | 'register' | 'request_quote' | null
   serviceKind?: string | null
   duration?: string | null
   branch?: string | null
@@ -40,4 +41,9 @@ export type Product = {
   Agreement?: string | null
   courseLevel?: string | null
   courseMode?: string | null
+  isPublished?: boolean | null
+  isMarketplaceVisible?: boolean | null
+  categoryKey?: string | null
+  categoryName?: string | null
+  currency?: string | null
 }
