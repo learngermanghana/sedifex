@@ -10,6 +10,12 @@ type BackfillPayload = {
 type SyncStorePayload = {
   storeId?: unknown
 }
+type ListingTypeCount = {
+  listings: number
+  products: number
+  services: number
+  courses: number
+}
 
 function text(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -19,6 +25,17 @@ function text(value: unknown): string | null {
 
 function itemType(value: unknown): 'product' | 'service' | 'course' {
   return value === 'course' ? 'course' : value === 'service' ? 'service' : 'product'
+}
+
+function emptyListingCounts(): ListingTypeCount {
+  return { listings: 0, products: 0, services: 0, courses: 0 }
+}
+
+function countListing(counts: ListingTypeCount, type: 'product' | 'service' | 'course'): void {
+  counts.listings += 1
+  if (type === 'course') counts.courses += 1
+  else if (type === 'service') counts.services += 1
+  else counts.products += 1
 }
 
 function numberOrNull(value: unknown): number | null {
@@ -177,8 +194,9 @@ function publicPayload(
     itemType: normalizedItemType,
     listingType: normalizedItemType,
     status,
+    isVisible: true,
     isPublished: true,
-    isMarketplaceVisible: data.isMarketplaceVisible === true,
+    isMarketplaceVisible: data.isMarketplaceVisible !== false,
     isWebsiteVisible: data.isWebsiteVisible === true,
     salesMode: text(data.salesMode),
     categoryKey: text(data.categoryKey),
@@ -223,7 +241,7 @@ export async function removeStorePublicCatalog(storeId: string): Promise<void> {
 
   await db.collection('stores').doc(storeId).set({
     publicCatalogLastSyncedAt: safeServerTimestamp(),
-    publicCatalogDocCount: { listings: 0 },
+    publicCatalogDocCount: emptyListingCounts(),
     publicCatalogOutOfSyncCount: 0,
   }, { merge: true })
 }
@@ -241,16 +259,17 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   const productsSnap = await db.collection('products').where('storeId', '==', storeId).get()
   let batch = db.batch()
   let writes = 0
-  let writtenListings = 0
+  const writtenCounts = emptyListingCounts()
   for (const productDoc of productsSnap.docs) {
     const data = (productDoc.data() ?? {}) as ProductData
     if (!shouldIncludeProduct(data, true)) continue
+    const listingType = itemType(data.itemType)
     const identity = resolvePublicListingId(productDoc.id, data)
     batch.set(db.collection('products').doc(productDoc.id), identity, { merge: true })
     writes += 1
     batch.set(db.collection('publicListings').doc(identity.publicListingId), publicPayload(productDoc.id, data, storeMeta, identity), { merge: true })
     writes += 1
-    writtenListings += 1
+    countListing(writtenCounts, listingType)
     if (writes >= 450) {
       await batch.commit()
       batch = db.batch()
@@ -261,7 +280,7 @@ export async function syncStorePublicCatalog(storeId: string): Promise<void> {
 
   await storeRef.set({
     publicCatalogLastSyncedAt: safeServerTimestamp(),
-    publicCatalogDocCount: { listings: writtenListings },
+    publicCatalogDocCount: writtenCounts,
     publicCatalogOutOfSyncCount: 0,
   }, { merge: true })
 }
