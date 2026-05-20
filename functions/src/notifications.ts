@@ -106,13 +106,49 @@ async function ensureNotificationSettings(storeId: string, brand?: StoreBrand): 
   return { customerEmailEnabled: existing.customerEmailEnabled !== false, storeAlertEnabled: true, adminEmails: defaultAdminEmails, replyToEmail: email(existing.replyToEmail) || resolvedBrand.email, mode: existing.mode === 'custom_webhook' ? 'custom_webhook' : 'sedifex_default', customWebhookEnabled: existing.customWebhookEnabled === true, customWebhookUrl: text(existing.customWebhookUrl, 1000) || null }
 }
 
+
+
+function buildWebhookPayload(payload: Record<string, unknown>) {
+  const eventType = text(payload.eventType, 80)
+  const data = getRecord(payload.data)
+  const customer = getRecord(payload.customer)
+  const payment = getRecord(payload.payment)
+  const bookingId = getFirstText(data, ['bookingId', 'booking_id', 'id'], 220)
+  const bookingStatus = getFirstText(data, ['bookingStatus', 'booking_status', 'status'], 80) || (eventType === 'booking.confirmed' ? 'confirmed' : eventType === 'booking.created' ? 'pending_approval' : '')
+
+  return {
+    ...payload,
+    bookingId: bookingId || undefined,
+    booking_id: bookingId || undefined,
+    bookingStatus: bookingStatus || undefined,
+    booking_status: bookingStatus || undefined,
+    status: bookingStatus || undefined,
+    serviceId: getFirstText(data, ['serviceId', 'service_id'], 220) || undefined,
+    serviceName: getFirstText(data, ['serviceName', 'service_name', 'itemName', 'productName'], 240) || undefined,
+    bookingDate: getFirstText(data, ['bookingDate', 'booking_date', 'preferredDate', 'date'], 80) || undefined,
+    bookingTime: getFirstText(data, ['bookingTime', 'booking_time', 'preferredTime', 'time'], 80) || undefined,
+    notes: getFirstText(data, ['notes', 'message', 'details'], 2000) || undefined,
+    quantity: getFirstText(data, ['quantity'], 20) || undefined,
+    customerName: text(customer.name, 240) || undefined,
+    customerPhone: text(customer.phone, 80) || undefined,
+    customerEmail: email(customer.email) || undefined,
+    paymentStatus: getFirstText(payment, ['status'], 80) || undefined,
+    payment_status: getFirstText(payment, ['status'], 80) || undefined,
+    paymentMethod: getFirstText(payment, ['method'], 80) || undefined,
+    paymentAmount: numberValue(payment.amount) ?? undefined,
+    paymentReference: getFirstText(payment, ['reference'], 220) || undefined,
+    paymentConfirmed: eventType === 'booking.confirmed' || isSettled(payment.status),
+  }
+}
+
 async function postToWebhook(payload: Record<string, unknown>, settings: NotificationSettings) {
   const centralUrl = SEDIFEX_NOTIFICATION_WEBHOOK_URL.value()?.trim() || process.env.SEDIFEX_NOTIFICATION_WEBHOOK_URL?.trim() || ''
   const customUrl = settings.customWebhookEnabled ? settings.customWebhookUrl || '' : ''
   const url = customUrl || centralUrl
   if (!url) return { attempted: false, ok: false, status: null }
   const secret = SEDIFEX_NOTIFICATION_SHARED_SECRET.value()?.trim() || process.env.SEDIFEX_NOTIFICATION_SHARED_SECRET?.trim() || ''
-  const webhookPayload = secret ? { ...payload, secret } : payload
+  const basePayload = buildWebhookPayload(payload)
+  const webhookPayload = secret ? { ...basePayload, secret } : basePayload
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(secret ? { 'x-sedifex-notification-secret': secret } : {}) }, body: JSON.stringify(webhookPayload) })
   return { attempted: true, ok: response.ok, status: response.status }
 }
