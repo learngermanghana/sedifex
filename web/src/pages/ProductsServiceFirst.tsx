@@ -138,7 +138,7 @@ const blankDraft: Draft = {
   Agreement: '',
   courseMode: 'in_person',
   classTimes: '',
-  isPublished: true,
+  isPublished: false,
   isMarketplaceVisible: false,
 }
 
@@ -518,9 +518,6 @@ export default function ProductsServiceFirst() {
     setMessage('')
     setError('')
     try {
-      if (draft.imageUrl.startsWith('data:image/')) {
-        throw new Error('Image is still local. Please upload again or paste an image URL.')
-      }
       const payload = buildSavePayload(draft as any, storeId)
       if (!editingId) {
         const possibleDuplicate = items.find(item => {
@@ -546,24 +543,55 @@ export default function ProductsServiceFirst() {
           }
         }
       }
-      if (editingId) {
-        await withTimeout(
-          updateDoc(doc(db, 'products', editingId), payload),
-          20_000,
-          'Save timed out. Please check your internet and try again.',
-        )
-        setMessage('Item saved successfully.')
-      } else {
-        await withTimeout(
-          setDoc(doc(collection(db, 'products')), {
+      const imageUploadPending = draft.imageUrl.startsWith('data:image/')
+      const draftPayload = {
+        ...payload,
+        status: 'draft',
+        isPublished: false,
+      }
+      const publishPayload = payload.isPublished
+        ? {
             ...payload,
-            createdAt: serverTimestamp(),
-            sortOrder: items.length + 1,
-          }),
-          20_000,
-          'Save timed out. Please check your internet and try again.',
-        )
-        setMessage('Item saved successfully.')
+            status: 'published',
+            publishedAt: serverTimestamp(),
+          }
+        : null
+
+      if (editingId) {
+        const itemRef = doc(db, 'products', editingId)
+        await withTimeout(updateDoc(itemRef, draftPayload), 20_000, 'Save timed out. Please check your internet and try again.')
+        if (publishPayload) {
+          try {
+            await withTimeout(updateDoc(itemRef, publishPayload), 20_000, 'Publish timed out. Please try again.')
+            setMessage(imageUploadPending ? 'Item saved. Image upload is pending — you can retry later.' : 'Item saved successfully.')
+          } catch (_publishError) {
+            setMessage('Draft saved but publishing was incomplete.')
+            setError('Draft saved but publishing was incomplete.')
+          }
+        } else {
+          setMessage(imageUploadPending ? 'Draft saved. Image upload is pending — you can retry later.' : 'Draft saved successfully.')
+        }
+      } else {
+        const itemRef = doc(collection(db, 'products'))
+        await withTimeout(setDoc(itemRef, {
+          ...draftPayload,
+          createdAt: serverTimestamp(),
+          sortOrder: items.length + 1,
+        }), 20_000, 'Save timed out. Please check your internet and try again.')
+        if (publishPayload) {
+          try {
+            await withTimeout(updateDoc(itemRef, publishPayload), 20_000, 'Publish timed out. Please try again.')
+            setMessage(imageUploadPending ? 'Item saved. Image upload is pending — you can retry later.' : 'Item saved successfully.')
+          } catch (_publishError) {
+            setMessage('Draft saved but publishing was incomplete.')
+            setError('Draft saved but publishing was incomplete.')
+          }
+        } else {
+          setMessage(imageUploadPending ? 'Draft saved. Image upload is pending — you can retry later.' : 'Draft saved successfully.')
+        }
+      }
+      if (imageUploadPending) {
+        setError('Image upload failed or is incomplete. Item was still saved; retry upload later.')
       }
       resetForm()
     } catch (err) {
@@ -813,7 +841,7 @@ export default function ProductsServiceFirst() {
                       <h4>{item.name}</h4>
                       <span className="products-page__badge products-page__badge--muted">{itemIsCourse ? 'Course' : itemIsService ? 'Service' : 'Product'}</span>
                       <span className={`products-page__badge ${(item as any).isPublished === false ? 'products-page__badge--draft' : 'products-page__badge--published'}`}>{(item as any).isPublished === false ? 'Draft' : 'Published'}</span>
-                      {(item as any).isMarketplaceVisible ? <span className="products-page__badge products-page__badge--market">Visible on Market</span> : null}
+                      {(item as any).isMarketplaceVisible ? <span className="products-page__badge products-page__badge--market">Marketplace Visible</span> : null}
                       <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
                     </div>
                     <div className="products-page__list-meta">

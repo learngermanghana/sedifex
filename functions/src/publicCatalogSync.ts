@@ -52,12 +52,7 @@ function toArray(value: unknown): string[] {
 
 function isStoreEligible(store: StoreData | undefined): boolean {
   if (!store) return false
-  return (
-    store.verified === true &&
-    store.eligibleForBuy === true &&
-    store.buyOptOut !== true &&
-    store.status === 'active'
-  )
+  return store.verified === true && store.eligibleForBuy === true && store.buyOptOut !== true && store.status === 'active'
 }
 
 function buildStoreMeta(store: StoreData): Record<string, unknown> {
@@ -83,11 +78,11 @@ function publicPayload(productId: string, data: ProductData, storeMeta: Record<s
     imageUrls: toArray(data.imageUrls),
     imageAlt: text(data.imageAlt),
     itemType: normalizedItemType,
+    listingType: normalizedItemType,
     isPublished: true,
     publishedAt: resolvePublicationTimestampCandidate(data.publishedAt, data.createdAt, data.updatedAt),
     unpublishedAt: admin.firestore.FieldValue.delete(),
     sourceUpdatedAt: data.updatedAt ?? null,
-    listingType: normalizedItemType === 'course' ? 'course' : text(data.listingType),
     serviceKind: text(data.serviceKind),
     duration: text(data.duration),
     branch: text(data.branch) ?? text(data.location),
@@ -104,194 +99,88 @@ function publicPayload(productId: string, data: ProductData, storeMeta: Record<s
   }
 }
 
-async function flush(batch: FirebaseFirestore.WriteBatch, count: number): Promise<void> {
-  if (count > 0) await batch.commit()
-}
-
 export async function removeStorePublicCatalog(storeId: string): Promise<void> {
-  const [publicProducts, publicServices] = await Promise.all([
-    db.collection('publicProducts').where('storeId', '==', storeId).get(),
-    db.collection('publicServices').where('storeId', '==', storeId).get(),
-  ])
-
+  const listings = await db.collection('publicListings').where('storeId', '==', storeId).get()
   let batch = db.batch()
   let writes = 0
-  let removed = 0
-
-  for (const doc of [...publicProducts.docs, ...publicServices.docs]) {
-    batch.delete(doc.ref)
+  for (const listing of listings.docs) {
+    batch.delete(listing.ref)
     writes += 1
-    removed += 1
     if (writes >= 450) {
       await batch.commit()
       batch = db.batch()
       writes = 0
     }
   }
-  await flush(batch, writes)
+  if (writes > 0) await batch.commit()
 
-  await db.collection('stores').doc(storeId).set(
-    {
-      publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
-      publicCatalogDocCount: { products: 0, services: 0 },
-    },
-    { merge: true },
-  )
-
-  functions.logger.info('removeStorePublicCatalog complete', { storeId, publicDocsRemoved: removed })
+  await db.collection('stores').doc(storeId).set({
+    publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+    publicCatalogDocCount: { listings: 0 },
+  }, { merge: true })
 }
 
 export async function syncStorePublicCatalog(storeId: string): Promise<void> {
   const storeRef = db.collection('stores').doc(storeId)
   const storeSnap = await storeRef.get()
   const storeData = (storeSnap.data() ?? {}) as StoreData
-  const eligible = isStoreEligible(storeData)
-
-  if (!eligible) {
+  if (!isStoreEligible(storeData)) {
     await removeStorePublicCatalog(storeId)
     return
   }
 
   const storeMeta = buildStoreMeta(storeData)
   const productsSnap = await db.collection('products').where('storeId', '==', storeId).where('isPublished', '==', true).get()
-
   let batch = db.batch()
   let writes = 0
-  let writtenProducts = 0
-  let writtenServices = 0
-  let removed = 0
-
+  let writtenListings = 0
   for (const productDoc of productsSnap.docs) {
     const data = (productDoc.data() ?? {}) as ProductData
-    const normalizedItemType = itemType(data.itemType)
-    const targetCollection = normalizedItemType === 'product' ? 'publicProducts' : 'publicServices'
-    const oppositeCollection = normalizedItemType === 'product' ? 'publicServices' : 'publicProducts'
-    const payload = publicPayload(productDoc.id, data, storeMeta)
-
-    batch.set(db.collection(targetCollection).doc(productDoc.id), payload, { merge: true })
-    batch.delete(db.collection(oppositeCollection).doc(productDoc.id))
-    writes += 2
-    removed += 1
-
-    if (normalizedItemType !== 'product') writtenServices += 1
-    else writtenProducts += 1
-
+    batch.set(db.collection('publicListings').doc(productDoc.id), publicPayload(productDoc.id, data, storeMeta), { merge: true })
+    writes += 1
+    writtenListings += 1
     if (writes >= 450) {
       await batch.commit()
       batch = db.batch()
       writes = 0
     }
   }
+  if (writes > 0) await batch.commit()
 
-  await flush(batch, writes)
-
-  await storeRef.set(
-    {
-      publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
-      publicCatalogDocCount: {
-        products: writtenProducts,
-        services: writtenServices,
-      },
-      publicCatalogOutOfSyncCount: 0,
-    },
-    { merge: true },
-  )
-
-  functions.logger.info('syncStorePublicCatalog complete', {
-    storeId,
-    productsScanned: productsSnap.size,
-    publicProductsWritten: writtenProducts,
-    publicServicesWritten: writtenServices,
-    publicDocsRemoved: removed,
-  })
+  await storeRef.set({
+    publicCatalogLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+    publicCatalogDocCount: { listings: writtenListings },
+    publicCatalogOutOfSyncCount: 0,
+  }, { merge: true })
 }
 
-export const syncPublicCatalogOnStoreEligibilityUpdate = functions.firestore
-  .document('stores/{storeId}')
-  .onUpdate(async (change, context) => {
-    const before = (change.before.data() ?? {}) as StoreData
-    const after = (change.after.data() ?? {}) as StoreData
-    const storeId = String(context.params.storeId || '')
+export const syncPublicCatalogOnStoreEligibilityUpdate = functions.firestore.document('stores/{storeId}').onUpdate(async (change, context) => {
+  const before = (change.before.data() ?? {}) as StoreData
+  const after = (change.after.data() ?? {}) as StoreData
+  const storeId = String(context.params.storeId || '')
+  const watched: Array<keyof StoreData> = ['verified', 'verified_product', 'eligibleForBuy', 'buyOptOut', 'status', 'paymentStatus', 'contractStatus']
+  if (!watched.some((field) => before[field] !== after[field])) return
+  if (isStoreEligible(after)) return syncStorePublicCatalog(storeId)
+  if (isStoreEligible(before)) return removeStorePublicCatalog(storeId)
+})
 
-    const watched: Array<keyof StoreData> = [
-      'verified',
-      'verified_product',
-      'eligibleForBuy',
-      'buyOptOut',
-      'status',
-      'paymentStatus',
-      'contractStatus',
-    ]
-
-    const changed = watched.some((field) => before[field] !== after[field])
-    if (!changed) return
-
-    const beforeEligible = isStoreEligible(before)
-    const afterEligible = isStoreEligible(after)
-
-    functions.logger.info('store eligibility changed', { storeId, beforeEligible, afterEligible })
-
-    if (afterEligible) {
-      await syncStorePublicCatalog(storeId)
-      return
-    }
-
-    if (beforeEligible && !afterEligible) {
-      await removeStorePublicCatalog(storeId)
-    }
-  })
-
-export const syncPublicCatalogOnProductWrite = functions.firestore
-  .document('products/{productId}')
-  .onWrite(async (change, context) => {
-    const productId = String(context.params.productId || '')
-    const afterExists = change.after.exists
-
-    if (!afterExists) {
-      await Promise.all([
-        db.collection('publicProducts').doc(productId).delete(),
-        db.collection('publicServices').doc(productId).delete(),
-      ])
-      functions.logger.info('product removed from public catalog', { productId })
-      return
-    }
-
-    const afterData = (change.after.data() ?? {}) as ProductData
-    const storeId = text(afterData.storeId)
-    if (!storeId || afterData.isPublished !== true) {
-      await Promise.all([
-        db.collection('publicProducts').doc(productId).delete(),
-        db.collection('publicServices').doc(productId).delete(),
-      ])
-      return
-    }
-
-    const storeSnap = await db.collection('stores').doc(storeId).get()
-    const storeData = (storeSnap.data() ?? {}) as StoreData
-    if (!isStoreEligible(storeData)) {
-      await Promise.all([
-        db.collection('publicProducts').doc(productId).delete(),
-        db.collection('publicServices').doc(productId).delete(),
-      ])
-      return
-    }
-
-    const payload = publicPayload(productId, afterData, buildStoreMeta(storeData))
-    const normalizedItemType = itemType(afterData.itemType)
-    const isPublicProduct = normalizedItemType === 'product'
-    const target = isPublicProduct ? 'publicProducts' : 'publicServices'
-    const opposite = isPublicProduct ? 'publicServices' : 'publicProducts'
-
-    await Promise.all([
-      db.collection(target).doc(productId).set(payload, { merge: true }),
-      db.collection(opposite).doc(productId).delete(),
-    ])
-
-    functions.logger.info('product synced to public catalog', {
-      storeId,
-      productId,
-      publicProductsWritten: isPublicProduct ? 1 : 0,
-      publicServicesWritten: isPublicProduct ? 0 : 1,
-      publicDocsRemoved: 1,
-    })
-  })
+export const syncPublicCatalogOnProductWrite = functions.firestore.document('products/{productId}').onWrite(async (change, context) => {
+  const productId = String(context.params.productId || '')
+  if (!change.after.exists) {
+    await db.collection('publicListings').doc(productId).delete()
+    return
+  }
+  const afterData = (change.after.data() ?? {}) as ProductData
+  const storeId = text(afterData.storeId)
+  if (!storeId || afterData.isPublished !== true) {
+    await db.collection('publicListings').doc(productId).delete()
+    return
+  }
+  const storeSnap = await db.collection('stores').doc(storeId).get()
+  const storeData = (storeSnap.data() ?? {}) as StoreData
+  if (!isStoreEligible(storeData)) {
+    await db.collection('publicListings').doc(productId).delete()
+    return
+  }
+  await db.collection('publicListings').doc(productId).set(publicPayload(productId, afterData, buildStoreMeta(storeData)), { merge: true })
+})

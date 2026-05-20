@@ -366,9 +366,8 @@ async function isAuthorizedByExistingProductEndpoint(req: functions.https.Reques
     if (payloadStoreId && payloadStoreId !== storeId) return false
 
     const products = Array.isArray(payload.products) ? payload.products : []
-    const publicProducts = Array.isArray(payload.publicProducts) ? payload.publicProducts : []
-    const publicServices = Array.isArray(payload.publicServices) ? payload.publicServices : []
-    const sampledItems = [...products, ...publicProducts, ...publicServices].slice(0, 10)
+    const publicListings = Array.isArray(payload.publicListings) ? payload.publicListings : []
+    const sampledItems = [...products, ...publicListings].slice(0, 10)
 
     for (const item of sampledItems) {
       if (!item || typeof item !== 'object') continue
@@ -587,8 +586,7 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
     defaultDb.collection('stores').doc(storeId).collection('services').doc(itemId),
     defaultDb.collection('products').doc(itemId),
     defaultDb.collection('services').doc(itemId),
-    defaultDb.collection('publicProducts').doc(itemId),
-    defaultDb.collection('publicServices').doc(itemId),
+    defaultDb.collection('publicListings').doc(itemId),
   ]
 
   for (const ref of directRefs) {
@@ -601,7 +599,7 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
     }
   }
 
-  const queryCollections = ['publicProducts', 'publicServices', 'v1IntegrationProducts']
+  const queryCollections = ['publicListings', 'v1IntegrationProducts']
   const queryFields = ['id', 'productId', 'sourceProductId']
 
   for (const collectionName of queryCollections) {
