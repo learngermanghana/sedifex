@@ -13,6 +13,7 @@ type ServiceRecord = {
   imageAlt?: string | null
   source?: string
 }
+
 type EventKind = 'intake' | 'class' | 'workshop' | 'event' | 'trip'
 type RegistrationMode = 'free' | 'paid' | 'deposit' | 'enquiry'
 
@@ -53,14 +54,14 @@ function safeFileName(value: string) {
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms)
+    const timer = window.setTimeout(() => reject(new Error(message)), ms)
     promise
       .then(result => {
-        clearTimeout(timer)
+        window.clearTimeout(timer)
         resolve(result)
       })
       .catch(error => {
-        clearTimeout(timer)
+        window.clearTimeout(timer)
         reject(error)
       })
   })
@@ -73,6 +74,8 @@ export default function BookingsAvailability() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
+  const [photoStatus, setPhotoStatus] = useState<'idle' | 'selected' | 'uploading' | 'uploaded' | 'failed'>('idle')
   const [serviceMode, setServiceMode] = useState<'catalog' | 'manual'>('catalog')
   const [serviceId, setServiceId] = useState('')
   const [manualServiceName, setManualServiceName] = useState('')
@@ -126,21 +129,11 @@ export default function BookingsAvailability() {
       addService(productDoc.id, productDoc.data() as Record<string, unknown>, 'products', 'product')
     })
 
-    const legacyCollections = [
-      'services',
-      'integrationServices',
-      'products',
-      'programmes',
-      'programs',
-      'integrationProgrammes',
-      'integrationPrograms',
-    ]
-
+    const legacyCollections = ['services', 'integrationServices', 'products', 'programmes', 'programs', 'integrationProgrammes', 'integrationPrograms']
     for (const collectionName of legacyCollections) {
       const snapshot = await getDocs(collection(db, 'stores', activeStoreId, collectionName))
       snapshot.forEach(serviceDoc => {
-        const inferredType: ServiceRecord['itemType'] =
-          collectionName.includes('program') ? 'programme' : collectionName.includes('service') ? 'service' : 'product'
+        const inferredType: ServiceRecord['itemType'] = collectionName.includes('program') ? 'programme' : collectionName.includes('service') ? 'service' : 'product'
         addService(serviceDoc.id, serviceDoc.data() as Record<string, unknown>, `stores/${activeStoreId}/${collectionName}`, inferredType)
       })
     }
@@ -165,10 +158,7 @@ export default function BookingsAvailability() {
         return {
           id: slotDoc.id,
           serviceId: normalizedServiceId,
-          serviceName:
-            (typeof data.serviceName === 'string' && data.serviceName.trim()) ||
-            serviceLookup.get(normalizedServiceId)?.name ||
-            normalizedServiceId,
+          serviceName: (typeof data.serviceName === 'string' && data.serviceName.trim()) || serviceLookup.get(normalizedServiceId)?.name || normalizedServiceId,
           startAt: start,
           endAt: end,
           timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'Africa/Accra',
@@ -215,17 +205,31 @@ export default function BookingsAvailability() {
   }, [reload])
 
   const uploadPhoto = useCallback(async (resolvedServiceName: string) => {
-    if (photoFile) {
-      if (!photoFile.type.startsWith('image/')) throw new Error('The selected file must be an image.')
-      if (photoFile.size > 5 * 1024 * 1024) throw new Error('The selected file must be 5MB or smaller.')
-      if (!storeId) throw new Error('No active store selected.')
+    const pastedImageUrl = imageUrl.trim()
+    if (!photoFile) return pastedImageUrl
+
+    if (!photoFile.type.startsWith('image/')) throw new Error('The selected file must be an image.')
+    if (photoFile.size > 5 * 1024 * 1024) throw new Error('The selected file must be 5MB or smaller.')
+    if (!storeId) throw new Error('No active store selected.')
+
+    setPhotoStatus('uploading')
+    setInfoMessage('Uploading photo…')
+
+    try {
       const extensionSafeName = safeFileName(photoFile.name)
       const path = `stores/${storeId}/availability/${Date.now()}-${slugify(resolvedServiceName)}-${extensionSafeName}`
       const storageRef = ref(storage, path)
-      await withTimeout(uploadBytes(storageRef, photoFile, { contentType: photoFile.type || 'image/jpeg' }), 20000, 'Photo upload timed out.')
-      return withTimeout(getDownloadURL(storageRef), 15000, 'Could not get uploaded photo URL in time.')
+      await withTimeout(uploadBytes(storageRef, photoFile, { contentType: photoFile.type || 'image/jpeg' }), 45000, 'Photo upload timed out.')
+      const uploadedUrl = await withTimeout(getDownloadURL(storageRef), 20000, 'Could not get uploaded photo URL in time.')
+      setPhotoStatus('uploaded')
+      setInfoMessage('Photo uploaded successfully.')
+      return uploadedUrl
+    } catch (error) {
+      console.error('[availability] Photo upload failed; saving event without uploaded photo', error)
+      setPhotoStatus('failed')
+      setInfoMessage('Photo upload failed or timed out. The event will still be saved without the uploaded photo. You can paste an image URL and update later.')
+      return pastedImageUrl
     }
-    return imageUrl.trim()
   }, [imageUrl, photoFile, storeId])
 
   const handleCreateSlot = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
@@ -257,6 +261,7 @@ export default function BookingsAvailability() {
 
     setSaving(true)
     setErrorMessage(null)
+    setInfoMessage(null)
     try {
       const uploadedImageUrl = await uploadPhoto(resolvedServiceName)
       const fallbackImageUrl = !uploadedImageUrl && !imageUrl.trim() ? selectedService?.imageUrl?.trim() || '' : ''
@@ -303,8 +308,10 @@ export default function BookingsAvailability() {
       setImageUrl('')
       setImageAlt('')
       setPhotoFile(null)
+      setPhotoStatus('idle')
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (serviceMode === 'manual') setManualServiceName('')
+      setInfoMessage(previous => previous?.includes('failed') || previous?.includes('timed out') ? `${previous} Event saved successfully.` : 'Event saved successfully.')
       await loadSlots(storeId, serviceMap)
     } catch (error) {
       console.error('[availability] Failed to create event', error)
@@ -371,20 +378,34 @@ export default function BookingsAvailability() {
           <label><span>Marketplace enabled</span><select value={marketplaceEnabled ? 'yes' : 'no'} onChange={event => setMarketplaceEnabled(event.target.value === 'yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>
           <div className="availability-photo-picker">
             <span>Photo upload</span>
-            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => setPhotoFile(event.target.files?.[0] ?? null)} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={event => {
+                const nextFile = event.target.files?.[0] ?? null
+                setPhotoFile(nextFile)
+                setPhotoStatus(nextFile ? 'selected' : 'idle')
+                setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null)
+              }}
+            />
             <div className="availability-photo-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>Upload photo</button>
-              {photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>Remove photo</button>}
+              <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>
+              {photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}
             </div>
-            <p className="availability-photo-name">{photoFile ? `Selected: ${photoFile.name}` : 'No file selected yet.'}</p>
+            <p className="availability-photo-name">
+              {photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : 'No file selected yet.'}
+            </p>
             {previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}
           </div>
           <label><span>Or image URL</span><input value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://..." /></label>
           <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>
-          <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button>
+          <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? photoStatus === 'uploading' ? 'Uploading photo…' : 'Saving…' : 'Add event'}</button>
         </form>
 
         {loading && <p className="form__hint">Loading events…</p>}
+        {infoMessage && <p className="form__hint">{infoMessage}</p>}
         {errorMessage && <p className="form__error">{errorMessage}</p>}
 
         {!loading && (
