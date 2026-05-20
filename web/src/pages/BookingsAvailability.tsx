@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy, query, updateDoc, where } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { db, storage } from '../firebase'
+import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import './BookingsAvailability.css'
 
 type ServiceRecord = {
@@ -48,25 +48,6 @@ function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'event'
 }
 
-function safeFileName(value: string) {
-  return value.toLowerCase().trim().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '') || 'event-photo.jpg'
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), ms)
-    promise
-      .then(result => {
-        window.clearTimeout(timer)
-        resolve(result)
-      })
-      .catch(error => {
-        window.clearTimeout(timer)
-        reject(error)
-      })
-  })
-}
-
 export default function BookingsAvailability() {
   const { storeId } = useActiveStore()
   const [services, setServices] = useState<ServiceRecord[]>([])
@@ -108,11 +89,8 @@ export default function BookingsAvailability() {
 
   const loadServices = useCallback(async (activeStoreId: string) => {
     const map = new Map<string, ServiceRecord>()
-
     const addService = (docId: string, data: Record<string, unknown>, source: string, fallbackType: ServiceRecord['itemType']) => {
-      const nameCandidate = [data.name, data.title, data.productName, data.serviceName].find(
-        value => typeof value === 'string' && value.trim(),
-      ) as string | undefined
+      const nameCandidate = [data.name, data.title, data.productName, data.serviceName].find(value => typeof value === 'string' && value.trim()) as string | undefined
       if (!nameCandidate) return
       map.set(docId, {
         id: docId,
@@ -125,9 +103,7 @@ export default function BookingsAvailability() {
     }
 
     const topLevelProducts = await getDocs(query(collection(db, 'products'), where('storeId', '==', activeStoreId), limit(500)))
-    topLevelProducts.forEach(productDoc => {
-      addService(productDoc.id, productDoc.data() as Record<string, unknown>, 'products', 'product')
-    })
+    topLevelProducts.forEach(productDoc => addService(productDoc.id, productDoc.data() as Record<string, unknown>, 'products', 'product'))
 
     const legacyCollections = ['services', 'integrationServices', 'products', 'programmes', 'programs', 'integrationProgrammes', 'integrationPrograms']
     for (const collectionName of legacyCollections) {
@@ -147,37 +123,35 @@ export default function BookingsAvailability() {
   const loadSlots = useCallback(async (activeStoreId: string, serviceLookup: Map<string, ServiceRecord>) => {
     const slotQuery = query(collection(db, 'stores', activeStoreId, 'integrationAvailabilitySlots'), orderBy('startAt', 'asc'))
     const snapshot = await getDocs(slotQuery)
-    const nextSlots: SlotRecord[] = snapshot.docs
-      .map(slotDoc => {
-        const data = slotDoc.data() as Record<string, unknown>
-        const start = data.startAt && typeof (data.startAt as Timestamp).toDate === 'function' ? (data.startAt as Timestamp).toDate() : null
-        const end = data.endAt && typeof (data.endAt as Timestamp).toDate === 'function' ? (data.endAt as Timestamp).toDate() : null
-        if (!start || !end) return null
-        const normalizedServiceId = typeof data.serviceId === 'string' && data.serviceId.trim() ? data.serviceId.trim() : 'unknown'
-        const attributes = data.attributes && typeof data.attributes === 'object' ? data.attributes as Record<string, unknown> : {}
-        return {
-          id: slotDoc.id,
-          serviceId: normalizedServiceId,
-          serviceName: (typeof data.serviceName === 'string' && data.serviceName.trim()) || serviceLookup.get(normalizedServiceId)?.name || normalizedServiceId,
-          startAt: start,
-          endAt: end,
-          timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'Africa/Accra',
-          capacity: typeof data.capacity === 'number' && Number.isFinite(data.capacity) ? Math.max(1, Math.floor(data.capacity)) : 1,
-          seatsBooked: typeof data.seatsBooked === 'number' && Number.isFinite(data.seatsBooked) ? Math.max(0, Math.floor(data.seatsBooked)) : 0,
-          status: data.status === 'closed' ? 'closed' : 'open',
-          linkedCourseId: typeof data.linkedCourseId === 'string' ? data.linkedCourseId : undefined,
-          eventKind: (typeof data.eventKind === 'string' ? data.eventKind : 'event') as EventKind,
-          registrationMode: (typeof data.registrationMode === 'string' ? data.registrationMode : 'paid') as RegistrationMode,
-          price: typeof data.price === 'number' ? data.price : undefined,
-          depositAmount: typeof data.depositAmount === 'number' ? data.depositAmount : undefined,
-          location: typeof data.location === 'string' ? data.location : undefined,
-          description: typeof data.description === 'string' ? data.description : undefined,
-          marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : true,
-          imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof attributes.imageUrl === 'string' ? attributes.imageUrl : undefined,
-          imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : typeof attributes.imageAlt === 'string' ? attributes.imageAlt : undefined,
-        } as SlotRecord
-      })
-      .filter((slot): slot is SlotRecord => slot !== null)
+    const nextSlots: SlotRecord[] = snapshot.docs.map(slotDoc => {
+      const data = slotDoc.data() as Record<string, unknown>
+      const start = data.startAt && typeof (data.startAt as Timestamp).toDate === 'function' ? (data.startAt as Timestamp).toDate() : null
+      const end = data.endAt && typeof (data.endAt as Timestamp).toDate === 'function' ? (data.endAt as Timestamp).toDate() : null
+      if (!start || !end) return null
+      const normalizedServiceId = typeof data.serviceId === 'string' && data.serviceId.trim() ? data.serviceId.trim() : 'unknown'
+      const attributes = data.attributes && typeof data.attributes === 'object' ? data.attributes as Record<string, unknown> : {}
+      return {
+        id: slotDoc.id,
+        serviceId: normalizedServiceId,
+        serviceName: (typeof data.serviceName === 'string' && data.serviceName.trim()) || serviceLookup.get(normalizedServiceId)?.name || normalizedServiceId,
+        startAt: start,
+        endAt: end,
+        timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'Africa/Accra',
+        capacity: typeof data.capacity === 'number' && Number.isFinite(data.capacity) ? Math.max(1, Math.floor(data.capacity)) : 1,
+        seatsBooked: typeof data.seatsBooked === 'number' && Number.isFinite(data.seatsBooked) ? Math.max(0, Math.floor(data.seatsBooked)) : 0,
+        status: data.status === 'closed' ? 'closed' : 'open',
+        linkedCourseId: typeof data.linkedCourseId === 'string' ? data.linkedCourseId : undefined,
+        eventKind: (typeof data.eventKind === 'string' ? data.eventKind : 'event') as EventKind,
+        registrationMode: (typeof data.registrationMode === 'string' ? data.registrationMode : 'paid') as RegistrationMode,
+        price: typeof data.price === 'number' ? data.price : undefined,
+        depositAmount: typeof data.depositAmount === 'number' ? data.depositAmount : undefined,
+        location: typeof data.location === 'string' ? data.location : undefined,
+        description: typeof data.description === 'string' ? data.description : undefined,
+        marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : true,
+        imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof attributes.imageUrl === 'string' ? attributes.imageUrl : undefined,
+        imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : typeof attributes.imageAlt === 'string' ? attributes.imageAlt : undefined,
+      } as SlotRecord
+    }).filter((slot): slot is SlotRecord => slot !== null)
     setSlots(nextSlots)
   }, [])
 
@@ -200,34 +174,27 @@ export default function BookingsAvailability() {
     }
   }, [loadServices, loadSlots, storeId])
 
-  useEffect(() => {
-    void reload()
-  }, [reload])
+  useEffect(() => { void reload() }, [reload])
 
   const uploadPhoto = useCallback(async (resolvedServiceName: string) => {
     const pastedImageUrl = imageUrl.trim()
     if (!photoFile) return pastedImageUrl
-
     if (!photoFile.type.startsWith('image/')) throw new Error('The selected file must be an image.')
-    if (photoFile.size > 5 * 1024 * 1024) throw new Error('The selected file must be 5MB or smaller.')
     if (!storeId) throw new Error('No active store selected.')
 
     setPhotoStatus('uploading')
     setInfoMessage('Uploading photo…')
-
     try {
-      const extensionSafeName = safeFileName(photoFile.name)
-      const path = `stores/${storeId}/availability/${Date.now()}-${slugify(resolvedServiceName)}-${extensionSafeName}`
-      const storageRef = ref(storage, path)
-      await withTimeout(uploadBytes(storageRef, photoFile, { contentType: photoFile.type || 'image/jpeg' }), 45000, 'Photo upload timed out.')
-      const uploadedUrl = await withTimeout(getDownloadURL(storageRef), 20000, 'Could not get uploaded photo URL in time.')
+      const uploadedUrl = await uploadProductImage(photoFile, {
+        storagePath: `stores/${storeId}/availability/${slugify(resolvedServiceName)}`,
+      })
       setPhotoStatus('uploaded')
       setInfoMessage('Photo uploaded successfully.')
       return uploadedUrl
     } catch (error) {
       console.error('[availability] Photo upload failed; saving event without uploaded photo', error)
       setPhotoStatus('failed')
-      setInfoMessage('Photo upload failed or timed out. The event will still be saved without the uploaded photo. You can paste an image URL and update later.')
+      setInfoMessage(error instanceof ProductImageUploadError || error instanceof Error ? `${error.message} Event will still be saved without the uploaded photo.` : 'Photo upload failed. Event will still be saved without the uploaded photo.')
       return pastedImageUrl
     }
   }, [imageUrl, photoFile, storeId])
@@ -238,26 +205,14 @@ export default function BookingsAvailability() {
     const startDate = new Date(startAt)
     const endDate = new Date(endAt)
     const nextCapacity = Math.max(1, Math.floor(Number(capacity) || 1))
-    if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
-      setErrorMessage('Enter a valid start date/time.')
-      return
-    }
-    if (!(endDate instanceof Date) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
-      setErrorMessage('End date/time must be after start date/time.')
-      return
-    }
+    if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) return setErrorMessage('Enter a valid start date/time.')
+    if (!(endDate instanceof Date) || Number.isNaN(endDate.getTime()) || endDate <= startDate) return setErrorMessage('End date/time must be after start date/time.')
     const manualName = manualServiceName.trim()
     const resolvedServiceName = serviceMode === 'manual' ? manualName : selectedService?.name?.trim() ?? ''
     const resolvedServiceId = serviceMode === 'manual' ? `manual:${slugify(manualName)}` : serviceId
 
-    if (!resolvedServiceName) {
-      setErrorMessage(serviceMode === 'manual' ? 'Enter an event, service, class, or product name.' : 'Choose a service, product, or programme first.')
-      return
-    }
-    if (serviceMode === 'catalog' && !serviceId) {
-      setErrorMessage('Choose a service, product, or programme first.')
-      return
-    }
+    if (!resolvedServiceName) return setErrorMessage(serviceMode === 'manual' ? 'Enter an event, service, class, or product name.' : 'Choose a service, product, or programme first.')
+    if (serviceMode === 'catalog' && !serviceId) return setErrorMessage('Choose a service, product, or programme first.')
 
     setSaving(true)
     setErrorMessage(null)
@@ -297,10 +252,7 @@ export default function BookingsAvailability() {
         visibleOnWebsite: true,
         imageUrl: resolvedImageUrl || null,
         imageAlt: resolvedImageAlt || null,
-        attributes: {
-          imageUrl: resolvedImageUrl || null,
-          imageAlt: resolvedImageAlt || null,
-        },
+        attributes: { imageUrl: resolvedImageUrl || null, imageAlt: resolvedImageAlt || null },
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       })
@@ -311,7 +263,7 @@ export default function BookingsAvailability() {
       setPhotoStatus('idle')
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (serviceMode === 'manual') setManualServiceName('')
-      setInfoMessage(previous => previous?.includes('failed') || previous?.includes('timed out') ? `${previous} Event saved successfully.` : 'Event saved successfully.')
+      setInfoMessage(previous => previous?.includes('failed') || previous?.includes('Upload') || previous?.includes('Network') ? `${previous} Event saved successfully.` : 'Event saved successfully.')
       await loadSlots(storeId, serviceMap)
     } catch (error) {
       console.error('[availability] Failed to create event', error)
@@ -350,20 +302,10 @@ export default function BookingsAvailability() {
   return (
     <main className="page availability-page">
       <section className="card stack gap-4">
-        <header className="stack gap-1">
-          <h1>Upcoming events</h1>
-          <p className="bookings-page__intro">
-            Create public events, classes, service sessions, intakes, or programmes that your connected website can display automatically.
-          </p>
-        </header>
-
+        <header className="stack gap-1"><h1>Upcoming events</h1><p className="bookings-page__intro">Create public events, classes, service sessions, intakes, or programmes that your connected website can display automatically.</p></header>
         <form className="availability-form" onSubmit={handleCreateSlot}>
           <label><span>Event source</span><select value={serviceMode} onChange={event => setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog')}><option value="catalog">Select existing service/product</option><option value="manual">Manual event/class name</option></select></label>
-          {serviceMode === 'catalog' ? (
-            <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
-          ) : (
-            <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>
-          )}
+          {serviceMode === 'catalog' ? <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => setServiceId(event.target.value)}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label> : <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>}
           <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
@@ -376,64 +318,13 @@ export default function BookingsAvailability() {
           <label><span>Location (optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>
           <label><span>Description (optional)</span><input value={description} onChange={event => setDescription(event.target.value)} /></label>
           <label><span>Marketplace enabled</span><select value={marketplaceEnabled ? 'yes' : 'no'} onChange={event => setMarketplaceEnabled(event.target.value === 'yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>
-          <div className="availability-photo-picker">
-            <span>Photo upload</span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={event => {
-                const nextFile = event.target.files?.[0] ?? null
-                setPhotoFile(nextFile)
-                setPhotoStatus(nextFile ? 'selected' : 'idle')
-                setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null)
-              }}
-            />
-            <div className="availability-photo-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>
-              {photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}
-            </div>
-            <p className="availability-photo-name">
-              {photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : 'No file selected yet.'}
-            </p>
-            {previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}
-          </div>
+          <div className="availability-photo-picker"><span>Photo upload</span><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => { const nextFile = event.target.files?.[0] ?? null; setPhotoFile(nextFile); setPhotoStatus(nextFile ? 'selected' : 'idle'); setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null) }} /><div className="availability-photo-actions"><button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>{photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}</div><p className="availability-photo-name">{photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : 'No file selected yet.'}</p>{previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}</div>
           <label><span>Or image URL</span><input value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://..." /></label>
           <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>
           <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? photoStatus === 'uploading' ? 'Uploading photo…' : 'Saving…' : 'Add event'}</button>
         </form>
-
-        {loading && <p className="form__hint">Loading events…</p>}
-        {infoMessage && <p className="form__hint">{infoMessage}</p>}
-        {errorMessage && <p className="form__error">{errorMessage}</p>}
-
-        {!loading && (
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>Photo</th><th>Event</th><th>Start</th><th>End</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead>
-              <tbody>
-                {slots.map(slot => (
-                  <tr key={slot.id}>
-                    <td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td>
-                    <td>{slot.serviceName}</td>
-                    <td>{slot.startAt.toLocaleString()}</td>
-                    <td>{slot.endAt.toLocaleString()}</td>
-                    <td>{slot.status}</td>
-                    <td>{slot.capacity}</td>
-                    <td>{slot.seatsBooked}</td>
-                    <td>
-                      <div className="availability-page__row-actions">
-                        <button type="button" className="btn btn-secondary" onClick={() => void toggleStatus(slot)}>{slot.status === 'open' ? 'Close' : 'Open'}</button>
-                        <button type="button" className="btn btn-secondary" onClick={() => void deleteSlot(slot.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {loading && <p className="form__hint">Loading events…</p>}{infoMessage && <p className="form__hint">{infoMessage}</p>}{errorMessage && <p className="form__error">{errorMessage}</p>}
+        {!loading && <div className="table-wrap"><table className="table"><thead><tr><th>Photo</th><th>Event</th><th>Start</th><th>End</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead><tbody>{slots.map(slot => <tr key={slot.id}><td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td><td>{slot.serviceName}</td><td>{slot.startAt.toLocaleString()}</td><td>{slot.endAt.toLocaleString()}</td><td>{slot.status}</td><td>{slot.capacity}</td><td>{slot.seatsBooked}</td><td><div className="availability-page__row-actions"><button type="button" className="btn btn-secondary" onClick={() => void toggleStatus(slot)}>{slot.status === 'open' ? 'Close' : 'Open'}</button><button type="button" className="btn btn-secondary" onClick={() => void deleteSlot(slot.id)}>Delete</button></div></td></tr>)}</tbody></table></div>}
       </section>
     </main>
   )
