@@ -10,26 +10,70 @@ type Props = {
 
 type ValidationError = string | null
 
+type PageGroup = {
+  title: string
+  helper: string
+  ids: string[]
+}
+
 const INDUSTRY_OPTIONS: Array<{ value: Industry; label: string; helper: string }> = [
+  { value: 'shop', label: 'Retail / Shop', helper: 'Starts with selling, products, customers, bookings, reports, settlement, promo, gallery, and marketing pages.' },
+  { value: 'travel', label: 'Travel', helper: 'Starts with trips, bookings, upcoming trips, travelers, invoices, blog, promos, gallery, and customer follow-up.' },
+  { value: 'ngo', label: 'NGO', helper: 'Starts with donors, volunteers, campaigns, support requests, funds, reports, blog, and communication tools.' },
+  { value: 'school', label: 'School', helper: 'Starts with students, registrations, upcoming classes, bookings, payments, blog, admissions promo, and communication tools.' },
+]
+
+const PAGE_DESCRIPTIONS: Record<string, string> = {
+  dashboard: 'Main overview for daily activity, alerts, and business health.',
+  reports: 'Performance reports for sales, inventory, bookings, donations, students, and growth.',
+  products: 'Manage products, services, packages, courses, trips, or donation items.',
+  sell: 'Sell quickly through POS-style checkout.',
+  invoices: 'Create and manage invoices for clients or partners.',
+  receipts: 'Create and manage receipts for payments received.',
+  customers: 'Manage customers, travelers, students, donors, or contacts.',
+  bookings: 'Manage service bookings, trips, classes, appointments, or campaigns.',
+  'upcoming-events': 'Manage upcoming trips, seminars, classes, workshops, or events.',
+  'student-registration': 'Collect and manage student or training registrations.',
+  volunteers: 'Collect and manage volunteer applications.',
+  'support-requests': 'Collect and manage support requests, cases, or applications.',
+  settlement: 'Track online payments and settlement records.',
+  integrations: 'Connect websites, bookings, checkout, email, and API settings.',
+  blog: 'Publish updates, travel guides, school news, campaign stories, or SEO posts.',
+  promo: 'Manage public offers, campaigns, and website promo sections.',
+  gallery: 'Manage public images for websites, campaigns, trips, or school pages.',
+  'social-links': 'Manage WhatsApp, Instagram, Facebook, TikTok, and other public links.',
+  'bulk-messaging': 'Send SMS updates and announcements.',
+  'bulk-email': 'Send bulk emails for customers, students, donors, or travelers.',
+  'donor-management': 'Track donors, expenses, contributions, and NGO/customer finance records.',
+  'funds-ledger': 'Track fund movement, donor money, campaign balances, and ledger activity.',
+  account: 'Manage workspace, billing, team, and setup settings.',
+}
+
+const PAGE_GROUPS: PageGroup[] = [
   {
-    value: 'shop',
-    label: 'Retail / Shop',
-    helper: 'Starts with selling, products, customers, bookings, reports, settlement, promo, gallery, and marketing pages.',
+    title: 'Core work',
+    helper: 'Pages most businesses use every day.',
+    ids: ['dashboard', 'reports', 'products', 'sell', 'customers'],
   },
   {
-    value: 'travel',
-    label: 'Travel',
-    helper: 'Starts with trips, bookings, upcoming trips, travelers, invoices, blog, promos, gallery, and customer follow-up.',
+    title: 'Bookings, registrations & cases',
+    helper: 'Pages for appointment, trip, class, student, volunteer, or support workflows.',
+    ids: ['bookings', 'upcoming-events', 'student-registration', 'volunteers', 'support-requests'],
   },
   {
-    value: 'ngo',
-    label: 'NGO',
-    helper: 'Starts with donors, volunteers, campaigns, support requests, funds, reports, blog, and communication tools.',
+    title: 'Finance & documents',
+    helper: 'Pages for payment records, invoices, receipts, and ledgers.',
+    ids: ['invoices', 'receipts', 'settlement', 'donor-management', 'funds-ledger'],
   },
   {
-    value: 'school',
-    label: 'School',
-    helper: 'Starts with students, registrations, upcoming classes, bookings, payments, blog, admissions promo, and communication tools.',
+    title: 'Marketing & communication',
+    helper: 'Pages that help the business publish, promote, and contact people.',
+    ids: ['blog', 'promo', 'gallery', 'social-links', 'bulk-messaging', 'bulk-email'],
+  },
+  {
+    title: 'Settings',
+    helper: 'Workspace setup and connections.',
+    ids: ['integrations', 'account'],
   },
 ]
 
@@ -45,6 +89,10 @@ function moduleSummary(enabledModules: string[]) {
   if (enabledModules.length === 0) return `${NAV_ITEMS.length} pages active`
   const count = NAV_ITEMS.filter(item => enabledModules.includes(item.id)).length
   return `${count} ${count === 1 ? 'page' : 'pages'} active`
+}
+
+function findNavItem(id: string) {
+  return NAV_ITEMS.find(item => item.id === id)
 }
 
 export default function NavigationSettingsSection({ preferences, onSave, canEdit }: Props) {
@@ -99,31 +147,19 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
   const toggleModule = (id: string) => {
     setDraft(current => {
-      const currentEnabled = current.enabledModules.length === 0
-        ? NAV_ITEMS.map(item => item.id)
-        : current.enabledModules
-      const enabled = currentEnabled.includes(id)
-        ? currentEnabled.filter(item => item !== id)
-        : [...currentEnabled, id]
+      const currentEnabled = current.enabledModules.length === 0 ? NAV_ITEMS.map(item => item.id) : current.enabledModules
+      const enabled = currentEnabled.includes(id) ? currentEnabled.filter(item => item !== id) : [...currentEnabled, id]
       return { ...current, enabledModules: uniqueList(enabled), customNavItems: [] }
     })
   }
 
   const resetToTemplate = () => {
-    setDraft(current => ({
-      ...current,
-      enabledModules: uniqueList(INDUSTRY_ENABLED_MODULE_PRESETS[current.industry] ?? []),
-      customNavItems: [],
-    }))
+    setDraft(current => ({ ...current, enabledModules: uniqueList(INDUSTRY_ENABLED_MODULE_PRESETS[current.industry] ?? []), customNavItems: [] }))
     setError(null)
   }
 
   const showAllPages = () => {
-    setDraft(current => ({
-      ...current,
-      enabledModules: NAV_ITEMS.map(item => item.id),
-      customNavItems: [],
-    }))
+    setDraft(current => ({ ...current, enabledModules: NAV_ITEMS.map(item => item.id), customNavItems: [] }))
     setError(null)
   }
 
@@ -146,11 +182,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
     <div className="account-overview__form-grid">
       <label><span>Business template</span>
-        <select
-          value={draft.industry}
-          disabled={!canEdit}
-          onChange={event => applyIndustryTemplate(event.target.value as Industry)}
-        >
+        <select value={draft.industry} disabled={!canEdit} onChange={event => applyIndustryTemplate(event.target.value as Industry)}>
           {INDUSTRY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
@@ -169,20 +201,30 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
     <h3>Pages in the main menu</h3>
     <p className="account-overview__help-text">
-      Tick the pages this workspace should show. Untick anything that is not useful now. Pages recommended for the selected industry are marked as recommended, but you can still remove them.
+      Tick the pages this workspace should show. Untick anything that is not useful now. Pages are grouped by purpose, and recommended pages are marked for the selected industry.
     </p>
 
-    <div className="account-overview__toggle-list">
-      {NAV_ITEMS.map(item => {
-        const checked = moduleIsEnabled(draft.enabledModules, item.id)
-        const recommended = enabledModulesByIndustry.has(item.id)
-        return (
-          <label key={item.id}>
-            <input type="checkbox" disabled={!canEdit} checked={checked} onChange={() => toggleModule(item.id)} />
-            <span>{item.label}</span>
-            {recommended ? <span className="account-overview__hint"> Recommended</span> : null}
-          </label>
-        )
+    <div className="account-overview__nav-groups">
+      {PAGE_GROUPS.map(group => {
+        const groupItems = group.ids.map(findNavItem).filter(Boolean) as typeof NAV_ITEMS
+        if (groupItems.length === 0) return null
+        return <div className="account-overview__card" key={group.title}>
+          <h4>{group.title}</h4>
+          <p className="account-overview__help-text">{group.helper}</p>
+          <div className="account-overview__toggle-list">
+            {groupItems.map(item => {
+              const checked = moduleIsEnabled(draft.enabledModules, item.id)
+              const recommended = enabledModulesByIndustry.has(item.id)
+              return (
+                <label key={item.id}>
+                  <input type="checkbox" disabled={!canEdit} checked={checked} onChange={() => toggleModule(item.id)} />
+                  <span><strong>{item.label}</strong><br /><small>{PAGE_DESCRIPTIONS[item.id] ?? 'Show or hide this Sedifex page.'}</small></span>
+                  {recommended ? <span className="account-overview__hint"> Recommended</span> : null}
+                </label>
+              )
+            })}
+          </div>
+        </div>
       })}
     </div>
 
