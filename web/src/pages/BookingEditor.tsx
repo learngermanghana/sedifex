@@ -4,6 +4,8 @@ import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firest
 import { db } from '../firebase'
 import { buildCancelBookingPayload, buildCompleteBookingPayload, buildConfirmBookingPayload, hasAppScriptBookingSyncConfigured } from '../utils/bookingActions'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useToast } from '../components/ToastProvider'
+import { playSound } from '../utils/sound'
 import './BookingEditor.css'
 
 type BookingFormState = {
@@ -148,6 +150,7 @@ export default function BookingEditor() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [existingPayment, setExistingPayment] = useState<Record<string, unknown>>({})
   const [shouldQueueBookingSync, setShouldQueueBookingSync] = useState(false)
+  const { publish } = useToast()
 
   useEffect(() => {
     if (!storeId || isCreateMode) {
@@ -302,11 +305,17 @@ export default function BookingEditor() {
         setDoc(doc(db, 'integrationBookings', targetId), payload, { merge: true }),
       ])
 
-      setSuccessMessage('Changes saved.')
+      const saveMessage = 'Booking changes saved successfully.'
+      setSuccessMessage(saveMessage)
+      publish({ tone: 'success', message: saveMessage })
+      void playSound('success')
       if (isCreateMode) navigate('/bookings')
     } catch (error) {
       console.error('[booking-editor] Failed to save booking', error)
-      setErrorMessage('Unable to save booking right now.')
+      const failureMessage = 'Unable to save booking right now.'
+      setErrorMessage(failureMessage)
+      publish({ tone: 'error', message: failureMessage })
+      void playSound('error')
     } finally {
       setSaving(false)
     }
@@ -332,9 +341,13 @@ export default function BookingEditor() {
         setExistingPayment(payload.payment as Record<string, unknown>)
       }
       setSuccessMessage(successMessageText)
+      publish({ tone: 'success', message: successMessageText })
+      void playSound('success')
     } catch (error) {
       console.error('[booking-editor] Failed to update booking', error)
       setErrorMessage(failureMessage)
+      publish({ tone: 'error', message: failureMessage })
+      void playSound('error')
     } finally {
       setSaving(false)
     }
