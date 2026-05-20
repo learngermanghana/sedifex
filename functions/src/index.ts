@@ -44,6 +44,7 @@ export {
 export * from './googleShopping'
 export * from './reporting'
 export * from './publicCatalogSync'
+export * from './publicCatalogRepair'
 export * from './blogAutomation'
 
 /**
@@ -218,14 +219,3 @@ const SMS_SEGMENT_SIZE = 160
 const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' })
 const OPENAI_MODEL = defineString('OPENAI_MODEL', { default: 'gpt-4o-mini' })
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
-const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
-  default: '2026-04-13',
-})
-const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', { default: '' })
-const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID'
-/** ============================================================================
- *  HELPERS
- * ==========================================================================*/
-
-let openAiConfigWarned = false
-let integrationApiKeyWarned = false
