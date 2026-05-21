@@ -8,6 +8,7 @@ import MarketplaceOrders from './pages/MarketplaceOrders'
 import DashboardHub from './pages/DashboardHub'
 import Products from './pages/ProductsServiceFirst'
 import Sell from './pages/Sell'
+import QuickPay from './pages/QuickPay'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
 import Students from './pages/Students'
@@ -100,6 +101,7 @@ const router = createBrowserRouter([
       { path: 'reports/blog', element: <BlogReport /> },
       { path: 'products', element: <Products /> },
       { path: 'sell', element: <Sell /> },
+      { path: 'quick-pay', element: <QuickPay /> },
       { path: 'customers', element: <Customers /> },
       { path: 'students', element: <Students /> },
       { path: 'bookings', element: <Bookings /> },
