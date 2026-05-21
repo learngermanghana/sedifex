@@ -27,6 +27,61 @@ function itemType(value: unknown): 'product' | 'service' | 'course' {
   return value === 'course' ? 'course' : value === 'service' ? 'service' : 'product'
 }
 
+function normalizeCategoryText(value: unknown): string | null {
+  const raw = text(value)?.replace(/\s+/g, ' ')
+  return raw || null
+}
+
+function categorySlug(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+function isBlockedFoodCategory(value: unknown): boolean {
+  const raw = normalizeCategoryText(value)
+  if (!raw) return false
+  const normalized = raw.toLowerCase().replace(/\s*&\s*/g, ' and ').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return [
+    'food',
+    'drink',
+    'drinks',
+    'beverage',
+    'beverages',
+    'food and beverage',
+    'food and beverages',
+  ].includes(normalized)
+}
+
+function toTitleCase(value: string): string {
+  return value.trim().toLowerCase().replace(/\b[a-z]/g, character => character.toUpperCase())
+}
+
+function normalizePublicCategory(data: ProductData, normalizedItemType: 'product' | 'service' | 'course'): string {
+  const explicitCategory = normalizeCategoryText(data.category)
+  const explicitCategoryName = normalizeCategoryText(data.categoryName)
+  const nameAndDescription = [text(data.name), text(data.description), text(data.serviceKind)]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  const hasBeautySignal = /beauty|makeup|cosmetology|hair|braid|bead|nail|spa|wig|millinery|fashion/.test(nameAndDescription)
+  const hasTrainingSignal = /course|class|training|academy|school|workshop|certificate|certification|learn/.test(nameAndDescription)
+
+  if (normalizedItemType === 'course') {
+    if (hasBeautySignal || hasTrainingSignal) return 'Beauty Training'
+    return 'Education'
+  }
+
+  if (normalizedItemType === 'service') {
+    if (hasBeautySignal || hasTrainingSignal) return hasTrainingSignal ? 'Beauty Training' : 'Beauty Services'
+    return 'Professional Services'
+  }
+
+  if (explicitCategory && !isBlockedFoodCategory(explicitCategory)) return toTitleCase(explicitCategory)
+  if (explicitCategoryName && !isBlockedFoodCategory(explicitCategoryName)) return toTitleCase(explicitCategoryName)
+  if (hasBeautySignal) return 'Beauty'
+  return 'General Products'
+}
+
 function emptyListingCounts(): ListingTypeCount {
   return { listings: 0, products: 0, services: 0, courses: 0 }
 }
@@ -173,7 +228,7 @@ function publicPayload(
   const normalizedItemType = itemType(data.itemType)
   const status = data.isPublished === true || isPublishedStatus(data.status) ? 'published' : 'draft'
   const deleteSentinel = safeDeleteField()
-  const category = text(data.category) ?? 'General'
+  const category = normalizePublicCategory(data, normalizedItemType)
   const metadata = (typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {}) as Record<string, unknown>
   const payload: Record<string, unknown> = {
     id: identity.publicListingId,
@@ -199,8 +254,8 @@ function publicPayload(
     isMarketplaceVisible: data.isMarketplaceVisible !== false,
     isWebsiteVisible: data.isWebsiteVisible === true,
     salesMode: text(data.salesMode),
-    categoryKey: text(data.categoryKey),
-    categoryName: text(data.categoryName) ?? category,
+    categoryKey: categorySlug(category),
+    categoryName: category,
     currency: text(data.currency) ?? 'GHS',
     publishedAt: resolvePublicationTimestampCandidate(data.publishedAt, data.createdAt, data.updatedAt),
     sourceUpdatedAt: data.updatedAt ?? null,
