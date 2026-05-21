@@ -10,6 +10,7 @@ import { configureAuthPersistence } from './controllers/sessionController'
 import { bootstrapStoreContext } from './controllers/accessController'
 import { AuthUserContext } from './hooks/useAuthUser'
 import AuthPage from './pages/AuthPage'
+import QuickPayLanding from './pages/QuickPayLanding'
 import { useOnboardingRedirect } from './hooks/useOnboardingRedirect'
 import { useSessionHeartbeat } from './hooks/useSessionHeartbeat'
 import { useQueueMessageToasts } from './hooks/useQueueMessageToasts'
@@ -24,6 +25,9 @@ export default function App() {
   >('idle')
   const [storeAccessError, setStoreAccessError] = useState<string | null>(null)
   const location = useLocation()
+
+  const isQuickPayHost =
+    typeof window !== 'undefined' && window.location.hostname === 'pay.sedifex.com'
 
   const isPwaApp = useMemo(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -50,7 +54,9 @@ export default function App() {
     '/return-policy',
   ]
 
-  const isPublicRoute = publicPaths.some(path => location.pathname.startsWith(path))
+  const isPublicRoute =
+    (isQuickPayHost && location.pathname === '/') ||
+    publicPaths.some(path => location.pathname.startsWith(path))
   const isAccountRoute = location.pathname.startsWith('/account')
 
   useEffect(() => {
@@ -100,7 +106,9 @@ export default function App() {
 
   let content: React.ReactNode
 
-  if (!isAuthReady && !isPublicRoute) {
+  if (isQuickPayHost && location.pathname === '/') {
+    content = <QuickPayLanding />
+  } else if (!isAuthReady && !isPublicRoute) {
     content = (
       <main className="app" style={appStyle}>
         <div className="app__card">
