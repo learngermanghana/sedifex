@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { buildCancelBookingPayload, buildCompleteBookingPayload, buildConfirmBookingPayload, hasAppScriptBookingSyncConfigured } from '../utils/bookingActions'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
@@ -139,6 +138,10 @@ function normalizeTimeInput(value: unknown): string {
   return ''
 }
 
+function statusLabel(value: string) {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -150,6 +153,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
     if (timeoutId) clearTimeout(timeoutId)
   }
 }
+
 export default function BookingEditor() {
   const { storeId } = useActiveStore()
   const { bookingId = 'new' } = useParams()
@@ -160,8 +164,6 @@ export default function BookingEditor() {
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [existingPayment, setExistingPayment] = useState<Record<string, unknown>>({})
-  const [shouldQueueBookingSync, setShouldQueueBookingSync] = useState(false)
   const { publish } = useToast()
 
   useEffect(() => {
@@ -175,8 +177,6 @@ export default function BookingEditor() {
       setLoading(true)
       setErrorMessage(null)
       try {
-        const storeDocSnap = await getDoc(doc(db, 'stores', storeId))
-        setShouldQueueBookingSync(hasAppScriptBookingSyncConfigured(storeDocSnap.data() as Record<string, unknown> | undefined))
         const storeBookingRef = doc(db, 'stores', storeId, 'integrationBookings', bookingId)
         const storeSnap = await getDoc(storeBookingRef)
         let data: Record<string, unknown> | null = null
@@ -201,7 +201,6 @@ export default function BookingEditor() {
 
         if (cancelled) return
         setForm(normalizeBookingForm(data))
-        setExistingPayment(recordValue(data.payment))
       } catch (error) {
         console.error('[booking-editor] Failed to load booking', error)
         if (!cancelled) {
@@ -217,31 +216,21 @@ export default function BookingEditor() {
     }
   }, [bookingId, isCreateMode, storeId])
 
-
-  useEffect(() => {
-    if (!storeId || !isCreateMode) return
-    let cancelled = false
-    async function loadStoreSyncConfig() {
-      try {
-        const storeDocSnap = await getDoc(doc(db, 'stores', storeId))
-        if (!cancelled) {
-          setShouldQueueBookingSync(hasAppScriptBookingSyncConfigured(storeDocSnap.data() as Record<string, unknown> | undefined))
-        }
-      } catch (error) {
-        console.error('[booking-editor] Failed to load booking sync config', error)
-        if (!cancelled) setShouldQueueBookingSync(false)
-      }
-    }
-    void loadStoreSyncConfig()
-    return () => {
-      cancelled = true
-    }
-  }, [isCreateMode, storeId])
-
   const quantityValue = useMemo(() => {
     const parsed = Number.parseInt(form.quantity, 10)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
   }, [form.quantity])
+
+  function setStatusDraft(nextStatus: string, nextPaymentStatus?: string) {
+    setForm(prev => ({
+      ...prev,
+      status: nextStatus,
+      paymentStatus: nextPaymentStatus ?? prev.paymentStatus,
+    }))
+    const message = `Status set to ${statusLabel(nextStatus)}. Click Save changes to sync this booking.`
+    setSuccessMessage(message)
+    publish({ tone: 'info', message })
+  }
 
   async function handleSave() {
     if (!storeId) {
@@ -260,6 +249,7 @@ export default function BookingEditor() {
 
     try {
       const normalizedStatus = (form.status.trim() || 'pending_approval').toLowerCase()
+      const normalizedPaymentStatus = form.paymentStatus.trim() || 'payment_pending'
       const payload = {
           name: form.fullName.trim(),
           fullName: form.fullName.trim(),
@@ -282,14 +272,14 @@ export default function BookingEditor() {
           paymentMethod: form.paymentMethod.trim(),
           paymentReference: form.paymentReference.trim(),
           reference: form.paymentReference.trim(),
-          paymentStatus: form.paymentStatus.trim() || 'payment_pending',
+          paymentStatus: normalizedPaymentStatus,
           payment: {
             amount: form.paymentAmount.trim(),
             depositAmount: form.depositAmount.trim(),
             method: form.paymentMethod.trim(),
             reference: form.paymentReference.trim(),
-            status: form.paymentStatus.trim() || 'payment_pending',
-            confirmed: ['paid', 'confirmed'].includes((form.paymentStatus.trim() || '').toLowerCase()),
+            status: normalizedPaymentStatus,
+            confirmed: ['paid', 'confirmed'].includes(normalizedPaymentStatus.toLowerCase()),
           },
           booking: {
             serviceId: form.serviceId.trim(),
@@ -321,7 +311,9 @@ export default function BookingEditor() {
         'Saving booking timed out. Please try again.',
       )
 
-      const saveMessage = 'Booking changes saved successfully.'
+      const saveMessage = isCreateMode
+        ? 'Booking created and queued for the connected booking records.'
+        : 'Booking changes saved successfully. Connected sheets/webhooks can now pick up the updated status.'
       setSuccessMessage(saveMessage)
       publish({ tone: 'success', message: saveMessage })
       void playSound('success')
@@ -337,69 +329,6 @@ export default function BookingEditor() {
     }
   }
 
-  async function updateExistingBooking(payload: Record<string, unknown>, failureMessage: string, successMessageText: string) {
-    if (!storeId || isCreateMode) return
-
-    setSaving(true)
-    setErrorMessage(null)
-    setSuccessMessage(null)
-    try {
-      await withTimeout(
-        Promise.all([
-          setDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId), payload, { merge: true }),
-          setDoc(doc(db, 'integrationBookings', bookingId), payload, { merge: true }),
-        ]),
-        15000,
-        'Saving booking timed out. Please try again.',
-      )
-      setForm(prev => ({
-        ...prev,
-        status: typeof payload.status === 'string' ? payload.status : prev.status,
-        paymentStatus: typeof payload.paymentStatus === 'string' ? payload.paymentStatus : prev.paymentStatus,
-      }))
-      if (payload.payment && typeof payload.payment === 'object') {
-        setExistingPayment(payload.payment as Record<string, unknown>)
-      }
-      setSuccessMessage(successMessageText)
-      publish({ tone: 'success', message: successMessageText })
-      void playSound('success')
-    } catch (error) {
-      console.error('[booking-editor] Failed to update booking', error)
-      setErrorMessage(failureMessage)
-      publish({ tone: 'error', message: failureMessage })
-      void playSound('error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function handleConfirmBooking() {
-    return updateExistingBooking(
-      buildConfirmBookingPayload(existingPayment, shouldQueueBookingSync),
-      'Unable to confirm booking right now.',
-      shouldQueueBookingSync
-        ? 'Booking confirmed, payment marked paid, and sync queued.'
-        : 'Booking confirmed and payment marked paid. App Script sync is not configured.',
-    )
-  }
-
-  function handleCancelBooking() {
-    return updateExistingBooking(
-      buildCancelBookingPayload(shouldQueueBookingSync),
-      'Unable to cancel booking right now.',
-      shouldQueueBookingSync ? 'Booking cancelled and sync queued.' : 'Booking cancelled. App Script sync is not configured.',
-    )
-  }
-
-  function handleCompleteBooking() {
-    return updateExistingBooking(
-      buildCompleteBookingPayload(shouldQueueBookingSync),
-      'Unable to complete booking right now.',
-      shouldQueueBookingSync ? 'Booking completed and sync queued.' : 'Booking completed. App Script sync is not configured.',
-    )
-  }
-
-
   return (
     <main className="page booking-editor-page">
       <section className="card booking-editor-page__card stack gap-3">
@@ -408,7 +337,9 @@ export default function BookingEditor() {
             <Link to="/bookings">← Back to bookings</Link>
           </p>
           <h1>{isCreateMode ? 'Add booking' : 'Edit booking'}</h1>
-          <p className="form__hint">Use action buttons to immediately confirm, cancel, or complete bookings. Save changes only updates edited fields.</p>
+          <p className="form__hint">
+            Update the booking status in this form, then click <strong>Save changes</strong>. This keeps Sedifex, the connected website, and any sheet/webhook sync using the same saved booking record.
+          </p>
         </header>
 
         {loading && <p className="form__hint">Loading booking…</p>}
@@ -459,22 +390,32 @@ export default function BookingEditor() {
             </label>
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
 
+            {!isCreateMode && (
+              <div className="booking-editor-page__quick-status" aria-label="Quick status shortcuts">
+                <div>
+                  <strong>Quick status</strong>
+                  <p className="form__hint">These buttons only set the fields above. Click Save changes to communicate the update to connected records.</p>
+                </div>
+                <div className="booking-editor-page__quick-status-actions">
+                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed')}>
+                    Set confirmed
+                  </button>
+                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('completed')}>
+                    Set completed
+                  </button>
+                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('cancelled')}>
+                    Set cancelled
+                  </button>
+                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed', 'paid')}>
+                    Set confirmed + paid
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="booking-editor-page__actions">
-              {!isCreateMode && (
-                <>
-                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleConfirmBooking()}>
-                    Confirm booking
-                  </button>
-                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleCancelBooking()}>
-                    Cancel booking
-                  </button>
-                  <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void handleCompleteBooking()}>
-                    Complete booking
-                  </button>
-                </>
-              )}
               <button type="submit" className="button button--primary" disabled={saving}>
-                {saving ? 'Saving…' : 'Save changes'}
+                {saving ? 'Saving…' : isCreateMode ? 'Create booking' : 'Save changes'}
               </button>
             </div>
           </form>
