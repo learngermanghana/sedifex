@@ -37,6 +37,17 @@ type PromoGalleryItem = {
   sortOrder: number
 }
 
+type BlogPost = {
+  id: string
+  title: string
+  slug: string
+  excerpt: string | null
+  content: string
+  imageUrl: string | null
+  tags: string[]
+  linkUrl: string | null
+}
+
 type PromoApiResponse = {
   promo?: {
     enabled?: boolean
@@ -100,8 +111,26 @@ type CatalogApiResponse = {
   }>
 }
 
-const CATALOG_PAGE_SIZE = 24
-const CATALOG_DESCRIPTION_PREVIEW_LENGTH = 220
+type BlogApiResponse = {
+  items?: Array<{
+    id?: string
+    title?: string
+    slug?: string
+    excerpt?: string | null
+    content?: string
+    imageUrl?: string | null
+    linkUrl?: string | null
+    tags?: string[]
+  }>
+}
+
+type CatalogFilter = 'all' | 'product' | 'service' | 'course' | 'made_to_order'
+
+const FEATURED_CATALOG_LIMIT = 6
+const FEATURED_BLOG_LIMIT = 3
+const FEATURED_GALLERY_LIMIT = 6
+const CATALOG_DESCRIPTION_PREVIEW_LENGTH = 150
+const BLOG_DESCRIPTION_PREVIEW_LENGTH = 150
 
 function normalizeSlug(value: string): string {
   return value
@@ -114,15 +143,27 @@ function normalizeSlug(value: string): string {
 
 function sanitizeSummary(value: string | null, storeName: string): string {
   if (!value) {
-    return `Discover limited-time beauty and wellness deals from ${storeName}. Book now and enjoy premium care for less.`
+    return `Everything publicly available for ${storeName} is organized here: offers, products, services, courses, blog updates, and gallery highlights.`
   }
 
   const compact = value.replace(/\s+/g, ' ').trim()
   if (compact.length < 16) {
-    return `Exclusive offer from ${storeName}. Secure your slot now and save on your next treatment.`
+    return `Explore offers, updates, and available services from ${storeName}.`
   }
 
   return compact
+}
+
+function compactText(value: string | null | undefined, fallback = ''): string {
+  const normalized = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+  return normalized || fallback
+}
+
+function previewText(value: string | null | undefined, length: number): string {
+  const normalized = compactText(value)
+  if (!normalized) return ''
+  if (normalized.length <= length) return normalized
+  return `${normalized.slice(0, length).replace(/\s+\S*$/, '').trim()}…`
 }
 
 function toYoutubeEmbedUrl(value: string | null): string | null {
@@ -192,6 +233,40 @@ function setOrCreateMetaTag(attribute: 'name' | 'property', key: string, content
   tag.setAttribute('content', content)
 }
 
+function catalogTypeLabel(type: CatalogItem['itemType']) {
+  if (type === 'course') return 'Course'
+  if (type === 'service') return 'Service'
+  if (type === 'made_to_order') return 'Made to order'
+  return 'Product'
+}
+
+function formatPrice(value: number | null) {
+  if (typeof value !== 'number') return null
+  return `GHS ${value.toFixed(2)}`
+}
+
+function itemMatchesSearch(item: CatalogItem, searchTerm: string) {
+  if (!searchTerm) return true
+  const searchableText = [item.name, item.description ?? '', item.category ?? '', item.id, item.itemType]
+    .join(' ')
+    .toLowerCase()
+  return searchableText.includes(searchTerm)
+}
+
+function blogMatchesSearch(item: BlogPost, searchTerm: string) {
+  if (!searchTerm) return true
+  const searchableText = [item.title, item.excerpt ?? '', item.content, item.slug, ...(item.tags ?? [])]
+    .join(' ')
+    .toLowerCase()
+  return searchableText.includes(searchTerm)
+}
+
+function galleryMatchesSearch(item: PromoGalleryItem, searchTerm: string) {
+  if (!searchTerm) return true
+  const searchableText = [item.alt ?? '', item.caption ?? '', item.id].join(' ').toLowerCase()
+  return searchableText.includes(searchTerm)
+}
+
 export default function PromoLandingPage() {
   const { slug = '' } = useParams()
   const [profile, setProfile] = useState<PromoProfile | null>(null)
@@ -199,48 +274,48 @@ export default function PromoLandingPage() {
   const [error, setError] = useState<string | null>(null)
   const [gallery, setGallery] = useState<PromoGalleryItem[]>([])
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
   const [activeGalleryImageId, setActiveGalleryImageId] = useState<string | null>(null)
-  const [catalogSearchTerm, setCatalogSearchTerm] = useState('')
-  const [catalogPage, setCatalogPage] = useState(1)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('all')
   const [expandedCatalogDescriptions, setExpandedCatalogDescriptions] = useState<Record<string, boolean>>({})
 
   const activeGalleryIndex = useMemo(() => {
-    if (!activeGalleryImageId) {
-      return -1
-    }
+    if (!activeGalleryImageId) return -1
     return gallery.findIndex(item => item.id === activeGalleryImageId)
   }, [activeGalleryImageId, gallery])
 
   const activeGalleryItem = activeGalleryIndex >= 0 ? gallery[activeGalleryIndex] : null
-  const normalizedCatalogSearchTerm = catalogSearchTerm.trim().toLowerCase()
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase()
+
   const catalogItemsWithImages = useMemo(
     () => catalogItems.filter(item => typeof item.imageUrl === 'string' && item.imageUrl.trim().length > 0),
     [catalogItems],
   )
-  const filteredCatalogItems = useMemo(() => {
-    if (!normalizedCatalogSearchTerm) {
-      return catalogItemsWithImages
-    }
 
+  const filteredCatalogItems = useMemo(() => {
     return catalogItemsWithImages.filter(item => {
-      const searchableText = [
-        item.name,
-        item.description ?? '',
-        item.category ?? '',
-        item.id,
-        item.itemType,
-      ]
-        .join(' ')
-        .toLowerCase()
-      return searchableText.includes(normalizedCatalogSearchTerm)
+      const matchesType = catalogFilter === 'all' || item.itemType === catalogFilter
+      return matchesType && itemMatchesSearch(item, normalizedSearchTerm)
     })
-  }, [catalogItemsWithImages, normalizedCatalogSearchTerm])
-  const totalCatalogPages = Math.max(1, Math.ceil(filteredCatalogItems.length / CATALOG_PAGE_SIZE))
-  const currentCatalogPage = Math.min(catalogPage, totalCatalogPages)
-  const paginatedCatalogItems = useMemo(() => {
-    const start = (currentCatalogPage - 1) * CATALOG_PAGE_SIZE
-    return filteredCatalogItems.slice(start, start + CATALOG_PAGE_SIZE)
-  }, [currentCatalogPage, filteredCatalogItems])
+  }, [catalogFilter, catalogItemsWithImages, normalizedSearchTerm])
+
+  const filteredBlogPosts = useMemo(
+    () => blogPosts.filter(item => blogMatchesSearch(item, normalizedSearchTerm)),
+    [blogPosts, normalizedSearchTerm],
+  )
+
+  const filteredGallery = useMemo(
+    () => gallery.filter(item => galleryMatchesSearch(item, normalizedSearchTerm)),
+    [gallery, normalizedSearchTerm],
+  )
+
+  const featuredCatalogItems = filteredCatalogItems.slice(0, FEATURED_CATALOG_LIMIT)
+  const featuredBlogPosts = filteredBlogPosts.slice(0, FEATURED_BLOG_LIMIT)
+  const featuredGalleryItems = filteredGallery.slice(0, FEATURED_GALLERY_LIMIT)
+  const productsCount = catalogItemsWithImages.filter(item => item.itemType === 'product' || item.itemType === 'made_to_order').length
+  const servicesCount = catalogItemsWithImages.filter(item => item.itemType === 'service').length
+  const coursesCount = catalogItemsWithImages.filter(item => item.itemType === 'course').length
 
   function getCatalogDescriptionPreview(value: string): { text: string; isTruncated: boolean } {
     const normalized = value.replace(/\s+/g, ' ').trim()
@@ -276,15 +351,9 @@ export default function PromoLandingPage() {
       try {
         setLoading(true)
         setError(null)
-        const promoUrl = `${getIntegrationEndpoint('integrationPromo')}?slug=${encodeURIComponent(
-          normalizedSlug,
-        )}`
-        const galleryUrl = `${getIntegrationEndpoint('integrationGallery')}?slug=${encodeURIComponent(
-          normalizedSlug,
-        )}`
-        const catalogUrl = `${getIntegrationEndpoint('integrationPublicCatalog')}?slug=${encodeURIComponent(
-          normalizedSlug,
-        )}`
+        const promoUrl = `${getIntegrationEndpoint('integrationPromo')}?slug=${encodeURIComponent(normalizedSlug)}`
+        const galleryUrl = `${getIntegrationEndpoint('integrationGallery')}?slug=${encodeURIComponent(normalizedSlug)}`
+        const catalogUrl = `${getIntegrationEndpoint('integrationPublicCatalog')}?slug=${encodeURIComponent(normalizedSlug)}`
 
         const [promoResponse, galleryResponse, catalogResponse] = await Promise.all([
           fetch(promoUrl, { method: 'GET' }),
@@ -296,17 +365,14 @@ export default function PromoLandingPage() {
           if (promoResponse.status === 404) {
             setProfile(null)
             setGallery([])
+            setBlogPosts([])
             setError('Promo not found.')
             return
           }
           throw new Error(`Promo fetch failed with ${promoResponse.status}`)
         }
-        if (!galleryResponse.ok) {
-          throw new Error(`Gallery fetch failed with ${galleryResponse.status}`)
-        }
-        if (!catalogResponse.ok) {
-          throw new Error(`Catalog fetch failed with ${catalogResponse.status}`)
-        }
+        if (!galleryResponse.ok) throw new Error(`Gallery fetch failed with ${galleryResponse.status}`)
+        if (!catalogResponse.ok) throw new Error(`Catalog fetch failed with ${catalogResponse.status}`)
 
         const promoPayload = (await promoResponse.json()) as PromoApiResponse
         const galleryPayload = (await galleryResponse.json()) as PromoGalleryApiResponse
@@ -316,23 +382,50 @@ export default function PromoLandingPage() {
         if (!promo || !storeId) {
           setProfile(null)
           setGallery([])
+          setCatalogItems([])
+          setBlogPosts([])
           setError('This promo link is not active.')
           return
+        }
+
+        let blogItems: BlogPost[] = []
+        try {
+          const blogResponse = await fetch(`/api/public-blog?${new URLSearchParams({ storeId }).toString()}`)
+          if (blogResponse.ok) {
+            const blogPayload = (await blogResponse.json()) as BlogApiResponse
+            blogItems = (blogPayload.items ?? [])
+              .map(item => {
+                const id = typeof item.id === 'string' ? item.id : ''
+                const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : ''
+                const postSlug = typeof item.slug === 'string' && item.slug.trim() ? item.slug.trim() : id
+                if (!id || !title || !postSlug) return null
+                return {
+                  id,
+                  title,
+                  slug: postSlug,
+                  excerpt: typeof item.excerpt === 'string' ? item.excerpt : null,
+                  content: typeof item.content === 'string' ? item.content : '',
+                  imageUrl: typeof item.imageUrl === 'string' && item.imageUrl.trim() ? item.imageUrl.trim() : null,
+                  linkUrl: typeof item.linkUrl === 'string' && item.linkUrl.trim() ? item.linkUrl.trim() : null,
+                  tags: Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+                } satisfies BlogPost
+              })
+              .filter((item): item is BlogPost => item !== null)
+          }
+        } catch (blogError) {
+          console.warn('[promo] Public blog preview unavailable', blogError)
         }
 
         const publishedGallery = (galleryPayload.gallery ?? [])
           .map(item => {
             const id = typeof item.id === 'string' ? item.id : ''
             const url = typeof item.url === 'string' ? item.url.trim() : ''
-            if (!id || !url) {
-              return null
-            }
+            if (!id || !url) return null
             return {
               id,
               url,
               alt: typeof item.alt === 'string' && item.alt.trim() ? item.alt.trim() : null,
-              caption:
-                typeof item.caption === 'string' && item.caption.trim() ? item.caption.trim() : null,
+              caption: typeof item.caption === 'string' && item.caption.trim() ? item.caption.trim() : null,
               sortOrder: typeof item.sortOrder === 'number' ? item.sortOrder : 0,
             } satisfies PromoGalleryItem
           })
@@ -343,21 +436,14 @@ export default function PromoLandingPage() {
           .map(item => {
             const id = typeof item.id === 'string' ? item.id : ''
             const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : ''
-            if (!id || !name) {
-              return null
-            }
+            if (!id || !name) return null
             return {
               id,
               name,
-              description:
-                typeof item.description === 'string' && item.description.trim()
-                  ? item.description.trim()
-                  : null,
-              category:
-                typeof item.category === 'string' && item.category.trim() ? item.category.trim() : null,
+              description: typeof item.description === 'string' && item.description.trim() ? item.description.trim() : null,
+              category: typeof item.category === 'string' && item.category.trim() ? item.category.trim() : null,
               price: typeof item.price === 'number' ? item.price : null,
-              imageUrl:
-                typeof item.imageUrl === 'string' && item.imageUrl.trim() ? item.imageUrl.trim() : null,
+              imageUrl: typeof item.imageUrl === 'string' && item.imageUrl.trim() ? item.imageUrl.trim() : null,
               imageAlt: typeof item.imageAlt === 'string' ? item.imageAlt : null,
               itemType:
                 item.itemType === 'service'
@@ -375,10 +461,7 @@ export default function PromoLandingPage() {
 
         setProfile({
           storeId,
-          storeName:
-            typeof promo.storeName === 'string' && promo.storeName.trim()
-              ? promo.storeName.trim()
-              : 'Sedifex Store',
+          storeName: typeof promo.storeName === 'string' && promo.storeName.trim() ? promo.storeName.trim() : 'Sedifex Store',
           storePhone: typeof promo.phone === 'string' && promo.phone.trim() ? promo.phone.trim() : null,
           promoEnabled: promo.enabled === true,
           title: typeof promo.title === 'string' ? promo.title : null,
@@ -387,12 +470,8 @@ export default function PromoLandingPage() {
           endDate: typeof promo.endDate === 'string' ? promo.endDate : null,
           websiteUrl: typeof promo.websiteUrl === 'string' ? promo.websiteUrl : null,
           youtubeUrl: typeof promo.youtubeUrl === 'string' ? promo.youtubeUrl : null,
-          youtubeEmbedUrl:
-            typeof promo.youtubeEmbedUrl === 'string'
-              ? promo.youtubeEmbedUrl
-              : toYoutubeEmbedUrl(typeof promo.youtubeUrl === 'string' ? promo.youtubeUrl : null),
-          youtubeChannelId:
-            typeof promo.youtubeChannelId === 'string' ? promo.youtubeChannelId : null,
+          youtubeEmbedUrl: typeof promo.youtubeEmbedUrl === 'string' ? promo.youtubeEmbedUrl : toYoutubeEmbedUrl(typeof promo.youtubeUrl === 'string' ? promo.youtubeUrl : null),
+          youtubeChannelId: typeof promo.youtubeChannelId === 'string' ? promo.youtubeChannelId : null,
           youtubeVideos: Array.isArray(promo.youtubeVideos)
             ? promo.youtubeVideos
                 .map(item => {
@@ -409,30 +488,21 @@ export default function PromoLandingPage() {
                     publishedAt: typeof item.publishedAt === 'string' ? item.publishedAt : null,
                   }
                 })
-                .filter(
-                  (
-                    item,
-                  ): item is {
-                    videoId: string
-                    title: string | null
-                    watchUrl: string
-                    embedUrl: string
-                    thumbnailUrl: string | null
-                    publishedAt: string | null
-                  } => item !== null,
-                )
+                .filter((item): item is PromoProfile['youtubeVideos'][number] => item !== null)
             : [],
           imageUrl: typeof promo.imageUrl === 'string' ? promo.imageUrl : null,
           imageAlt: typeof promo.imageAlt === 'string' ? promo.imageAlt : null,
         })
         setGallery(publishedGallery)
         setCatalogItems(catalog)
+        setBlogPosts(blogItems)
       } catch (nextError) {
         console.error('[promo] Failed to load promo page', nextError)
         if (isMounted) {
           setProfile(null)
           setGallery([])
           setCatalogItems([])
+          setBlogPosts([])
           setError('Unable to load this promo right now.')
         }
       } finally {
@@ -448,15 +518,13 @@ export default function PromoLandingPage() {
   }, [slug])
 
   useEffect(() => {
-    if (!profile) {
-      return
-    }
+    if (!profile) return
 
-    const pageTitle = profile.title?.trim() || `Special offers at ${profile.storeName}`
+    const pageTitle = profile.title?.trim() || `${profile.storeName} | Public store page`
     const description = sanitizeSummary(profile.summary, profile.storeName)
     const normalizedSlug = normalizeSlug(decodeURIComponent(slug))
     const pageUrl = `https://sedifex.com/${encodeURIComponent(normalizedSlug)}`
-    const imageUrl = profile.imageUrl || gallery[0]?.url || 'https://sedifex.com/logo-512.png'
+    const imageUrl = profile.imageUrl || gallery[0]?.url || catalogItems.find(item => item.imageUrl)?.imageUrl || 'https://sedifex.com/logo-512.png'
 
     document.title = `${pageTitle} | Sedifex`
     setOrCreateMetaTag('name', 'description', description)
@@ -470,12 +538,10 @@ export default function PromoLandingPage() {
     setOrCreateMetaTag('name', 'twitter:title', pageTitle)
     setOrCreateMetaTag('name', 'twitter:description', description)
     setOrCreateMetaTag('name', 'twitter:image', imageUrl)
-  }, [gallery, profile, slug])
+  }, [catalogItems, gallery, profile, slug])
 
   useEffect(() => {
-    if (!activeGalleryItem) {
-      return
-    }
+    if (!activeGalleryItem) return
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -483,9 +549,7 @@ export default function PromoLandingPage() {
         return
       }
 
-      if (!gallery.length) {
-        return
-      }
+      if (!gallery.length) return
 
       if (event.key === 'ArrowRight') {
         event.preventDefault()
@@ -504,10 +568,6 @@ export default function PromoLandingPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeGalleryIndex, activeGalleryItem, gallery])
 
-  useEffect(() => {
-    setCatalogPage(1)
-  }, [normalizedCatalogSearchTerm])
-
   function openGalleryItem(itemId: string) {
     setActiveGalleryImageId(itemId)
   }
@@ -517,26 +577,22 @@ export default function PromoLandingPage() {
   }
 
   function showPreviousGalleryImage() {
-    if (!gallery.length || activeGalleryIndex < 0) {
-      return
-    }
+    if (!gallery.length || activeGalleryIndex < 0) return
     const previousIndex = (activeGalleryIndex - 1 + gallery.length) % gallery.length
     setActiveGalleryImageId(gallery[previousIndex].id)
   }
 
   function showNextGalleryImage() {
-    if (!gallery.length || activeGalleryIndex < 0) {
-      return
-    }
+    if (!gallery.length || activeGalleryIndex < 0) return
     const nextIndex = (activeGalleryIndex + 1) % gallery.length
     setActiveGalleryImageId(gallery[nextIndex].id)
   }
 
   if (loading) {
     return (
-      <main className="promo-page">
-        <article className="promo-card">
-          <p className="promo-state">Loading promo…</p>
+      <main className="promo-page promo-public-page">
+        <article className="promo-shell">
+          <p className="promo-state">Loading public page…</p>
         </article>
       </main>
     )
@@ -544,13 +600,11 @@ export default function PromoLandingPage() {
 
   if (error || !profile) {
     return (
-      <main className="promo-page">
-        <article className="promo-card">
-          <h1 className="promo-error-title">Promo unavailable</h1>
-          <p className="promo-state">{error ?? 'This promo link is not active.'}</p>
-          <p>
-            <Link to="/">Go to Sedifex home</Link>
-          </p>
+      <main className="promo-page promo-public-page">
+        <article className="promo-shell">
+          <h1 className="promo-error-title">Page unavailable</h1>
+          <p className="promo-state">{error ?? 'This public page is not active.'}</p>
+          <p><Link to="/">Go to Sedifex home</Link></p>
         </article>
       </main>
     )
@@ -561,75 +615,181 @@ export default function PromoLandingPage() {
   const directChatLink = profile.storePhone ? `sms:${profile.storePhone}` : null
   const whatsappLink = buildWhatsAppLink(profile.storePhone, profile.storeName)
   const primaryPromoVideoEmbedUrl = profile.youtubeVideos[0]?.embedUrl ?? profile.youtubeEmbedUrl
+  const avatarText = profile.storeName.trim().charAt(0).toUpperCase() || 'S'
+  const hasSearchResults = featuredCatalogItems.length || featuredBlogPosts.length || featuredGalleryItems.length
+
   return (
-    <main className="promo-page">
-      <article className="promo-card">
-        <header className="promo-site-header">
-          <p className="promo-label">Sedifex store page</p>
-          <h1>{profile.storeName}</h1>
-          <p className="promo-summary">
-            Everything we have publicly available for {profile.storeName} is arranged below like a full
-            webpage: promo details, latest gallery updates, and products/services.
-          </p>
-          <nav className="promo-nav" aria-label="Promo sections">
-            <a className="promo-nav__button" href="#promo-about">
-              About
-            </a>
-            <a className="promo-nav__button" href="#promo-hero">
-              Promo
-            </a>
-            <a className="promo-nav__button" href="#promo-gallery">
-              Gallery
-            </a>
-            <a className="promo-nav__button" href="#promo-catalog">
-              Products & services
-            </a>
-          </nav>
+    <main className="promo-page promo-public-page">
+      <article className="promo-shell">
+        <header className="promo-public-hero">
+          <div className="promo-public-hero__avatar">{avatarText}</div>
+          <div className="promo-public-hero__copy">
+            <p className="promo-label">Sedifex public page</p>
+            <h1>{profile.storeName}</h1>
+            <p>{promoSummary}</p>
+            <div className="promo-public-hero__actions">
+              {profile.websiteUrl ? <a className="promo-button promo-button--primary" href={profile.websiteUrl} target="_blank" rel="noreferrer noopener">Visit website</a> : null}
+              {whatsappLink ? <a className="promo-button" href={whatsappLink} target="_blank" rel="noreferrer noopener">WhatsApp</a> : null}
+              {directChatLink ? <a className="promo-button" href={directChatLink}>Direct chat</a> : null}
+            </div>
+          </div>
+          <div className="promo-public-hero__stats" aria-label="Page summary">
+            <span><strong>{catalogItemsWithImages.length}</strong> Items</span>
+            <span><strong>{blogPosts.length}</strong> Posts</span>
+            <span><strong>{gallery.length}</strong> Photos</span>
+          </div>
         </header>
-        <section id="promo-about" className="promo-section promo-section--panel">
-          <p className="promo-label">About this page</p>
-          <p className="promo-summary">
-            This public Sedifex page helps {profile.storeName} get SEO presence with a free URL.
-            Promo updates, gallery images, and available products/services are organized here
-            automatically.
+
+        <nav className="promo-public-tabs" aria-label="Public page sections">
+          <a href="#promo-about">About</a>
+          <a href="#promo-catalog">Products & services</a>
+          <a href="#promo-blog">Blog</a>
+          <a href="#promo-gallery">Gallery</a>
+          <a href="#promo-hero">Promo</a>
+        </nav>
+
+        <section className="promo-search-panel" aria-label="Search this public page">
+          <div>
+            <p className="promo-label">Search page</p>
+            <h2>Find products, services, courses, blog posts, or gallery updates.</h2>
+          </div>
+          <label className="promo-public-search">
+            <span>Search {profile.storeName}</span>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Search offers, services, courses, blog posts..."
+            />
+          </label>
+        </section>
+
+        <section id="promo-about" className="promo-section promo-about-panel">
+          <div>
+            <p className="promo-label">About this page</p>
+            <h2>Everything from {profile.storeName}, organized in one place.</h2>
+          </div>
+          <p>
+            This public Sedifex page helps customers discover available products, services, courses,
+            blog updates, promo details, and gallery highlights without searching across many links.
           </p>
         </section>
-        <div className="promo-section-divider" aria-hidden="true" />
-        <section id="promo-hero" className="promo-section promo-section--panel">
-          <p className="promo-label">Sedifex promo</p>
-          {!profile.promoEnabled ? (
-            <p className="promo-meta">No active promo is running right now. Check back soon.</p>
-          ) : null}
-          {profile.imageUrl ? (
-            <img
-              className="promo-image"
-              src={profile.imageUrl}
-              alt={profile.imageAlt || `${profile.storeName} promo image`}
-              loading="lazy"
-            />
-          ) : null}
-          <h1>{promoTitle}</h1>
-          <p className="promo-store">Store: {profile.storeName}</p>
-          {profile.storePhone ? (
-            <p className="promo-meta">
-              Contact: <a href={`tel:${profile.storePhone}`}>{profile.storePhone}</a>
-            </p>
-          ) : null}
-          {directChatLink || whatsappLink ? (
-            <div className="promo-contact-actions">
-              {directChatLink ? (
-                <a className="promo-nav__button" href={directChatLink}>
-                  Direct chat
-                </a>
-              ) : null}
-              {whatsappLink ? (
-                <a className="promo-nav__button" href={whatsappLink} target="_blank" rel="noreferrer noopener">
-                  Contact on WhatsApp
-                </a>
-              ) : null}
+
+        <section id="promo-catalog" className="promo-section promo-public-section">
+          <div className="promo-section-heading">
+            <div>
+              <p className="promo-label">Products & services</p>
+              <h2>Available offerings</h2>
+              <p>Showing a few public items first. Use search and filters to narrow the page.</p>
             </div>
+            <div className="promo-filter-tabs" aria-label="Catalog filters">
+              <button type="button" className={catalogFilter === 'all' ? 'is-active' : ''} onClick={() => setCatalogFilter('all')}>All</button>
+              <button type="button" className={catalogFilter === 'product' ? 'is-active' : ''} onClick={() => setCatalogFilter('product')}>Products ({productsCount})</button>
+              <button type="button" className={catalogFilter === 'service' ? 'is-active' : ''} onClick={() => setCatalogFilter('service')}>Services ({servicesCount})</button>
+              <button type="button" className={catalogFilter === 'course' ? 'is-active' : ''} onClick={() => setCatalogFilter('course')}>Courses ({coursesCount})</button>
+            </div>
+          </div>
+          {featuredCatalogItems.length ? (
+            <div className="promo-catalog-grid" role="list" aria-label="Featured catalog items">
+              {featuredCatalogItems.map(item => {
+                const descriptionPreview = item.description ? getCatalogDescriptionPreview(item.description) : null
+                return (
+                  <article key={item.id} className="promo-catalog-card" role="listitem">
+                    {item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || `${item.name} image`} loading="lazy" /> : null}
+                    <div className="promo-catalog-card__body">
+                      <span className="promo-pill">{catalogTypeLabel(item.itemType)}</span>
+                      <h3>{item.name}</h3>
+                      {item.description ? (
+                        <>
+                          <p>{expandedCatalogDescriptions[item.id] ? item.description : descriptionPreview?.text}</p>
+                          {descriptionPreview?.isTruncated ? (
+                            <button type="button" className="promo-description-toggle" onClick={() => toggleCatalogDescription(item.id)}>
+                              {expandedCatalogDescriptions[item.id] ? 'View less' : 'View more'}
+                            </button>
+                          ) : null}
+                        </>
+                      ) : <p>{catalogTypeLabel(item.itemType)} available from {profile.storeName}.</p>}
+                      <div className="promo-catalog-card__meta">
+                        <span>{item.category || 'General'}</span>
+                        {formatPrice(item.price) ? <strong>{formatPrice(item.price)}</strong> : null}
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="promo-empty-state">
+              {catalogItemsWithImages.length ? 'No products, services, or courses match your search.' : 'Products and services with pictures will appear here soon.'}
+            </p>
+          )}
+          {filteredCatalogItems.length > FEATURED_CATALOG_LIMIT ? (
+            <p className="promo-section-footnote">Showing {FEATURED_CATALOG_LIMIT} of {filteredCatalogItems.length}. Search a specific name or category to narrow the list.</p>
           ) : null}
-          <p className="promo-summary">{promoSummary}</p>
+        </section>
+
+        <section id="promo-blog" className="promo-section promo-public-section">
+          <div className="promo-section-heading">
+            <div>
+              <p className="promo-label">Blog & updates</p>
+              <h2>Latest articles</h2>
+              <p>Helpful updates, offers, guides, and announcements from {profile.storeName}.</p>
+            </div>
+            {blogPosts.length ? <Link className="promo-button" to={`/public-blog/${profile.storeId}`}>Open blog</Link> : null}
+          </div>
+          {featuredBlogPosts.length ? (
+            <div className="promo-blog-grid">
+              {featuredBlogPosts.map(post => (
+                <article key={post.id} className="promo-blog-card">
+                  {post.imageUrl ? <img src={post.imageUrl} alt={post.title} loading="lazy" /> : null}
+                  <div>
+                    <p className="promo-label">Article</p>
+                    <h3>{post.title}</h3>
+                    <p>{previewText(post.excerpt || post.content, BLOG_DESCRIPTION_PREVIEW_LENGTH)}</p>
+                    <Link to={`/public-blog/${profile.storeId}/${post.slug}`}>Read article</Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="promo-empty-state">Blog updates will appear here when this store publishes posts.</p>
+          )}
+        </section>
+
+        <section id="promo-gallery" className="promo-section promo-public-section">
+          <div className="promo-section-heading">
+            <div>
+              <p className="promo-label">Gallery</p>
+              <h2>Latest highlights</h2>
+              <p>Recent photos and public updates from {profile.storeName}.</p>
+            </div>
+          </div>
+          {featuredGalleryItems.length ? (
+            <div className="promo-gallery-grid promo-gallery-grid--modern" role="list" aria-label="Promo gallery">
+              {featuredGalleryItems.map(item => (
+                <figure key={item.id} className="promo-gallery-item promo-gallery-item--modern" role="listitem">
+                  <button type="button" className="promo-gallery-item__image-button" onClick={() => openGalleryItem(item.id)} aria-label={`Open image ${item.alt || item.caption || item.id}`}>
+                    <img src={item.url} alt={item.alt || `${profile.storeName} gallery image`} loading="lazy" />
+                  </button>
+                  {item.caption ? <figcaption>{item.caption}</figcaption> : null}
+                </figure>
+              ))}
+            </div>
+          ) : <p className="promo-empty-state">Gallery updates will appear here soon.</p>}
+          {filteredGallery.length > FEATURED_GALLERY_LIMIT ? <p className="promo-section-footnote">Showing {FEATURED_GALLERY_LIMIT} of {filteredGallery.length} gallery images.</p> : null}
+        </section>
+
+        <section id="promo-hero" className="promo-section promo-public-section promo-offer-card">
+          <div className="promo-offer-card__header">
+            <div>
+              <p className="promo-label">Current promo</p>
+              <h2>{promoTitle}</h2>
+            </div>
+            {!profile.promoEnabled ? <span className="promo-status-pill">No active promo</span> : <span className="promo-status-pill is-active">Active promo</span>}
+          </div>
+          {profile.imageUrl ? <img className="promo-image" src={profile.imageUrl} alt={profile.imageAlt || `${profile.storeName} promo image`} loading="lazy" /> : null}
+          <p>{promoSummary}</p>
+          {profile.storePhone ? <p className="promo-meta">Contact: <a href={`tel:${profile.storePhone}`}>{profile.storePhone}</a></p> : null}
           {primaryPromoVideoEmbedUrl ? (
             <div className="promo-video-wrapper">
               <iframe
@@ -643,220 +803,28 @@ export default function PromoLandingPage() {
               />
             </div>
           ) : null}
-          {profile.youtubeVideos.length > 1 ? (
-            <div className="promo-video-list" role="list" aria-label="Latest YouTube videos">
-              {profile.youtubeVideos.map(video => (
-                <a
-                  key={video.videoId}
-                  className="promo-video-list__item"
-                  href={video.watchUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  role="listitem"
-                >
-                  {video.thumbnailUrl ? (
-                    <img
-                      className="promo-video-list__thumb"
-                      src={video.thumbnailUrl}
-                      alt={video.title ?? `${profile.storeName} video thumbnail`}
-                      loading="lazy"
-                    />
-                  ) : null}
-                  <span className="promo-video-list__meta">
-                    <strong>{video.title ?? 'Latest upload'}</strong>
-                    {formatPublishedDate(video.publishedAt) ? (
-                      <small>Published {formatPublishedDate(video.publishedAt)}</small>
-                    ) : null}
-                  </span>
-                </a>
-              ))}
-            </div>
-          ) : null}
-          {(profile.startDate || profile.endDate) && (
-            <p className="promo-dates">
-              Offer window: {profile.startDate || 'Now'} – {profile.endDate || 'Limited time'}
-            </p>
-          )}
-          {profile.websiteUrl ? (
-            <a
-              className="promo-cta"
-              href={profile.websiteUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              Shop now
-            </a>
-          ) : null}
-        </section>
-        <div className="promo-section-divider" aria-hidden="true" />
-        <section id="promo-gallery" className="promo-section promo-section--panel">
-          <div className="promo-gallery-header">
-            <h2>Gallery</h2>
-            <p>Latest highlights from {profile.storeName}.</p>
+          {(profile.startDate || profile.endDate) && <p className="promo-dates">Offer window: {profile.startDate || 'Now'} – {profile.endDate || 'Limited time'}</p>}
+          <div className="promo-public-hero__actions">
+            {profile.websiteUrl ? <a className="promo-button promo-button--primary" href={profile.websiteUrl} target="_blank" rel="noreferrer noopener">Visit website</a> : null}
+            {whatsappLink ? <a className="promo-button" href={whatsappLink} target="_blank" rel="noreferrer noopener">Contact on WhatsApp</a> : null}
           </div>
-          {gallery.length ? (
-            <div className="promo-gallery-grid" role="list" aria-label="Promo gallery">
-              {gallery.map(item => (
-                <figure key={item.id} className="promo-gallery-item" role="listitem">
-                  <button
-                    type="button"
-                    className="promo-gallery-item__image-button"
-                    onClick={() => openGalleryItem(item.id)}
-                    aria-label={`Open image ${item.alt || item.caption || item.id}`}
-                  >
-                    <img
-                      src={item.url}
-                      alt={item.alt || `${profile.storeName} gallery image`}
-                      loading="lazy"
-                    />
-                  </button>
-                  {item.caption ? <figcaption>{item.caption}</figcaption> : null}
-                </figure>
-              ))}
-            </div>
-          ) : (
-            <p className="promo-gallery-empty">Gallery updates will appear here soon.</p>
-          )}
         </section>
+
+        {normalizedSearchTerm && !hasSearchResults ? <p className="promo-empty-state promo-empty-state--global">No public content matches “{searchTerm}”. Try another word.</p> : null}
+
         {activeGalleryItem ? (
-          <div
-            className="promo-gallery-viewer"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Gallery image viewer"
-            onClick={closeGalleryViewer}
-          >
+          <div className="promo-gallery-viewer" role="dialog" aria-modal="true" aria-label="Gallery image viewer" onClick={closeGalleryViewer}>
             <div className="promo-gallery-viewer__content" onClick={event => event.stopPropagation()}>
-              <button
-                type="button"
-                className="promo-gallery-viewer__close"
-                aria-label="Close image viewer"
-                onClick={closeGalleryViewer}
-              >
-                ×
-              </button>
-              <button
-                type="button"
-                className="promo-gallery-viewer__nav"
-                onClick={showPreviousGalleryImage}
-                aria-label="View previous image"
-              >
-                ‹
-              </button>
+              <button type="button" className="promo-gallery-viewer__close" aria-label="Close image viewer" onClick={closeGalleryViewer}>×</button>
+              <button type="button" className="promo-gallery-viewer__nav" onClick={showPreviousGalleryImage} aria-label="View previous image">‹</button>
               <figure className="promo-gallery-viewer__figure">
-                <img
-                  src={activeGalleryItem.url}
-                  alt={activeGalleryItem.alt || `${profile?.storeName || 'Store'} gallery image`}
-                />
+                <img src={activeGalleryItem.url} alt={activeGalleryItem.alt || `${profile?.storeName || 'Store'} gallery image`} />
                 {activeGalleryItem.caption ? <figcaption>{activeGalleryItem.caption}</figcaption> : null}
               </figure>
-              <button
-                type="button"
-                className="promo-gallery-viewer__nav"
-                onClick={showNextGalleryImage}
-                aria-label="View next image"
-              >
-                ›
-              </button>
+              <button type="button" className="promo-gallery-viewer__nav" onClick={showNextGalleryImage} aria-label="View next image">›</button>
             </div>
           </div>
         ) : null}
-        <div className="promo-section-divider" aria-hidden="true" />
-        <section id="promo-catalog" className="promo-section promo-section--panel">
-            <div className="promo-gallery-header">
-              <h2>Products & services</h2>
-              <p>Available offerings from {profile.storeName}.</p>
-            </div>
-            <div className="promo-catalog-controls">
-              <label className="promo-catalog-search">
-                <span>Search products</span>
-                <input
-                  type="search"
-                  value={catalogSearchTerm}
-                  onChange={event => setCatalogSearchTerm(event.target.value)}
-                  placeholder="Search by name, category, part number, or description"
-                />
-              </label>
-              <p className="promo-meta">
-                Showing {paginatedCatalogItems.length} of {filteredCatalogItems.length} matching items
-              </p>
-            </div>
-            {filteredCatalogItems.length ? (
-              <div className="promo-gallery-grid" role="list" aria-label="Store catalog">
-                {paginatedCatalogItems.map(item => (
-                  <article key={item.id} className="promo-gallery-item" role="listitem">
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.imageAlt || `${item.name} image`}
-                        loading="lazy"
-                      />
-                    ) : null}
-                    <div>
-                      <strong>{item.name}</strong>
-                      {item.description ? (
-                        <>
-                          <p className="promo-summary">
-                            {expandedCatalogDescriptions[item.id]
-                              ? item.description
-                              : getCatalogDescriptionPreview(item.description).text}
-                          </p>
-                          {getCatalogDescriptionPreview(item.description).isTruncated ? (
-                            <button
-                              type="button"
-                              className="promo-description-toggle"
-                              onClick={() => toggleCatalogDescription(item.id)}
-                              aria-expanded={Boolean(expandedCatalogDescriptions[item.id])}
-                            >
-                              {expandedCatalogDescriptions[item.id] ? 'View less' : 'View more'}
-                            </button>
-                          ) : null}
-                        </>
-                      ) : (
-                        <p className="promo-summary">
-                          {`${item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'} available`}
-                        </p>
-                      )}
-                      <p className="promo-meta">
-                        {item.category || 'General'} · {item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'}
-                        {typeof item.price === 'number' ? ` · ${item.price.toFixed(2)}` : ''}
-                      </p>
-                      <p className="promo-meta">Part #: {item.id}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="promo-gallery-empty">
-                {catalogItemsWithImages.length
-                  ? 'No products or services with images match your search yet.'
-                  : 'Products and services with pictures will appear here soon.'}
-              </p>
-            )}
-            {filteredCatalogItems.length > CATALOG_PAGE_SIZE ? (
-              <nav className="promo-pagination" aria-label="Catalog page navigation">
-                <button
-                  type="button"
-                  className="promo-nav__button"
-                  onClick={() => setCatalogPage(page => Math.max(1, page - 1))}
-                  disabled={currentCatalogPage === 1}
-                >
-                  Previous
-                </button>
-                <span className="promo-meta">
-                  Page {currentCatalogPage} of {totalCatalogPages}
-                </span>
-                <button
-                  type="button"
-                  className="promo-nav__button"
-                  onClick={() => setCatalogPage(page => Math.min(totalCatalogPages, page + 1))}
-                  disabled={currentCatalogPage >= totalCatalogPages}
-                >
-                  Next
-                </button>
-              </nav>
-            ) : null}
-        </section>
       </article>
     </main>
   )
