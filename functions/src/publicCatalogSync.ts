@@ -211,11 +211,39 @@ function shouldIncludeProduct(data: ProductData, eligibleStore: boolean): boolea
 }
 
 function buildStoreMeta(store: StoreData): Record<string, unknown> {
+  const websiteUrl = text(store.websiteUrl)
+    ?? text(store.websiteLink)
+    ?? text(store.storeWebsiteUrl)
+    ?? text(store.storeWebsite)
+    ?? text(store.website)
+    ?? text(store.promoWebsiteUrl)
+  const storePhone = text(store.storePhone)
+    ?? text(store.phone)
+    ?? text(store.phoneNumber)
+    ?? text(store.contactPhone)
+    ?? text(store.whatsappNumber)
+    ?? text(store.waLink)
+
   return {
-    storeName: text(store.displayName) ?? text(store.name),
-    storeCity: text(store.city) ?? text(store.town),
-    storePhone: text(store.phone) ?? text(store.phoneNumber) ?? text(store.contactPhone),
-    websiteLink: text(store.websiteLink) ?? text(store.promoWebsiteUrl),
+    storeName: text(store.displayName) ?? text(store.storeName) ?? text(store.name),
+    storeCity: text(store.city) ?? text(store.storeCity) ?? text(store.town),
+    storeCountry: text(store.country) ?? text(store.storeCountry),
+    storePhone,
+    storeWhatsapp: text(store.whatsappNumber) ?? text(store.waLink) ?? storePhone,
+    storeEmail: text(store.publicEmail) ?? text(store.email) ?? text(store.ownerEmail),
+    addressLine1: text(store.addressLine1) ?? text(store.address),
+    storeLogoUrl: text(store.storeLogoUrl) ?? text(store.logoUrl),
+    logoUrl: text(store.logoUrl) ?? text(store.storeLogoUrl),
+    websiteUrl,
+    websiteLink: websiteUrl,
+    storeWebsiteUrl: websiteUrl,
+    instagramUrl: text(store.instagramUrl) ?? text(store.instagramHandle),
+    facebookUrl: text(store.facebookUrl),
+    tiktokUrl: text(store.tiktokUrl) ?? text(store.tiktokHandle),
+    youtubeUrl: text(store.youtubeUrl),
+    xUrl: text(store.xUrl) ?? text(store.twitterUrl) ?? text(store.xHandle),
+    twitterUrl: text(store.twitterUrl) ?? text(store.xUrl) ?? text(store.xHandle),
+    linkedinUrl: text(store.linkedinUrl),
   }
 }
 
@@ -344,7 +372,52 @@ export const syncPublicCatalogOnStoreEligibilityUpdate = functions.firestore.doc
   const before = (change.before.data() ?? {}) as StoreData
   const after = (change.after.data() ?? {}) as StoreData
   const storeId = String(context.params.storeId || '')
-  const watched: Array<keyof StoreData> = ['verified', 'verified_product', 'eligibleForBuy', 'buyOptOut', 'status', 'paymentStatus', 'contractStatus']
+  const watched: Array<keyof StoreData> = [
+    'verified',
+    'verified_product',
+    'eligibleForBuy',
+    'buyOptOut',
+    'status',
+    'paymentStatus',
+    'contractStatus',
+    'displayName',
+    'storeName',
+    'name',
+    'phone',
+    'phoneNumber',
+    'storePhone',
+    'contactPhone',
+    'whatsappNumber',
+    'waLink',
+    'publicEmail',
+    'email',
+    'ownerEmail',
+    'websiteUrl',
+    'websiteLink',
+    'storeWebsiteUrl',
+    'storeWebsite',
+    'website',
+    'promoWebsiteUrl',
+    'logoUrl',
+    'storeLogoUrl',
+    'addressLine1',
+    'address',
+    'city',
+    'storeCity',
+    'town',
+    'country',
+    'storeCountry',
+    'instagramUrl',
+    'instagramHandle',
+    'facebookUrl',
+    'tiktokUrl',
+    'tiktokHandle',
+    'youtubeUrl',
+    'xUrl',
+    'twitterUrl',
+    'xHandle',
+    'linkedinUrl',
+  ]
   if (!watched.some((field) => before[field] !== after[field])) return
   if (isStoreEligible(after)) return syncStorePublicCatalog(storeId)
   if (isStoreEligible(before)) return removeStorePublicCatalog(storeId)
