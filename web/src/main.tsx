@@ -9,6 +9,7 @@ import DashboardHub from './pages/DashboardHub'
 import Products from './pages/ProductsServiceFirst'
 import Sell from './pages/Sell'
 import QuickPay from './pages/QuickPay'
+import PublicQuickPayCheckout from './pages/PublicQuickPayCheckout'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
 import Students from './pages/Students'
@@ -77,6 +78,7 @@ const router = createBrowserRouter([
   { path: '/receipt/:saleId', element: <ReceiptView /> },
   { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/login', element: <Navigate to="/" replace /> },
+  { path: '/s/:storeId', element: <PublicQuickPayCheckout /> },
   { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
