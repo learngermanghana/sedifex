@@ -235,6 +235,14 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         integrationBookingConfig: bookingSync,
         appScriptBookingSyncEnabled: true,
         bookingSyncEnabled: true,
+        integrationApi: {
+          enabled: true,
+          baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
+          checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
+          contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
+          updatedAt: serverTimestamp(),
+        },
+        integrationApiEnabled: true,
         updatedAt: serverTimestamp(),
       }
       await Promise.all([
@@ -285,8 +293,30 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     try {
       setIsSaving(true)
       const callable = httpsCallable(functions, 'createIntegrationApiKey')
-      const response = await callable({ name: keyName.trim() })
+      const response = await callable({
+        name: keyName.trim(),
+        storeId,
+      })
       const token = text((response.data as Record<string, unknown> | undefined)?.token)
+      const keyPreview = 'masked preview only'
+      const integrationApiPayload = {
+        integrationApi: {
+          enabled: true,
+          baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
+          checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
+          contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
+          keyName: keyName.trim(),
+          keyPreview,
+          updatedAt: serverTimestamp(),
+        },
+        integrationApiEnabled: true,
+        latestIntegrationApiKeyPreview: keyPreview,
+        updatedAt: serverTimestamp(),
+      }
+      await Promise.all([
+        setDoc(doc(db, 'stores', storeId), integrationApiPayload, { merge: true }),
+        setDoc(doc(db, 'storeSettings', storeId), integrationApiPayload, { merge: true }),
+      ])
       if (token) {
         setLatestToken(token)
         await copy(token, 'New API key')
