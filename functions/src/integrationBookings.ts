@@ -6,25 +6,60 @@ const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION'
   default: '2026-04-13',
 })
 const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', { default: '' })
+const BOOKING_DEFAULT_SERVICE_ID = defineString('BOOKING_DEFAULT_SERVICE_ID', { default: '' })
 
 type BookingRequestBody = {
   serviceId?: unknown
   slotId?: unknown
+  slotID?: unknown
+  slot_id?: unknown
   customer?: unknown
+  customerName?: unknown
+  customerPhone?: unknown
+  customerEmail?: unknown
   quantity?: unknown
   notes?: unknown
   bookingDate?: unknown
+  date?: unknown
   bookingTime?: unknown
+  time?: unknown
   branchLocationId?: unknown
+  branchId?: unknown
+  locationId?: unknown
+  storeBranchId?: unknown
   branchLocationName?: unknown
+  branchName?: unknown
+  storeBranch?: unknown
+  locationName?: unknown
+  preferredBranch?: unknown
+  eventLocation?: unknown
+  eventVenue?: unknown
+  venue?: unknown
+  eventAddress?: unknown
+  customerStayLocation?: unknown
+  stayLocation?: unknown
+  hotelLocation?: unknown
+  guestLocation?: unknown
   paymentMethod?: unknown
+  payment_method?: unknown
+  paymentType?: unknown
   paymentAmount?: unknown
+  amount?: unknown
+  total?: unknown
+  price?: unknown
+  depositAmount?: unknown
+  paymentStatus?: unknown
+  payment_status?: unknown
   serviceName?: unknown
+  productName?: unknown
+  service_note_name?: unknown
   attributes?: unknown
   status?: unknown
+  bookingStatus?: unknown
   source?: unknown
   sourceChannel?: unknown
   source_channel?: unknown
+  sourceLabel?: unknown
 }
 
 function clean(value: unknown, max = 500) {
@@ -52,6 +87,14 @@ function assertContract(req: functions.https.Request, res: functions.Response) {
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function firstClean(values: unknown[], max = 500) {
+  for (const value of values) {
+    const cleaned = clean(value, max)
+    if (cleaned) return cleaned
+  }
+  return ''
 }
 
 async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReference, field: string, apiKey: string) {
@@ -112,6 +155,24 @@ function asObject(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
+function normalizeSourceChannel(value: string) {
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, '_')
+  if (['website_booking_form', 'website', 'clientwebsite', 'client_website'].includes(normalized)) return 'client_website'
+  if (normalized.includes('market')) return 'sedifex_market'
+  if (normalized.includes('custom') || normalized.includes('public')) return 'sedifex_custom_page'
+  if (normalized.includes('manual')) return 'manual_admin'
+  return normalized || 'client_website'
+}
+
+function sourceLabelFor(sourceChannel: string, suppliedLabel: string) {
+  if (suppliedLabel) return suppliedLabel
+  if (sourceChannel === 'client_website') return 'Client website'
+  if (sourceChannel === 'sedifex_market') return 'Sedifex Market'
+  if (sourceChannel === 'sedifex_custom_page') return 'Sedifex public page'
+  if (sourceChannel === 'manual_admin') return 'Manual/admin'
+  return sourceChannel.replace(/_/g, ' ')
+}
+
 async function findCustomerDoc(storeId: string, phone: string, email: string) {
   const customersRef = defaultDb.collection('stores').doc(storeId).collection('customers')
   if (phone) {
@@ -169,35 +230,40 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     }
 
     const body = asObject(req.body) as BookingRequestBody
-    const serviceId = clean(body.serviceId, 220)
-    const slotId = clean(body.slotId, 220)
-    const quantity = Math.max(1, Math.floor(toNumber(body.quantity, 1)))
-    const notes = clean(body.notes, 2000)
-    const bookingDate = clean(body.bookingDate, 80)
-    const bookingTime = clean(body.bookingTime, 80)
-    const branchLocationId = clean(body.branchLocationId, 220)
-    const branchLocationName = clean(body.branchLocationName, 240)
-    const paymentMethod = clean(body.paymentMethod, 120)
-    const serviceName = clean(body.serviceName, 240)
-    const requestedStatus = clean(body.status, 80).toLowerCase()
-    const status = requestedStatus || 'pending'
-    const paymentAmount = toNumber(body.paymentAmount, 0)
-    const sourceChannel = clean(body.sourceChannel ?? body.source_channel ?? body.source, 120) || 'integration'
     const attributes = asObject(body.attributes)
     const customer = asObject(body.customer)
-    const customerName = clean(customer.name, 240)
-    const customerPhone = clean(customer.phone, 80)
-    const customerEmail = clean(customer.email, 240).toLowerCase()
+    const defaultServiceId = BOOKING_DEFAULT_SERVICE_ID.value()?.trim() || process.env.BOOKING_DEFAULT_SERVICE_ID?.trim() || ''
 
-    if (!serviceId && !slotId) {
-      res.status(400).json({ error: 'missing-service-or-slot' })
-      return
-    }
+    let resolvedServiceId = firstClean([body.serviceId], 220)
+    const slotId = firstClean([body.slotId, body.slotID, body.slot_id], 220)
+    const quantity = Math.max(1, Math.floor(toNumber(body.quantity, 1)))
+    const notes = clean(body.notes, 2000)
+    const bookingDate = firstClean([body.bookingDate, body.date], 80)
+    const bookingTime = firstClean([body.bookingTime, body.time], 80)
+    const branchLocationId = firstClean([body.branchLocationId, body.branchId, body.locationId, body.storeBranchId], 220)
+    const branchLocationName = firstClean([body.branchLocationName, body.branchName, body.storeBranch, body.locationName, body.preferredBranch], 240)
+    const eventLocation = firstClean([body.eventLocation, body.eventVenue, body.venue, body.eventAddress], 500)
+    const customerStayLocation = firstClean([body.customerStayLocation, body.stayLocation, body.hotelLocation, body.guestLocation], 500)
+    const paymentMethod = firstClean([body.paymentMethod, body.payment_method, body.paymentType], 120)
+    const serviceName = firstClean([body.serviceName, body.productName, body.service_note_name], 240)
+    const requestedStatus = clean(body.status, 80).toLowerCase()
+    const status = requestedStatus || 'pending'
+    const requestedBookingStatus = clean(body.bookingStatus, 80).toLowerCase()
+    const bookingStatus = requestedBookingStatus || 'pending_approval'
+    const paymentAmount = toNumber(body.paymentAmount ?? body.amount ?? body.total ?? body.price ?? body.depositAmount, 0)
+    const paymentStatus = firstClean([body.paymentStatus, body.payment_status], 80) || 'pending'
+    const customerName = firstClean([customer.name, body.customerName], 240)
+    const customerPhone = firstClean([customer.phone, body.customerPhone], 80)
+    const customerEmail = firstClean([customer.email, body.customerEmail], 240).toLowerCase()
+
+    const rawSourceChannel = firstClean([body.sourceChannel, body.source_channel, attributes.sourceChannel, attributes.source_channel, body.source, attributes.source], 120) || 'client_website'
+    const sourceChannel = normalizeSourceChannel(rawSourceChannel)
+    const source = firstClean([body.source, attributes.source], 120) || 'website_booking_form'
+    const sourceLabel = sourceLabelFor(sourceChannel, firstClean([body.sourceLabel, attributes.sourceLabel], 160))
 
     const now = admin.firestore.FieldValue.serverTimestamp()
     const storeRef = defaultDb.collection('stores').doc(storeId)
 
-    let resolvedServiceId = serviceId
     let resolvedServiceName = serviceName
     if (slotId) {
       const slotRef = storeRef.collection('integrationAvailabilitySlots').doc(slotId)
@@ -219,6 +285,20 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
       })
     }
 
+    resolvedServiceId = resolvedServiceId || defaultServiceId
+    if (!resolvedServiceId) {
+      res.status(400).json({
+        error: 'service-not-resolved',
+        message: 'Service could not be resolved. Configure BOOKING_DEFAULT_SERVICE_ID or provide serviceId.',
+      })
+      return
+    }
+
+    if (!customerName && !customerPhone && !customerEmail) {
+      res.status(400).json({ error: 'missing-customer', message: 'Provide at least one customer name, phone, or email.' })
+      return
+    }
+
     const customerDoc = await findCustomerDoc(storeId, customerPhone, customerEmail)
     const customerRef = customerDoc ? customerDoc.ref : storeRef.collection('customers').doc()
     await customerRef.set(
@@ -228,7 +308,9 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
         email: customerEmail || null,
         updatedAt: now,
         createdAt: customerDoc ? customerDoc.get('createdAt') || now : now,
-        source: 'integration',
+        source: customerDoc ? customerDoc.get('source') || 'integrationBooking' : 'integrationBooking',
+        sourceChannel,
+        sourceLabel,
       },
       { merge: true },
     )
@@ -244,18 +326,36 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
       serviceName: resolvedServiceName || null,
       slotId: slotId || null,
       customer: { name: customerName || null, phone: customerPhone || null, email: customerEmail || null },
+      customerName: customerName || null,
+      customerPhone: customerPhone || null,
+      customerEmail: customerEmail || null,
       quantity,
       notes: notes || null,
       bookingDate: bookingDate || null,
       bookingTime: bookingTime || null,
       branchLocationId: branchLocationId || null,
       branchLocationName: branchLocationName || null,
+      preferredBranch: branchLocationName || null,
+      eventLocation: eventLocation || null,
+      customerStayLocation: customerStayLocation || null,
       paymentMethod: paymentMethod || null,
       paymentAmount,
-      paymentStatus: 'pending',
-      attributes,
-      bookingStatus: 'pending_approval',
-      status: 'pending',
+      depositAmount: paymentAmount,
+      paymentStatus,
+      payment: {
+        method: paymentMethod || null,
+        amount: paymentAmount,
+        status: paymentStatus,
+        confirmed: false,
+      },
+      attributes: {
+        ...attributes,
+        source,
+        sourceChannel,
+        sourceLabel,
+      },
+      bookingStatus,
+      status,
       syncStatus: 'not_ready',
       syncReason: null,
       syncRequestedAt: null,
@@ -264,10 +364,11 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
       rescheduledAt: null,
       cancelledAt: null,
       completedAt: null,
-      source: 'integration',
+      source,
       sourceChannel,
       source_channel: sourceChannel,
-      channel: 'BuySedifex',
+      sourceLabel,
+      channel: sourceLabel,
       recordType: 'service_booking',
       createdAt: now,
       updatedAt: now,
