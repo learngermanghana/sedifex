@@ -76,7 +76,6 @@ const PRODUCT_CATEGORIES = [
   'Skin Care',
   'Hair Care',
   'Supplements',
-  'Food & Beverages',
   'Household',
   'Electronics',
   'Fashion',
@@ -202,6 +201,25 @@ function splitSentences(text: string) {
     .filter(Boolean)
 }
 
+
+function cleanSavedDescription(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[•·▪◦]/g, '-')
+    .replace(/^\s*[-–—]\s*$/gm, '')
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/\*\*\s*([^*]+?)\s*\*\*/g, '**$1**')
+    .replace(/\s-\s(?=\*\*[^*]{1,80}:)/g, '\n- ')
+    .replace(/\*\*(?=[^*]{1,80}:\*\*)/g, '\n**')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+}
+
 function generateItemDescription(draft: Draft): string {
   const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'service' ? 'This service' : 'This product')
   const category = normalizeCategory(draft.category, draft.itemType)
@@ -213,35 +231,46 @@ function generateItemDescription(draft: Draft): string {
     const mode = draft.courseMode === 'online' ? 'online' : draft.courseMode === 'hybrid' ? 'in online and in-person formats' : 'in person'
     const classTimes = draft.preferredTimes.trim() || draft.classTimes.trim()
     const fee = cleanNumber(draft.price)
-    const feeText = fee !== null ? ` The course fee is GHS ${fee.toFixed(2)}.` : ''
-    return `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical and structured progress. It includes guided lessons and class support to help students build confidence step by step${duration ? ` over ${duration}` : ''}. Classes are offered ${mode}${(draft.branch.trim() || locationText) ? ` at ${draft.branch.trim() || locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}.${feeText}`.replace(/\s+/g, ' ').trim()
+    const feeText = fee !== null ? `The course fee is GHS ${fee.toFixed(2)}.` : ''
+    const intro = `${itemName} is a ${level} ${category.toLowerCase()} programme for learners who want practical and structured progress.`
+    const details = `Classes are offered ${mode}${(draft.branch.trim() || locationText) ? ` at ${draft.branch.trim() || locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}${duration ? `, over ${duration}` : ''}.`
+    return cleanSavedDescription([intro, details, feeText].filter(Boolean).join('\n\n'))
   }
 
   if (draft.itemType === 'service') {
     const duration = cleanNumber(draft.durationMinutes)
-    const kind = draft.serviceKind === 'quote_request' ? 'service available by quote request' : 'consultation and appointment service'
-    return `${itemName} is a ${kind} that supports customers who want professional and reliable support. ${duration ? `Typical session time is about ${duration} minutes. ` : ''}${locationText ? `It is offered at ${locationText}, and ` : ''}customers can request a preferred date and time while the store confirms availability.`.replace(/\s+/g, ' ').trim()
+    const intro = `${itemName} helps customers access professional and reliable ${category.toLowerCase()} support.`
+    const booking = `${locationText ? `It is offered at ${locationText}. ` : ''}Customers can request or book a preferred date and time, and Sedifex-powered channels can handle online booking and payment records.`
+    const durationText = duration ? `Typical session time is about ${duration} minutes.` : ''
+    return cleanSavedDescription([intro, booking, durationText].filter(Boolean).join('\n\n'))
   }
 
   const fee = cleanNumber(draft.price)
-  const feeText = fee !== null ? ` The current listed price is GHS ${fee.toFixed(2)}.` : ''
-  return `${itemName} is available from the store for customers who want a reliable and convenient purchase option. It belongs to the ${category.toLowerCase()} category and can be ordered based on availability.${feeText}`.replace(/\s+/g, ' ').trim()
+  const feeText = fee !== null ? `The current listed price is GHS ${fee.toFixed(2)}.` : ''
+  const intro = `${itemName} is available from the store for customers who want a reliable and convenient purchase option.`
+  const details = `It belongs to the ${category.toLowerCase()} category and can be ordered based on availability.`
+  return cleanSavedDescription([intro, details, feeText].filter(Boolean).join('\n\n'))
 }
 
 function improveDescription(text: string): string {
-  const cleaned = text
-    .replace(/\*\*/g, '')
-    .replace(/#{1,6}\s*/g, '')
-    .replace(/---+/g, ' ')
-    .replace(/[•·▪◦]/g, ' ')
-    .replace(/\s*\n+\s*/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  const cleaned = cleanSavedDescription(text)
 
   if (!cleaned) return ''
+
+  // If the text already has useful structure, preserve it after cleaning.
+  if (cleaned.includes('\n') || /^[-*]\s+/m.test(cleaned) || /\*\*[^*]+:\*\*/.test(cleaned)) {
+    return cleaned
+  }
+
   const sentences = splitSentences(cleaned)
-  if (sentences.length >= 2) return sentences.slice(0, 4).join(' ')
-  const chunks = cleaned.split(/,\s+/).map(chunk => chunk.trim()).filter(Boolean).slice(0, 4)
+  if (sentences.length >= 2) return sentences.slice(0, 5).join(' ')
+
+  const chunks = cleaned
+    .split(/,\s+/)
+    .map(chunk => chunk.trim())
+    .filter(Boolean)
+    .slice(0, 5)
+
   const rebuilt = chunks.join('. ')
   return rebuilt.endsWith('.') ? rebuilt : `${rebuilt}.`
 }
@@ -256,7 +285,7 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     name,
     itemType,
     category: normalizeCategory(data.category, itemFormType),
-    description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
+    description: typeof data.description === 'string' && data.description.trim() ? cleanSavedDescription(data.description) : null,
     sku: itemType === 'product' && typeof data.sku === 'string' && data.sku.trim() ? data.sku.trim() : null,
     barcode: itemType === 'product' && typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : null,
     price: cleanNumber(data.price),
@@ -333,6 +362,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
   const isPublished = draft.isPublished === true
   const status: 'draft' | 'published' = isPublished ? 'published' : 'draft'
+  const description = cleanSavedDescription(draft.description)
 
   return {
     storeId,
@@ -347,7 +377,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
     categoryKey,
     categoryName,
     status,
-    description: draft.description.trim() || null,
+    description: description || null,
     price,
     currency,
     costPrice: behavesLikeService ? null : cleanNumber(draft.costPrice),
@@ -762,16 +792,20 @@ export default function ProductsServiceFirst() {
                     className="button button--ghost products-page__helper-button"
                     onClick={() => {
                       const improved = improveDescription(draft.description)
-                      if (!improved) return
+                      if (!improved) {
+                        setError('Add a description first.')
+                        return
+                      }
                       setError('')
                       updateDraft('description', improved)
                     }}
                   >
-                    Improve text
+                    Clean formatting
                   </button>
                 </div>
               </div>
               <textarea id="item-description" rows={4} value={draft.description} onChange={event => updateDraft('description', event.target.value)} />
+              <p className="field__hint">Use Clean formatting to remove broken AI separators, empty dash lines, and messy markdown.</p>
             </div>
             <div className="field">
               <label className="field__label" htmlFor="item-image">Image URL</label>
