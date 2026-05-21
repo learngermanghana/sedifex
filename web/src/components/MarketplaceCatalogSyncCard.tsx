@@ -10,16 +10,22 @@ type CatalogHealth = {
   listings: number
   products: number
   services: number
+  courses: number
   outOfSync: number
 }
 
 type SyncResponse = {
   ok?: boolean
   storeId?: string
+  deletedListings?: number
+  scannedProducts?: number
+  skippedProducts?: number
+  writtenListings?: number
   publicCatalogDocCount?: {
     listings?: number
     products?: number
     services?: number
+    courses?: number
   } | null
   publicCatalogOutOfSyncCount?: number | null
   publicCatalogLastSyncedAt?: string | null
@@ -51,10 +57,10 @@ function formatTimestamp(timestamp: Timestamp | null) {
 
 function readinessLabel(health: CatalogHealth | null) {
   if (!health) return 'Checking marketplace readiness…'
-  if (health.outOfSync > 0) return `${health.outOfSync} item${health.outOfSync === 1 ? '' : 's'} need sync`
-  const total = health.listings || health.products + health.services
+  if (health.outOfSync > 0) return `${health.outOfSync} item${health.outOfSync === 1 ? '' : 's'} need repair`
+  const total = health.listings || health.products + health.services + health.courses
   if (total === 0) return 'No public listings yet'
-  return `${total} public listing${total === 1 ? '' : 's'} synced`
+  return `${total} public listing${total === 1 ? '' : 's'} ready`
 }
 
 export default function MarketplaceCatalogSyncCard({ canSync }: Props) {
@@ -81,6 +87,7 @@ export default function MarketplaceCatalogSyncCard({ canSync }: Props) {
         listings: numberField(count.listings),
         products: numberField(count.products),
         services: numberField(count.services),
+        courses: numberField(count.courses),
         outOfSync: numberField(data.publicCatalogOutOfSyncCount),
       })
     } catch (error) {
@@ -99,13 +106,13 @@ export default function MarketplaceCatalogSyncCard({ canSync }: Props) {
   async function handleSync() {
     if (!storeId) return
     if (!canSync) {
-      publish({ message: 'Only the workspace owner can sync the marketplace catalog.', tone: 'error' })
+      publish({ message: 'Only the workspace owner can repair the marketplace catalog.', tone: 'error' })
       return
     }
 
     setSyncing(true)
     try {
-      const callable = httpsCallable(functions, 'adminSyncStorePublicCatalog')
+      const callable = httpsCallable(functions, 'repairStorePublicCatalog')
       const response = await callable({ storeId })
       const payload = (response.data ?? {}) as SyncResponse
       const count = payload.publicCatalogDocCount ?? {}
@@ -114,15 +121,19 @@ export default function MarketplaceCatalogSyncCard({ canSync }: Props) {
         listings: numberField(count.listings),
         products: numberField(count.products),
         services: numberField(count.services),
+        courses: numberField(count.courses),
         outOfSync: numberField(payload.publicCatalogOutOfSyncCount),
       }))
-      publish({ message: 'Marketplace catalog synced.', tone: 'success' })
+      publish({
+        message: `Marketplace catalog repaired. Deleted ${numberField(payload.deletedListings)} old listing${numberField(payload.deletedListings) === 1 ? '' : 's'} and wrote ${numberField(payload.writtenListings)} clean listing${numberField(payload.writtenListings) === 1 ? '' : 's'}.`,
+        tone: 'success',
+      })
       await loadHealth()
     } catch (error) {
-      console.error('[marketplace-sync] Failed to sync public catalog', error)
+      console.error('[marketplace-sync] Failed to repair public catalog', error)
       const message = typeof (error as { message?: unknown }).message === 'string'
         ? (error as { message: string }).message
-        : 'Unable to sync marketplace catalog.'
+        : 'Unable to repair marketplace catalog.'
       publish({ message, tone: 'error' })
     } finally {
       setSyncing(false)
@@ -133,17 +144,19 @@ export default function MarketplaceCatalogSyncCard({ canSync }: Props) {
     <div className="account-overview__card" role="status" aria-live="polite">
       <h3>Marketplace readiness</h3>
       <p className="account-overview__hint">
-        Keep Sedifex Market updated even while product data is still incomplete. The marketplace will show placeholders for missing images, but this sync repairs public listing records.
+        Repair the public catalog when marketplace items are duplicated, stuck as draft, or showing under the wrong type. This rebuilds clean public listings from the source product, service, and course records.
       </p>
       <div className="account-overview__website-sync-keys">
         <p className="account-overview__hint"><strong>{loading ? 'Loading…' : readinessLabel(health)}</strong></p>
-        <p className="account-overview__hint">Last synced: {formatTimestamp(health?.lastSyncedAt ?? null)}</p>
+        <p className="account-overview__hint">Last repaired: {formatTimestamp(health?.lastSyncedAt ?? null)}</p>
         <p className="account-overview__hint">
           Listings: {health?.listings ?? 0}
           {' · '}
           Products: {health?.products ?? 0}
           {' · '}
           Services: {health?.services ?? 0}
+          {' · '}
+          Courses: {health?.courses ?? 0}
         </p>
         <p className="account-overview__hint">Out of sync: {health?.outOfSync ?? 0}</p>
       </div>
@@ -152,7 +165,7 @@ export default function MarketplaceCatalogSyncCard({ canSync }: Props) {
           Refresh status
         </button>
         <button type="button" className="button button--primary" onClick={handleSync} disabled={!canSync || syncing || !storeId}>
-          {syncing ? 'Syncing…' : 'Sync Marketplace Catalog'}
+          {syncing ? 'Repairing…' : 'Repair Marketplace Catalog'}
         </button>
       </div>
     </div>
