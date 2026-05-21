@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, doc as firestoreDoc, getDocs, limit, query, serverTimestamp, setDoc, where, type Timestamp } from 'firebase/firestore'
+import { addDoc, collection, doc as firestoreDoc, getDocs, limit, query, serverTimestamp, setDoc, updateDoc, where, type Timestamp } from 'firebase/firestore'
+import { uploadProductImage } from '../api/productImageUpload'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 
@@ -58,14 +59,19 @@ const pageStyles = {
   formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(210px, 100%), 1fr))', gap: 12, minWidth: 0 },
   label: { display: 'grid', gap: 7, color: '#334155', fontSize: 13, fontWeight: 800, minWidth: 0 },
   input: { width: '100%', maxWidth: '100%', border: '1px solid #cbd5e1', borderRadius: 13, padding: '11px 12px', fontSize: 14, background: '#ffffff', color: '#0f172a', outline: 'none', boxSizing: 'border-box' as const },
-  actions: { display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 10, marginTop: 16 },
+  actions: { display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 8, marginTop: 16 },
   primaryButton: { border: 0, borderRadius: 13, padding: '11px 17px', background: 'linear-gradient(135deg, #4338ca, #4f46e5)', color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: '0 18px 36px -24px rgba(67, 56, 202, 0.85)' },
-  secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 13, padding: '10px 15px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  successButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#059669', color: '#fff', fontWeight: 900, cursor: 'pointer' },
+  warningButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#d97706', color: '#fff', fontWeight: 900, cursor: 'pointer' },
+  dangerButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#dc2626', color: '#fff', fontWeight: 900, cursor: 'pointer' },
+  secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 13, padding: '9px 12px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
   tableWrap: { width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto' as const, borderRadius: 16, border: '1px solid #e2e8f0', boxSizing: 'border-box' as const },
-  table: { width: '100%', minWidth: 860, borderCollapse: 'collapse' as const, tableLayout: 'auto' as const },
+  table: { width: '100%', minWidth: 960, borderCollapse: 'collapse' as const, tableLayout: 'auto' as const },
   th: { textAlign: 'left' as const, padding: '12px 12px', fontSize: 11, color: '#64748b', background: '#f8fafc', textTransform: 'uppercase' as const, letterSpacing: '0.07em', whiteSpace: 'nowrap' as const },
   td: { padding: '12px 12px', borderTop: '1px solid #e2e8f0', verticalAlign: 'top' as const, color: '#334155', fontSize: 13, overflowWrap: 'anywhere' as const },
   alert: { borderRadius: 16, padding: '12px 14px', fontWeight: 800 },
+  splitGrid: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 18 },
+  photoPreview: { width: 72, height: 82, borderRadius: 14, border: '1px solid #cbd5e1', background: '#eef2ff', display: 'grid', placeItems: 'center', overflow: 'hidden', color: '#3730a3', fontSize: 11, fontWeight: 900 },
 }
 
 function toDate(value?: Timestamp | string | null) { if (!value) return null; if (typeof value === 'string') { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? null : parsed } const date = value?.toDate?.(); return date && !Number.isNaN(date.getTime()) ? date : null }
@@ -77,10 +83,11 @@ function normalizePaymentStatus(mode: ManualForm['paymentMode'], status: string)
 function buildManualReference(storeId: string) { return `REG-${storeId.slice(0, 6).toUpperCase()}-${Date.now()}` }
 function buildStudentCode(storeId: string, id: string) { return `${storeId.replace(/[^a-z0-9]/gi, '').slice(0, 4).toUpperCase() || 'STU'}-${new Date().getFullYear()}-${id.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}` }
 function statusLabel(value?: string | null) { const text = value || 'not_required'; return text.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()) }
-function statusStyle(value?: string | null) { const normalized = (value || '').toLowerCase(); if (['paid', 'success', 'captured', 'confirmed', 'active'].includes(normalized)) return { background: '#dcfce7', color: '#166534' }; if (['pending', 'checkout_created', 'pending_manual_review'].includes(normalized)) return { background: '#fef3c7', color: '#92400e' }; return { background: '#e0e7ff', color: '#3730a3' } }
+function statusStyle(value?: string | null) { const normalized = (value || '').toLowerCase(); if (['paid', 'success', 'captured', 'confirmed', 'active'].includes(normalized)) return { background: '#dcfce7', color: '#166534' }; if (['rejected', 'cancelled', 'canceled'].includes(normalized)) return { background: '#fee2e2', color: '#991b1b' }; if (['pending', 'checkout_created', 'pending_manual_review', 'new'].includes(normalized)) return { background: '#fef3c7', color: '#92400e' }; return { background: '#e0e7ff', color: '#3730a3' } }
 function studentCodeOf(item: RegistrationDoc) { return item.studentCode || item.data?.studentCode || buildStudentCode(item.storeId || 'STU', item.id) }
 function studentPhotoOf(item: RegistrationDoc) { return item.studentPhotoUrl || item.data?.studentPhotoUrl || '' }
-function studentStatusOf(item: RegistrationDoc) { return item.studentStatus || item.data?.studentStatus || 'pending' }
+function studentStatusOf(item: RegistrationDoc) { return item.studentStatus || item.data?.studentStatus || item.status || 'pending' }
+function isIncomingRegistration(item: RegistrationDoc) { return item.source !== 'manual_dashboard' }
 
 function StatCard({ label, value, accent }: { label: string; value: number; accent: string }) { return <article style={{ ...pageStyles.statCard, borderTop: `4px solid ${accent}` }}><p style={{ ...pageStyles.statValue, color: accent }}>{value}</p><p style={pageStyles.statLabel}>{label}</p></article> }
 
@@ -117,12 +124,38 @@ function PrintableIdCard({ student, onClose }: { student: RegistrationDoc; onClo
   </div>
 }
 
+function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefresh, onPrint, onConfirm, onMarkPaid, onReject, actioningId }: {
+  title: string
+  subtitle: string
+  items: RegistrationDoc[]
+  loading: boolean
+  emptyText: string
+  onRefresh: () => void
+  onPrint: (item: RegistrationDoc) => void
+  onConfirm: (item: RegistrationDoc) => void
+  onMarkPaid: (item: RegistrationDoc) => void
+  onReject: (item: RegistrationDoc) => void
+  actioningId: string | null
+}) {
+  return <section style={pageStyles.card}>
+    <div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>{title}</h2><p style={pageStyles.muted}>{subtitle}</p></div><button type="button" style={pageStyles.secondaryButton} onClick={onRefresh} disabled={loading}>Refresh</button></div>
+    {loading ? <p style={pageStyles.muted}>Loading registrations…</p> : null}
+    {!loading && items.length === 0 ? <div style={{ border: '1px dashed #cbd5e1', borderRadius: 18, padding: 24, textAlign: 'center', color: '#64748b' }}><strong style={{ color: '#334155' }}>{emptyText}</strong></div> : null}
+    {items.length > 0 ? <div style={pageStyles.tableWrap}><table style={pageStyles.table}><thead><tr><th style={pageStyles.th}>Student</th><th style={pageStyles.th}>Student ID</th><th style={pageStyles.th}>Course</th><th style={pageStyles.th}>Class time</th><th style={pageStyles.th}>Status</th><th style={pageStyles.th}>Payment</th><th style={pageStyles.th}>Reference</th><th style={pageStyles.th}>Actions</th></tr></thead><tbody>{items.map(item => {
+      const isBusy = actioningId === item.id
+      return <tr key={item.id}><td style={pageStyles.td}><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><div style={{ ...pageStyles.photoPreview, width: 44, height: 50 }}>{studentPhotoOf(item) ? <img src={studentPhotoOf(item)} alt={item.customer?.name || 'Student'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}</div><div><strong style={{ color: '#0f172a' }}>{item.customer?.name ?? 'Unnamed student'}</strong><br /><small>{item.customer?.phone ?? item.customer?.email ?? 'No contact'}</small></div></div></td><td style={pageStyles.td}><strong>{studentCodeOf(item)}</strong></td><td style={pageStyles.td}>{item.data?.course ?? '—'}</td><td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td><td style={pageStyles.td}><span style={{ ...statusStyle(studentStatusOf(item)), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(studentStatusOf(item))}</span></td><td style={pageStyles.td}><span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(item.payment?.status)}</span><br /><small>{formatAmount(item.payment)}</small></td><td style={pageStyles.td}>{item.payment?.reference ?? '—'}<br /><small>{formatDate(item.createdAt)}</small></td><td style={pageStyles.td}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}><button type="button" style={pageStyles.successButton} onClick={() => onConfirm(item)} disabled={isBusy}>Confirm</button><button type="button" style={pageStyles.warningButton} onClick={() => onMarkPaid(item)} disabled={isBusy}>Mark paid</button><button type="button" style={pageStyles.secondaryButton} onClick={() => onPrint(item)} disabled={isBusy}>Print ID</button><button type="button" style={pageStyles.dangerButton} onClick={() => onReject(item)} disabled={isBusy}>Reject</button></div></td></tr>
+    })}</tbody></table></div> : null}
+  </section>
+}
+
 export default function StudentRegistration() {
   const { storeId } = useActiveStore()
   const [registrations, setRegistrations] = useState<RegistrationDoc[]>([])
   const [selectedCardStudent, setSelectedCardStudent] = useState<RegistrationDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [actioningId, setActioningId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [manualForm, setManualForm] = useState<ManualForm>(initialManualForm)
@@ -139,7 +172,16 @@ export default function StudentRegistration() {
   }
 
   useEffect(() => { let active = true; void loadRegistrations(active); return () => { active = false } }, [storeId])
-  const totals = useMemo(() => { const total = registrations.length; const paid = registrations.filter(item => ['paid', 'success', 'captured', 'confirmed'].includes(item.payment?.status ?? '')).length; const manual = registrations.filter(item => item.payment?.status === 'pending_manual_review').length; const pending = registrations.filter(item => ['pending', 'checkout_created'].includes(item.payment?.status ?? '')).length; return { total, paid, manual, pending } }, [registrations])
+
+  const incomingRegistrations = useMemo(() => registrations.filter(isIncomingRegistration), [registrations])
+  const manualRegistrations = useMemo(() => registrations.filter(item => !isIncomingRegistration(item)), [registrations])
+  const totals = useMemo(() => {
+    const total = registrations.length
+    const paid = registrations.filter(item => ['paid', 'success', 'captured', 'confirmed'].includes(item.payment?.status ?? '')).length
+    const manual = manualRegistrations.length
+    const pending = incomingRegistrations.filter(item => ['pending', 'checkout_created', 'new'].includes(item.payment?.status ?? '') || ['pending', 'new'].includes(studentStatusOf(item))).length
+    return { total, paid, manual, pending }
+  }, [incomingRegistrations, manualRegistrations, registrations])
 
   async function ensureStudentCode(item: RegistrationDoc) {
     if (!storeId) return studentCodeOf(item)
@@ -153,6 +195,53 @@ export default function StudentRegistration() {
     setSelectedCardStudent({ ...item, studentCode: studentCodeOf(item) })
   }
 
+  async function updateRegistrationStatus(item: RegistrationDoc, changes: Partial<RegistrationDoc> & { data?: RegistrationDoc['data']; payment?: RegistrationDoc['payment'] }, message: string) {
+    setActioningId(item.id)
+    setError(null)
+    setSaveMessage(null)
+    try {
+      await ensureStudentCode(item)
+      await setDoc(firestoreDoc(db, 'student_registrations', item.id), { ...changes, updatedAt: serverTimestamp() }, { merge: true })
+      setSaveMessage(message)
+      await loadRegistrations(true)
+    } catch (actionError) {
+      console.error(actionError)
+      setError('Unable to update registration. Check Firestore rules and try again.')
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  function confirmStudent(item: RegistrationDoc) {
+    void updateRegistrationStatus(item, { status: 'confirmed', studentStatus: 'active', data: { ...(item.data || {}), studentStatus: 'active', studentCode: studentCodeOf(item) } }, 'Student registration confirmed.')
+  }
+
+  function markPaid(item: RegistrationDoc) {
+    void updateRegistrationStatus(item, { payment: { ...(item.payment || {}), status: 'paid', currency: item.payment?.currency ?? 'GHS' }, status: item.status === 'rejected' ? 'confirmed' : item.status }, 'Payment marked as paid.')
+  }
+
+  function rejectStudent(item: RegistrationDoc) {
+    if (!window.confirm(`Reject registration for ${item.customer?.name || 'this student'}?`)) return
+    void updateRegistrationStatus(item, { status: 'rejected', studentStatus: 'rejected', data: { ...(item.data || {}), studentStatus: 'rejected' } }, 'Registration rejected.')
+  }
+
+  async function handlePhotoUpload(file: File | null) {
+    if (!file || !storeId) return
+    if (!file.type.startsWith('image/')) { setError('Choose a valid image file.'); return }
+    setUploadingPhoto(true)
+    setError(null)
+    try {
+      const url = await uploadProductImage(file, { storagePath: `stores/${storeId}/student-photos` })
+      updateManualForm('studentPhotoUrl', url)
+      setSaveMessage('Student photo uploaded. Save the student to attach it to the ID card.')
+    } catch (uploadError) {
+      console.error(uploadError)
+      setError('Unable to upload student photo. You can paste a photo URL instead.')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!storeId) { setError('Select a workspace before adding a student.'); return }
@@ -164,33 +253,42 @@ export default function StudentRegistration() {
       const reference = cleanText(manualForm.reference, 140) || buildManualReference(storeId)
       const paymentStatus = normalizePaymentStatus(manualForm.paymentMode, manualForm.paymentStatus)
       const now = serverTimestamp(); const docRef = firestoreDoc(collection(db, 'student_registrations')); const studentCode = buildStudentCode(storeId, docRef.id)
-      const payload = { storeId, pageId: 'student-registration', pageType: 'student_registration', source: 'manual_dashboard', status: 'new', studentCode, studentStatus: cleanText(manualForm.studentStatus, 80) || 'pending', studentPhotoUrl: cleanText(manualForm.studentPhotoUrl, 500) || null, idCardIssued: false, idCardIssuedAt: null, idCardExpiresAt: cleanText(manualForm.idCardExpiresAt, 80) || null, customer: { name: studentName, email: email || null, phone: phone || null }, data: { course: course || null, preferredClassTime: cleanText(manualForm.preferredClassTime, 120) || null, branch: cleanText(manualForm.branch, 120) || null, notes: cleanText(manualForm.notes, 1000) || null, studentCode, studentStatus: cleanText(manualForm.studentStatus, 80) || 'pending', studentPhotoUrl: cleanText(manualForm.studentPhotoUrl, 500) || null }, payment: { mode: manualForm.paymentMode, status: paymentStatus, amount: hasAmount ? amount : null, currency: 'GHS', reference }, createdAt: now, updatedAt: now }
+      const photoUrl = cleanText(manualForm.studentPhotoUrl, 500) || null
+      const payload = { storeId, pageId: 'student-registration', pageType: 'student_registration', source: 'manual_dashboard', status: 'confirmed', studentCode, studentStatus: cleanText(manualForm.studentStatus, 80) || 'pending', studentPhotoUrl: photoUrl, idCardIssued: false, idCardIssuedAt: null, idCardExpiresAt: cleanText(manualForm.idCardExpiresAt, 80) || null, customer: { name: studentName, email: email || null, phone: phone || null }, data: { course: course || null, preferredClassTime: cleanText(manualForm.preferredClassTime, 120) || null, branch: cleanText(manualForm.branch, 120) || null, notes: cleanText(manualForm.notes, 1000) || null, studentCode, studentStatus: cleanText(manualForm.studentStatus, 80) || 'pending', studentPhotoUrl: photoUrl }, payment: { mode: manualForm.paymentMode, status: paymentStatus, amount: hasAmount ? amount : null, currency: 'GHS', reference }, createdAt: now, updatedAt: now }
       await setDoc(docRef, payload)
       await addDoc(collection(db, 'customers'), { storeId, name: studentName, displayName: studentName, email: email || null, phone: phone || null, source: 'student-registration-manual', tags: ['Student', course].filter(Boolean), studentRegistrationId: docRef.id, studentCode, studentStatus: payload.studentStatus, studentPhotoUrl: payload.studentPhotoUrl, createdAt: now, updatedAt: now })
-      setManualForm(initialManualForm); setSaveMessage(`Student registration added. Student ID: ${studentCode}`); await loadRegistrations(true)
+      setManualForm(initialManualForm); setSaveMessage(`Manual student registration added. Student ID: ${studentCode}`); await loadRegistrations(true)
     } catch (saveError) { console.error(saveError); setError('Unable to save student registration. Check Firestore rules or try again.') } finally { setSaving(false) }
   }
 
   function updateManualForm<K extends keyof ManualForm>(key: K, value: ManualForm[K]) { setManualForm(current => ({ ...current, [key]: value, ...(key === 'paymentMode' ? { paymentStatus: value === 'manual' ? 'pending_manual_review' : value === 'online' ? 'pending' : 'not_required' } : {}) })) }
 
   return <div style={pageStyles.page}>{selectedCardStudent ? <PrintableIdCard student={selectedCardStudent} onClose={() => setSelectedCardStudent(null)} /> : null}
-    <section style={pageStyles.hero}><p style={pageStyles.eyebrow}>Admissions workspace</p><h1 style={pageStyles.title}>Student registration</h1><p style={pageStyles.subtitle}>Keep registrations in one admissions list and print student ID cards with auto-filled codes, course, class, payment status, and student photo.</p></section>
-    <section style={pageStyles.statsGrid} aria-label="Registration summary"><StatCard label="Total registrations" value={totals.total} accent="#4f46e5" /><StatCard label="Paid or confirmed" value={totals.paid} accent="#059669" /><StatCard label="Online pending" value={totals.pending} accent="#d97706" /><StatCard label="Manual review" value={totals.manual} accent="#7c3aed" /></section>
-    <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Add student manually</h2><p style={pageStyles.muted}>Student ID is generated automatically. Add a photo URL now or later before printing.</p></div></div><form onSubmit={handleManualSubmit}><div style={pageStyles.formGrid}>
+    <section style={pageStyles.hero}><p style={pageStyles.eyebrow}>Admissions workspace</p><h1 style={pageStyles.title}>Student registration</h1><p style={pageStyles.subtitle}>Review website registrations separately from manual entries. Confirm students, mark payments, upload photos, and print student ID cards.</p></section>
+    <section style={pageStyles.statsGrid} aria-label="Registration summary"><StatCard label="Total registrations" value={totals.total} accent="#4f46e5" /><StatCard label="Paid or confirmed" value={totals.paid} accent="#059669" /><StatCard label="Incoming pending" value={totals.pending} accent="#d97706" /><StatCard label="Manual entries" value={totals.manual} accent="#7c3aed" /></section>
+    {error ? <p style={{ ...pageStyles.alert, background: '#fef2f2', color: '#b91c1c' }}>{error}</p> : null}
+    {saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}
+
+    <RegistrationTable title="Incoming website registrations" subtitle="New registrations submitted from connected websites appear here first. Confirm them before printing final IDs." items={incomingRegistrations} loading={loading} emptyText="No incoming website registrations yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} />
+
+    <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Add student manually</h2><p style={pageStyles.muted}>Use this for walk-ins or phone registrations. Upload a student photo or paste a photo URL before printing the ID card.</p></div></div><form onSubmit={handleManualSubmit}><div style={pageStyles.formGrid}>
       <label style={pageStyles.label}>Student name *<input style={pageStyles.input} value={manualForm.name} onChange={event => updateManualForm('name', event.target.value)} placeholder="Student full name" /></label>
       <label style={pageStyles.label}>Phone<input style={pageStyles.input} value={manualForm.phone} onChange={event => updateManualForm('phone', event.target.value)} placeholder="+233..." /></label>
       <label style={pageStyles.label}>Email<input style={pageStyles.input} type="email" value={manualForm.email} onChange={event => updateManualForm('email', event.target.value)} placeholder="student@example.com" /></label>
       <label style={pageStyles.label}>Course / program<input style={pageStyles.input} value={manualForm.course} onChange={event => updateManualForm('course', event.target.value)} placeholder="Hair Braiding" /></label>
       <label style={pageStyles.label}>Preferred class time<input style={pageStyles.input} value={manualForm.preferredClassTime} onChange={event => updateManualForm('preferredClassTime', event.target.value)} placeholder="14 July 2026, Morning" /></label>
       <label style={pageStyles.label}>Branch<input style={pageStyles.input} value={manualForm.branch} onChange={event => updateManualForm('branch', event.target.value)} placeholder="Tema" /></label>
+      <label style={pageStyles.label}>Upload student photo<input style={pageStyles.input} type="file" accept="image/*" onChange={event => void handlePhotoUpload(event.target.files?.[0] ?? null)} disabled={uploadingPhoto || saving} />{uploadingPhoto ? <small>Uploading photo…</small> : null}</label>
       <label style={pageStyles.label}>Student photo URL<input style={pageStyles.input} value={manualForm.studentPhotoUrl} onChange={event => updateManualForm('studentPhotoUrl', event.target.value)} placeholder="https://..." /></label>
+      <div style={{ ...pageStyles.label, gap: 8 }}>Photo preview<div style={pageStyles.photoPreview}>{manualForm.studentPhotoUrl ? <img src={manualForm.studentPhotoUrl} alt="Student preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}</div></div>
       <label style={pageStyles.label}>Student status<select style={pageStyles.input} value={manualForm.studentStatus} onChange={event => updateManualForm('studentStatus', event.target.value)}><option value="pending">Pending</option><option value="active">Active</option><option value="completed">Completed</option><option value="suspended">Suspended</option></select></label>
       <label style={pageStyles.label}>ID expiry date<input style={pageStyles.input} type="date" value={manualForm.idCardExpiresAt} onChange={event => updateManualForm('idCardExpiresAt', event.target.value)} /></label>
       <label style={pageStyles.label}>Payment mode<select style={pageStyles.input} value={manualForm.paymentMode} onChange={event => updateManualForm('paymentMode', event.target.value as ManualForm['paymentMode'])}><option value="none">No payment required</option><option value="manual">Manual payment</option><option value="online">Online payment</option></select></label>
       <label style={pageStyles.label}>Payment status<input style={pageStyles.input} value={manualForm.paymentStatus} onChange={event => updateManualForm('paymentStatus', event.target.value)} /></label>
       <label style={pageStyles.label}>Amount<input style={pageStyles.input} inputMode="decimal" value={manualForm.amount} onChange={event => updateManualForm('amount', event.target.value)} placeholder="0.00" /></label>
       <label style={pageStyles.label}>Reference<input style={pageStyles.input} value={manualForm.reference} onChange={event => updateManualForm('reference', event.target.value)} placeholder="Optional" /></label>
-    </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving}>{saving ? 'Saving…' : 'Add student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving}>Clear form</button></div>{saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}</form></section>
-    <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Latest registrations</h2><p style={pageStyles.muted}>Website submissions and manual entries appear here.</p></div><button type="button" style={pageStyles.secondaryButton} onClick={() => void loadRegistrations(true)} disabled={loading}>Refresh</button></div>{loading ? <p style={pageStyles.muted}>Loading registrations…</p> : null}{error ? <p style={{ ...pageStyles.alert, background: '#fef2f2', color: '#b91c1c' }}>{error}</p> : null}{!loading && !error && registrations.length === 0 ? <div style={{ border: '1px dashed #cbd5e1', borderRadius: 18, padding: 24, textAlign: 'center', color: '#64748b' }}><strong style={{ color: '#334155' }}>No student registrations yet.</strong><p style={{ margin: '6px 0 0' }}>Add one manually or wait for the connected website to submit a registration.</p></div> : null}{registrations.length > 0 ? <div style={pageStyles.tableWrap}><table style={pageStyles.table}><thead><tr><th style={pageStyles.th}>Student</th><th style={pageStyles.th}>Student ID</th><th style={pageStyles.th}>Course</th><th style={pageStyles.th}>Class time</th><th style={pageStyles.th}>Status</th><th style={pageStyles.th}>Payment</th><th style={pageStyles.th}>Reference</th><th style={pageStyles.th}>Actions</th></tr></thead><tbody>{registrations.map(item => <tr key={item.id}><td style={pageStyles.td}><strong style={{ color: '#0f172a' }}>{item.customer?.name ?? 'Unnamed student'}</strong><br /><small>{item.customer?.phone ?? item.customer?.email ?? 'No contact'}</small></td><td style={pageStyles.td}><strong>{studentCodeOf(item)}</strong></td><td style={pageStyles.td}>{item.data?.course ?? '—'}</td><td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td><td style={pageStyles.td}><span style={{ ...statusStyle(studentStatusOf(item)), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(studentStatusOf(item))}</span></td><td style={pageStyles.td}><span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(item.payment?.status)}</span><br /><small>{formatAmount(item.payment)}</small></td><td style={pageStyles.td}>{item.payment?.reference ?? '—'}<br /><small>{formatDate(item.createdAt)}</small></td><td style={pageStyles.td}><button type="button" style={pageStyles.secondaryButton} onClick={() => void handlePrintCard(item)}>Print ID</button></td></tr>)}</tbody></table></div> : null}</section>
+    </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving || uploadingPhoto}>{saving ? 'Saving…' : 'Add manual student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving || uploadingPhoto}>Clear form</button></div></form></section>
+
+    <RegistrationTable title="Manual entries" subtitle="Students added by staff from this dashboard." items={manualRegistrations} loading={loading} emptyText="No manual entries yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} />
   </div>
 }
