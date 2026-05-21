@@ -10,6 +10,7 @@ import Products from './pages/ProductsServiceFirst'
 import Sell from './pages/Sell'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
+import Students from './pages/Students'
 import Bookings from './pages/Bookings'
 import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
@@ -100,6 +101,7 @@ const router = createBrowserRouter([
       { path: 'products', element: <Products /> },
       { path: 'sell', element: <Sell /> },
       { path: 'customers', element: <Customers /> },
+      { path: 'students', element: <Students /> },
       { path: 'bookings', element: <Bookings /> },
       { path: 'bookings/new', element: <BookingEditor /> },
       { path: 'bookings/availability', element: <Navigate to="/upcoming-events" replace /> },
