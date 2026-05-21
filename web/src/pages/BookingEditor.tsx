@@ -139,10 +139,6 @@ function normalizeTimeInput(value: unknown): string {
   return ''
 }
 
-function statusLabel(value: string) {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
-}
-
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -243,17 +239,6 @@ export default function BookingEditor() {
     const parsed = Number.parseInt(form.quantity, 10)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
   }, [form.quantity])
-
-  function setStatusDraft(nextStatus: string, nextPaymentStatus?: string) {
-    setForm(prev => ({
-      ...prev,
-      status: nextStatus,
-      paymentStatus: nextPaymentStatus ?? prev.paymentStatus,
-    }))
-    const message = `Status set to ${statusLabel(nextStatus)}. Click Save changes to save to reports${shouldQueueBookingSync ? ' and queue sheet sync' : ''}.`
-    setSuccessMessage(message)
-    publish({ tone: 'info', message })
-  }
 
   function buildStatusPayload(normalizedStatus: string, normalizedPaymentStatus: string) {
     if (normalizedStatus === 'confirmed') return buildConfirmBookingPayload({}, shouldQueueBookingSync)
@@ -413,7 +398,7 @@ export default function BookingEditor() {
           <p className="form__hint"><Link to="/bookings">← Back to bookings</Link></p>
           <h1>{isCreateMode ? 'Add booking' : 'Edit booking'}</h1>
           <p className="form__hint">
-            Update the booking, then click <strong>Save changes</strong>. Saved bookings appear in reports. If booking sheet sync is configured, the update is queued for the sheet.
+            Choose the booking status, then click <strong>Save changes</strong>. Saved bookings appear in reports. If booking sheet sync is configured, the update is queued for the sheet.
           </p>
           <p className="form__hint">
             Sheet sync status: <strong>{shouldQueueBookingSync ? 'Configured - updates will be queued' : 'Not configured'}</strong>
@@ -445,16 +430,12 @@ export default function BookingEditor() {
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
 
             {!isCreateMode && (
-              <div className="booking-editor-page__quick-status" aria-label="Quick status shortcuts">
+              <div className="booking-editor-page__quick-status" aria-label="Sheet sync test">
                 <div>
-                  <strong>Booking actions</strong>
-                  <p className="form__hint">Use these buttons, then click Save changes. This saves to reports and queues sheet sync when configured.</p>
+                  <strong>Sheet sync test</strong>
+                  <p className="form__hint">Use only when you want to check if the connected booking sheet/App Script can pick up this booking.</p>
                 </div>
                 <div className="booking-editor-page__quick-status-actions">
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed')}>Confirm</button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('cancelled')}>Cancel</button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('completed')}>Complete</button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed', 'paid')}>Confirm + mark paid</button>
                   <button type="button" className="button button--outline" disabled={saving} onClick={() => void trySheetSync()}>Try sheet sync</button>
                 </div>
               </div>
