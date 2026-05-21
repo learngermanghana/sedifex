@@ -22,6 +22,7 @@ export {
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationBookings } from './integrationBookings'
 export { v1IntegrationStudentRegistrations } from './integrationStudentRegistrations'
+export { publicQuickPayCatalog } from './quickPay'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
   notifyNgoVolunteerApplicationReceived,
