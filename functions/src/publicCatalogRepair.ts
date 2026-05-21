@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1'
-import { admin, defaultDb as db } from './firestore'
+import { FieldValue } from 'firebase-admin/firestore'
+import { defaultDb as db } from './firestore'
 import { resolvePublicationTimestampCandidate } from './catalogPublication'
 
 type StoreData = Record<string, unknown>
@@ -127,7 +128,7 @@ function toArray(value: unknown): string[] {
 }
 
 function serverTimestamp(): unknown {
-  return admin.firestore.FieldValue.serverTimestamp()
+  return FieldValue.serverTimestamp()
 }
 
 function isStoreEligible(store: StoreData | undefined): boolean {
