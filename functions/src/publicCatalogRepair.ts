@@ -25,6 +25,61 @@ function resolveListingType(data: ProductData): ListingType {
   return normalizedType(text(data.listingType) ?? text(data.itemType) ?? data.type)
 }
 
+function normalizeCategoryText(value: unknown): string | null {
+  const raw = text(value)?.replace(/\s+/g, ' ')
+  return raw || null
+}
+
+function categorySlug(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+function isBlockedFoodCategory(value: unknown): boolean {
+  const raw = normalizeCategoryText(value)
+  if (!raw) return false
+  const normalized = raw.toLowerCase().replace(/\s*&\s*/g, ' and ').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return [
+    'food',
+    'drink',
+    'drinks',
+    'beverage',
+    'beverages',
+    'food and beverage',
+    'food and beverages',
+  ].includes(normalized)
+}
+
+function toTitleCase(value: string): string {
+  return value.trim().toLowerCase().replace(/\b[a-z]/g, character => character.toUpperCase())
+}
+
+function normalizePublicCategory(data: ProductData, listingType: ListingType): string {
+  const explicitCategory = normalizeCategoryText(data.category)
+  const explicitCategoryName = normalizeCategoryText(data.categoryName)
+  const nameAndDescription = [text(data.name), text(data.productName), text(data.description), text(data.serviceKind)]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  const hasBeautySignal = /beauty|makeup|cosmetology|hair|braid|bead|nail|spa|wig|millinery|fashion/.test(nameAndDescription)
+  const hasTrainingSignal = /course|class|training|academy|school|workshop|certificate|certification|learn/.test(nameAndDescription)
+
+  if (listingType === 'course') {
+    if (hasBeautySignal || hasTrainingSignal) return 'Beauty Training'
+    return 'Education'
+  }
+
+  if (listingType === 'service') {
+    if (hasBeautySignal || hasTrainingSignal) return hasTrainingSignal ? 'Beauty Training' : 'Beauty Services'
+    return 'Professional Services'
+  }
+
+  if (explicitCategory && !isBlockedFoodCategory(explicitCategory)) return toTitleCase(explicitCategory)
+  if (explicitCategoryName && !isBlockedFoodCategory(explicitCategoryName)) return toTitleCase(explicitCategoryName)
+  if (hasBeautySignal) return 'Beauty'
+  return 'General Products'
+}
+
 function emptyCounts(): ListingCounts {
   return { listings: 0, products: 0, services: 0, courses: 0 }
 }
@@ -143,7 +198,7 @@ function storeMeta(store: StoreData): Record<string, unknown> {
 
 function publicPayload(productId: string, data: ProductData, store: StoreData, identity: { publicListingId: string; sourceProductId: string; slug: string | null }): Record<string, unknown> {
   const listingType = resolveListingType(data)
-  const category = text(data.category) ?? text(data.categoryName) ?? 'General'
+  const category = normalizePublicCategory(data, listingType)
   const metadata = (typeof data.metadata === 'object' && data.metadata !== null ? data.metadata : {}) as Record<string, unknown>
 
   return {
@@ -156,8 +211,8 @@ function publicPayload(productId: string, data: ProductData, store: StoreData, i
     name: text(data.name) ?? text(data.productName),
     description: text(data.description),
     category,
-    categoryKey: text(data.categoryKey),
-    categoryName: text(data.categoryName) ?? category,
+    categoryKey: categorySlug(category),
+    categoryName: category,
     price: numberOrNull(data.price) ?? numberOrNull(data.fullFee),
     fullFee: numberOrNull(data.fullFee) ?? numberOrNull(data.price),
     registrationFee: numberOrNull(data.registrationFee),
@@ -251,6 +306,7 @@ export const repairStorePublicCatalog = functions.https.onCall(async (data: Repa
 
     const identity = resolvePublicListingId(productDoc.id, product)
     const listingType = resolveListingType(product)
+    const category = normalizePublicCategory(product, listingType)
 
     batch.set(productDoc.ref, {
       publicListingId: identity.publicListingId,
@@ -258,6 +314,9 @@ export const repairStorePublicCatalog = functions.https.onCall(async (data: Repa
       slug: identity.slug,
       listingType,
       itemType: listingType,
+      category,
+      categoryKey: categorySlug(category),
+      categoryName: category,
     }, { merge: true })
     writes += 1
 
