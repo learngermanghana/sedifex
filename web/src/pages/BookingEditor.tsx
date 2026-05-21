@@ -4,6 +4,7 @@ import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firest
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
+import { buildCancelBookingPayload, buildCompleteBookingPayload, buildConfirmBookingPayload, hasAppScriptBookingSyncConfigured } from '../utils/bookingActions'
 import { playSound } from '../utils/sound'
 import './BookingEditor.css'
 
@@ -138,10 +139,6 @@ function normalizeTimeInput(value: unknown): string {
   return ''
 }
 
-function statusLabel(value: string) {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
-}
-
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -154,6 +151,17 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
   }
 }
 
+function saveMessage(isCreateMode: boolean, shouldQueueBookingSync: boolean) {
+  if (shouldQueueBookingSync) {
+    return isCreateMode
+      ? 'Booking created, saved to reports, and queued for sheet sync.'
+      : 'Booking saved to reports and queued for sheet sync.'
+  }
+  return isCreateMode
+    ? 'Booking created and saved to reports. Sheet sync is not configured yet.'
+    : 'Booking saved to reports. Sheet sync is not configured yet.'
+}
+
 export default function BookingEditor() {
   const { storeId } = useActiveStore()
   const { bookingId = 'new' } = useParams()
@@ -164,7 +172,24 @@ export default function BookingEditor() {
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [shouldQueueBookingSync, setShouldQueueBookingSync] = useState(false)
   const { publish } = useToast()
+
+  useEffect(() => {
+    if (!storeId) return
+    let cancelled = false
+    async function loadStoreSyncConfig() {
+      try {
+        const storeSnap = await getDoc(doc(db, 'stores', storeId))
+        if (!cancelled) setShouldQueueBookingSync(hasAppScriptBookingSyncConfigured(storeSnap.data() as Record<string, unknown> | undefined))
+      } catch (error) {
+        console.error('[booking-editor] Failed to load booking sync config', error)
+        if (!cancelled) setShouldQueueBookingSync(false)
+      }
+    }
+    void loadStoreSyncConfig()
+    return () => { cancelled = true }
+  }, [storeId])
 
   useEffect(() => {
     if (!storeId || isCreateMode) {
@@ -193,9 +218,7 @@ export default function BookingEditor() {
         }
 
         if (!data) {
-          if (!cancelled) {
-            setErrorMessage('Booking not found.')
-          }
+          if (!cancelled) setErrorMessage('Booking not found.')
           return
         }
 
@@ -203,17 +226,13 @@ export default function BookingEditor() {
         setForm(normalizeBookingForm(data))
       } catch (error) {
         console.error('[booking-editor] Failed to load booking', error)
-        if (!cancelled) {
-          setErrorMessage('Unable to load this booking. Please retry.')
-        }
+        if (!cancelled) setErrorMessage('Unable to load this booking. Please retry.')
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     void loadBooking()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [bookingId, isCreateMode, storeId])
 
   const quantityValue = useMemo(() => {
@@ -221,15 +240,31 @@ export default function BookingEditor() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
   }, [form.quantity])
 
-  function setStatusDraft(nextStatus: string, nextPaymentStatus?: string) {
-    setForm(prev => ({
-      ...prev,
-      status: nextStatus,
-      paymentStatus: nextPaymentStatus ?? prev.paymentStatus,
-    }))
-    const message = `Status set to ${statusLabel(nextStatus)}. Click Save changes to sync this booking.`
-    setSuccessMessage(message)
-    publish({ tone: 'info', message })
+  function buildStatusPayload(normalizedStatus: string, normalizedPaymentStatus: string) {
+    if (normalizedStatus === 'confirmed') return buildConfirmBookingPayload({}, shouldQueueBookingSync)
+    if (normalizedStatus === 'cancelled') return buildCancelBookingPayload(shouldQueueBookingSync)
+    if (normalizedStatus === 'completed') return buildCompleteBookingPayload(shouldQueueBookingSync)
+    return {
+      bookingStatus: normalizedStatus,
+      status: normalizedStatus === 'pending_approval' ? 'pending' : normalizedStatus,
+      paymentStatus: normalizedPaymentStatus,
+      syncStatus: shouldQueueBookingSync ? 'pending' : 'not_ready',
+      syncReason: shouldQueueBookingSync ? 'booking_updated' : null,
+      syncRequestedAt: shouldQueueBookingSync ? Timestamp.now() : null,
+      syncConfigDetected: shouldQueueBookingSync,
+      updatedAt: serverTimestamp(),
+    }
+  }
+
+  async function savePayload(targetId: string, payload: Record<string, unknown>) {
+    await withTimeout(
+      Promise.all([
+        setDoc(doc(db, 'stores', storeId!, 'integrationBookings', targetId), payload, { merge: true }),
+        setDoc(doc(db, 'integrationBookings', targetId), payload, { merge: true }),
+      ]),
+      15000,
+      'Saving booking timed out. Please try again.',
+    )
   }
 
   async function handleSave() {
@@ -250,72 +285,68 @@ export default function BookingEditor() {
     try {
       const normalizedStatus = (form.status.trim() || 'pending_approval').toLowerCase()
       const normalizedPaymentStatus = form.paymentStatus.trim() || 'payment_pending'
+      const statusPayload = buildStatusPayload(normalizedStatus, normalizedPaymentStatus)
       const payload = {
+        ...statusPayload,
+        name: form.fullName.trim(),
+        fullName: form.fullName.trim(),
+        customerName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        customerPhone: form.phone.trim(),
+        email: form.email.trim(),
+        customerEmail: form.email.trim(),
+        serviceName: form.serviceName.trim(),
+        serviceId: form.serviceId.trim(),
+        date: normalizeDateInput(form.bookingDate),
+        bookingDate: normalizeDateInput(form.bookingDate),
+        time: normalizeTimeInput(form.bookingTime),
+        bookingTime: normalizeTimeInput(form.bookingTime),
+        preferredBranch: form.preferredBranch.trim(),
+        branchLocationName: form.preferredBranch.trim(),
+        preferredContactMethod: form.preferredContactMethod.trim(),
+        quantity: quantityValue,
+        notes: form.notes.trim(),
+        paymentAmount: form.paymentAmount.trim(),
+        depositAmount: form.depositAmount.trim(),
+        paymentMethod: form.paymentMethod.trim(),
+        paymentReference: form.paymentReference.trim(),
+        reference: form.paymentReference.trim(),
+        paymentStatus: normalizedPaymentStatus,
+        payment: {
+          amount: form.paymentAmount.trim(),
+          depositAmount: form.depositAmount.trim(),
+          method: form.paymentMethod.trim(),
+          reference: form.paymentReference.trim(),
+          status: normalizedPaymentStatus,
+          confirmed: ['paid', 'confirmed'].includes(normalizedPaymentStatus.toLowerCase()),
+        },
+        booking: {
+          serviceId: form.serviceId.trim(),
+          serviceName: form.serviceName.trim(),
+          preferredDate: normalizeDateInput(form.bookingDate),
+          preferredTime: normalizeTimeInput(form.bookingTime),
+        },
+        customer: {
           name: form.fullName.trim(),
-          fullName: form.fullName.trim(),
           phone: form.phone.trim(),
           email: form.email.trim(),
-          serviceName: form.serviceName.trim(),
-          serviceId: form.serviceId.trim(),
-          date: normalizeDateInput(form.bookingDate),
-          bookingDate: normalizeDateInput(form.bookingDate),
-          time: normalizeTimeInput(form.bookingTime),
-          bookingTime: normalizeTimeInput(form.bookingTime),
-          preferredBranch: form.preferredBranch.trim(),
-          preferredContactMethod: form.preferredContactMethod.trim(),
-          bookingStatus: normalizedStatus,
-          status: normalizedStatus === 'pending_approval' ? 'pending' : normalizedStatus,
-          quantity: quantityValue,
-          notes: form.notes.trim(),
-          paymentAmount: form.paymentAmount.trim(),
-          depositAmount: form.depositAmount.trim(),
-          paymentMethod: form.paymentMethod.trim(),
-          paymentReference: form.paymentReference.trim(),
-          reference: form.paymentReference.trim(),
-          paymentStatus: normalizedPaymentStatus,
-          payment: {
-            amount: form.paymentAmount.trim(),
-            depositAmount: form.depositAmount.trim(),
-            method: form.paymentMethod.trim(),
-            reference: form.paymentReference.trim(),
-            status: normalizedPaymentStatus,
-            confirmed: ['paid', 'confirmed'].includes(normalizedPaymentStatus.toLowerCase()),
-          },
-          booking: {
-            serviceId: form.serviceId.trim(),
-            serviceName: form.serviceName.trim(),
-            preferredDate: normalizeDateInput(form.bookingDate),
-            preferredTime: normalizeTimeInput(form.bookingTime),
-          },
-          customer: {
-            name: form.fullName.trim(),
-            phone: form.phone.trim(),
-            email: form.email.trim(),
-          },
-          bookingId: targetId,
-          booking_id: targetId,
-          updatedAt: serverTimestamp(),
-          ...(isCreateMode ? {
-            createdAt: serverTimestamp(),
-            source: 'manual_admin',
-            sourceChannel: 'manual_admin',
-            source_channel: 'manual_admin',
-          } : {}),
-        }
-      await withTimeout(
-        Promise.all([
-          setDoc(doc(db, 'stores', storeId, 'integrationBookings', targetId), payload, { merge: true }),
-          setDoc(doc(db, 'integrationBookings', targetId), payload, { merge: true }),
-        ]),
-        15000,
-        'Saving booking timed out. Please try again.',
-      )
+        },
+        bookingId: targetId,
+        booking_id: targetId,
+        updatedAt: serverTimestamp(),
+        ...(isCreateMode ? {
+          createdAt: serverTimestamp(),
+          source: 'manual_admin',
+          sourceChannel: 'manual_admin',
+          source_channel: 'manual_admin',
+          sourceLabel: 'Manual/admin',
+        } : {}),
+      }
+      await savePayload(targetId, payload)
 
-      const saveMessage = isCreateMode
-        ? 'Booking created and queued for the connected booking records.'
-        : 'Booking changes saved successfully. Connected sheets/webhooks can now pick up the updated status.'
-      setSuccessMessage(saveMessage)
-      publish({ tone: 'success', message: saveMessage })
+      const message = saveMessage(isCreateMode, shouldQueueBookingSync)
+      setSuccessMessage(message)
+      publish({ tone: 'success', message })
       void playSound('success')
       if (isCreateMode) navigate('/bookings')
     } catch (error) {
@@ -329,16 +360,48 @@ export default function BookingEditor() {
     }
   }
 
+  async function trySheetSync() {
+    if (!storeId || isCreateMode) return
+    setSaving(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+    try {
+      const payload = {
+        syncStatus: shouldQueueBookingSync ? 'pending' : 'not_ready',
+        syncReason: 'manual_sync_test',
+        syncRequestedAt: Timestamp.now(),
+        syncConfigDetected: shouldQueueBookingSync,
+        updatedAt: serverTimestamp(),
+      }
+      await savePayload(bookingId, payload)
+      const message = shouldQueueBookingSync
+        ? 'Sheet sync test queued. Check the booking sheet/App Script logs to confirm delivery.'
+        : 'Saved to reports, but sheet sync is not configured yet. Add the Apps Script URL in Integrations first.'
+      setSuccessMessage(message)
+      publish({ tone: shouldQueueBookingSync ? 'success' : 'warning', message })
+      void playSound(shouldQueueBookingSync ? 'success' : 'error')
+    } catch (error) {
+      console.error('[booking-editor] Failed to queue sheet sync test', error)
+      const message = 'Unable to try sheet sync right now.'
+      setErrorMessage(message)
+      publish({ tone: 'error', message })
+      void playSound('error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <main className="page booking-editor-page">
       <section className="card booking-editor-page__card stack gap-3">
         <header className="stack gap-1">
-          <p className="form__hint">
-            <Link to="/bookings">← Back to bookings</Link>
-          </p>
+          <p className="form__hint"><Link to="/bookings">← Back to bookings</Link></p>
           <h1>{isCreateMode ? 'Add booking' : 'Edit booking'}</h1>
           <p className="form__hint">
-            Update the booking status in this form, then click <strong>Save changes</strong>. This keeps Sedifex, the connected website, and any sheet/webhook sync using the same saved booking record.
+            Choose the booking status, then click <strong>Save changes</strong>. Saved bookings appear in reports. If booking sheet sync is configured, the update is queued for the sheet.
+          </p>
+          <p className="form__hint">
+            Sheet sync status: <strong>{shouldQueueBookingSync ? 'Configured - updates will be queued' : 'Not configured'}</strong>
           </p>
         </header>
 
@@ -347,13 +410,7 @@ export default function BookingEditor() {
         {successMessage && <p className="form__success">{successMessage}</p>}
 
         {!loading && (
-          <form
-            className="booking-editor-page__form"
-            onSubmit={event => {
-              event.preventDefault()
-              void handleSave()
-            }}
-          >
+          <form className="booking-editor-page__form" onSubmit={event => { event.preventDefault(); void handleSave() }}>
             <label><span>Customer name</span><input value={form.fullName} onChange={event => setForm(prev => ({ ...prev, fullName: event.target.value }))} required /></label>
             <label><span>Phone</span><input value={form.phone} onChange={event => setForm(prev => ({ ...prev, phone: event.target.value }))} /></label>
             <label><span>Email</span><input type="email" value={form.email} onChange={event => setForm(prev => ({ ...prev, email: event.target.value }))} /></label>
@@ -363,60 +420,29 @@ export default function BookingEditor() {
             <label><span>Booking time</span><input type="time" value={form.bookingTime} onChange={event => setForm(prev => ({ ...prev, bookingTime: event.target.value }))} /></label>
             <label><span>Preferred branch</span><input value={form.preferredBranch} onChange={event => setForm(prev => ({ ...prev, preferredBranch: event.target.value }))} /></label>
             <label><span>Preferred contact method</span><input value={form.preferredContactMethod} onChange={event => setForm(prev => ({ ...prev, preferredContactMethod: event.target.value }))} /></label>
-            <label>
-              <span>Status</span>
-              <select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}>
-                <option value="pending_approval">Pending approval</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="rescheduled">Rescheduled</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </label>
+            <label><span>Status</span><select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}><option value="pending_approval">Pending approval</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="rescheduled">Rescheduled</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
             <label><span>Quantity</span><input type="number" min={1} value={form.quantity} onChange={event => setForm(prev => ({ ...prev, quantity: event.target.value }))} /></label>
             <label><span>Payment amount</span><input value={form.paymentAmount} onChange={event => setForm(prev => ({ ...prev, paymentAmount: event.target.value }))} /></label>
             <label><span>Deposit amount</span><input value={form.depositAmount} onChange={event => setForm(prev => ({ ...prev, depositAmount: event.target.value }))} /></label>
             <label><span>Payment method</span><input value={form.paymentMethod} onChange={event => setForm(prev => ({ ...prev, paymentMethod: event.target.value }))} /></label>
             <label><span>Payment reference</span><input value={form.paymentReference} onChange={event => setForm(prev => ({ ...prev, paymentReference: event.target.value }))} /></label>
-            <label>
-              <span>Payment status</span>
-              <select value={form.paymentStatus} onChange={event => setForm(prev => ({ ...prev, paymentStatus: event.target.value }))}>
-                <option value="payment_pending">Payment pending</option>
-                <option value="paid">Paid</option>
-                <option value="manual_review">Manual review</option>
-                <option value="refunded">Refunded</option>
-              </select>
-            </label>
+            <label><span>Payment status</span><select value={form.paymentStatus} onChange={event => setForm(prev => ({ ...prev, paymentStatus: event.target.value }))}><option value="payment_pending">Payment pending</option><option value="paid">Paid</option><option value="manual_review">Manual review</option><option value="refunded">Refunded</option></select></label>
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
 
             {!isCreateMode && (
-              <div className="booking-editor-page__quick-status" aria-label="Quick status shortcuts">
+              <div className="booking-editor-page__quick-status" aria-label="Sheet sync test">
                 <div>
-                  <strong>Quick status</strong>
-                  <p className="form__hint">These buttons only set the fields above. Click Save changes to communicate the update to connected records.</p>
+                  <strong>Sheet sync test</strong>
+                  <p className="form__hint">Use only when you want to check if the connected booking sheet/App Script can pick up this booking.</p>
                 </div>
                 <div className="booking-editor-page__quick-status-actions">
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed')}>
-                    Set confirmed
-                  </button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('completed')}>
-                    Set completed
-                  </button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('cancelled')}>
-                    Set cancelled
-                  </button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed', 'paid')}>
-                    Set confirmed + paid
-                  </button>
+                  <button type="button" className="button button--outline" disabled={saving} onClick={() => void trySheetSync()}>Try sheet sync</button>
                 </div>
               </div>
             )}
 
             <div className="booking-editor-page__actions">
-              <button type="submit" className="button button--primary" disabled={saving}>
-                {saving ? 'Saving…' : isCreateMode ? 'Create booking' : 'Save changes'}
-              </button>
+              <button type="submit" className="button button--primary" disabled={saving}>{saving ? 'Saving…' : isCreateMode ? 'Create booking' : 'Save changes'}</button>
             </div>
           </form>
         )}
