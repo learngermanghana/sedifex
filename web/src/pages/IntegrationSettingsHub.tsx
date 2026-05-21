@@ -5,11 +5,13 @@ import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useAuthUser } from '../hooks/useAuthUser'
 import { useToast } from '../components/ToastProvider'
+import { WebsiteApiKeysPanel } from '../components/WebsiteApiKeysPanel'
 import './AccountOverview.css'
 
 type IntegrationTab = 'website' | 'booking' | 'email' | 'keys'
+type KeyPurpose = 'product' | 'booking'
 type Props = { defaultTab?: IntegrationTab }
-type KeyRow = { id: string; name: string; status: string; keyPreview: string; createdAt: Timestamp | null }
+type KeyRow = { id: string; name: string; status: string; keyPreview: string; createdAt: Timestamp | null; purpose?: KeyPurpose }
 
 type Draft = {
   websiteDomain: string
@@ -30,7 +32,8 @@ type Draft = {
 const DEFAULT_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
 const DEFAULT_CHECKOUT_CREATE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate'
 const DEFAULT_CONTRACT_VERSION = '2026-04-13'
-const API_KEY_PLACEHOLDER = 'PASTE_CREATED_SEDIFEX_API_KEY_HERE'
+const PRODUCT_KEY_PLACEHOLDER = 'PASTE_PRODUCT_INTEGRATION_KEY_HERE'
+const BOOKING_KEY_PLACEHOLDER = 'PASTE_BOOKING_CHECKOUT_KEY_HERE'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : ''
@@ -40,18 +43,15 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-function formatTimestamp(timestamp: Timestamp | null) {
-  if (!timestamp) return '—'
-  try {
-    return timestamp.toDate().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-  } catch {
-    return '—'
-  }
-}
-
 function normalize(value: string) {
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function deriveKeyPurpose(item: Record<string, unknown>): KeyPurpose {
+  const combined = `${text(item.purpose)} ${text(item.keyPurpose)} ${text(item.keyType)} ${text(item.type)} ${text(item.name)}`.toLowerCase()
+  if (combined.includes('booking') || combined.includes('checkout') || combined.includes('payment')) return 'booking'
+  return 'product'
 }
 
 export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props) {
@@ -77,14 +77,11 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
   const [isSaving, setIsSaving] = useState(false)
   const [keys, setKeys] = useState<KeyRow[]>([])
   const [keysLoading, setKeysLoading] = useState(false)
-  const [keyName, setKeyName] = useState('Website production key')
-  const [latestToken, setLatestToken] = useState('')
 
   const canSave = Boolean(storeId && user)
 
   const envBlock = useMemo(() => {
     if (!storeId) return ''
-    const apiKeyValue = latestToken || API_KEY_PLACEHOLDER
     const apiBaseUrl = draft.apiBaseUrl || DEFAULT_BASE_URL
     const checkoutCreateUrl = draft.checkoutCreateUrl || DEFAULT_CHECKOUT_CREATE_URL
     const returnUrl = draft.checkoutReturnUrl || 'https://yourwebsite.com/payment/return'
@@ -94,13 +91,14 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       `SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=${checkoutCreateUrl}`,
       `SEDIFEX_BOOKING_TARGET_STORE_ID=${storeId}`,
       `SEDIFEX_STORE_ID=${storeId}`,
-      `SEDIFEX_BOOKING_API_KEY=${apiKeyValue}`,
-      `SEDIFEX_CHECKOUT_API_KEY=${apiKeyValue}`,
+      `SEDIFEX_INTEGRATION_API_KEY=${PRODUCT_KEY_PLACEHOLDER}`,
+      `SEDIFEX_BOOKING_API_KEY=${BOOKING_KEY_PLACEHOLDER}`,
+      `SEDIFEX_CHECKOUT_API_KEY=${BOOKING_KEY_PLACEHOLDER}`,
       `SEDIFEX_CONTRACT_VERSION=${draft.contractVersion || DEFAULT_CONTRACT_VERSION}`,
       `SEDIFEX_CHECKOUT_RETURN_URL=${returnUrl}`,
       `NEXT_PUBLIC_SEDIFEX_STORE_ID=${storeId}`,
     ].join('\n')
-  }, [draft.apiBaseUrl, draft.checkoutCreateUrl, draft.checkoutReturnUrl, draft.contractVersion, latestToken, storeId])
+  }, [draft.apiBaseUrl, draft.checkoutCreateUrl, draft.checkoutReturnUrl, draft.contractVersion, storeId])
 
   function update(key: keyof Draft, value: string | boolean) {
     setDraft(current => ({ ...current, [key]: value }))
@@ -123,6 +121,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         status: text(item.status) || 'active',
         keyPreview: text(item.keyPreview) || 'sedx••••',
         createdAt: item.createdAt && typeof item.createdAt === 'object' && typeof (item.createdAt as Timestamp).toDate === 'function' ? item.createdAt as Timestamp : null,
+        purpose: deriveKeyPurpose(item),
       })).filter(item => item.id))
     } catch (err) {
       console.error('[integrations] failed to load keys', err)
@@ -131,6 +130,14 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     } finally {
       setKeysLoading(false)
     }
+  }
+
+  async function saveDocs(payload: Record<string, unknown>) {
+    if (!storeId) return
+    await Promise.all([
+      setDoc(doc(db, 'stores', storeId), payload, { merge: true }),
+      setDoc(doc(db, 'storeSettings', storeId), payload, { merge: true }),
+    ])
   }
 
   useEffect(() => {
@@ -196,10 +203,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         },
         updatedAt: serverTimestamp(),
       }
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId), payload, { merge: true }),
-        setDoc(doc(db, 'storeSettings', storeId), payload, { merge: true }),
-      ])
+      await saveDocs(payload)
       publish({ message: 'Website integration settings saved.', tone: 'success' })
     } catch (err) {
       console.error('[integrations] failed to save website settings', err)
@@ -245,10 +249,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         integrationApiEnabled: true,
         updatedAt: serverTimestamp(),
       }
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId), payload, { merge: true }),
-        setDoc(doc(db, 'storeSettings', storeId), payload, { merge: true }),
-      ])
+      await saveDocs(payload)
       publish({ message: 'Booking/App Script sync saved.', tone: 'success' })
     } catch (err) {
       console.error('[integrations] failed to save booking sync', err)
@@ -272,60 +273,11 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         fromName: normalize(draft.emailFromName),
         updatedAt: serverTimestamp(),
       }
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId), { bulkEmailIntegration, updatedAt: serverTimestamp() }, { merge: true }),
-        setDoc(doc(db, 'storeSettings', storeId), { bulkEmailIntegration, updatedAt: serverTimestamp() }, { merge: true }),
-      ])
+      await saveDocs({ bulkEmailIntegration, updatedAt: serverTimestamp() })
       publish({ message: 'Email integration saved.', tone: 'success' })
     } catch (err) {
       console.error('[integrations] failed to save email integration', err)
       publish({ message: 'Unable to save email integration.', tone: 'error' })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  async function createKey() {
-    if (!keyName.trim()) {
-      publish({ message: 'Enter a key name first.', tone: 'error' })
-      return
-    }
-    try {
-      setIsSaving(true)
-      const callable = httpsCallable(functions, 'createIntegrationApiKey')
-      const response = await callable({
-        name: keyName.trim(),
-        storeId,
-      })
-      const token = text((response.data as Record<string, unknown> | undefined)?.token)
-      const keyPreview = 'masked preview only'
-      const integrationApiPayload = {
-        integrationApi: {
-          enabled: true,
-          baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
-          checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
-          contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
-          keyName: keyName.trim(),
-          keyPreview,
-          updatedAt: serverTimestamp(),
-        },
-        integrationApiEnabled: true,
-        latestIntegrationApiKeyPreview: keyPreview,
-        updatedAt: serverTimestamp(),
-      }
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId), integrationApiPayload, { merge: true }),
-        setDoc(doc(db, 'storeSettings', storeId), integrationApiPayload, { merge: true }),
-      ])
-      if (token) {
-        setLatestToken(token)
-        await copy(token, 'New API key')
-        publish({ message: 'New API key copied. The developer env block now includes it.', tone: 'success' })
-      }
-      await refreshKeys()
-    } catch (err) {
-      console.error('[integrations] failed to create key', err)
-      publish({ message: 'Unable to create API key.', tone: 'error' })
     } finally {
       setIsSaving(false)
     }
@@ -356,7 +308,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'website' && (
         <div className="account-overview__website-sync">
           <h2>Website + checkout setup</h2>
-          <p className="account-overview__hint">Use these values on Glittering, Kwaku, Pirus, or any client website that connects to Sedifex. Create an API key in the API keys tab first if you want this block to include the actual key.</p>
+          <p className="account-overview__hint">Use these values on Glittering, Kwaku, Pirus, or any client website that connects to Sedifex. Create separate product/integration and booking/checkout keys in the API keys tab.</p>
           <div className="account-overview__form-grid">
             <label><span>Website domain</span><input value={draft.websiteDomain} onChange={event => update('websiteDomain', event.target.value)} placeholder="https://www.example.com" /></label>
             <label><span>Checkout return URL</span><input value={draft.checkoutReturnUrl} onChange={event => update('checkoutReturnUrl', event.target.value)} placeholder="https://www.example.com/payment/return" /></label>
@@ -372,7 +324,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
           </div>
           <div className="account-overview__website-sync-actions">
             <button type="button" className="button button--secondary" onClick={() => copy(storeId, 'Store ID')}>Copy Store ID</button>
-            <button type="button" className="button button--secondary" onClick={() => copy(envBlock, latestToken ? 'Developer env block with key' : 'Developer env block')}>Copy developer env block</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(envBlock, 'Developer env block')}>Copy developer env block</button>
             <button type="button" className="button" onClick={saveWebsite} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save website setup'}</button>
           </div>
         </div>
@@ -405,16 +357,16 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       )}
 
       {tab === 'keys' && (
-        <div className="account-overview__website-sync">
-          <h2>Website API keys</h2>
-          <p className="account-overview__hint">Create a key, copy it once, and put it in the website environment as SEDIFEX_BOOKING_API_KEY and SEDIFEX_CHECKOUT_API_KEY. The full key is shown once only.</p>
-          <div className="account-overview__website-sync-test">
-            <label><span>New key name</span><input value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="Website production key" /></label>
-            <button type="button" className="button" onClick={createKey} disabled={isSaving}>{isSaving ? 'Creating…' : 'Create and copy key'}</button>
-          </div>
-          {latestToken ? <div className="account-overview__integration-token-notice"><p><strong>Save this key now. It is shown once.</strong></p><code className="account-overview__integration-token-value">{latestToken}</code><div className="account-overview__website-sync-actions"><button type="button" className="button button--secondary" onClick={() => copy(envBlock, 'Developer env block with new key')}>Copy full developer env block with key</button></div></div> : null}
-          {keysLoading ? <p>Loading keys…</p> : <ul className="account-overview__integration-key-list">{keys.map(item => <li key={item.id} className="account-overview__integration-key-item"><div><strong>{item.name}</strong><p className="account-overview__hint">{item.keyPreview} · {item.status} · Created {formatTimestamp(item.createdAt)}</p></div></li>)}</ul>}
-        </div>
+        <WebsiteApiKeysPanel
+          storeId={storeId}
+          keys={keys}
+          keysLoading={keysLoading}
+          isSaving={isSaving}
+          setIsSaving={setIsSaving}
+          refreshKeys={refreshKeys}
+          saveKeyPreview={saveDocs}
+          envBlock={envBlock}
+        />
       )}
     </section>
   )
