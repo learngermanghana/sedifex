@@ -22,7 +22,7 @@ export default function PageSection({
   const cardClasses = cardClassName ? `card ${cardClassName}` : 'card'
 
   return (
-    <div className={pageClassName}>
+    <div className={pageClassName} data-page-title={title}>
       <header className="page__header">
         <div>
           <h2 className="page__title">{title}</h2>
