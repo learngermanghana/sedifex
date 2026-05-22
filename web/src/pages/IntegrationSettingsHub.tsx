@@ -7,7 +7,7 @@ import { useAuthUser } from '../hooks/useAuthUser'
 import { useToast } from '../components/ToastProvider'
 import './AccountOverview.css'
 
-type IntegrationTab = 'website' | 'booking' | 'email' | 'keys'
+type IntegrationTab = 'website' | 'products' | 'bookingsApi' | 'booking' | 'email' | 'keys'
 type Props = { defaultTab?: IntegrationTab }
 type KeyRow = { id: string; name: string; status: string; keyPreview: string; createdAt: Timestamp | null }
 
@@ -54,6 +54,10 @@ function normalize(value: string) {
   return trimmed || null
 }
 
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, '')
+}
+
 export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props) {
   const { storeId, isLoading, error } = useActiveStore()
   const user = useAuthUser()
@@ -81,11 +85,17 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
   const [latestToken, setLatestToken] = useState('')
 
   const canSave = Boolean(storeId && user)
+  const apiBaseUrl = trimTrailingSlash(draft.apiBaseUrl || DEFAULT_BASE_URL)
+  const apiKeyValue = latestToken || API_KEY_PLACEHOLDER
+  const contractVersion = draft.contractVersion || DEFAULT_CONTRACT_VERSION
+
+  function endpoint(path: string) {
+    if (!storeId) return ''
+    return `${apiBaseUrl}${path}?storeId=${storeId}`
+  }
 
   const envBlock = useMemo(() => {
     if (!storeId) return ''
-    const apiKeyValue = latestToken || API_KEY_PLACEHOLDER
-    const apiBaseUrl = draft.apiBaseUrl || DEFAULT_BASE_URL
     const checkoutCreateUrl = draft.checkoutCreateUrl || DEFAULT_CHECKOUT_CREATE_URL
     const returnUrl = draft.checkoutReturnUrl || 'https://yourwebsite.com/payment/return'
     return [
@@ -96,11 +106,45 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       `SEDIFEX_STORE_ID=${storeId}`,
       `SEDIFEX_BOOKING_API_KEY=${apiKeyValue}`,
       `SEDIFEX_CHECKOUT_API_KEY=${apiKeyValue}`,
-      `SEDIFEX_CONTRACT_VERSION=${draft.contractVersion || DEFAULT_CONTRACT_VERSION}`,
+      `SEDIFEX_CONTRACT_VERSION=${contractVersion}`,
       `SEDIFEX_CHECKOUT_RETURN_URL=${returnUrl}`,
       `NEXT_PUBLIC_SEDIFEX_STORE_ID=${storeId}`,
     ].join('\n')
-  }, [draft.apiBaseUrl, draft.checkoutCreateUrl, draft.checkoutReturnUrl, draft.contractVersion, latestToken, storeId])
+  }, [apiBaseUrl, apiKeyValue, contractVersion, draft.checkoutCreateUrl, draft.checkoutReturnUrl, storeId])
+
+  const productsEnvBlock = useMemo(() => {
+    if (!storeId) return ''
+    return [
+      `SEDIFEX_API_BASE_URL=${apiBaseUrl}`,
+      `SEDIFEX_INTEGRATION_API_BASE_URL=${apiBaseUrl}`,
+      `SEDIFEX_STORE_ID=${storeId}`,
+      `NEXT_PUBLIC_SEDIFEX_STORE_ID=${storeId}`,
+      `SEDIFEX_INTEGRATION_API_KEY=${apiKeyValue}`,
+      `SEDIFEX_CONTRACT_VERSION=${contractVersion}`,
+      '',
+      `# Products and content feeds`,
+      `SEDIFEX_PRODUCTS_ENDPOINT=${endpoint('/v1IntegrationProducts')}`,
+      `SEDIFEX_PROMO_ENDPOINT=${endpoint('/v1IntegrationPromo')}`,
+      `SEDIFEX_GALLERY_ENDPOINT=${endpoint('/integrationGallery')}`,
+      `SEDIFEX_TOP_SELLING_ENDPOINT=${endpoint('/integrationTopSelling')}&days=30&limit=10`,
+    ].join('\n')
+  }, [apiBaseUrl, apiKeyValue, contractVersion, storeId])
+
+  const bookingsEnvBlock = useMemo(() => {
+    if (!storeId) return ''
+    return [
+      `SEDIFEX_API_BASE_URL=${apiBaseUrl}`,
+      `SEDIFEX_INTEGRATION_API_BASE_URL=${apiBaseUrl}`,
+      `SEDIFEX_STORE_ID=${storeId}`,
+      `SEDIFEX_BOOKING_TARGET_STORE_ID=${storeId}`,
+      `SEDIFEX_BOOKING_API_KEY=${apiKeyValue}`,
+      `SEDIFEX_CONTRACT_VERSION=${contractVersion}`,
+      '',
+      `# Booking and availability API`,
+      `SEDIFEX_AVAILABILITY_ENDPOINT=${endpoint('/v1IntegrationAvailability')}&serviceId=SERVICE_ID&from=FROM_ISO&to=TO_ISO`,
+      `SEDIFEX_BOOKINGS_ENDPOINT=${endpoint('/v1IntegrationBookings')}`,
+    ].join('\n')
+  }, [apiBaseUrl, apiKeyValue, contractVersion, storeId])
 
   function update(key: keyof Draft, value: string | boolean) {
     setDraft(current => ({ ...current, [key]: value }))
@@ -204,6 +248,34 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     } catch (err) {
       console.error('[integrations] failed to save website settings', err)
       publish({ message: 'Unable to save website integration settings.', tone: 'error' })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function saveApiBaseSettings() {
+    if (!storeId || !canSave) return
+    try {
+      setIsSaving(true)
+      const payload = {
+        integrationApi: {
+          enabled: true,
+          baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
+          checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
+          contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
+          updatedAt: serverTimestamp(),
+        },
+        integrationApiEnabled: true,
+        updatedAt: serverTimestamp(),
+      }
+      await Promise.all([
+        setDoc(doc(db, 'stores', storeId), payload, { merge: true }),
+        setDoc(doc(db, 'storeSettings', storeId), payload, { merge: true }),
+      ])
+      publish({ message: 'Integration API settings saved.', tone: 'success' })
+    } catch (err) {
+      console.error('[integrations] failed to save API settings', err)
+      publish({ message: 'Unable to save integration API settings.', tone: 'error' })
     } finally {
       setIsSaving(false)
     }
@@ -339,12 +411,14 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     <section className="account-overview" aria-labelledby="integrations-title">
       <h1 id="integrations-title">Integrations</h1>
       <p className="account-overview__subtitle">
-        Save all website, checkout, booking, sheet, and API settings here. No Firestore editing needed.
+        Save website, product feed, checkout, booking, sheet, and API settings here. No Firestore editing needed.
       </p>
 
       <nav className="account-overview__tabs" aria-label="Integration sections">
         {([
           ['website', 'Website + checkout'],
+          ['products', 'Products API'],
+          ['bookingsApi', 'Bookings API'],
           ['booking', 'Booking sheet sync'],
           ['email', 'Email Apps Script'],
           ['keys', 'API keys'],
@@ -378,10 +452,78 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         </div>
       )}
 
+      {tab === 'products' && (
+        <div className="account-overview__website-sync">
+          <h2>Products API</h2>
+          <p className="account-overview__hint">Use this tab when a client website needs to pull Sedifex products, services, promo content, gallery images, or top-selling items. This is different from checkout setup.</p>
+          <div className="account-overview__form-grid">
+            <label><span>Sedifex API base URL</span><input value={draft.apiBaseUrl} onChange={event => update('apiBaseUrl', event.target.value)} /></label>
+            <label><span>Contract version</span><input value={draft.contractVersion} onChange={event => update('contractVersion', event.target.value)} /></label>
+          </div>
+          <div className="account-overview__integration-token-notice">
+            <p><strong>Product/content endpoints</strong></p>
+            <ul className="account-overview__hint">
+              <li><code>GET /v1IntegrationProducts?storeId={storeId}</code> — products and services</li>
+              <li><code>GET /v1IntegrationPromo?storeId={storeId}</code> — promo content</li>
+              <li><code>GET /integrationGallery?storeId={storeId}</code> — gallery images</li>
+              <li><code>GET /integrationTopSelling?storeId={storeId}&days=30&limit=10</code> — top selling items</li>
+            </ul>
+            <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{productsEnvBlock}</pre>
+          </div>
+          <div className="account-overview__website-sync-actions">
+            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationProducts'), 'Products endpoint')}>Copy products endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationPromo'), 'Promo endpoint')}>Copy promo endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/integrationGallery'), 'Gallery endpoint')}>Copy gallery endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(productsEnvBlock, latestToken ? 'Products API env block with key' : 'Products API env block')}>Copy products env block</button>
+            <button type="button" className="button" onClick={saveApiBaseSettings} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save API settings'}</button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'bookingsApi' && (
+        <div className="account-overview__website-sync">
+          <h2>Bookings API</h2>
+          <p className="account-overview__hint">Use this tab when a client website needs to check availability or submit bookings directly to Sedifex. Keep the API key server-side in the website backend.</p>
+          <div className="account-overview__form-grid">
+            <label><span>Sedifex API base URL</span><input value={draft.apiBaseUrl} onChange={event => update('apiBaseUrl', event.target.value)} /></label>
+            <label><span>Contract version</span><input value={draft.contractVersion} onChange={event => update('contractVersion', event.target.value)} /></label>
+          </div>
+          <div className="account-overview__integration-token-notice">
+            <p><strong>Booking endpoints</strong></p>
+            <ul className="account-overview__hint">
+              <li><code>GET /v1IntegrationAvailability?storeId={storeId}&serviceId=SERVICE_ID&from=FROM_ISO&to=TO_ISO</code> — check available slots</li>
+              <li><code>GET /v1IntegrationBookings?storeId={storeId}</code> — list bookings for integration use</li>
+              <li><code>POST /v1IntegrationBookings?storeId={storeId}</code> — submit a website booking</li>
+            </ul>
+            <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{bookingsEnvBlock}</pre>
+          </div>
+          <div className="account-overview__integration-token-notice">
+            <p><strong>Booking payload starter</strong></p>
+            <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{`{
+  "customerName": "Customer name",
+  "customerEmail": "customer@example.com",
+  "customerPhone": "+233240000000",
+  "serviceId": "SERVICE_ID",
+  "serviceName": "Service name",
+  "bookingDate": "2026-05-22",
+  "bookingTime": "10:00",
+  "notes": "Optional notes",
+  "source": "client_website",
+  "attributes": {}
+}`}</pre>
+          </div>
+          <div className="account-overview__website-sync-actions">
+            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationBookings'), 'Bookings endpoint')}>Copy bookings endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(bookingsEnvBlock, latestToken ? 'Bookings API env block with key' : 'Bookings API env block')}>Copy bookings env block</button>
+            <button type="button" className="button" onClick={saveApiBaseSettings} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save API settings'}</button>
+          </div>
+        </div>
+      )}
+
       {tab === 'booking' && (
         <div className="account-overview__website-sync">
           <h2>Booking sheet sync</h2>
-          <p className="account-overview__hint">Paste the Google Apps Script Web App URL used by the booking sheet. Sedifex will store it on the store and storeSettings docs.</p>
+          <p className="account-overview__hint">This is only for syncing Sedifex bookings into a Google Sheet through Apps Script. For client website booking forms, use the Bookings API tab.</p>
           <div className="account-overview__form-grid">
             <label><span>Booking Apps Script Web App URL</span><input value={draft.bookingWebAppUrl} onChange={event => update('bookingWebAppUrl', event.target.value)} placeholder="https://script.google.com/macros/s/.../exec" /></label>
             <label><span>Booking webhook secret (optional)</span><input type="password" value={draft.bookingSecret} onChange={event => update('bookingSecret', event.target.value)} placeholder="Optional shared secret" /></label>
@@ -407,7 +549,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'keys' && (
         <div className="account-overview__website-sync">
           <h2>Website API keys</h2>
-          <p className="account-overview__hint">Create a key, copy it once, and put it in the website environment as SEDIFEX_BOOKING_API_KEY and SEDIFEX_CHECKOUT_API_KEY. The full key is shown once only.</p>
+          <p className="account-overview__hint">Create a key, copy it once, and put it in the website environment as SEDIFEX_INTEGRATION_API_KEY, SEDIFEX_BOOKING_API_KEY, and SEDIFEX_CHECKOUT_API_KEY. The full key is shown once only.</p>
           <div className="account-overview__website-sync-test">
             <label><span>New key name</span><input value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="Website production key" /></label>
             <button type="button" className="button" onClick={createKey} disabled={isSaving}>{isSaving ? 'Creating…' : 'Create and copy key'}</button>
