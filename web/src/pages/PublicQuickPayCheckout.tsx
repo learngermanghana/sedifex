@@ -2,10 +2,12 @@ import React, { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import './PublicQuickPayCheckout.css'
 
+type QuickPayItemType = 'PRODUCT' | 'SERVICE' | 'COURSE' | 'DONATION' | 'STUDENT_REGISTRATION' | 'BOOKING' | 'MANUAL'
+
 type QuickPayItem = {
   id: string
   name: string
-  type: 'PRODUCT' | 'SERVICE' | 'COURSE'
+  type: QuickPayItemType
   price: number
   priceMinor?: number
   description?: string | null
@@ -25,16 +27,16 @@ const FUNCTION_BASE_URL =
   'https://us-central1-sedifex-web.cloudfunctions.net'
 
 const CONTRACT_VERSION = import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || '2026-04-13'
-const TYPE_FILTERS: Array<'ALL' | QuickPayItem['type']> = ['ALL', 'PRODUCT', 'SERVICE', 'COURSE']
-const DEFAULT_VISIBLE_ITEMS = 6
+const TYPE_FILTERS: Array<'ALL' | QuickPayItemType> = ['ALL', 'PRODUCT', 'SERVICE', 'COURSE', 'BOOKING', 'STUDENT_REGISTRATION', 'DONATION']
+const DEFAULT_VISIBLE_ITEMS = 4
 
 const DEMO_ITEMS: QuickPayItem[] = [
   {
     id: 'manual-service',
-    name: 'Manual service payment',
-    type: 'SERVICE',
+    name: 'Manual payment request',
+    type: 'MANUAL',
     price: 0,
-    description: 'Use this when the customer cannot find the exact item. The store can review it later.',
+    description: 'Use this only when you cannot find the exact product, service, booking, course, donation, or registration. The business will review it later.',
   },
 ]
 
@@ -42,14 +44,35 @@ function money(value: number) {
   return new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }).format(value)
 }
 
-function normalizeCheckoutItemType(type: QuickPayItem['type']) {
-  return type === 'PRODUCT' ? 'PRODUCT' : 'SERVICE'
+function normalizeCheckoutItemType(type: QuickPayItemType) {
+  if (type === 'PRODUCT') return 'PRODUCT'
+  return 'SERVICE'
 }
 
-function getItemIcon(type: QuickPayItem['type']) {
+function getAccountingType(type: QuickPayItemType) {
+  if (type === 'DONATION') return 'donation'
+  if (type === 'STUDENT_REGISTRATION') return 'student_registration'
+  if (type === 'BOOKING') return 'booking'
+  if (type === 'COURSE') return 'course'
+  if (type === 'SERVICE') return 'service'
+  if (type === 'PRODUCT') return 'product'
+  return 'manual_quick_sale'
+}
+
+function getItemIcon(type: QuickPayItemType) {
   if (type === 'SERVICE') return 'S'
   if (type === 'COURSE') return 'C'
+  if (type === 'DONATION') return 'D'
+  if (type === 'STUDENT_REGISTRATION') return 'R'
+  if (type === 'BOOKING') return 'B'
+  if (type === 'MANUAL') return 'M'
   return 'P'
+}
+
+function getTypeLabel(type: QuickPayItemType) {
+  if (type === 'STUDENT_REGISTRATION') return 'Student registration'
+  if (type === 'MANUAL') return 'Manual payment'
+  return type.toLowerCase()
 }
 
 export default function PublicQuickPayCheckout() {
@@ -60,7 +83,7 @@ export default function PublicQuickPayCheckout() {
   const paymentReference = searchParams.get('reference') || searchParams.get('trxref') || ''
   const shouldShowSuccess = paymentReturnStatus === 'success' || paymentReturnStatus === 'returning' || Boolean(paymentReference)
   const [query, setQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'ALL' | QuickPayItem['type']>('ALL')
+  const [typeFilter, setTypeFilter] = useState<'ALL' | QuickPayItemType>('ALL')
   const [items, setItems] = useState<QuickPayItem[]>([])
   const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -70,22 +93,26 @@ export default function PublicQuickPayCheckout() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const catalogWithManual = useMemo(() => {
+    return items.some(item => item.id === 'manual-service') ? items : [...items, ...DEMO_ITEMS]
+  }, [items])
+
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase()
-    return items.filter(item => {
+    return catalogWithManual.filter(item => {
       if (typeFilter !== 'ALL' && item.type !== typeFilter) return false
-      if (!normalized) return true
+      if (!normalized) return item.type !== 'MANUAL'
       const haystack = `${item.name} ${item.description ?? ''} ${item.category ?? ''} ${item.type}`.toLowerCase()
       return haystack.includes(normalized)
     })
-  }, [items, query, typeFilter])
+  }, [catalogWithManual, query, typeFilter])
 
   const hasSearch = query.trim().length > 0
   const visibleItems = hasSearch ? filteredItems : filteredItems.slice(0, DEFAULT_VISIBLE_ITEMS)
   const hiddenItemCount = Math.max(filteredItems.length - visibleItems.length, 0)
 
   const unitAmount = selectedItem?.price ?? 0
-  const finalAmount = selectedItem?.id === 'manual-service' ? Number(customAmount || 0) : unitAmount * quantity
+  const finalAmount = selectedItem?.type === 'MANUAL' ? Number(customAmount || 0) : unitAmount * quantity
 
   useEffect(() => {
     let isMounted = true
@@ -101,12 +128,12 @@ export default function PublicQuickPayCheckout() {
         const payload = await response.json() as { items?: QuickPayItem[] }
         if (!isMounted) return
         const loadedItems = Array.isArray(payload.items) ? payload.items : []
-        setItems(loadedItems.length ? loadedItems : DEMO_ITEMS)
-        setStatus(loadedItems.length ? null : 'No published items found yet. Use manual service payment.')
+        setItems(loadedItems)
+        setStatus(loadedItems.length ? null : 'No published items found yet. Use manual payment if needed.')
       } catch (catalogError) {
         if (!isMounted) return
         console.warn('[quick-pay] Catalog load failed', catalogError)
-        setItems(DEMO_ITEMS)
+        setItems([])
         setStatus('Catalog is not available yet. Manual payment mode is available.')
       }
     }
@@ -126,6 +153,7 @@ export default function PublicQuickPayCheckout() {
     try {
       const reference = `qp_${storeId}_${Date.now()}`
       const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=success&reference=${encodeURIComponent(reference)}`
+      const accountingType = getAccountingType(selectedItem.type)
       const body = {
         storeId,
         merchantId: storeId,
@@ -140,16 +168,38 @@ export default function PublicQuickPayCheckout() {
         returnUrl,
         sourceChannel: 'quick_pay_qr',
         sourceLabel: 'Sedifex Quick Pay',
-        items: [{ item_id: selectedItem.id, itemId: selectedItem.id, name: selectedItem.name, type: normalizeCheckoutItemType(selectedItem.type), item_type: normalizeCheckoutItemType(selectedItem.type), qty: quantity, quantity }],
+        quickPayType: selectedItem.type,
+        accountingType,
+        orderType: accountingType,
+        items: [{
+          item_id: selectedItem.id,
+          itemId: selectedItem.id,
+          name: selectedItem.name,
+          type: normalizeCheckoutItemType(selectedItem.type),
+          item_type: normalizeCheckoutItemType(selectedItem.type),
+          quickPayType: selectedItem.type,
+          accountingType,
+          qty: quantity,
+          quantity,
+        }],
         pricing_snapshot: {
-          pricing_version: 'quick-pay-public-page-v1',
+          pricing_version: 'quick-pay-public-page-v2',
           currency: 'GHS',
           subtotal: Math.round(finalAmount * 100),
           tax_total: 0,
           final_total: Math.round(finalAmount * 100),
-          items: [{ item_id: selectedItem.id, name: selectedItem.name, qty: quantity, unit_price: Math.round(unitAmount * 100), line_total: Math.round(finalAmount * 100), type: normalizeCheckoutItemType(selectedItem.type) }],
+          items: [{
+            item_id: selectedItem.id,
+            name: selectedItem.name,
+            qty: quantity,
+            unit_price: Math.round(unitAmount * 100),
+            line_total: Math.round(finalAmount * 100),
+            type: normalizeCheckoutItemType(selectedItem.type),
+            quickPayType: selectedItem.type,
+            accountingType,
+          }],
         },
-        metadata: { quickPay: true, storeId, itemId: selectedItem.id, itemName: selectedItem.name, itemType: selectedItem.type, quantity },
+        metadata: { quickPay: true, storeId, itemId: selectedItem.id, itemName: selectedItem.name, itemType: selectedItem.type, quickPayType: selectedItem.type, accountingType, quantity },
       }
       const response = await fetch(`${FUNCTION_BASE_URL}/integrationCheckoutCreate`, {
         method: 'POST',
@@ -167,6 +217,10 @@ export default function PublicQuickPayCheckout() {
       setStatus(null)
       setIsSubmitting(false)
     }
+  }
+
+  function scrollToCheckout() {
+    document.getElementById('quick-pay-checkout-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   if (shouldShowSuccess) {
@@ -200,28 +254,28 @@ export default function PublicQuickPayCheckout() {
         <section className="qp-checkout-hero">
           <p className="qp-eyebrow">Sedifex Quick Pay</p>
           <h1 className="qp-title">Scan, search, pay</h1>
-          <p className="qp-copy">Search for the product, service, or course you want. Pay securely and the business receives the order in Sedifex.</p>
+          <p className="qp-copy">Search for the product, service, booking, registration, donation, or course you want. Pay securely and the business receives the order in Sedifex.</p>
 
           <div className="qp-hero-search">
-            <label className="qp-hero-label" htmlFor="quick-pay-search">What do you want to buy or pay for?</label>
+            <label className="qp-hero-label" htmlFor="quick-pay-search">What do you want to pay for?</label>
             <div className="qp-hero-input-shell">
               <span className="qp-hero-search-icon">⌕</span>
               <input
                 id="quick-pay-search"
                 type="search"
-                placeholder="Search products, services, courses..."
+                placeholder="Search products, services, bookings, donations..."
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 className="qp-hero-input"
               />
               {query ? <button type="button" className="qp-clear-search" onClick={() => setQuery('')}>Clear</button> : null}
             </div>
-            <p className="qp-hero-help">Showing a few popular items first. Search to find more items quickly.</p>
+            <p className="qp-hero-help">Showing a few popular items first. Search above to find more items quickly.</p>
           </div>
 
           <div className="qp-trust-row">
             <span>♢ Secure payments</span>
-            <span>◇ Best prices</span>
+            <span>◇ Store recorded</span>
             <span>▯ Mobile money & cards</span>
           </div>
         </section>
@@ -231,7 +285,7 @@ export default function PublicQuickPayCheckout() {
             <div className="qp-type-tabs">
               {TYPE_FILTERS.map(type => (
                 <button key={type} type="button" className={`qp-type-tab ${typeFilter === type ? 'qp-type-tab-active' : ''}`} onClick={() => setTypeFilter(type)}>
-                  {type === 'ALL' ? 'All' : type.toLowerCase()}
+                  {type === 'ALL' ? 'All' : getTypeLabel(type)}
                 </button>
               ))}
             </div>
@@ -241,13 +295,13 @@ export default function PublicQuickPayCheckout() {
               {visibleItems.map(item => {
                 const isSelected = selectedItem?.id === item.id
                 return (
-                  <button key={item.id} type="button" className={`qp-item-card ${isSelected ? 'qp-item-card-selected' : ''}`} onClick={() => setSelectedItem(item)}>
+                  <button key={item.id} type="button" className={`qp-item-card ${item.type === 'MANUAL' ? 'qp-item-card-manual' : ''} ${isSelected ? 'qp-item-card-selected' : ''}`} onClick={() => { setSelectedItem(item); window.setTimeout(scrollToCheckout, 100) }}>
                     <div className="qp-item-top">
                       <div className="qp-item-icon">{getItemIcon(item.type)}</div>
                       <div className="qp-item-main">
                         <h2 className="qp-item-name">{item.name}</h2>
                         <div className="qp-item-meta">
-                          <span className="qp-badge">{item.type}</span>
+                          <span className="qp-badge">{getTypeLabel(item.type)}</span>
                           {item.category ? <span className="qp-badge">{item.category}</span> : null}
                         </div>
                       </div>
@@ -257,16 +311,21 @@ export default function PublicQuickPayCheckout() {
                   </button>
                 )
               })}
-              {visibleItems.length === 0 ? <div className="qp-empty">No item matched your search. Try another word or contact the business.</div> : null}
+              {visibleItems.length === 0 ? <div className="qp-empty">No item matched your search. Try another word or use manual payment.</div> : null}
             </div>
+            <button type="button" className="qp-manual-link" onClick={() => { setSelectedItem(DEMO_ITEMS[0]); window.setTimeout(scrollToCheckout, 100) }}>
+              Cannot find it? Use manual payment request
+            </button>
           </section>
 
-          <form onSubmit={createCheckout} className="qp-panel qp-payment-panel">
-            <h2 className="qp-payment-title">Payment details</h2>
-            <p className="qp-selected-name">{selectedItem ? selectedItem.name : 'Select an item to continue.'}</p>
+          <form id="quick-pay-checkout-panel" onSubmit={createCheckout} className="qp-panel qp-payment-panel">
+            <div className="qp-checkout-marker">Step 2 of 2</div>
+            <h2 className="qp-payment-title">Checkout</h2>
+            <p className="qp-selected-name">{selectedItem ? selectedItem.name : 'Select an item above to continue.'}</p>
+            {selectedItem?.type === 'MANUAL' ? <p className="qp-manual-note">Manual payments are saved as manual quick sales for the business to review and account for later.</p> : null}
             {selectedItem ? (
               <div className="qp-summary">
-                {selectedItem.id === 'manual-service' ? (
+                {selectedItem.type === 'MANUAL' ? (
                   <label className="qp-field-label">Amount to pay<input type="number" min="1" step="0.01" value={customAmount} onChange={event => setCustomAmount(event.target.value)} className="qp-field" placeholder="Enter amount" /></label>
                 ) : (
                   <label className="qp-field-label">Quantity<input type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="qp-field" /></label>
@@ -280,11 +339,21 @@ export default function PublicQuickPayCheckout() {
               <input type="tel" placeholder="Phone / WhatsApp" value={customer.phone} onChange={event => setCustomer(previous => ({ ...previous, phone: event.target.value }))} className="qp-field" />
             </div>
             {error ? <p className="qp-error">{error}</p> : null}
-            <button type="submit" disabled={isSubmitting || !selectedItem} className="qp-pay-button">{isSubmitting ? 'Opening payment…' : 'Pay now'}</button>
+            <button type="submit" disabled={isSubmitting || !selectedItem} className="qp-pay-button">{isSubmitting ? 'Opening payment…' : selectedItem ? `Pay ${money(finalAmount || 0)}` : 'Select item to pay'}</button>
             <p className="qp-powered">Powered by Sedifex. Payment is processed securely and recorded for the business.</p>
           </form>
         </div>
       </div>
+
+      {selectedItem ? (
+        <button type="button" className="qp-mobile-checkout-bar" onClick={scrollToCheckout}>
+          <span>
+            <strong>{selectedItem.name}</strong>
+            <small>{selectedItem.type === 'MANUAL' ? 'Manual payment' : `${quantity} × ${money(unitAmount || finalAmount || 0)}`}</small>
+          </span>
+          <b>{finalAmount > 0 ? `Checkout ${money(finalAmount)}` : 'Checkout'}</b>
+        </button>
+      ) : null}
     </main>
   )
 }
