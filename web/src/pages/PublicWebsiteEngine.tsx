@@ -61,6 +61,41 @@ export default function PublicWebsiteEngine() {
   }, [slug])
 
   const availablePages = useMemo(() => uniquePages(settings?.pages ?? []), [settings?.pages])
+
+  useEffect(() => {
+    if (!settings || !profile) return
+
+    const siteName = profile.name || settings.businessName || 'Sedifex website'
+    const pageLabelText = pageLabel(activePage)
+    const pageTitle = activePage === 'home' ? siteName : `${siteName} | ${pageLabelText}`
+    const pageDescription = settings.description || `Explore ${siteName} — products, services, gallery, and secure payments.`
+    const pageUrl = typeof window !== 'undefined' ? window.location.href : ''
+    const imageUrl = settings.coverImageUrl || profile.logoUrl
+
+    document.title = pageTitle
+
+    const setMeta = (selector: string, attr: 'name' | 'property', value: string) => {
+      let element = document.head.querySelector(selector)
+      if (!element) {
+        element = document.createElement('meta')
+        element.setAttribute(attr, selector.match(/=['\"]([^'\"]+)['\"]/)?.[1] || '')
+        document.head.appendChild(element)
+      }
+      element.setAttribute('content', value)
+    }
+
+    setMeta("meta[name='description']", 'name', pageDescription)
+    setMeta("meta[property='og:title']", 'property', pageTitle)
+    setMeta("meta[property='og:description']", 'property', pageDescription)
+    setMeta("meta[property='og:type']", 'property', 'website')
+    if (pageUrl) setMeta("meta[property='og:url']", 'property', pageUrl)
+    if (imageUrl) setMeta("meta[property='og:image']", 'property', imageUrl)
+    setMeta("meta[name='twitter:card']", 'name', imageUrl ? 'summary_large_image' : 'summary')
+    setMeta("meta[name='twitter:title']", 'name', pageTitle)
+    setMeta("meta[name='twitter:description']", 'name', pageDescription)
+    if (imageUrl) setMeta("meta[name='twitter:image']", 'name', imageUrl)
+  }, [activePage, profile, settings])
+
   if (loading) return <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading website…</main>
   if (error || !settings || !profile) return <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-center text-white"><div className="max-w-lg rounded-3xl border border-white/10 bg-white/10 p-8"><h1 className="text-3xl font-black">Website unavailable</h1><p className="mt-3 text-slate-300">{error ?? 'This Sedifex website could not be found.'}</p><Link className="mt-6 inline-block rounded-2xl bg-white px-5 py-3 font-semibold text-slate-950" to="/">Go home</Link></div></main>
 
