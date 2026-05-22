@@ -36,7 +36,7 @@ export default function QuickPayPrint() {
   }, [mode, storeId])
 
   const qrCodeUrl = useMemo(() => {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(quickPayUrl)}`
+    return `https://api.qrserver.com/v1/create-qr-code/?size=560x560&margin=0&data=${encodeURIComponent(quickPayUrl)}`
   }, [quickPayUrl])
 
   useEffect(() => {
@@ -66,45 +66,184 @@ export default function QuickPayPrint() {
   const displayName = isLoading ? 'Preparing store…' : profile.name
 
   return (
-    <main className="quick-pay-print-main min-h-screen bg-slate-100 px-3 py-4 text-slate-950 sm:px-6 sm:py-8 print:bg-white print:p-0">
+    <main className="quick-pay-print-main">
       <style>{`
-        .quick-pay-print-main {
+        .quick-pay-print-main,
+        .quick-pay-print-main * {
           box-sizing: border-box;
+        }
+
+        .quick-pay-print-main {
           width: 100%;
+          min-height: 100dvh;
+          margin: 0;
           overflow-x: hidden;
+          background: #eef2f7;
+          color: #0f172a;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 16px;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        .quick-pay-print-toolbar {
+          width: min(100%, 560px);
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin: 0 auto 14px;
+        }
+
+        .quick-pay-print-back,
+        .quick-pay-print-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 42px;
+          border-radius: 14px;
+          padding: 0 16px;
+          font-size: 14px;
+          font-weight: 900;
+          text-decoration: none;
+          cursor: pointer;
+        }
+
+        .quick-pay-print-back {
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #334155;
+        }
+
+        .quick-pay-print-button {
+          border: 0;
+          background: #4f46e5;
+          color: #ffffff;
+          box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
         }
 
         .quick-pay-poster {
-          box-sizing: border-box;
+          width: min(100%, 560px);
+          min-height: 720px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
+          margin: 0 auto;
+          padding: 36px 32px;
+          border: 1px solid #e2e8f0;
+          border-radius: 32px;
+          background: #ffffff;
+          text-align: center;
+          box-shadow: 0 28px 70px rgba(15, 23, 42, 0.14);
+        }
+
+        .quick-pay-poster-title {
           width: 100%;
-          max-width: 520px;
-          min-height: auto;
+        }
+
+        .quick-pay-poster-title h1 {
+          margin: 0;
+          overflow-wrap: anywhere;
+          color: #0f172a;
+          font-size: clamp(30px, 8vw, 42px);
+          line-height: 1.05;
+          font-weight: 950;
+          letter-spacing: -0.04em;
+        }
+
+        .quick-pay-poster-title p {
+          margin: 10px 0 0;
+          color: #4f46e5;
+          font-size: clamp(20px, 5vw, 26px);
+          line-height: 1.2;
+          font-weight: 950;
+        }
+
+        .quick-pay-qr-wrap {
+          width: 100%;
+          display: flex;
+          justify-content: center;
         }
 
         .quick-pay-qr-frame {
-          box-sizing: border-box;
-          width: min(100%, 280px);
-          max-width: 100%;
+          width: min(100%, 330px);
           aspect-ratio: 1 / 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 8px solid #0f172a;
+          border-radius: 22px;
+          background: #ffffff;
+          padding: 10px;
+        }
+
+        .quick-pay-qr-frame img {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
         }
 
         .quick-pay-steps {
           width: 100%;
-          max-width: 400px;
+          max-width: 440px;
+          border-radius: 24px;
+          background: #0f172a;
+          color: #ffffff;
+          padding: 24px 28px;
+          text-align: left;
         }
 
-        @media (min-width: 640px) {
+        .quick-pay-steps h2 {
+          margin: 0;
+          color: #ffffff;
+          text-align: center;
+          font-size: 24px;
+          line-height: 1.2;
+          font-weight: 950;
+        }
+
+        .quick-pay-steps ol {
+          margin: 18px 0 0;
+          padding-left: 24px;
+          display: grid;
+          gap: 10px;
+          color: #ffffff;
+          font-size: 18px;
+          line-height: 1.35;
+          font-weight: 750;
+        }
+
+        @media (max-width: 520px) {
+          .quick-pay-print-main {
+            padding: 12px;
+          }
+
           .quick-pay-poster {
-            max-width: 560px;
-            min-height: 720px;
+            min-height: auto;
+            padding: 26px 18px;
+            border-radius: 24px;
+            gap: 20px;
           }
 
           .quick-pay-qr-frame {
-            width: min(100%, 320px);
+            width: min(100%, 300px);
+            border-width: 6px;
+            border-radius: 18px;
+            padding: 8px;
           }
 
           .quick-pay-steps {
-            max-width: 420px;
+            padding: 20px;
+            border-radius: 20px;
+          }
+
+          .quick-pay-steps ol {
+            font-size: 16px;
           }
         }
 
@@ -122,7 +261,7 @@ export default function QuickPayPrint() {
             margin: 0 !important;
             padding: 0 !important;
             overflow: hidden !important;
-            background: white !important;
+            background: #ffffff !important;
           }
 
           body * {
@@ -142,11 +281,9 @@ export default function QuickPayPrint() {
             min-height: 210mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
-            display: flex !important;
-            align-items: stretch !important;
-            justify-content: center !important;
+            background: #ffffff !important;
             overflow: hidden !important;
+            display: block !important;
           }
 
           .quick-pay-print-toolbar,
@@ -160,18 +297,27 @@ export default function QuickPayPrint() {
             height: 210mm !important;
             min-height: 210mm !important;
             margin: 0 !important;
+            padding: 13mm 11mm !important;
             border: 0 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
-            padding: 12mm 11mm !important;
             gap: 7mm !important;
           }
 
+          .quick-pay-poster-title h1 {
+            font-size: 30px !important;
+            line-height: 1.08 !important;
+          }
+
+          .quick-pay-poster-title p {
+            margin-top: 6px !important;
+            font-size: 21px !important;
+          }
+
           .quick-pay-qr-frame {
-            width: 86mm !important;
-            height: 86mm !important;
-            max-width: 86mm !important;
-            border-width: 6px !important;
+            width: 88mm !important;
+            height: 88mm !important;
+            border-width: 5px !important;
             border-radius: 0 !important;
             padding: 3mm !important;
           }
@@ -181,39 +327,43 @@ export default function QuickPayPrint() {
             border-radius: 12px !important;
             padding: 6mm 7mm !important;
           }
+
+          .quick-pay-steps h2 {
+            font-size: 20px !important;
+          }
+
+          .quick-pay-steps ol {
+            margin-top: 5mm !important;
+            gap: 3mm !important;
+            font-size: 16px !important;
+          }
         }
       `}</style>
 
-      <div className="quick-pay-print-toolbar no-print mx-auto mb-4 flex w-full max-w-[520px] flex-wrap items-center justify-between gap-3">
-        <Link className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700" to="/quick-pay">
+      <div className="quick-pay-print-toolbar no-print">
+        <Link className="quick-pay-print-back" to="/quick-pay">
           Back to Quick Pay
         </Link>
-        <button
-          type="button"
-          className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
-          onClick={() => window.print()}
-        >
+        <button type="button" className="quick-pay-print-button" onClick={() => window.print()}>
           Print poster
         </button>
       </div>
 
-      <section className="quick-pay-poster mx-auto flex flex-col items-center justify-between rounded-[1.5rem] bg-white px-5 py-7 text-center shadow-xl sm:rounded-[2rem] sm:px-10 sm:py-10">
-        <div className="w-full">
-          <h1 className="break-words text-3xl font-black tracking-tight text-slate-950 sm:text-4xl print:text-[30px] print:leading-tight">
-            {displayName}
-          </h1>
-          <p className="mt-2 text-xl font-extrabold text-indigo-700 sm:mt-3 sm:text-2xl print:text-[22px]">Scan to Pay</p>
+      <section className="quick-pay-poster">
+        <div className="quick-pay-poster-title">
+          <h1>{displayName}</h1>
+          <p>Scan to Pay</p>
         </div>
 
-        <div className="my-5 flex w-full justify-center sm:my-6 print:my-[6mm]">
-          <div className="quick-pay-qr-frame flex items-center justify-center rounded-[1.25rem] border-[6px] border-slate-950 bg-white p-2 sm:rounded-[1.5rem] sm:border-[10px] sm:p-3">
-            <img src={qrCodeUrl} alt={`${displayName} Quick Pay QR code`} className="h-full w-full object-contain" />
+        <div className="quick-pay-qr-wrap">
+          <div className="quick-pay-qr-frame">
+            <img src={qrCodeUrl} alt={`${displayName} Quick Pay QR code`} />
           </div>
         </div>
 
-        <div className="quick-pay-steps rounded-[1.25rem] bg-slate-950 px-5 py-5 text-left text-white sm:rounded-[1.5rem] sm:px-7 sm:py-6">
-          <h2 className="text-center text-xl font-black sm:text-2xl print:text-[20px]">How to pay</h2>
-          <ol className="mt-4 list-decimal space-y-2 pl-5 text-base font-semibold leading-snug sm:mt-5 sm:space-y-3 sm:pl-6 sm:text-xl print:mt-[5mm] print:space-y-[3mm] print:text-[16px]">
+        <div className="quick-pay-steps">
+          <h2>How to pay</h2>
+          <ol>
             <li>Open your phone camera</li>
             <li>Scan the QR code</li>
             <li>Select product, service, or course</li>
