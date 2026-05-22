@@ -11,12 +11,34 @@ type DisplayWebsiteStatus = StoredWebsiteStatus | 'needs-setup'
 type PreviewMode = 'mobile' | 'desktop'
 type BuilderStepId = 'identity' | 'type' | 'pages' | 'theme' | 'content' | 'payments' | 'domain' | 'publish'
 
+type SocialLinks = {
+  facebook: string
+  instagram: string
+  tiktok: string
+  youtube: string
+  linkedin: string
+  x: string
+  website: string
+}
+
 type WebsiteBuilderSettings = {
   slug: string
   websiteType: WebsiteType
   theme: WebsiteTheme
   pages: string[]
   status: StoredWebsiteStatus
+  businessName: string
+  tagline: string
+  description: string
+  phone: string
+  whatsapp: string
+  email: string
+  location: string
+  openingHours: string
+  businessLogoUrl: string
+  coverImageUrl: string
+  brandColor: string
+  socialLinks: SocialLinks
 }
 
 type WebsiteTypeOption = {
@@ -48,7 +70,7 @@ type PreviewContent = {
 }
 
 const BUILDER_STEPS: Array<{ id: BuilderStepId; label: string; description: string }> = [
-  { id: 'identity', label: 'Business identity', description: 'Name, logo direction, and public link.' },
+  { id: 'identity', label: 'Business identity', description: 'Name, logo, contact details, social links, and brand assets.' },
   { id: 'type', label: 'Website type', description: 'Choose the right structure for the business.' },
   { id: 'pages', label: 'Pages', description: 'Select the pages customers should see.' },
   { id: 'theme', label: 'Theme', description: 'Pick the visual style and feel.' },
@@ -56,6 +78,26 @@ const BUILDER_STEPS: Array<{ id: BuilderStepId; label: string; description: stri
   { id: 'payments', label: 'Payments / Quick Pay', description: 'Prepare checkout and payment pages.' },
   { id: 'domain', label: 'Domain', description: 'Use Sedifex subdomain or custom domain.' },
   { id: 'publish', label: 'Publish', description: 'Review and send the website live.' },
+]
+
+const DEFAULT_SOCIAL_LINKS: SocialLinks = {
+  facebook: '',
+  instagram: '',
+  tiktok: '',
+  youtube: '',
+  linkedin: '',
+  x: '',
+  website: '',
+}
+
+const SOCIAL_LINK_FIELDS: Array<{ id: keyof SocialLinks; label: string; placeholder: string }> = [
+  { id: 'facebook', label: 'Facebook', placeholder: 'https://facebook.com/yourbusiness' },
+  { id: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/yourbusiness' },
+  { id: 'tiktok', label: 'TikTok', placeholder: 'https://tiktok.com/@yourbusiness' },
+  { id: 'youtube', label: 'YouTube', placeholder: 'https://youtube.com/@yourbusiness' },
+  { id: 'linkedin', label: 'LinkedIn', placeholder: 'https://linkedin.com/company/yourbusiness' },
+  { id: 'x', label: 'X / Twitter', placeholder: 'https://x.com/yourbusiness' },
+  { id: 'website', label: 'Existing website', placeholder: 'https://www.yourbusiness.com' },
 ]
 
 const WEBSITE_TYPES: WebsiteTypeOption[] = [
@@ -174,7 +216,7 @@ const CONTENT_MODULES = [
   { label: 'Products / Services', description: 'Pull items directly from Sedifex inventory and service records.' },
   { label: 'Gallery', description: 'Show business photos, work samples, or treatment/course images.' },
   { label: 'Promotions', description: 'Highlight offers, featured products, and seasonal campaigns.' },
-  { label: 'Contact details', description: 'Use store profile details so customers can call, WhatsApp, or visit.' },
+  { label: 'Contact details', description: 'Use phone, WhatsApp, email, location, opening hours, and social links from business identity.' },
 ]
 
 const PREVIEW_CONTENT: Record<WebsiteType, PreviewContent> = {
@@ -247,6 +289,28 @@ const STATUS_CONFIG: Record<DisplayWebsiteStatus, { label: string; className: st
   },
 }
 
+function createDefaultSettings(): WebsiteBuilderSettings {
+  return {
+    slug: '',
+    websiteType: 'shop',
+    theme: 'modern',
+    pages: ['Home', 'Products', 'Services', 'Gallery', 'Contact', 'Quick Pay'],
+    status: 'draft',
+    businessName: '',
+    tagline: '',
+    description: '',
+    phone: '',
+    whatsapp: '',
+    email: '',
+    location: '',
+    openingHours: '',
+    businessLogoUrl: '',
+    coverImageUrl: '',
+    brandColor: '#4f46e5',
+    socialLinks: { ...DEFAULT_SOCIAL_LINKS },
+  }
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -265,16 +329,44 @@ function getDisplayStatus(settings: WebsiteBuilderSettings, storeId: string | nu
   return settings.status
 }
 
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function readString(record: Record<string, unknown>, key: string, fallback = '') {
+  const value = record[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
+}
+
+function normalizeBrandColor(value: unknown) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : '#4f46e5'
+}
+
+function mergeSocialLinks(...sources: unknown[]): SocialLinks {
+  const merged: SocialLinks = { ...DEFAULT_SOCIAL_LINKS }
+  sources.forEach(source => {
+    const record = getRecord(source)
+    SOCIAL_LINK_FIELDS.forEach(field => {
+      const value = record[field.id]
+      if (typeof value === 'string' && value.trim()) {
+        merged[field.id] = value.trim()
+      }
+    })
+  })
+  return merged
+}
+
+function isWebsiteType(value: unknown): value is WebsiteType {
+  return WEBSITE_TYPES.some(type => type.id === value)
+}
+
+function isWebsiteTheme(value: unknown): value is WebsiteTheme {
+  return THEMES.some(theme => theme.id === value)
+}
+
 export default function WebsiteBuilder() {
   const { storeId, isLoading } = useActiveStore()
-  const [businessName, setBusinessName] = useState('')
-  const [settings, setSettings] = useState<WebsiteBuilderSettings>({
-    slug: '',
-    websiteType: 'shop',
-    theme: 'modern',
-    pages: ['Home', 'Products', 'Services', 'Gallery', 'Contact', 'Quick Pay'],
-    status: 'draft',
-  })
+  const [settings, setSettings] = useState<WebsiteBuilderSettings>(() => createDefaultSettings())
   const [feedback, setFeedback] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -293,6 +385,7 @@ export default function WebsiteBuilder() {
   const selectedTheme = THEMES.find(theme => theme.id === settings.theme) ?? THEMES[0]
   const previewContent = PREVIEW_CONTENT[settings.websiteType]
   const previewPages = settings.pages.length ? settings.pages.slice(0, 5) : ['Home']
+  const activeSocialLinks = SOCIAL_LINK_FIELDS.filter(field => settings.socialLinks[field.id]).slice(0, 4)
   const canPublish = Boolean(storeId && settings.slug && settings.pages.length > 0 && !isLoading && !isSaving)
   const currentStepIndex = BUILDER_STEPS.findIndex(step => step.id === activeStep)
   const safeStepIndex = currentStepIndex >= 0 ? currentStepIndex : 0
@@ -300,7 +393,7 @@ export default function WebsiteBuilder() {
   const progressPercent = Math.round(((safeStepIndex + 1) / BUILDER_STEPS.length) * 100)
 
   const stepCompletion: Record<BuilderStepId, boolean> = {
-    identity: Boolean(businessName.trim() && settings.slug),
+    identity: Boolean(settings.businessName.trim() && settings.slug && (settings.phone || settings.whatsapp || settings.email)),
     type: Boolean(settings.websiteType),
     pages: settings.pages.length > 0,
     theme: Boolean(settings.theme),
@@ -335,29 +428,41 @@ export default function WebsiteBuilder() {
         if (!mounted) return
 
         const storeData = storeSnap.exists() ? (storeSnap.data() as Record<string, unknown>) : {}
-        const name =
-          typeof storeData.businessName === 'string' && storeData.businessName.trim()
-            ? storeData.businessName.trim()
-            : typeof storeData.storeName === 'string' && storeData.storeName.trim()
-              ? storeData.storeName.trim()
-              : typeof storeData.name === 'string' && storeData.name.trim()
-                ? storeData.name.trim()
-                : 'My business'
-        setBusinessName(name)
-
         const data = settingsSnap.exists() ? (settingsSnap.data() as Record<string, unknown>) : {}
-        const website = data.websiteBuilder && typeof data.websiteBuilder === 'object'
-          ? data.websiteBuilder as Partial<WebsiteBuilderSettings>
-          : null
+        const website = getRecord(data.websiteBuilder)
+        const fallbackBusinessName =
+          readString(storeData, 'businessName') ||
+          readString(storeData, 'storeName') ||
+          readString(storeData, 'name') ||
+          'My business'
 
-        setSettings(previous => ({
-          ...previous,
-          slug: website?.slug || slugify(name),
-          websiteType: website?.websiteType || previous.websiteType,
-          theme: website?.theme || previous.theme,
-          pages: Array.isArray(website?.pages) && website.pages.length ? website.pages : previous.pages,
-          status: website?.status === 'published' ? 'published' : 'draft',
-        }))
+        setSettings(previous => {
+          const businessName = readString(website, 'businessName', fallbackBusinessName)
+          const pages = Array.isArray(website.pages) && website.pages.length
+            ? website.pages.filter((page): page is string => typeof page === 'string')
+            : previous.pages
+
+          return {
+            ...previous,
+            slug: readString(website, 'slug') || slugify(businessName),
+            websiteType: isWebsiteType(website.websiteType) ? website.websiteType : previous.websiteType,
+            theme: isWebsiteTheme(website.theme) ? website.theme : previous.theme,
+            pages,
+            status: website.status === 'published' ? 'published' : 'draft',
+            businessName,
+            tagline: readString(website, 'tagline', readString(storeData, 'tagline')),
+            description: readString(website, 'description', readString(storeData, 'description')),
+            phone: readString(website, 'phone', readString(storeData, 'phone', readString(storeData, 'phoneNumber'))),
+            whatsapp: readString(website, 'whatsapp', readString(storeData, 'whatsapp', readString(storeData, 'whatsappNumber'))),
+            email: readString(website, 'email', readString(storeData, 'email', readString(storeData, 'businessEmail'))),
+            location: readString(website, 'location', readString(storeData, 'location', readString(storeData, 'address'))),
+            openingHours: readString(website, 'openingHours', readString(storeData, 'openingHours')),
+            businessLogoUrl: readString(website, 'businessLogoUrl', readString(storeData, 'businessLogoUrl', readString(storeData, 'logoUrl'))),
+            coverImageUrl: readString(website, 'coverImageUrl', readString(storeData, 'coverImageUrl', readString(storeData, 'bannerImageUrl'))),
+            brandColor: normalizeBrandColor(website.brandColor || storeData.brandColor),
+            socialLinks: mergeSocialLinks(storeData.socialLinks, storeData.socialMediaLinks, website.socialLinks),
+          }
+        })
         setFeedback(null)
       } catch (loadError) {
         console.error('[website-builder] Unable to load settings', loadError)
@@ -372,13 +477,27 @@ export default function WebsiteBuilder() {
     }
   }, [storeId])
 
+  function updateSetting<K extends keyof WebsiteBuilderSettings>(key: K, value: WebsiteBuilderSettings[K]) {
+    setSettings(previous => ({ ...previous, [key]: value }))
+  }
+
+  function updateSocialLink(key: keyof SocialLinks, value: string) {
+    setSettings(previous => ({
+      ...previous,
+      socialLinks: {
+        ...previous.socialLinks,
+        [key]: value,
+      },
+    }))
+  }
+
   async function saveSettings(nextStatus: StoredWebsiteStatus) {
     if (!storeId) {
       setError('No active store selected.')
       return
     }
 
-    const normalizedSlug = slugify(settings.slug || businessName || storeId)
+    const normalizedSlug = slugify(settings.slug || settings.businessName || storeId)
     if (!normalizedSlug) {
       setError('Enter a website slug.')
       return
@@ -397,7 +516,34 @@ export default function WebsiteBuilder() {
       const payload: WebsiteBuilderSettings = {
         ...settings,
         slug: normalizedSlug,
+        businessName: settings.businessName.trim() || 'My business',
+        tagline: settings.tagline.trim(),
+        description: settings.description.trim(),
+        phone: settings.phone.trim(),
+        whatsapp: settings.whatsapp.trim(),
+        email: settings.email.trim(),
+        location: settings.location.trim(),
+        openingHours: settings.openingHours.trim(),
+        businessLogoUrl: settings.businessLogoUrl.trim(),
+        coverImageUrl: settings.coverImageUrl.trim(),
+        brandColor: normalizeBrandColor(settings.brandColor),
+        socialLinks: mergeSocialLinks(settings.socialLinks),
         status: nextStatus,
+      }
+
+      const businessIdentity = {
+        businessName: payload.businessName,
+        tagline: payload.tagline,
+        description: payload.description,
+        phone: payload.phone,
+        whatsapp: payload.whatsapp,
+        email: payload.email,
+        location: payload.location,
+        openingHours: payload.openingHours,
+        businessLogoUrl: payload.businessLogoUrl,
+        coverImageUrl: payload.coverImageUrl,
+        brandColor: payload.brandColor,
+        socialLinks: payload.socialLinks,
       }
 
       await setDoc(
@@ -405,8 +551,8 @@ export default function WebsiteBuilder() {
         {
           websiteBuilder: {
             ...payload,
+            businessIdentity,
             storeId,
-            businessName,
             publicUrl: `https://sites.sedifex.com/${normalizedSlug}`,
             updatedAt: serverTimestamp(),
             publishedAt: nextStatus === 'published' ? serverTimestamp() : null,
@@ -471,14 +617,14 @@ export default function WebsiteBuilder() {
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Business website control center</p>
-                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Build and publish a website step by step</h3>
+                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Build a full website from business data</h3>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
-                  A guided setup helps normal business owners finish their website without facing one long form.
+                  Store the business identity once, then reuse it for the homepage, contact page, footer, social links, and Quick Pay.
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm shadow-xl backdrop-blur">
                 <p className="text-slate-300">Current website</p>
-                <p className="mt-1 font-semibold text-white">{businessName || 'Loading business…'}</p>
+                <p className="mt-1 font-semibold text-white">{settings.businessName || 'Loading business…'}</p>
                 <p className="mt-3 break-all rounded-xl bg-white/10 px-3 py-2 text-cyan-100">{previewUrl}</p>
               </div>
             </div>
@@ -526,18 +672,73 @@ export default function WebsiteBuilder() {
             {activeStep === 'identity' ? (
               <div>
                 <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Business identity</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Start with the business details</h3>
-                <p className="mt-2 text-sm text-slate-500">This controls the website name, preview header, and public Sedifex link.</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Collect all website identity data</h3>
+                <p className="mt-2 text-sm text-slate-500">These fields let Sedifex generate a complete website, contact section, footer, social links, and branded preview from one profile.</p>
 
                 <div className="mt-6 grid gap-5 lg:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Business name
                     <input
                       className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      value={businessName}
-                      onChange={event => setBusinessName(event.target.value)}
+                      value={settings.businessName}
+                      onChange={event => updateSetting('businessName', event.target.value)}
                       placeholder="Glittering Med Spa"
                     />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Short tagline
+                    <input
+                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                      value={settings.tagline}
+                      onChange={event => updateSetting('tagline', event.target.value)}
+                      placeholder="Beauty, wellness, and confidence in one place"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700 lg:col-span-2">
+                    Business description
+                    <textarea
+                      className="mt-2 min-h-28 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                      value={settings.description}
+                      onChange={event => updateSetting('description', event.target.value)}
+                      placeholder="Tell customers what the business does, who it serves, and why they should choose it."
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Business logo
+                    <input
+                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                      value={settings.businessLogoUrl}
+                      onChange={event => updateSetting('businessLogoUrl', event.target.value)}
+                      placeholder="https://.../logo.png"
+                    />
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Paste a logo URL for now. Later this can connect to the uploader.</span>
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Cover / banner image
+                    <input
+                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                      value={settings.coverImageUrl}
+                      onChange={event => updateSetting('coverImageUrl', event.target.value)}
+                      placeholder="https://.../banner.jpg"
+                    />
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Used for the homepage hero or service banner.</span>
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Brand color
+                    <div className="mt-2 flex items-center gap-3 rounded-2xl border border-slate-300 px-4 py-3 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50">
+                      <input
+                        type="color"
+                        className="h-10 w-12 cursor-pointer rounded-lg border border-slate-200 bg-white"
+                        value={settings.brandColor}
+                        onChange={event => updateSetting('brandColor', event.target.value)}
+                      />
+                      <input
+                        className="min-w-0 flex-1 outline-none"
+                        value={settings.brandColor}
+                        onChange={event => updateSetting('brandColor', normalizeBrandColor(event.target.value))}
+                        placeholder="#4f46e5"
+                      />
+                    </div>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     Website slug
@@ -546,16 +747,85 @@ export default function WebsiteBuilder() {
                       <input
                         className="min-w-0 flex-1 px-4 py-3 outline-none"
                         value={settings.slug}
-                        onChange={event => setSettings(previous => ({ ...previous, slug: slugify(event.target.value) }))}
+                        onChange={event => updateSetting('slug', slugify(event.target.value))}
                         placeholder="glittering-med-spa"
                       />
                     </div>
                   </label>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
-                  <p className="font-semibold text-slate-900">Logo and brand image</p>
-                  <p className="mt-1 text-sm text-slate-600">Next, this area can connect to the store logo uploader. For now, the preview uses the business type icon as the logo placeholder.</p>
+                <div className="mt-8">
+                  <h4 className="text-lg font-semibold text-slate-950">Contact details</h4>
+                  <div className="mt-4 grid gap-5 lg:grid-cols-2">
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Phone number
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                        value={settings.phone}
+                        onChange={event => updateSetting('phone', event.target.value)}
+                        placeholder="+233 24 000 0000"
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-slate-700">
+                      WhatsApp number
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                        value={settings.whatsapp}
+                        onChange={event => updateSetting('whatsapp', event.target.value)}
+                        placeholder="+233 24 000 0000"
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Email
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                        value={settings.email}
+                        onChange={event => updateSetting('email', event.target.value)}
+                        placeholder="hello@business.com"
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Location
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                        value={settings.location}
+                        onChange={event => updateSetting('location', event.target.value)}
+                        placeholder="Accra, Ghana"
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-slate-700 lg:col-span-2">
+                      Opening hours
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                        value={settings.openingHours}
+                        onChange={event => updateSetting('openingHours', event.target.value)}
+                        placeholder="Mon - Sat, 9:00 AM - 6:00 PM"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-8">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <h4 className="text-lg font-semibold text-slate-950">Social media links</h4>
+                      <p className="mt-1 text-sm text-slate-500">Expanded socialLinks data can be reused across the header, footer, contact page, and social buttons.</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{activeSocialLinks.length} filled</span>
+                  </div>
+                  <div className="mt-4 grid gap-5 lg:grid-cols-2">
+                    {SOCIAL_LINK_FIELDS.map(field => (
+                      <label key={field.id} className="block text-sm font-semibold text-slate-700">
+                        {field.label}
+                        <input
+                          className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                          value={settings.socialLinks[field.id]}
+                          onChange={event => updateSocialLink(field.id, event.target.value)}
+                          placeholder={field.placeholder}
+                        />
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -578,7 +848,7 @@ export default function WebsiteBuilder() {
                             ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
                             : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
                         }`}
-                        onClick={() => setSettings(previous => ({ ...previous, websiteType: type.id }))}
+                        onClick={() => updateSetting('websiteType', type.id)}
                       >
                         <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl text-xl ring-1 ${type.accentClassName}`}>{type.icon}</span>
                         <span className="mt-4 block font-semibold text-slate-950">{type.label}</span>
@@ -613,7 +883,7 @@ export default function WebsiteBuilder() {
                           type="checkbox"
                           className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           checked={isChecked}
-                          onChange={() => setSettings(previous => ({ ...previous, pages: togglePage(previous.pages, page) }))}
+                          onChange={() => updateSetting('pages', togglePage(settings.pages, page))}
                         />
                         <span>{page}</span>
                       </label>
@@ -641,7 +911,7 @@ export default function WebsiteBuilder() {
                             ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
                             : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
                         }`}
-                        onClick={() => setSettings(previous => ({ ...previous, theme: theme.id }))}
+                        onClick={() => updateSetting('theme', theme.id)}
                       >
                         <div className={`rounded-2xl bg-gradient-to-br ${theme.previewClassName} p-5`}>
                           <div className={`h-3 w-24 rounded-full ${theme.headingClassName}`} />
@@ -707,7 +977,7 @@ export default function WebsiteBuilder() {
                     <button
                       type="button"
                       className="mt-5 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white"
-                      onClick={() => setSettings(previous => ({ ...previous, pages: togglePage(previous.pages, 'Quick Pay') }))}
+                      onClick={() => updateSetting('pages', togglePage(settings.pages, 'Quick Pay'))}
                     >
                       {settings.pages.includes('Quick Pay') ? 'Remove Quick Pay' : 'Enable Quick Pay'}
                     </button>
@@ -772,8 +1042,9 @@ export default function WebsiteBuilder() {
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <button
-                    className="rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
+                    className="rounded-2xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
                     type="button"
+                    style={{ backgroundColor: canPublish ? settings.brandColor : undefined }}
                     disabled={!canPublish}
                     onClick={() => void saveSettings('published')}
                   >
@@ -827,7 +1098,7 @@ export default function WebsiteBuilder() {
               <div>
                 <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Preview</p>
                 <h3 className="mt-1 text-xl font-semibold text-slate-950">Home page preview</h3>
-                <p className="mt-1 text-sm text-slate-500">Live preview updates when theme, pages, or business type changes.</p>
+                <p className="mt-1 text-sm text-slate-500">Live preview updates from identity, theme, pages, and brand color.</p>
               </div>
               <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}>
                 <span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />
@@ -861,16 +1132,23 @@ export default function WebsiteBuilder() {
                   <span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{previewUrl}</span>
                 </div>
 
-                <div className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`}>
+                <div
+                  className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`}
+                  style={settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.62), rgba(15, 23, 42, 0.2)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>
+                      {settings.businessLogoUrl ? (
+                        <img src={settings.businessLogoUrl} alt="Business logo" className="h-9 w-9 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" />
+                      ) : (
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>
+                      )}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{businessName || 'My business'}</p>
-                        <p className="truncate text-[11px] opacity-75">{selectedType.label}</p>
+                        <p className="truncate text-sm font-bold">{settings.businessName || 'My business'}</p>
+                        <p className="truncate text-[11px] opacity-75">{settings.tagline || selectedType.label}</p>
                       </div>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${selectedTheme.buttonClassName}`}>Pay</span>
+                    <span className="rounded-full px-3 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: settings.brandColor }}>Pay</span>
                   </div>
 
                   <div className={`mt-4 flex gap-2 overflow-hidden text-[11px] ${previewMode === 'mobile' ? 'flex-wrap' : 'flex-nowrap'}`}>
@@ -883,19 +1161,20 @@ export default function WebsiteBuilder() {
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{previewContent.eyebrow}</p>
                       <h4 className={`${previewMode === 'mobile' ? 'text-2xl' : 'text-3xl'} mt-2 font-black leading-tight tracking-tight`}>
-                        {previewContent.headline}
+                        {settings.tagline || previewContent.headline}
                       </h4>
-                      <p className="mt-3 text-sm leading-6 opacity-85">{previewContent.body}</p>
-                      <button type="button" className={`mt-4 rounded-full px-4 py-2 text-sm font-bold shadow-sm ${selectedTheme.buttonClassName}`}>
+                      <p className="mt-3 text-sm leading-6 opacity-85">{settings.description || previewContent.body}</p>
+                      <button type="button" className="mt-4 rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm" style={{ backgroundColor: settings.brandColor }}>
                         {previewContent.cta}
                       </button>
                     </div>
 
                     <div className={`rounded-3xl p-3 shadow-sm ${selectedTheme.surfaceClassName}`}>
                       <div className="h-24 rounded-2xl bg-slate-200/80" />
-                      <div className="mt-3 space-y-2">
-                        <div className="h-2.5 w-3/4 rounded-full bg-slate-300/80" />
-                        <div className="h-2.5 w-1/2 rounded-full bg-slate-200" />
+                      <div className="mt-3 space-y-2 text-xs">
+                        <p className="font-bold">Contact</p>
+                        <p className="truncate opacity-70">{settings.phone || settings.whatsapp || 'Phone / WhatsApp'}</p>
+                        <p className="truncate opacity-70">{settings.location || 'Business location'}</p>
                       </div>
                     </div>
                   </div>
@@ -904,11 +1183,21 @@ export default function WebsiteBuilder() {
                 <div className="grid gap-3 bg-white p-4 sm:grid-cols-3">
                   {previewContent.cards.map(card => (
                     <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="h-8 w-8 rounded-xl bg-indigo-100" />
+                      <div className="h-8 w-8 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} />
                       <p className="mt-3 text-xs font-bold text-slate-900">{card}</p>
                       <div className="mt-2 h-1.5 w-16 rounded-full bg-slate-200" />
                     </div>
                   ))}
+                </div>
+
+                <div className="border-t border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap gap-2">
+                    {settings.openingHours ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{settings.openingHours}</span> : null}
+                    {activeSocialLinks.map(field => (
+                      <span key={field.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{field.label}</span>
+                    ))}
+                    {!settings.openingHours && activeSocialLinks.length === 0 ? <span className="text-[11px] font-semibold text-slate-400">Opening hours and social links will show here.</span> : null}
+                  </div>
                 </div>
               </div>
             </div>
