@@ -6,6 +6,7 @@ import { useActiveStore } from '../hooks/useActiveStore'
 
 type StorePrintProfile = {
   name: string
+  websiteUrl: string
 }
 
 function clean(value: unknown) {
@@ -22,12 +23,33 @@ function pickStoreName(record: Record<string, unknown>, fallback: string) {
   )
 }
 
+function pickWebsiteUrl(record: Record<string, unknown>) {
+  return (
+    clean(record.websiteUrl) ||
+    clean(record.website) ||
+    clean(record.businessWebsite) ||
+    clean(record.publicWebsite) ||
+    clean(record.siteUrl) ||
+    clean(record.domain) ||
+    ''
+  )
+}
+
+function formatWebsiteUrl(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  const label = trimmed.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '')
+  return { href, label }
+}
+
 export default function QuickPayPrint() {
   const { storeId, isLoading } = useActiveStore()
   const [searchParams] = useSearchParams()
   const mode = searchParams.get('mode') || 'store'
   const [profile, setProfile] = useState<StorePrintProfile>({
     name: 'Your business',
+    websiteUrl: '',
   })
 
   const quickPayUrl = useMemo(() => {
@@ -51,6 +73,7 @@ export default function QuickPayPrint() {
         const data = snapshot.data() as Record<string, unknown>
         setProfile({
           name: pickStoreName(data, storeId),
+          websiteUrl: pickWebsiteUrl(data),
         })
       } catch (error) {
         console.warn('[quick-pay-print] Unable to load store profile', error)
@@ -64,6 +87,7 @@ export default function QuickPayPrint() {
   }, [storeId])
 
   const displayName = isLoading ? 'Preparing store…' : profile.name
+  const formattedWebsite = useMemo(() => formatWebsiteUrl(profile.websiteUrl), [profile.websiteUrl])
 
   return (
     <main className="quick-pay-print-main">
@@ -131,9 +155,9 @@ export default function QuickPayPrint() {
           flex-direction: column;
           align-items: center;
           justify-content: space-between;
-          gap: 22px;
+          gap: 20px;
           margin: 0 auto;
-          padding: 34px 32px 28px;
+          padding: 34px 32px 26px;
           border: 1px solid #e2e8f0;
           border-radius: 32px;
           background: #ffffff;
@@ -170,7 +194,7 @@ export default function QuickPayPrint() {
         }
 
         .quick-pay-qr-frame {
-          width: min(100%, 320px);
+          width: min(100%, 310px);
           aspect-ratio: 1 / 1;
           display: flex;
           align-items: center;
@@ -194,7 +218,7 @@ export default function QuickPayPrint() {
           border-radius: 24px;
           background: #0f172a;
           color: #ffffff;
-          padding: 22px 26px;
+          padding: 20px 24px;
           text-align: left;
         }
 
@@ -202,42 +226,58 @@ export default function QuickPayPrint() {
           margin: 0;
           color: #ffffff;
           text-align: center;
-          font-size: 23px;
+          font-size: 22px;
           line-height: 1.2;
           font-weight: 950;
         }
 
         .quick-pay-steps ol {
-          margin: 16px 0 0;
+          margin: 14px 0 0;
           padding-left: 24px;
           display: grid;
-          gap: 9px;
+          gap: 8px;
           color: #ffffff;
-          font-size: 17px;
+          font-size: 16px;
           line-height: 1.35;
           font-weight: 750;
         }
 
+        .quick-pay-poster-footer {
+          display: grid;
+          gap: 4px;
+          width: 100%;
+        }
+
+        .quick-pay-store-site,
         .quick-pay-powered {
           width: 100%;
           margin: 0;
-          padding-top: 4px;
           color: #475569;
-          font-size: 13px;
           line-height: 1.35;
           font-weight: 850;
           text-align: center;
         }
 
+        .quick-pay-store-site {
+          font-size: 13px;
+        }
+
+        .quick-pay-powered {
+          font-size: 12px;
+        }
+
+        .quick-pay-store-site span,
         .quick-pay-powered span {
           color: #0f172a;
           font-weight: 950;
         }
 
+        .quick-pay-store-site a,
         .quick-pay-powered a {
           color: #4f46e5;
           font-weight: 950;
           text-decoration: none;
+          overflow-wrap: anywhere;
         }
 
         @media (max-width: 520px) {
@@ -247,20 +287,20 @@ export default function QuickPayPrint() {
 
           .quick-pay-poster {
             min-height: auto;
-            padding: 26px 18px 22px;
+            padding: 24px 18px 20px;
             border-radius: 24px;
-            gap: 18px;
+            gap: 16px;
           }
 
           .quick-pay-qr-frame {
-            width: min(100%, 290px);
+            width: min(100%, 280px);
             border-width: 6px;
             border-radius: 18px;
             padding: 8px;
           }
 
           .quick-pay-steps {
-            padding: 18px;
+            padding: 17px;
             border-radius: 20px;
           }
 
@@ -268,8 +308,9 @@ export default function QuickPayPrint() {
             font-size: 15px;
           }
 
+          .quick-pay-store-site,
           .quick-pay-powered {
-            font-size: 12px;
+            font-size: 11px;
           }
         }
 
@@ -323,26 +364,26 @@ export default function QuickPayPrint() {
             height: 210mm !important;
             min-height: 210mm !important;
             margin: 0 !important;
-            padding: 12mm 11mm 8mm !important;
+            padding: 11mm 11mm 7mm !important;
             border: 0 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
-            gap: 5.5mm !important;
+            gap: 4.5mm !important;
           }
 
           .quick-pay-poster-title h1 {
-            font-size: 29px !important;
+            font-size: 28px !important;
             line-height: 1.08 !important;
           }
 
           .quick-pay-poster-title p {
             margin-top: 5px !important;
-            font-size: 20px !important;
+            font-size: 19px !important;
           }
 
           .quick-pay-qr-frame {
-            width: 84mm !important;
-            height: 84mm !important;
+            width: 80mm !important;
+            height: 80mm !important;
             border-width: 5px !important;
             border-radius: 0 !important;
             padding: 3mm !important;
@@ -351,23 +392,27 @@ export default function QuickPayPrint() {
           .quick-pay-steps {
             max-width: 118mm !important;
             border-radius: 12px !important;
-            padding: 5.5mm 7mm !important;
+            padding: 5mm 7mm !important;
           }
 
           .quick-pay-steps h2 {
-            font-size: 19px !important;
+            font-size: 18px !important;
           }
 
           .quick-pay-steps ol {
-            margin-top: 4mm !important;
-            gap: 2.4mm !important;
-            font-size: 15px !important;
+            margin-top: 3.5mm !important;
+            gap: 2mm !important;
+            font-size: 14px !important;
           }
 
+          .quick-pay-poster-footer {
+            gap: 1.5mm !important;
+          }
+
+          .quick-pay-store-site,
           .quick-pay-powered {
-            padding-top: 0 !important;
-            font-size: 11px !important;
-            line-height: 1.25 !important;
+            font-size: 10.5px !important;
+            line-height: 1.2 !important;
           }
         }
       `}</style>
@@ -403,9 +448,16 @@ export default function QuickPayPrint() {
           </ol>
         </div>
 
-        <p className="quick-pay-powered">
-          Powered by <span>Sedifex</span> • <a href="https://www.sedifex.com">www.sedifex.com</a>
-        </p>
+        <footer className="quick-pay-poster-footer">
+          {formattedWebsite ? (
+            <p className="quick-pay-store-site">
+              <span>Store website:</span> <a href={formattedWebsite.href}>{formattedWebsite.label}</a>
+            </p>
+          ) : null}
+          <p className="quick-pay-powered">
+            Powered by <span>Sedifex</span> • <a href="https://www.sedifex.com">www.sedifex.com</a>
+          </p>
+        </footer>
       </section>
     </main>
   )
