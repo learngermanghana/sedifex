@@ -137,9 +137,19 @@ export default function QuickPay() {
                   Copy payment link
                 </button>
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-500 sm:text-sm">
-                This is the most important link. Add it to WhatsApp, Instagram, flyers, SMS, or your website.
-              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs leading-5 text-slate-500 sm:text-sm">
+                  This is the most important link. Add it to WhatsApp, Instagram, flyers, SMS, or your website.
+                </p>
+                <a
+                  className="text-xs font-black uppercase tracking-[0.16em] text-indigo-700 underline decoration-indigo-300 underline-offset-4 hover:text-indigo-900"
+                  href={quickPayUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Preview customer page
+                </a>
+              </div>
             </div>
           </section>
 
