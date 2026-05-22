@@ -9,6 +9,7 @@ const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', 
 
 type BookingRequestBody = {
   serviceId?: unknown
+  service_id?: unknown
   slotId?: unknown
   customer?: unknown
   quantity?: unknown
@@ -29,6 +30,13 @@ type BookingRequestBody = {
 
 function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+
+function normalizeServiceId(rawValue: unknown) {
+  const value = clean(rawValue, 220)
+  if (!value) return ''
+  return value.toLowerCase().startsWith('draft-') ? value.slice(6).trim() : value
 }
 
 function setCors(res: functions.Response) {
@@ -151,7 +159,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
   try {
     if (req.method === 'GET') {
       const status = clean(req.query.status, 80).toLowerCase()
-      const serviceId = clean(req.query.serviceId, 220)
+      const serviceId = normalizeServiceId(req.query.serviceId)
 
       let query: FirebaseFirestore.Query = defaultDb
         .collection('stores')
@@ -169,7 +177,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     }
 
     const body = asObject(req.body) as BookingRequestBody
-    const serviceId = clean(body.serviceId, 220)
+    const serviceId = normalizeServiceId(body.serviceId ?? body.service_id)
     const slotId = clean(body.slotId, 220)
     const quantity = Math.max(1, Math.floor(toNumber(body.quantity, 1)))
     const notes = clean(body.notes, 2000)
