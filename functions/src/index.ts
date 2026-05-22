@@ -22,7 +22,7 @@ export {
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationBookings } from './integrationBookings'
 export { v1IntegrationStudentRegistrations } from './integrationStudentRegistrations'
-export { publicQuickPayCatalog } from './quickPay'
+export { publicQuickPayCatalog, publicQuickPayStores, syncQuickPayStoreIndex } from './quickPay'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
 export {
   notifyNgoVolunteerApplicationReceived,
@@ -43,180 +43,13 @@ export {
   googleAdsMetricsSync,
 } from './googleAds'
 export * from './googleShopping'
-export * from './reporting'
-export * from './publicCatalogSync'
-export * from './publicCatalogRepair'
-export * from './blogAutomation'
+export * from './googleBusinessProfile'
 
-/**
- * SINGLE FIRESTORE INSTANCE
- */
-// Firestore instance is provided by the shared firestore module to avoid
-// repeated admin initialization during function discovery.
-
-/** ============================================================================
- *  TYPES
- * ==========================================================================*/
-
-type ContactPayload = {
-  phone?: unknown
-  firstSignupEmail?: unknown
-}
-
-type StoreProfilePayload = {
-  phone?: unknown
-  ownerName?: unknown
-  businessName?: unknown
-  country?: unknown
-  town?: unknown
-  city?: unknown
-  addressLine1?: unknown
-  address?: unknown
-}
-
-type InitializeStorePayload = {
-  contact?: ContactPayload
-  profile?: StoreProfilePayload
-  storeId?: unknown
-}
-
-type BulkMessageChannel = 'sms'
-
-type BulkMessageRecipient = {
-  id?: string
-  name?: string
-  phone?: string
-}
-
-type BulkMessagePayload = {
-  storeId?: unknown
-  channel?: unknown
-  message?: unknown
-  recipients?: unknown
-}
-
-type BulkEmailRecipient = {
-  id: string
-  name: string
-  email: string
-}
-
-type BulkEmailPayload = {
-  storeId?: unknown
-  fromName?: unknown
-  subject?: unknown
-  html?: unknown
-  recipients?: unknown
-}
-
-type SmsRateTable = {
-  defaultGroup: string
-  dialCodeToGroup: Record<string, string>
-  sms: Record<string, { perSegment: number }>
-}
-
-type ManageStaffPayload = {
-  storeId?: unknown
-  email?: unknown
-  role?: unknown
-  password?: unknown
-  action?: unknown
-}
-
-type CreateStoreMasterInvitePayload = {
-  storeId?: unknown
-  role?: unknown
-  expiresInHours?: unknown
-  maxUses?: unknown
-}
-
-type AcceptStoreMasterInvitePayload = {
-  tokenOrUrl?: unknown
-  childStoreId?: unknown
-  confirmOverwrite?: unknown
-}
-
-type BillingStatus = 'trial' | 'active' | 'past_due' | 'inactive'
-
-type CreateCheckoutPayload = {
-  email?: unknown
-  storeId?: unknown
-  amount?: unknown
-  plan?: unknown
-  planId?: unknown
-  metadata?: unknown
-  returnUrl?: unknown
-  redirectUrl?: unknown
-}
-
-type BulkCreditsCheckoutPayload = {
-  storeId?: unknown
-  package?: unknown
-  returnUrl?: unknown
-  redirectUrl?: unknown
-  metadata?: unknown
-}
-
-type ListStoreProductsPayload = {
-  storeId?: unknown
-  limit?: unknown
-}
-
-type CreateIntegrationApiKeyPayload = {
-  name?: unknown
-}
-
-type RotateIntegrationApiKeyPayload = {
-  keyId?: unknown
-}
-
-type RevokeIntegrationApiKeyPayload = {
-  keyId?: unknown
-}
-
-type ListWebhookEndpointsPayload = {
-  storeId?: unknown
-}
-
-type UpsertWebhookEndpointPayload = {
-  endpointId?: unknown
-  url?: unknown
-  secret?: unknown
-  events?: unknown
-}
-
-type RevokeWebhookEndpointPayload = {
-  endpointId?: unknown
-}
-
-type DeleteWebhookEndpointPayload = {
-  endpointId?: unknown
-}
-
-type StartTikTokConnectPayload = {
-  storeId?: unknown
-}
-
-type GenerateAiAdvicePayload = {
-  question?: unknown
-  storeId?: unknown
-  jsonContext?: unknown
-}
-
-type GenerateSocialPostPayload = {
-  storeId?: unknown
-  platform?: unknown
-  productId?: unknown
-  product?: unknown
-}
-
-const VALID_ROLES = new Set(['owner', 'staff'])
-const GRACE_DAYS = 7
-const MILLIS_PER_DAY = 1000 * 60 * 60 * 24
-const BULK_MESSAGE_LIMIT = 1000
-const BULK_MESSAGE_BATCH_LIMIT = 200
-const BULK_EMAIL_BATCH_LIMIT = 500
-const SMS_SEGMENT_SIZE = 160
-const OPENAI_API_KEY = defineString('OPENAI_API_KEY', { default: '' })
 const OPENAI_MODEL = defineString('OPENAI_MODEL', { default: 'gpt-4o-mini' })
-const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions'
+const DEFAULT_STORE_ID = defineString('DEFAULT_STORE_ID', { default: '' })
+const DEFAULT_PUBLIC_PAGE_BASE_URL = defineString('DEFAULT_PUBLIC_PAGE_BASE_URL', { default: '' })
+const GOOGLE_ADS_CLIENT_ID = defineString('GOOGLE_ADS_CLIENT_ID', { default: '' })
+const GOOGLE_ADS_CLIENT_SECRET = defineString('GOOGLE_ADS_CLIENT_SECRET', { default: '' })
+const GOOGLE_ADS_REDIRECT_URI = defineString('GOOGLE_ADS_REDIRECT_URI', { default: '' })
+const GOOGLE_ADS_DEVELOPER_TOKEN = defineString('GOOGLE_ADS_DEVELOPER_TOKEN', { default: '' })
+const GOOGLE_ADS_LOGIN_CUSTOMER_ID = defineString('GOOGLE_ADS_LOGIN_CUSTOMER_ID', { default: '' })
