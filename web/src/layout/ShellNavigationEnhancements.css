@@ -1,6 +1,6 @@
 /* Clean Shell navigation behavior
    - Desktop: left sidebar includes Hide navigation and remembers collapsed state.
-   - Desktop collapsed: small rail remains on the left with Show nav.
+   - Desktop collapsed: a small floating Show nav button remains without taking page space.
    - Mobile/tablet: hamburger controls the drawer only.
    - Sidebar scrolls independently when many modules are visible.
    - Website Builder uses full edit width; preview opens via the public-site action. */
@@ -45,21 +45,23 @@
 }
 
 .shell__nav-rail {
-  position: sticky;
-  top: 92px;
-  align-self: start;
-  z-index: 3;
+  position: fixed;
+  top: 156px;
+  left: max(14px, calc((100vw - 1600px) / 2 + 18px));
+  z-index: 45;
 }
 
 .shell__nav-rail-button {
-  writing-mode: vertical-rl;
-  min-height: 132px;
-  width: 48px;
-  padding: 14px 10px;
+  width: auto;
+  min-width: 118px;
+  min-height: 0;
+  padding: 10px 14px;
+  writing-mode: horizontal-tb;
+  white-space: nowrap;
 }
 
 .shell__nav-rail-button .shell__menu-icon {
-  transform: rotate(90deg);
+  transform: none;
 }
 
 @media (min-width: 961px) {
@@ -81,7 +83,7 @@
   }
 
   .shell--nav-collapsed .shell__layout {
-    grid-template-columns: 56px minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
   .shell--nav-collapsed .shell__container {
@@ -166,4 +168,92 @@
 
 .page[data-page-title='Website Builder'] .page__actions .button--ghost::after {
   content: ' ↗';
+}
+
+/* Invoice / receipt editor fixes.
+   The editor now has controlled width so the business form never sits under the preview.
+   The preview stacks safely when there is not enough horizontal room. */
+.documents-builder {
+  max-width: 1320px !important;
+  padding-inline: clamp(18px, 3vw, 36px) !important;
+}
+
+.documents-builder__layout {
+  grid-template-columns: minmax(0, 650px) minmax(390px, 520px) !important;
+  justify-content: center !important;
+  gap: clamp(24px, 3.2vw, 52px) !important;
+  overflow: hidden !important;
+}
+
+.documents-builder__form {
+  max-width: 650px !important;
+  min-width: 0 !important;
+}
+
+.documents-builder__form .documents-generator__row {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.documents-builder__form .form__field,
+.documents-builder__form .input,
+.documents-builder__form textarea,
+.documents-builder__form select {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.documents-builder__preview {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.documents-builder__paper {
+  max-width: 520px !important;
+  width: 100% !important;
+}
+
+.documents-builder__paper-header {
+  grid-template-columns: 82px minmax(0, 1fr) !important;
+}
+
+.documents-builder__paper-header h3,
+.documents-builder__paper-header p,
+.documents-builder__two-col p,
+.documents-builder__table td {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+@media (max-width: 1320px) {
+  .documents-builder__layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .documents-builder__form,
+  .documents-builder__paper {
+    max-width: 760px !important;
+    margin-inline: auto !important;
+  }
+
+  .documents-builder__preview {
+    position: static !important;
+    order: -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .documents-builder__form .documents-generator__row,
+  .documents-generator__item .documents-generator__row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .documents-builder__layout {
+    padding: 14px !important;
+  }
+
+  .documents-builder__paper-header,
+  .documents-builder__paper-title,
+  .documents-builder__two-col {
+    grid-template-columns: 1fr !important;
+  }
 }
