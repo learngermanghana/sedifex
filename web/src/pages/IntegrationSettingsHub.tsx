@@ -35,28 +35,28 @@ const API_KEY_PLACEHOLDER = 'PASTE_CREATED_SEDIFEX_API_KEY_HERE'
 
 const KEY_PURPOSE_CONFIG: Record<KeyPurpose, { title: string; name: string; envVar: string; description: string; button: string; note: string }> = {
   products: {
-    title: 'Products API key',
+    title: 'Product key',
     name: 'Products API production key',
     envVar: 'SEDIFEX_PRODUCTS_API_KEY / SEDIFEX_INTEGRATION_API_KEY',
-    description: 'Use this only for product feeds, promo content, gallery, top-selling items, and public catalog data.',
-    button: 'Create Products API key',
-    note: 'Give this to websites that only need to read products, services, promos, and gallery content.',
+    description: 'Use this for products, services, promo content, gallery, and catalog data.',
+    button: 'Create product key',
+    note: 'Use for websites that need products, services, promos, and gallery content.',
   },
   bookings: {
-    title: 'Bookings API key',
+    title: 'Booking key',
     name: 'Bookings API production key',
     envVar: 'SEDIFEX_BOOKING_API_KEY',
-    description: 'Use this only for availability checks, booking form submissions, and booking integration endpoints.',
-    button: 'Create Bookings API key',
-    note: 'Give this to websites that need booking forms or appointment availability.',
+    description: 'Use this for website booking forms and availability checks.',
+    button: 'Create booking key',
+    note: 'Use for websites that need booking forms or appointment availability.',
   },
   checkout: {
-    title: 'Checkout / Website API key',
+    title: 'Checkout key',
     name: 'Checkout Website API production key',
     envVar: 'SEDIFEX_CHECKOUT_API_KEY',
-    description: 'Use this for checkout preview, payment creation, website checkout, and Quick Pay checkout actions.',
-    button: 'Create Checkout API key',
-    note: 'Give this to websites that need online checkout or payment creation.',
+    description: 'Use this for checkout and payment creation.',
+    button: 'Create checkout key',
+    note: 'Use for websites that need online checkout or payment creation.',
   },
 }
 
@@ -68,15 +68,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-function formatTimestamp(timestamp: Timestamp | null) {
-  if (!timestamp) return '—'
-  try {
-    return timestamp.toDate().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-  } catch {
-    return '—'
-  }
-}
-
 function normalize(value: string) {
   const trimmed = value.trim()
   return trimmed || null
@@ -84,14 +75,6 @@ function normalize(value: string) {
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
-}
-
-function keyPurposeFromName(name: string): KeyPurpose | 'general' {
-  const normalized = name.toLowerCase()
-  if (normalized.includes('product') || normalized.includes('catalog') || normalized.includes('feed')) return 'products'
-  if (normalized.includes('booking') || normalized.includes('appointment') || normalized.includes('availability')) return 'bookings'
-  if (normalized.includes('checkout') || normalized.includes('payment') || normalized.includes('website')) return 'checkout'
-  return 'general'
 }
 
 export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props) {
@@ -118,7 +101,6 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
   const [creatingKeyPurpose, setCreatingKeyPurpose] = useState<KeyPurpose | null>(null)
   const [keys, setKeys] = useState<KeyRow[]>([])
   const [keysLoading, setKeysLoading] = useState(false)
-  const [customKeyName, setCustomKeyName] = useState('Website production key')
   const [latestToken, setLatestToken] = useState('')
   const [latestTokenPurpose, setLatestTokenPurpose] = useState<KeyPurpose | null>(null)
 
@@ -188,12 +170,6 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     bookings: bookingsEnvBlock,
     checkout: envBlock,
   }
-
-  const groupedKeys = useMemo(() => {
-    const groups: Record<KeyPurpose | 'general', KeyRow[]> = { products: [], bookings: [], checkout: [], general: [] }
-    keys.forEach(item => groups[keyPurposeFromName(item.name)].push(item))
-    return groups
-  }, [keys])
 
   function update(key: keyof Draft, value: string | boolean) {
     setDraft(current => ({ ...current, [key]: value }))
@@ -406,13 +382,9 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     }
   }
 
-  async function createKeyForPurpose(purpose: KeyPurpose, nameOverride?: string) {
+  async function createKeyForPurpose(purpose: KeyPurpose) {
     const config = KEY_PURPOSE_CONFIG[purpose]
-    const keyName = (nameOverride || config.name).trim()
-    if (!keyName) {
-      publish({ message: 'Enter a key name first.', tone: 'error' })
-      return
-    }
+    const keyName = config.name
     try {
       setCreatingKeyPurpose(purpose)
       setIsSaving(true)
@@ -446,7 +418,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         setLatestToken(token)
         setLatestTokenPurpose(purpose)
         await copy(token, `${config.title}`)
-        publish({ message: `${config.title} copied. Use it only for ${config.envVar}.`, tone: 'success' })
+        publish({ message: `${config.title} copied. Save it now; it is shown once.`, tone: 'success' })
       }
       await refreshKeys()
     } catch (err) {
@@ -604,63 +576,37 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'keys' && (
         <div className="account-overview__website-sync">
           <h2>API keys</h2>
-          <p className="account-overview__hint">Create separate keys for separate jobs. This keeps the developer setup clear and avoids putting a booking key where a product feed key should be.</p>
+          <p className="account-overview__hint">Create only the key you need. The full key is shown once and copied automatically.</p>
 
-          <div className="account-overview__form-grid">
-            {(['products', 'bookings', 'checkout'] as KeyPurpose[]).map(purpose => {
+          <div className="account-overview__form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+            {(['products', 'bookings'] as KeyPurpose[]).map(purpose => {
               const config = KEY_PURPOSE_CONFIG[purpose]
-              const purposeKeys = groupedKeys[purpose]
               const isCreating = creatingKeyPurpose === purpose
               return (
                 <section key={purpose} className="account-overview__card" style={{ margin: 0 }}>
-                  <h3>{config.title}</h3>
+                  <h3>{purpose === 'products' ? 'Product key' : 'Booking key'}</h3>
                   <p className="account-overview__hint">{config.description}</p>
-                  <p className="account-overview__hint"><strong>Use as:</strong> <code>{config.envVar}</code></p>
-                  <div className="account-overview__website-sync-actions">
-                    <button type="button" className="button" onClick={() => createKeyForPurpose(purpose)} disabled={isSaving}>{isCreating ? 'Creating…' : config.button}</button>
-                    <button type="button" className="button button--secondary" onClick={() => copy(envBlockByPurpose[purpose], `${config.title} env block`)}>Copy env block</button>
-                  </div>
-                  <p className="account-overview__hint">{config.note}</p>
-                  <div style={{ marginTop: 12 }}>
-                    <strong>{purposeKeys.length} saved key{purposeKeys.length === 1 ? '' : 's'}</strong>
-                    {purposeKeys.length ? (
-                      <ul className="account-overview__integration-key-list">
-                        {purposeKeys.map(item => <li key={item.id} className="account-overview__integration-key-item"><div><strong>{item.name}</strong><p className="account-overview__hint">{item.keyPreview} · {item.status} · Created {formatTimestamp(item.createdAt)}</p></div></li>)}
-                      </ul>
-                    ) : <p className="account-overview__hint">No {config.title.toLowerCase()} created yet.</p>}
-                  </div>
+                  <button type="button" className="button" onClick={() => createKeyForPurpose(purpose)} disabled={isSaving}>
+                    {isCreating ? 'Creating…' : config.button}
+                  </button>
                 </section>
               )
             })}
           </div>
 
-          <div className="account-overview__integration-token-notice">
-            <p><strong>Create custom/general key</strong></p>
-            <p className="account-overview__hint">Use this only when you intentionally need one custom key name. For normal websites, use the three clear sections above.</p>
-            <div className="account-overview__website-sync-test">
-              <label><span>Custom key name</span><input value={customKeyName} onChange={event => setCustomKeyName(event.target.value)} placeholder="Website production key" /></label>
-              <button type="button" className="button" onClick={() => createKeyForPurpose('checkout', customKeyName)} disabled={isSaving}>{isSaving ? 'Creating…' : 'Create custom key'}</button>
-            </div>
-          </div>
-
           {latestToken ? (
             <div className="account-overview__integration-token-notice">
               <p><strong>Save this key now. It is shown once.</strong></p>
-              <p className="account-overview__hint">Latest key type: {latestTokenPurpose ? KEY_PURPOSE_CONFIG[latestTokenPurpose].title : 'API key'}</p>
+              <p className="account-overview__hint">Key type: {latestTokenPurpose ? KEY_PURPOSE_CONFIG[latestTokenPurpose].title : 'API key'}</p>
               <code className="account-overview__integration-token-value">{latestToken}</code>
               <div className="account-overview__website-sync-actions">
-                {latestTokenPurpose ? <button type="button" className="button button--secondary" onClick={() => copy(envBlockByPurpose[latestTokenPurpose], `${KEY_PURPOSE_CONFIG[latestTokenPurpose].title} env block with key`)}>Copy matching env block with key</button> : null}
                 <button type="button" className="button button--secondary" onClick={() => copy(latestToken, 'Latest API key')}>Copy key again</button>
+                {latestTokenPurpose ? <button type="button" className="button button--secondary" onClick={() => copy(envBlockByPurpose[latestTokenPurpose], `${KEY_PURPOSE_CONFIG[latestTokenPurpose].title} env block`)}>Copy env block</button> : null}
               </div>
             </div>
           ) : null}
 
-          {keysLoading ? <p>Loading keys…</p> : (
-            <div className="account-overview__integration-token-notice">
-              <p><strong>Other / old keys</strong></p>
-              {groupedKeys.general.length ? <ul className="account-overview__integration-key-list">{groupedKeys.general.map(item => <li key={item.id} className="account-overview__integration-key-item"><div><strong>{item.name}</strong><p className="account-overview__hint">{item.keyPreview} · {item.status} · Created {formatTimestamp(item.createdAt)}</p></div></li>)}</ul> : <p className="account-overview__hint">No old/general keys found.</p>}
-            </div>
-          )}
+          {keysLoading ? <p>Loading keys…</p> : keys.length ? <p className="account-overview__hint">{keys.length} saved key{keys.length === 1 ? '' : 's'} in this workspace.</p> : null}
         </div>
       )}
     </section>
