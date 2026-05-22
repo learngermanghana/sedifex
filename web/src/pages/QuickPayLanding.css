@@ -1,0 +1,366 @@
+.quickpay-root {
+  min-height: 100dvh;
+  width: 100%;
+  overflow-x: hidden;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.quickpay-shell {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 20px 16px 32px;
+  box-sizing: border-box;
+}
+
+.quickpay-card {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+}
+
+.quickpay-hero {
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.quickpay-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #2563eb, #6d28d9);
+  color: #ffffff;
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.28);
+}
+
+.quickpay-title {
+  margin: 18px 0 0;
+  font-size: clamp(30px, 8vw, 42px);
+  line-height: 1.05;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #1d4ed8;
+}
+
+.quickpay-subtitle {
+  margin: 12px 0 0;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.quickpay-copy {
+  max-width: 380px;
+  margin: 14px auto 0;
+  font-size: 15px;
+  line-height: 1.7;
+  font-weight: 500;
+  color: #475569;
+}
+
+.quickpay-search-card {
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.quickpay-label {
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.quickpay-input-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  margin-top: 14px;
+  padding: 0 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.quickpay-input-shell:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.quickpay-search-icon {
+  color: #94a3b8;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.quickpay-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.quickpay-input::placeholder {
+  color: #94a3b8;
+}
+
+.quickpay-helper {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.quickpay-error {
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.quickpay-primary,
+.quickpay-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 14px;
+  border-radius: 18px;
+  font-size: 16px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.quickpay-primary {
+  border: 0;
+  background: linear-gradient(90deg, #3b82f6, #7c3aed);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.24);
+}
+
+.quickpay-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.quickpay-secondary {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.quickpay-results {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.quickpay-store-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #0f172a;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.quickpay-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 50px;
+  height: 50px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2563eb, #6d28d9);
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.quickpay-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.quickpay-store-meta {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.quickpay-store-name {
+  margin: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickpay-store-category {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickpay-chevron {
+  flex: 0 0 auto;
+  color: #cbd5e1;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.quickpay-steps {
+  margin-top: 22px;
+  padding: 18px;
+}
+
+.quickpay-step {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 14px;
+}
+
+.quickpay-step-number-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.quickpay-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2563eb, #6d28d9);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.quickpay-step-line {
+  width: 1px;
+  height: 46px;
+  background: #e2e8f0;
+}
+
+.quickpay-step-body {
+  padding-bottom: 22px;
+  text-align: left;
+}
+
+.quickpay-step-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.quickpay-step-copy {
+  margin: 8px 0 0;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.quickpay-chip-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.quickpay-chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.quickpay-chip {
+  flex: 0 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #334155;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.quickpay-chip-active {
+  border-color: #6d28d9;
+  background: #6d28d9;
+  color: #ffffff;
+}
+
+.quickpay-popular {
+  margin-top: 22px;
+  padding-bottom: 28px;
+}
+
+.quickpay-section-title {
+  margin: 0 0 14px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.quickpay-popular-list {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 720px) {
+  .quickpay-shell {
+    max-width: 760px;
+    padding-top: 32px;
+  }
+
+  .quickpay-hero,
+  .quickpay-search-card,
+  .quickpay-steps {
+    padding: 28px;
+  }
+}
