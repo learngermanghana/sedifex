@@ -9,6 +9,7 @@ const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', 
 
 type BookingRequestBody = {
   serviceId?: unknown
+  service_id?: unknown
   slotId?: unknown
   customer?: unknown
   quantity?: unknown

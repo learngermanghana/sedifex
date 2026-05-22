@@ -147,6 +147,12 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
   return false
 }
 
+function normalizeServiceId(rawValue: unknown) {
+  const value = clean(rawValue, 220)
+  if (!value) return ''
+  return value.toLowerCase().startsWith('draft-') ? value.slice(6).trim() : value
+}
+
 function slotMatchesFilters(slot: SlotResponse, fromDate: Date | null, toDateFilter: Date | null, serviceId: string) {
   const start = parseDate(slot.startAt)
   if (!start) return false
@@ -170,7 +176,7 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
 
   try {
     const storeId = clean(req.query.storeId, 180)
-    const serviceId = clean(req.query.serviceId, 220)
+    const serviceId = normalizeServiceId(req.query.serviceId)
     const fromDate = parseDate(clean(req.query.from, 100))
     const toDateFilter = parseDate(clean(req.query.to, 100))
 
@@ -199,7 +205,7 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
 
       const capacity = Math.max(0, Math.floor(toNumber(data.capacity, 0)))
       const seatsBooked = Math.max(0, Math.floor(toNumber(data.seatsBooked, 0)))
-      const resolvedServiceId = clean(data.serviceId, 220)
+      const resolvedServiceId = normalizeServiceId(data.serviceId)
       const resolvedServiceName = clean(data.serviceName, 240)
       if (!authorized) {
         const isClosed = data.status === 'closed'
