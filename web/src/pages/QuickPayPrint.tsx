@@ -36,7 +36,7 @@ export default function QuickPayPrint() {
   }, [mode, storeId])
 
   const qrCodeUrl = useMemo(() => {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=760x760&data=${encodeURIComponent(quickPayUrl)}`
+    return `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(quickPayUrl)}`
   }, [quickPayUrl])
 
   useEffect(() => {
@@ -83,28 +83,28 @@ export default function QuickPayPrint() {
 
         .quick-pay-qr-frame {
           box-sizing: border-box;
-          width: min(100%, 340px);
+          width: min(100%, 280px);
           max-width: 100%;
           aspect-ratio: 1 / 1;
         }
 
         .quick-pay-steps {
           width: 100%;
-          max-width: 420px;
+          max-width: 400px;
         }
 
         @media (min-width: 640px) {
           .quick-pay-poster {
             max-width: 560px;
-            min-height: 760px;
+            min-height: 720px;
           }
 
           .quick-pay-qr-frame {
-            width: min(100%, 420px);
+            width: min(100%, 320px);
           }
 
           .quick-pay-steps {
-            max-width: 440px;
+            max-width: 420px;
           }
         }
 
@@ -163,22 +163,23 @@ export default function QuickPayPrint() {
             border: 0 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
-            padding: 14mm 13mm !important;
+            padding: 12mm 11mm !important;
+            gap: 7mm !important;
           }
 
           .quick-pay-qr-frame {
-            width: 112mm !important;
-            height: 112mm !important;
-            max-width: 112mm !important;
+            width: 86mm !important;
+            height: 86mm !important;
+            max-width: 86mm !important;
             border-width: 6px !important;
             border-radius: 0 !important;
             padding: 3mm !important;
           }
 
           .quick-pay-steps {
-            max-width: 112mm !important;
+            max-width: 118mm !important;
             border-radius: 12px !important;
-            padding: 7mm 8mm !important;
+            padding: 6mm 7mm !important;
           }
         }
       `}</style>
@@ -204,7 +205,7 @@ export default function QuickPayPrint() {
           <p className="mt-2 text-xl font-extrabold text-indigo-700 sm:mt-3 sm:text-2xl print:text-[22px]">Scan to Pay</p>
         </div>
 
-        <div className="my-6 flex w-full justify-center sm:my-8 print:my-[10mm]">
+        <div className="my-5 flex w-full justify-center sm:my-6 print:my-[6mm]">
           <div className="quick-pay-qr-frame flex items-center justify-center rounded-[1.25rem] border-[6px] border-slate-950 bg-white p-2 sm:rounded-[1.5rem] sm:border-[10px] sm:p-3">
             <img src={qrCodeUrl} alt={`${displayName} Quick Pay QR code`} className="h-full w-full object-contain" />
           </div>
