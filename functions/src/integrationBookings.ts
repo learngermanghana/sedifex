@@ -67,6 +67,12 @@ async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReferen
   return !snapshot.empty
 }
 
+
+async function queryStoreSettingsByStoreId(storeId: string) {
+  const snapshot = await defaultDb.collection('storeSettings').where('storeId', '==', storeId).limit(5).get()
+  return snapshot.docs
+}
+
 function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
   const candidates = [record.integrationApiKey, record.integrationKey, record.integrationToken, record.apiKey, record.token, record.key]
   return candidates.some(value => clean(value, 1000) === apiKey)
@@ -99,6 +105,16 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
     const settingsSnap = await defaultDb.collection('storeSettings').doc(storeId).get()
     const settingsData = (settingsSnap.data() ?? {}) as Record<string, unknown>
     if (recordContainsKey(settingsData, apiKey)) return true
+
+    const matchingSettingsDocs = await queryStoreSettingsByStoreId(storeId)
+    for (const settingsDoc of matchingSettingsDocs) {
+      const data = (settingsDoc.data() ?? {}) as Record<string, unknown>
+      if (recordContainsKey(data, apiKey)) return true
+      const nestedCollection = defaultDb.collection('storeSettings').doc(settingsDoc.id).collection('integrationApiKeys')
+      for (const field of ['token', 'key', 'apiKey', 'value']) {
+        if (await queryHasMatch(nestedCollection, field, apiKey)) return true
+      }
+    }
 
     const storeKeyCollections = [
       defaultDb.collection('stores').doc(storeId).collection('integrationApiKeys'),
