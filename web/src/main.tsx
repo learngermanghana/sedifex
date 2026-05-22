@@ -83,6 +83,7 @@ const router = createBrowserRouter([
   { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/login', element: <Navigate to="/" replace /> },
   { path: '/s/:storeId', element: <PublicQuickPayCheckout /> },
+  { path: '/sites/:slug/:pageSlug', element: <PublicWebsiteEngine /> },
   { path: '/sites/:slug', element: <PublicWebsiteEngine /> },
   { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
