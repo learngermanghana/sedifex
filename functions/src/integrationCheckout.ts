@@ -60,6 +60,12 @@ function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
+function normalizeServiceLikeItemId(rawValue: unknown) {
+  const value = clean(rawValue, 220)
+  if (!value) return ''
+  return value.toLowerCase().startsWith('draft-') ? value.slice(6).trim() : value
+}
+
 function numberValue(value: unknown) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
@@ -667,7 +673,7 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
 
     for (const rawItem of items) {
       const item = rawItem && typeof rawItem === 'object' ? rawItem as CheckoutPreviewItem : {}
-      const itemId = clean(item.item_id ?? item.itemId ?? item.productId ?? item.serviceId, 220)
+      const itemId = normalizeServiceLikeItemId(item.item_id ?? item.itemId ?? item.productId ?? item.serviceId)
       const qtyRaw = numberValue(item.qty ?? item.quantity)
       const qty = qtyRaw && qtyRaw > 0 ? Math.round(qtyRaw) : 1
       const type = normalizeCheckoutItemType(item.type ?? item.item_type ?? (item.serviceId ? 'SERVICE' : 'PRODUCT'))
