@@ -702,3 +702,45 @@ body.shell--menu-open {
     display: block;
   }
 }
+
+@media (min-width: 961px) {
+  .shell__menu-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-left: 0;
+    border-color: rgba(67, 56, 202, 0.18);
+    background: #f8f7ff;
+    color: #312e81;
+  }
+
+  .shell__menu-toggle .shell__menu-label {
+    font-size: 0;
+  }
+
+  .shell__menu-toggle .shell__menu-label::after {
+    content: 'Hide nav';
+    font-size: 13px;
+    letter-spacing: 0.01em;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__menu-toggle .shell__menu-label::after {
+    content: 'Show nav';
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__backdrop,
+  .shell:has(.shell__toolbar.is-open) .shell__toolbar {
+    display: none;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__sidebar {
+    display: none;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__container {
+    max-width: min(1600px, 100%);
+  }
+}
