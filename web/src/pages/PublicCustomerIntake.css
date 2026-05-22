@@ -145,21 +145,99 @@
   width: min(520px, 100%);
 }
 
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
 @media print {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+  }
+
+  * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
   .public-customer-intake {
-    background: #fff;
-    padding: 0;
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
   }
 
   .public-customer-intake__card {
-    box-shadow: none;
-    border-color: #cbd5e1;
-    max-width: 100%;
-    min-height: 100vh;
-    align-content: center;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    box-shadow: none !important;
+    border: 2px solid #cbd5e1 !important;
+    border-radius: 18px !important;
+    padding: 18mm 14mm !important;
+    gap: 10px !important;
+    align-content: start !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
+  .public-customer-intake--qr .public-customer-intake__card {
+    text-align: center;
+  }
+
+  .public-customer-intake__logo {
+    max-width: 90px !important;
+    max-height: 70px !important;
+    margin: 0 auto 4px !important;
+  }
+
+  .public-customer-intake__headline,
+  .public-customer-intake h1 {
+    font-size: 28px !important;
+    line-height: 1.15 !important;
+  }
+
+  .public-customer-intake__qr {
+    width: 260px !important;
+    height: 260px !important;
+    margin: 12px auto !important;
+  }
+
+  .public-customer-intake__qr svg {
+    width: 260px !important;
+    height: 260px !important;
+    display: block !important;
+  }
+
+  .public-customer-intake__link {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+
+  .customers-page__form-actions,
   .public-customer-intake .button {
-    display: none;
+    display: none !important;
+  }
+}
+
+@page :first {
+  margin: 12mm;
+}
+
+@media print and (max-width: 600px) {
+  .public-customer-intake__qr,
+  .public-customer-intake__qr svg {
+    width: 220px !important;
+    height: 220px !important;
   }
 }
