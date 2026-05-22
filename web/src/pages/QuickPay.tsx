@@ -3,11 +3,14 @@ import { doc, getDoc } from 'firebase/firestore'
 import PageSection from '../layout/PageSection'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { db } from '../firebase'
+import './QuickPay.css'
 
 type StoreProfile = {
   name: string
   logoUrl: string
 }
+
+type QuickPayTab = 'link' | 'print' | 'message'
 
 function copyToClipboard(value: string) {
   if (!navigator.clipboard) return Promise.reject(new Error('Clipboard unavailable'))
@@ -26,8 +29,13 @@ function pickLogo(record: Record<string, unknown>) {
   return clean(record.logoUrl) || clean(record.logo) || clean(record.photoUrl) || clean(record.imageUrl)
 }
 
+function getInitial(name: string) {
+  return name.trim().slice(0, 1).toUpperCase() || 'S'
+}
+
 export default function QuickPay() {
   const { storeId, isLoading } = useActiveStore()
+  const [activeTab, setActiveTab] = useState<QuickPayTab>('link')
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [profile, setProfile] = useState<StoreProfile>({ name: 'Your store', logoUrl: '' })
 
@@ -37,10 +45,6 @@ export default function QuickPay() {
   }, [storeId])
 
   const printUrl = '/quick-pay/print'
-
-  const qrCodeUrl = useMemo(() => {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(quickPayUrl)}`
-  }, [quickPayUrl])
 
   const customerMessage = useMemo(() => {
     return [
@@ -99,115 +103,143 @@ export default function QuickPay() {
   }
 
   const displayName = isLoading ? 'Preparing store…' : profile.name
+  const storeInitial = getInitial(profile.name)
 
   return (
     <PageSection
       title="Quick Pay"
-      subtitle="Use one simple payment link and one clean QR poster for customer payments."
+      subtitle="Use one simple payment link, a clean print poster, and a ready customer message."
     >
-      <div className="space-y-5">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
-          <section className="overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-slate-50 p-4 shadow-sm sm:p-6 lg:p-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 text-xl font-black text-white sm:h-16 sm:w-16 sm:text-2xl">
-                {profile.logoUrl ? <img src={profile.logoUrl} alt="" className="h-full w-full object-cover" /> : profile.name.slice(0, 1).toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-700 sm:text-sm">Main customer payment link</p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{displayName}</h3>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                  Send this link to customers. They open it, search what they want, select the item, and pay securely.
-                </p>
-              </div>
+      <div className="quick-pay-admin">
+        <section className="quick-pay-admin__hero">
+          <div className="quick-pay-admin__store">
+            <div className="quick-pay-admin__avatar" aria-hidden="true">
+              {profile.logoUrl ? <img src={profile.logoUrl} alt="" /> : <span>{storeInitial}</span>}
             </div>
-
-            <div className="mt-6 rounded-2xl border border-indigo-100 bg-white p-3 shadow-sm sm:p-4">
-              <label className="block text-sm font-bold text-slate-800" htmlFor="quick-pay-link">
-                Payment link
-              </label>
-              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                <input
-                  id="quick-pay-link"
-                  className="min-h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-950 outline-none focus:border-indigo-500 sm:text-base"
-                  readOnly
-                  value={quickPayUrl}
-                  onFocus={event => event.currentTarget.select()}
-                />
-                <button type="button" className="button button--primary min-h-12 justify-center whitespace-nowrap" onClick={handleCopyLink}>
-                  Copy payment link
-                </button>
-              </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs leading-5 text-slate-500 sm:text-sm">
-                  This is the most important link. Add it to WhatsApp, Instagram, flyers, SMS, or your website.
-                </p>
-                <a
-                  className="text-xs font-black uppercase tracking-[0.16em] text-indigo-700 underline decoration-indigo-300 underline-offset-4 hover:text-indigo-900"
-                  href={quickPayUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Preview customer page
-                </a>
-              </div>
-            </div>
-          </section>
-
-          <aside className="rounded-3xl border border-slate-200 bg-slate-950 p-4 text-white shadow-sm sm:p-6">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-200 sm:text-sm">Print page link</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight">Counter QR poster</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Open the half-page poster with only the store name, QR code, and payment steps.
-            </p>
-
-            <div className="mt-5 rounded-2xl bg-white p-3">
-              {isLoading ? (
-                <div className="flex h-48 items-center justify-center text-sm text-slate-600">Preparing QR…</div>
-              ) : (
-                <img src={qrCodeUrl} alt="Quick Pay QR code" className="mx-auto h-48 w-48" />
-              )}
-            </div>
-
-            <a className="button button--primary mt-5 w-full justify-center" href={printUrl}>
-              Open print page
-            </a>
-            <p className="mt-3 break-all rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold text-indigo-100">
-              {printUrl}
-            </p>
-          </aside>
-        </div>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Message to customer</p>
-              <h3 className="mt-2 text-2xl font-black text-slate-950">Ready-to-send payment message</h3>
-            </div>
-            <button type="button" className="button button--ghost justify-center whitespace-nowrap" onClick={handleCopyMessage}>
-              Copy message
-            </button>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
-            <p className="text-base font-semibold leading-7 text-slate-950">
-              Hello, you can pay <span className="font-black">{profile.name}</span> securely with Sedifex Quick Pay.
-            </p>
-
-            <div className="mt-4 rounded-2xl border border-indigo-100 bg-white p-3 sm:p-4">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-700">Payment link</p>
-              <p className="mt-2 break-all text-sm font-semibold leading-6 text-slate-950 sm:text-base">{quickPayUrl}</p>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl bg-white p-4 text-sm font-semibold text-slate-700">1. Open the link</div>
-              <div className="rounded-2xl bg-white p-4 text-sm font-semibold text-slate-700">2. Search what you want</div>
-              <div className="rounded-2xl bg-white p-4 text-sm font-semibold text-slate-700">3. Select product, service, or course</div>
-              <div className="rounded-2xl bg-white p-4 text-sm font-semibold text-slate-700">4. Pay securely</div>
+              <p className="quick-pay-admin__eyebrow">Quick Pay setup</p>
+              <h3>{displayName}</h3>
+              <p>Share the payment link with customers or print the counter poster when you need a QR code.</p>
             </div>
           </div>
         </section>
 
-        {copyStatus ? <p className="rounded-xl bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">{copyStatus}</p> : null}
+        <div className="quick-pay-admin__tabs" role="tablist" aria-label="Quick Pay tools">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'link'}
+            className={activeTab === 'link' ? 'is-active' : ''}
+            onClick={() => setActiveTab('link')}
+          >
+            Payment link
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'print'}
+            className={activeTab === 'print' ? 'is-active' : ''}
+            onClick={() => setActiveTab('print')}
+          >
+            Print poster
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'message'}
+            className={activeTab === 'message' ? 'is-active' : ''}
+            onClick={() => setActiveTab('message')}
+          >
+            Customer message
+          </button>
+        </div>
+
+        {activeTab === 'link' ? (
+          <section className="quick-pay-admin__panel" role="tabpanel">
+            <div className="quick-pay-admin__panel-header">
+              <div>
+                <p className="quick-pay-admin__eyebrow">Main customer payment link</p>
+                <h3>Send customers here to pay</h3>
+                <p>Customers open this link, search what they want, select the item, and pay securely.</p>
+              </div>
+              <a className="quick-pay-admin__small-link" href={quickPayUrl} target="_blank" rel="noreferrer">
+                Preview customer page
+              </a>
+            </div>
+
+            <div className="quick-pay-admin__link-box">
+              <label htmlFor="quick-pay-link">Payment link</label>
+              <div className="quick-pay-admin__link-row">
+                <input
+                  id="quick-pay-link"
+                  readOnly
+                  value={quickPayUrl}
+                  onFocus={event => event.currentTarget.select()}
+                />
+                <button type="button" className="button button--primary" onClick={handleCopyLink}>
+                  Copy payment link
+                </button>
+              </div>
+              <p>This is the most important link. Add it to WhatsApp, Instagram, flyers, SMS, or your website.</p>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'print' ? (
+          <section className="quick-pay-admin__panel" role="tabpanel">
+            <div className="quick-pay-admin__panel-header">
+              <div>
+                <p className="quick-pay-admin__eyebrow">Print page link</p>
+                <h3>Counter QR poster</h3>
+                <p>The QR code image stays on the print page only, so this Quick Pay page stays clean.</p>
+              </div>
+            </div>
+
+            <div className="quick-pay-admin__print-card">
+              <div>
+                <h4>Open the half-page poster</h4>
+                <p>The poster shows only the store name, QR code, and payment steps. Use it for your counter, reception, classroom, or flyer.</p>
+                <code>{printUrl}</code>
+              </div>
+              <a className="button button--primary" href={printUrl}>
+                Open print page
+              </a>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'message' ? (
+          <section className="quick-pay-admin__panel" role="tabpanel">
+            <div className="quick-pay-admin__panel-header">
+              <div>
+                <p className="quick-pay-admin__eyebrow">Message to customer</p>
+                <h3>Ready-to-send payment message</h3>
+                <p>Copy this message and send it by WhatsApp, SMS, email, or social media inbox.</p>
+              </div>
+              <button type="button" className="button button--ghost" onClick={handleCopyMessage}>
+                Copy message
+              </button>
+            </div>
+
+            <div className="quick-pay-admin__message-card">
+              <p>
+                Hello, you can pay <strong>{profile.name}</strong> securely with Sedifex Quick Pay.
+              </p>
+              <div>
+                <span>Payment link</span>
+                <strong>{quickPayUrl}</strong>
+              </div>
+              <ol>
+                <li>Open the link</li>
+                <li>Search what you want</li>
+                <li>Select product, service, or course</li>
+                <li>Pay securely</li>
+              </ol>
+            </div>
+          </section>
+        ) : null}
+
+        {copyStatus ? <p className="quick-pay-admin__status">{copyStatus}</p> : null}
       </div>
     </PageSection>
   )
