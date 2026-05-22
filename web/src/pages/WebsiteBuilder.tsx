@@ -8,6 +8,7 @@ type WebsiteType = 'shop' | 'beauty' | 'school' | 'travel' | 'ngo' | 'restaurant
 type WebsiteTheme = 'modern' | 'luxury' | 'clean' | 'bold'
 type StoredWebsiteStatus = 'draft' | 'published'
 type DisplayWebsiteStatus = StoredWebsiteStatus | 'needs-setup'
+type PreviewMode = 'mobile' | 'desktop'
 
 type WebsiteBuilderSettings = {
   slug: string
@@ -32,6 +33,17 @@ type WebsiteThemeOption = {
   previewClassName: string
   headingClassName: string
   buttonClassName: string
+  textClassName: string
+  surfaceClassName: string
+  mutedSurfaceClassName: string
+}
+
+type PreviewContent = {
+  eyebrow: string
+  headline: string
+  body: string
+  cta: string
+  cards: string[]
 }
 
 const WEBSITE_TYPES: WebsiteTypeOption[] = [
@@ -93,7 +105,10 @@ const THEMES: WebsiteThemeOption[] = [
     description: 'Clean sections with strong call-to-action buttons.',
     previewClassName: 'from-indigo-500 via-blue-500 to-cyan-400',
     headingClassName: 'bg-white/95',
-    buttonClassName: 'bg-slate-950',
+    buttonClassName: 'bg-slate-950 text-white',
+    textClassName: 'text-white',
+    surfaceClassName: 'bg-white text-slate-950',
+    mutedSurfaceClassName: 'bg-white/15 text-white',
   },
   {
     id: 'luxury',
@@ -101,7 +116,10 @@ const THEMES: WebsiteThemeOption[] = [
     description: 'Premium spacing, darker accents, and elegant visuals.',
     previewClassName: 'from-slate-950 via-stone-800 to-amber-600',
     headingClassName: 'bg-amber-100/90',
-    buttonClassName: 'bg-amber-400',
+    buttonClassName: 'bg-amber-400 text-slate-950',
+    textClassName: 'text-amber-50',
+    surfaceClassName: 'bg-stone-950 text-amber-50',
+    mutedSurfaceClassName: 'bg-amber-100/15 text-amber-50',
   },
   {
     id: 'clean',
@@ -109,7 +127,10 @@ const THEMES: WebsiteThemeOption[] = [
     description: 'Simple, bright, and easy for small businesses.',
     previewClassName: 'from-slate-100 via-white to-blue-100',
     headingClassName: 'bg-slate-900',
-    buttonClassName: 'bg-blue-500',
+    buttonClassName: 'bg-blue-500 text-white',
+    textClassName: 'text-slate-950',
+    surfaceClassName: 'bg-white text-slate-950',
+    mutedSurfaceClassName: 'bg-slate-900/5 text-slate-700',
   },
   {
     id: 'bold',
@@ -117,7 +138,10 @@ const THEMES: WebsiteThemeOption[] = [
     description: 'High contrast design for sales and promotions.',
     previewClassName: 'from-rose-500 via-orange-400 to-yellow-300',
     headingClassName: 'bg-white',
-    buttonClassName: 'bg-rose-700',
+    buttonClassName: 'bg-rose-700 text-white',
+    textClassName: 'text-white',
+    surfaceClassName: 'bg-white text-slate-950',
+    mutedSurfaceClassName: 'bg-white/20 text-white',
   },
 ]
 
@@ -133,6 +157,58 @@ const PAGE_OPTIONS = [
   'Contact',
   'Quick Pay',
 ]
+
+const PREVIEW_CONTENT: Record<WebsiteType, PreviewContent> = {
+  shop: {
+    eyebrow: 'Online shop',
+    headline: 'Shop products and pay safely online.',
+    body: 'Show products, promotions, checkout, and Quick Pay from one public website.',
+    cta: 'Shop now',
+    cards: ['Featured products', 'New arrivals', 'Quick Pay'],
+  },
+  beauty: {
+    eyebrow: 'Beauty studio',
+    headline: 'Book beauty services with confidence.',
+    body: 'Display services, gallery, bookings, reviews, and client payments in one place.',
+    cta: 'Book appointment',
+    cards: ['Popular services', 'Gallery', 'Client booking'],
+  },
+  school: {
+    eyebrow: 'School website',
+    headline: 'Courses, registration, and student payments.',
+    body: 'Promote classes, accept enquiries, and connect course registration to Sedifex.',
+    cta: 'Register now',
+    cards: ['Courses', 'Class schedule', 'Student payments'],
+  },
+  travel: {
+    eyebrow: 'Travel agency',
+    headline: 'Turn travel enquiries into bookings.',
+    body: 'Show packages, collect leads, receive booking requests, and track payments.',
+    cta: 'Send enquiry',
+    cards: ['Travel packages', 'Visa support', 'Consultation'],
+  },
+  ngo: {
+    eyebrow: 'Impact website',
+    headline: 'Share your mission and collect support.',
+    body: 'Highlight programs, donations, volunteer forms, and impact stories.',
+    cta: 'Support us',
+    cards: ['Programs', 'Donations', 'Impact gallery'],
+  },
+  restaurant: {
+    eyebrow: 'Restaurant website',
+    headline: 'Show your menu and receive orders.',
+    body: 'Publish menu items, ordering links, table QR, and customer payments.',
+    cta: 'View menu',
+    cards: ['Menu', 'Table QR', 'Order online'],
+  },
+  service: {
+    eyebrow: 'Service business',
+    headline: 'Sell services and receive bookings online.',
+    body: 'Show service packages, accept bookings, issue invoices, and collect Quick Pay.',
+    cta: 'Request service',
+    cards: ['Services', 'Bookings', 'Invoices'],
+  },
+}
 
 const STATUS_CONFIG: Record<DisplayWebsiteStatus, { label: string; className: string; dotClassName: string }> = {
   draft: {
@@ -183,6 +259,8 @@ export default function WebsiteBuilder() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop')
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
 
   const previewUrl = useMemo(() => {
     const slug = settings.slug || 'your-business'
@@ -193,6 +271,8 @@ export default function WebsiteBuilder() {
   const statusConfig = STATUS_CONFIG[displayStatus]
   const selectedType = WEBSITE_TYPES.find(type => type.id === settings.websiteType) ?? WEBSITE_TYPES[0]
   const selectedTheme = THEMES.find(theme => theme.id === settings.theme) ?? THEMES[0]
+  const previewContent = PREVIEW_CONTENT[settings.websiteType]
+  const previewPages = settings.pages.length ? settings.pages.slice(0, 5) : ['Home']
   const canPublish = Boolean(storeId && settings.slug && settings.pages.length > 0 && !isLoading && !isSaving)
 
   const completionItems = [
@@ -309,6 +389,18 @@ export default function WebsiteBuilder() {
     }
   }
 
+  async function copyWebsiteLink() {
+    try {
+      await navigator.clipboard.writeText(previewUrl)
+      setCopyFeedback('Website link copied.')
+    } catch (copyError) {
+      console.error('[website-builder] Unable to copy website link', copyError)
+      setCopyFeedback('Could not copy link. You can copy it from the preview URL.')
+    }
+
+    window.setTimeout(() => setCopyFeedback(null), 2500)
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     void saveSettings('draft')
@@ -331,7 +423,7 @@ export default function WebsiteBuilder() {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(330px,0.88fr)]">
+      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)]">
         <div className="space-y-6">
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white shadow-sm">
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
@@ -445,6 +537,117 @@ export default function WebsiteBuilder() {
         </div>
 
         <aside className="space-y-6">
+          <section className="sticky top-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/70 md:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Preview</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-950">Home page preview</h3>
+                <p className="mt-1 text-sm text-slate-500">Live preview updates when theme, pages, or business type changes.</p>
+              </div>
+              <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}>
+                <span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />
+                {statusConfig.label}
+              </span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-2 transition ${previewMode === 'mobile' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                onClick={() => setPreviewMode('mobile')}
+              >
+                Mobile preview
+              </button>
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-2 transition ${previewMode === 'desktop' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                onClick={() => setPreviewMode('desktop')}
+              >
+                Desktop preview
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-[2rem] border border-slate-200 bg-slate-100 p-3">
+              <div className={`${previewMode === 'mobile' ? 'mx-auto max-w-[285px] rounded-[1.75rem]' : 'rounded-[1.75rem]'} overflow-hidden border border-slate-900/10 bg-white shadow-sm`}>
+                <div className="flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+                  <span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{previewUrl}</span>
+                </div>
+
+                <div className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{businessName || 'My business'}</p>
+                        <p className="truncate text-[11px] opacity-75">{selectedType.label}</p>
+                      </div>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${selectedTheme.buttonClassName}`}>Pay</span>
+                  </div>
+
+                  <div className={`mt-4 flex gap-2 overflow-hidden text-[11px] ${previewMode === 'mobile' ? 'flex-wrap' : 'flex-nowrap'}`}>
+                    {previewPages.map(page => (
+                      <span key={page} className={`rounded-full px-2.5 py-1 ${selectedTheme.mutedSurfaceClassName}`}>{page}</span>
+                    ))}
+                  </div>
+
+                  <div className={`${previewMode === 'mobile' ? 'grid gap-4' : 'grid grid-cols-[1.2fr_0.8fr] gap-4'} mt-6 items-center`}>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{previewContent.eyebrow}</p>
+                      <h4 className={`${previewMode === 'mobile' ? 'text-2xl' : 'text-3xl'} mt-2 font-black leading-tight tracking-tight`}>
+                        {previewContent.headline}
+                      </h4>
+                      <p className="mt-3 text-sm leading-6 opacity-85">{previewContent.body}</p>
+                      <button type="button" className={`mt-4 rounded-full px-4 py-2 text-sm font-bold shadow-sm ${selectedTheme.buttonClassName}`}>
+                        {previewContent.cta}
+                      </button>
+                    </div>
+
+                    <div className={`rounded-3xl p-3 shadow-sm ${selectedTheme.surfaceClassName}`}>
+                      <div className="h-24 rounded-2xl bg-slate-200/80" />
+                      <div className="mt-3 space-y-2">
+                        <div className="h-2.5 w-3/4 rounded-full bg-slate-300/80" />
+                        <div className="h-2.5 w-1/2 rounded-full bg-slate-200" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 bg-white p-4 sm:grid-cols-3">
+                  {previewContent.cards.map(card => (
+                    <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="h-8 w-8 rounded-xl bg-indigo-100" />
+                      <p className="mt-3 text-xs font-bold text-slate-900">{card}</p>
+                      <div className="mt-2 h-1.5 w-16 rounded-full bg-slate-200" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <a
+                className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5"
+                href={previewUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open public site
+              </a>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                onClick={() => void copyWebsiteLink()}
+              >
+                Copy website link
+              </button>
+            </div>
+            {copyFeedback ? <p className="mt-3 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{copyFeedback}</p> : null}
+          </section>
+
           <section className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -543,9 +746,6 @@ export default function WebsiteBuilder() {
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Pages</dt><dd className="text-right font-semibold text-slate-900">{settings.pages.length}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Status</dt><dd className="text-right font-semibold text-slate-900">{statusConfig.label}</dd></div>
             </dl>
-            <a className="mt-5 flex rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-50" href={previewUrl} target="_blank" rel="noreferrer">
-              Open preview →
-            </a>
           </section>
         </aside>
       </form>
