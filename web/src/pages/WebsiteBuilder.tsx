@@ -72,7 +72,7 @@ type PreviewContent = {
 const BUILDER_STEPS: Array<{ id: BuilderStepId; label: string; description: string }> = [
   { id: 'identity', label: 'Business identity', description: 'Name, logo, contact details, social links, and brand assets.' },
   { id: 'type', label: 'Website type', description: 'Choose the right structure for the business.' },
-  { id: 'pages', label: 'Pages', description: 'Select the pages customers should see.' },
+  { id: 'pages', label: 'Pages', description: 'Select smart pages based on the website type.' },
   { id: 'theme', label: 'Theme', description: 'Pick the visual style and feel.' },
   { id: 'content', label: 'Content', description: 'Connect website sections to Sedifex data.' },
   { id: 'payments', label: 'Payments / Quick Pay', description: 'Prepare checkout and payment pages.' },
@@ -101,192 +101,63 @@ const SOCIAL_LINK_FIELDS: Array<{ id: keyof SocialLinks; label: string; placehol
 ]
 
 const WEBSITE_TYPES: WebsiteTypeOption[] = [
-  {
-    id: 'shop',
-    label: 'Shop website',
-    description: 'Products, categories, checkout, and Quick Pay.',
-    icon: '🛍️',
-    accentClassName: 'bg-indigo-50 text-indigo-700 ring-indigo-100',
-  },
-  {
-    id: 'beauty',
-    label: 'Beauty / salon website',
-    description: 'Services, bookings, gallery, and client payments.',
-    icon: '✨',
-    accentClassName: 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-100',
-  },
-  {
-    id: 'school',
-    label: 'School website',
-    description: 'Courses, registrations, classes, and student payments.',
-    icon: '🎓',
-    accentClassName: 'bg-blue-50 text-blue-700 ring-blue-100',
-  },
-  {
-    id: 'travel',
-    label: 'Travel agency website',
-    description: 'Trips, bookings, leads, and enquiry payments.',
-    icon: '✈️',
-    accentClassName: 'bg-sky-50 text-sky-700 ring-sky-100',
-  },
-  {
-    id: 'ngo',
-    label: 'NGO website',
-    description: 'Programs, donations, volunteers, and impact gallery.',
-    icon: '🤝',
-    accentClassName: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-  },
-  {
-    id: 'restaurant',
-    label: 'Restaurant website',
-    description: 'Menu, table QR, ordering, and payments.',
-    icon: '🍽️',
-    accentClassName: 'bg-orange-50 text-orange-700 ring-orange-100',
-  },
-  {
-    id: 'service',
-    label: 'Service business website',
-    description: 'Services, invoices, bookings, and Quick Pay.',
-    icon: '🧰',
-    accentClassName: 'bg-slate-100 text-slate-700 ring-slate-200',
-  },
+  { id: 'shop', label: 'Shop website', description: 'Products, categories, checkout, cart, and Quick Pay.', icon: '🛍️', accentClassName: 'bg-indigo-50 text-indigo-700 ring-indigo-100' },
+  { id: 'beauty', label: 'Beauty / salon website', description: 'Services, bookings, gallery, client reviews, and Quick Pay.', icon: '✨', accentClassName: 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-100' },
+  { id: 'school', label: 'School website', description: 'Courses, registration, classes, and student payments.', icon: '🎓', accentClassName: 'bg-blue-50 text-blue-700 ring-blue-100' },
+  { id: 'travel', label: 'Travel agency website', description: 'Packages, destinations, enquiries, consultations, and bookings.', icon: '✈️', accentClassName: 'bg-sky-50 text-sky-700 ring-sky-100' },
+  { id: 'ngo', label: 'NGO website', description: 'Programs, donations, volunteers, blog, and impact gallery.', icon: '🤝', accentClassName: 'bg-emerald-50 text-emerald-700 ring-emerald-100' },
+  { id: 'restaurant', label: 'Restaurant website', description: 'Menu, ordering, reservations, table QR, and payments.', icon: '🍽️', accentClassName: 'bg-orange-50 text-orange-700 ring-orange-100' },
+  { id: 'service', label: 'Service business website', description: 'Services, bookings, invoices, testimonials, and Quick Pay.', icon: '🧰', accentClassName: 'bg-slate-100 text-slate-700 ring-slate-200' },
 ]
+
+const PAGE_OPTIONS_BY_TYPE: Record<WebsiteType, string[]> = {
+  ngo: ['Home', 'About', 'Programs', 'Donate', 'Volunteers', 'Gallery', 'Blog', 'Contact'],
+  shop: ['Home', 'Products', 'Categories', 'Cart / Checkout', 'Quick Pay', 'Contact'],
+  beauty: ['Home', 'Services', 'Bookings', 'Gallery', 'Client reviews', 'Quick Pay', 'Contact'],
+  school: ['Home', 'Courses', 'Registration', 'Classes', 'Student payments', 'Contact'],
+  travel: ['Home', 'Packages', 'Destinations', 'Consultation / Enquiry', 'Bookings', 'Gallery', 'Blog', 'Contact'],
+  restaurant: ['Home', 'Menu', 'Online ordering', 'Table QR', 'Reservations', 'Gallery', 'Contact'],
+  service: ['Home', 'Services', 'Bookings', 'Invoices', 'Testimonials', 'Quick Pay', 'Contact'],
+}
+
+const PAYMENT_PAGES_BY_TYPE: Record<WebsiteType, string[]> = {
+  shop: ['Cart / Checkout', 'Quick Pay'],
+  beauty: ['Quick Pay', 'Bookings'],
+  school: ['Student payments', 'Registration'],
+  travel: ['Consultation / Enquiry', 'Bookings'],
+  ngo: ['Donate'],
+  restaurant: ['Online ordering', 'Table QR'],
+  service: ['Quick Pay', 'Invoices'],
+}
 
 const THEMES: WebsiteThemeOption[] = [
-  {
-    id: 'modern',
-    label: 'Modern',
-    description: 'Clean sections with strong call-to-action buttons.',
-    previewClassName: 'from-indigo-500 via-blue-500 to-cyan-400',
-    headingClassName: 'bg-white/95',
-    buttonClassName: 'bg-slate-950 text-white',
-    textClassName: 'text-white',
-    surfaceClassName: 'bg-white text-slate-950',
-    mutedSurfaceClassName: 'bg-white/15 text-white',
-  },
-  {
-    id: 'luxury',
-    label: 'Luxury',
-    description: 'Premium spacing, darker accents, and elegant visuals.',
-    previewClassName: 'from-slate-950 via-stone-800 to-amber-600',
-    headingClassName: 'bg-amber-100/90',
-    buttonClassName: 'bg-amber-400 text-slate-950',
-    textClassName: 'text-amber-50',
-    surfaceClassName: 'bg-stone-950 text-amber-50',
-    mutedSurfaceClassName: 'bg-amber-100/15 text-amber-50',
-  },
-  {
-    id: 'clean',
-    label: 'Clean',
-    description: 'Simple, bright, and easy for small businesses.',
-    previewClassName: 'from-slate-100 via-white to-blue-100',
-    headingClassName: 'bg-slate-900',
-    buttonClassName: 'bg-blue-500 text-white',
-    textClassName: 'text-slate-950',
-    surfaceClassName: 'bg-white text-slate-950',
-    mutedSurfaceClassName: 'bg-slate-900/5 text-slate-700',
-  },
-  {
-    id: 'bold',
-    label: 'Bold',
-    description: 'High contrast design for sales and promotions.',
-    previewClassName: 'from-rose-500 via-orange-400 to-yellow-300',
-    headingClassName: 'bg-white',
-    buttonClassName: 'bg-rose-700 text-white',
-    textClassName: 'text-white',
-    surfaceClassName: 'bg-white text-slate-950',
-    mutedSurfaceClassName: 'bg-white/20 text-white',
-  },
-]
-
-const PAGE_OPTIONS = [
-  'Home',
-  'About',
-  'Products',
-  'Services',
-  'Courses',
-  'Bookings',
-  'Gallery',
-  'Blog',
-  'Contact',
-  'Quick Pay',
+  { id: 'modern', label: 'Modern', description: 'Clean sections with strong call-to-action buttons.', previewClassName: 'from-indigo-500 via-blue-500 to-cyan-400', headingClassName: 'bg-white/95', buttonClassName: 'bg-slate-950 text-white', textClassName: 'text-white', surfaceClassName: 'bg-white text-slate-950', mutedSurfaceClassName: 'bg-white/15 text-white' },
+  { id: 'luxury', label: 'Luxury', description: 'Premium spacing, darker accents, and elegant visuals.', previewClassName: 'from-slate-950 via-stone-800 to-amber-600', headingClassName: 'bg-amber-100/90', buttonClassName: 'bg-amber-400 text-slate-950', textClassName: 'text-amber-50', surfaceClassName: 'bg-stone-950 text-amber-50', mutedSurfaceClassName: 'bg-amber-100/15 text-amber-50' },
+  { id: 'clean', label: 'Clean', description: 'Simple, bright, and easy for small businesses.', previewClassName: 'from-slate-100 via-white to-blue-100', headingClassName: 'bg-slate-900', buttonClassName: 'bg-blue-500 text-white', textClassName: 'text-slate-950', surfaceClassName: 'bg-white text-slate-950', mutedSurfaceClassName: 'bg-slate-900/5 text-slate-700' },
+  { id: 'bold', label: 'Bold', description: 'High contrast design for sales and promotions.', previewClassName: 'from-rose-500 via-orange-400 to-yellow-300', headingClassName: 'bg-white', buttonClassName: 'bg-rose-700 text-white', textClassName: 'text-white', surfaceClassName: 'bg-white text-slate-950', mutedSurfaceClassName: 'bg-white/20 text-white' },
 ]
 
 const CONTENT_MODULES = [
-  { label: 'Products / Services', description: 'Pull items directly from Sedifex inventory and service records.' },
-  { label: 'Gallery', description: 'Show business photos, work samples, or treatment/course images.' },
-  { label: 'Promotions', description: 'Highlight offers, featured products, and seasonal campaigns.' },
-  { label: 'Contact details', description: 'Use phone, WhatsApp, email, location, opening hours, and social links from business identity.' },
+  { label: 'Business identity', description: 'Use logo, tagline, description, contact details, social links, brand color, and cover image.' },
+  { label: 'Products / Services / Programs', description: 'Pull the right records from Sedifex based on the website type and selected pages.' },
+  { label: 'Gallery and reviews', description: 'Show proof, images, testimonials, client reviews, impact gallery, or food/service photos.' },
+  { label: 'Payments and enquiries', description: 'Use Donate, Quick Pay, Cart / Checkout, Student payments, invoices, or bookings where relevant.' },
 ]
 
 const PREVIEW_CONTENT: Record<WebsiteType, PreviewContent> = {
-  shop: {
-    eyebrow: 'Online shop',
-    headline: 'Shop products and pay safely online.',
-    body: 'Show products, promotions, checkout, and Quick Pay from one public website.',
-    cta: 'Shop now',
-    cards: ['Featured products', 'New arrivals', 'Quick Pay'],
-  },
-  beauty: {
-    eyebrow: 'Beauty studio',
-    headline: 'Book beauty services with confidence.',
-    body: 'Display services, gallery, bookings, reviews, and client payments in one place.',
-    cta: 'Book appointment',
-    cards: ['Popular services', 'Gallery', 'Client booking'],
-  },
-  school: {
-    eyebrow: 'School website',
-    headline: 'Courses, registration, and student payments.',
-    body: 'Promote classes, accept enquiries, and connect course registration to Sedifex.',
-    cta: 'Register now',
-    cards: ['Courses', 'Class schedule', 'Student payments'],
-  },
-  travel: {
-    eyebrow: 'Travel agency',
-    headline: 'Turn travel enquiries into bookings.',
-    body: 'Show packages, collect leads, receive booking requests, and track payments.',
-    cta: 'Send enquiry',
-    cards: ['Travel packages', 'Visa support', 'Consultation'],
-  },
-  ngo: {
-    eyebrow: 'Impact website',
-    headline: 'Share your mission and collect support.',
-    body: 'Highlight programs, donations, volunteer forms, and impact stories.',
-    cta: 'Support us',
-    cards: ['Programs', 'Donations', 'Impact gallery'],
-  },
-  restaurant: {
-    eyebrow: 'Restaurant website',
-    headline: 'Show your menu and receive orders.',
-    body: 'Publish menu items, ordering links, table QR, and customer payments.',
-    cta: 'View menu',
-    cards: ['Menu', 'Table QR', 'Order online'],
-  },
-  service: {
-    eyebrow: 'Service business',
-    headline: 'Sell services and receive bookings online.',
-    body: 'Show service packages, accept bookings, issue invoices, and collect Quick Pay.',
-    cta: 'Request service',
-    cards: ['Services', 'Bookings', 'Invoices'],
-  },
+  shop: { eyebrow: 'Online shop', headline: 'Shop products and pay safely online.', body: 'Show products, categories, checkout, and Quick Pay from one public website.', cta: 'Shop now', cards: ['Products', 'Categories', 'Checkout'] },
+  beauty: { eyebrow: 'Beauty studio', headline: 'Book beauty services with confidence.', body: 'Display services, gallery, bookings, client reviews, and payments in one place.', cta: 'Book appointment', cards: ['Services', 'Gallery', 'Reviews'] },
+  school: { eyebrow: 'School website', headline: 'Courses, registration, and student payments.', body: 'Promote classes, accept registrations, and connect student payments to Sedifex.', cta: 'Register now', cards: ['Courses', 'Classes', 'Payments'] },
+  travel: { eyebrow: 'Travel agency', headline: 'Turn travel enquiries into bookings.', body: 'Show packages, destinations, consultation requests, bookings, and travel content.', cta: 'Send enquiry', cards: ['Packages', 'Destinations', 'Bookings'] },
+  ngo: { eyebrow: 'Impact website', headline: 'Share your mission and collect support.', body: 'Highlight programs, donations, volunteer forms, blog posts, and impact stories.', cta: 'Donate now', cards: ['Programs', 'Donate', 'Volunteers'] },
+  restaurant: { eyebrow: 'Restaurant website', headline: 'Show your menu and receive orders.', body: 'Publish menu items, online ordering, reservations, table QR, and customer payments.', cta: 'View menu', cards: ['Menu', 'Ordering', 'Reservations'] },
+  service: { eyebrow: 'Service business', headline: 'Sell services and receive bookings online.', body: 'Show service packages, accept bookings, issue invoices, and collect Quick Pay.', cta: 'Request service', cards: ['Services', 'Bookings', 'Invoices'] },
 }
 
 const STATUS_CONFIG: Record<DisplayWebsiteStatus, { label: string; className: string; dotClassName: string }> = {
-  draft: {
-    label: 'Draft',
-    className: 'border-amber-200 bg-amber-50 text-amber-700',
-    dotClassName: 'bg-amber-500',
-  },
-  published: {
-    label: 'Published',
-    className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    dotClassName: 'bg-emerald-500',
-  },
-  'needs-setup': {
-    label: 'Needs setup',
-    className: 'border-rose-200 bg-rose-50 text-rose-700',
-    dotClassName: 'bg-rose-500',
-  },
+  draft: { label: 'Draft', className: 'border-amber-200 bg-amber-50 text-amber-700', dotClassName: 'bg-amber-500' },
+  published: { label: 'Published', className: 'border-emerald-200 bg-emerald-50 text-emerald-700', dotClassName: 'bg-emerald-500' },
+  'needs-setup': { label: 'Needs setup', className: 'border-rose-200 bg-rose-50 text-rose-700', dotClassName: 'bg-rose-500' },
 }
 
 function createDefaultSettings(): WebsiteBuilderSettings {
@@ -294,7 +165,7 @@ function createDefaultSettings(): WebsiteBuilderSettings {
     slug: '',
     websiteType: 'shop',
     theme: 'modern',
-    pages: ['Home', 'Products', 'Services', 'Gallery', 'Contact', 'Quick Pay'],
+    pages: [...PAGE_OPTIONS_BY_TYPE.shop],
     status: 'draft',
     businessName: '',
     tagline: '',
@@ -312,12 +183,7 @@ function createDefaultSettings(): WebsiteBuilderSettings {
 }
 
 function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
 }
 
 function togglePage(pages: string[], page: string) {
@@ -348,9 +214,7 @@ function mergeSocialLinks(...sources: unknown[]): SocialLinks {
     const record = getRecord(source)
     SOCIAL_LINK_FIELDS.forEach(field => {
       const value = record[field.id]
-      if (typeof value === 'string' && value.trim()) {
-        merged[field.id] = value.trim()
-      }
+      if (typeof value === 'string' && value.trim()) merged[field.id] = value.trim()
     })
   })
   return merged
@@ -362,6 +226,20 @@ function isWebsiteType(value: unknown): value is WebsiteType {
 
 function isWebsiteTheme(value: unknown): value is WebsiteTheme {
   return THEMES.some(theme => theme.id === value)
+}
+
+function getSmartPagesForType(type: WebsiteType) {
+  return PAGE_OPTIONS_BY_TYPE[type]
+}
+
+function getPaymentPagesForType(type: WebsiteType) {
+  return PAYMENT_PAGES_BY_TYPE[type]
+}
+
+function filterPagesForType(type: WebsiteType, pages: string[]) {
+  const allowedPages = getSmartPagesForType(type)
+  const filtered = pages.filter(page => allowedPages.includes(page))
+  return filtered.length ? filtered : [...allowedPages]
 }
 
 export default function WebsiteBuilder() {
@@ -384,8 +262,12 @@ export default function WebsiteBuilder() {
   const selectedType = WEBSITE_TYPES.find(type => type.id === settings.websiteType) ?? WEBSITE_TYPES[0]
   const selectedTheme = THEMES.find(theme => theme.id === settings.theme) ?? THEMES[0]
   const previewContent = PREVIEW_CONTENT[settings.websiteType]
+  const smartPageOptions = getSmartPagesForType(settings.websiteType)
+  const paymentPages = getPaymentPagesForType(settings.websiteType)
+  const primaryPaymentPage = paymentPages[0]
   const previewPages = settings.pages.length ? settings.pages.slice(0, 5) : ['Home']
   const activeSocialLinks = SOCIAL_LINK_FIELDS.filter(field => settings.socialLinks[field.id]).slice(0, 4)
+  const hasPaymentPage = paymentPages.some(page => settings.pages.includes(page))
   const canPublish = Boolean(storeId && settings.slug && settings.pages.length > 0 && !isLoading && !isSaving)
   const currentStepIndex = BUILDER_STEPS.findIndex(step => step.id === activeStep)
   const safeStepIndex = currentStepIndex >= 0 ? currentStepIndex : 0
@@ -398,7 +280,7 @@ export default function WebsiteBuilder() {
     pages: settings.pages.length > 0,
     theme: Boolean(settings.theme),
     content: settings.pages.length > 0,
-    payments: settings.pages.includes('Quick Pay'),
+    payments: hasPaymentPage,
     domain: Boolean(settings.slug),
     publish: settings.status === 'published',
   }
@@ -406,9 +288,9 @@ export default function WebsiteBuilder() {
   const completionItems = [
     { label: 'Business identity', complete: stepCompletion.identity },
     { label: 'Website type', complete: stepCompletion.type },
-    { label: 'Pages selected', complete: stepCompletion.pages },
+    { label: 'Smart pages selected', complete: stepCompletion.pages },
     { label: 'Theme selected', complete: stepCompletion.theme },
-    { label: 'Quick Pay page', complete: stepCompletion.payments },
+    { label: 'Payment page', complete: stepCompletion.payments },
     { label: 'Domain slug', complete: stepCompletion.domain },
   ]
 
@@ -430,22 +312,18 @@ export default function WebsiteBuilder() {
         const storeData = storeSnap.exists() ? (storeSnap.data() as Record<string, unknown>) : {}
         const data = settingsSnap.exists() ? (settingsSnap.data() as Record<string, unknown>) : {}
         const website = getRecord(data.websiteBuilder)
-        const fallbackBusinessName =
-          readString(storeData, 'businessName') ||
-          readString(storeData, 'storeName') ||
-          readString(storeData, 'name') ||
-          'My business'
+        const fallbackBusinessName = readString(storeData, 'businessName') || readString(storeData, 'storeName') || readString(storeData, 'name') || 'My business'
 
         setSettings(previous => {
           const businessName = readString(website, 'businessName', fallbackBusinessName)
-          const pages = Array.isArray(website.pages) && website.pages.length
-            ? website.pages.filter((page): page is string => typeof page === 'string')
-            : previous.pages
+          const websiteType = isWebsiteType(website.websiteType) ? website.websiteType : previous.websiteType
+          const loadedPages = Array.isArray(website.pages) ? website.pages.filter((page): page is string => typeof page === 'string') : []
+          const pages = loadedPages.length ? filterPagesForType(websiteType, loadedPages) : [...PAGE_OPTIONS_BY_TYPE[websiteType]]
 
           return {
             ...previous,
             slug: readString(website, 'slug') || slugify(businessName),
-            websiteType: isWebsiteType(website.websiteType) ? website.websiteType : previous.websiteType,
+            websiteType,
             theme: isWebsiteTheme(website.theme) ? website.theme : previous.theme,
             pages,
             status: website.status === 'published' ? 'published' : 'draft',
@@ -481,14 +359,16 @@ export default function WebsiteBuilder() {
     setSettings(previous => ({ ...previous, [key]: value }))
   }
 
-  function updateSocialLink(key: keyof SocialLinks, value: string) {
+  function selectWebsiteType(websiteType: WebsiteType) {
     setSettings(previous => ({
       ...previous,
-      socialLinks: {
-        ...previous.socialLinks,
-        [key]: value,
-      },
+      websiteType,
+      pages: [...PAGE_OPTIONS_BY_TYPE[websiteType]],
     }))
+  }
+
+  function updateSocialLink(key: keyof SocialLinks, value: string) {
+    setSettings(previous => ({ ...previous, socialLinks: { ...previous.socialLinks, [key]: value } }))
   }
 
   async function saveSettings(nextStatus: StoredWebsiteStatus) {
@@ -503,7 +383,8 @@ export default function WebsiteBuilder() {
       return
     }
 
-    if (nextStatus === 'published' && settings.pages.length === 0) {
+    const normalizedPages = filterPagesForType(settings.websiteType, settings.pages)
+    if (nextStatus === 'published' && normalizedPages.length === 0) {
       setError('Select at least one page before publishing.')
       return
     }
@@ -516,6 +397,7 @@ export default function WebsiteBuilder() {
       const payload: WebsiteBuilderSettings = {
         ...settings,
         slug: normalizedSlug,
+        pages: normalizedPages,
         businessName: settings.businessName.trim() || 'My business',
         tagline: settings.tagline.trim(),
         description: settings.description.trim(),
@@ -552,6 +434,8 @@ export default function WebsiteBuilder() {
           websiteBuilder: {
             ...payload,
             businessIdentity,
+            smartPages: PAGE_OPTIONS_BY_TYPE[payload.websiteType],
+            paymentPages: PAYMENT_PAGES_BY_TYPE[payload.websiteType],
             storeId,
             publicUrl: `https://sites.sedifex.com/${normalizedSlug}`,
             updatedAt: serverTimestamp(),
@@ -605,9 +489,7 @@ export default function WebsiteBuilder() {
             <span className={`h-2.5 w-2.5 rounded-full ${statusConfig.dotClassName}`} />
             {statusConfig.label}
           </span>
-          <a className="button button--ghost" href={previewUrl} target="_blank" rel="noreferrer">
-            Preview website
-          </a>
+          <a className="button button--ghost" href={previewUrl} target="_blank" rel="noreferrer">Preview website</a>
         </div>
       }
     >
@@ -617,10 +499,8 @@ export default function WebsiteBuilder() {
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Business website control center</p>
-                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Build a full website from business data</h3>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
-                  Store the business identity once, then reuse it for the homepage, contact page, footer, social links, and Quick Pay.
-                </p>
+                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Build a smart website from business data</h3>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">Website type now controls the available pages, so each business sees the pages that match its workflow.</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm shadow-xl backdrop-blur">
                 <p className="text-slate-300">Current website</p>
@@ -647,16 +527,7 @@ export default function WebsiteBuilder() {
                 const isActive = activeStep === step.id
                 const isComplete = stepCompletion[step.id]
                 return (
-                  <button
-                    key={step.id}
-                    type="button"
-                    className={`rounded-2xl border p-3 text-left transition ${
-                      isActive
-                        ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100'
-                        : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
-                    }`}
-                    onClick={() => setActiveStep(step.id)}
-                  >
+                  <button key={step.id} type="button" className={`rounded-2xl border p-3 text-left transition ${isActive ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'}`} onClick={() => setActiveStep(step.id)}>
                     <span className="flex items-center justify-between gap-2">
                       <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{index + 1}</span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{isComplete ? 'Done' : 'Open'}</span>
@@ -676,155 +547,30 @@ export default function WebsiteBuilder() {
                 <p className="mt-2 text-sm text-slate-500">These fields let Sedifex generate a complete website, contact section, footer, social links, and branded preview from one profile.</p>
 
                 <div className="mt-6 grid gap-5 lg:grid-cols-2">
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Business name
-                    <input
-                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      value={settings.businessName}
-                      onChange={event => updateSetting('businessName', event.target.value)}
-                      placeholder="Glittering Med Spa"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Short tagline
-                    <input
-                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      value={settings.tagline}
-                      onChange={event => updateSetting('tagline', event.target.value)}
-                      placeholder="Beauty, wellness, and confidence in one place"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700 lg:col-span-2">
-                    Business description
-                    <textarea
-                      className="mt-2 min-h-28 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      value={settings.description}
-                      onChange={event => updateSetting('description', event.target.value)}
-                      placeholder="Tell customers what the business does, who it serves, and why they should choose it."
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Business logo
-                    <input
-                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      value={settings.businessLogoUrl}
-                      onChange={event => updateSetting('businessLogoUrl', event.target.value)}
-                      placeholder="https://.../logo.png"
-                    />
-                    <span className="mt-1 block text-xs font-normal text-slate-500">Paste a logo URL for now. Later this can connect to the uploader.</span>
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Cover / banner image
-                    <input
-                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      value={settings.coverImageUrl}
-                      onChange={event => updateSetting('coverImageUrl', event.target.value)}
-                      placeholder="https://.../banner.jpg"
-                    />
-                    <span className="mt-1 block text-xs font-normal text-slate-500">Used for the homepage hero or service banner.</span>
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Brand color
-                    <div className="mt-2 flex items-center gap-3 rounded-2xl border border-slate-300 px-4 py-3 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50">
-                      <input
-                        type="color"
-                        className="h-10 w-12 cursor-pointer rounded-lg border border-slate-200 bg-white"
-                        value={settings.brandColor}
-                        onChange={event => updateSetting('brandColor', event.target.value)}
-                      />
-                      <input
-                        className="min-w-0 flex-1 outline-none"
-                        value={settings.brandColor}
-                        onChange={event => updateSetting('brandColor', normalizeBrandColor(event.target.value))}
-                        placeholder="#4f46e5"
-                      />
-                    </div>
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Website slug
-                    <div className="mt-2 flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50 sm:flex-row">
-                      <span className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-slate-500 sm:border-b-0 sm:border-r">sites.sedifex.com/</span>
-                      <input
-                        className="min-w-0 flex-1 px-4 py-3 outline-none"
-                        value={settings.slug}
-                        onChange={event => updateSetting('slug', slugify(event.target.value))}
-                        placeholder="glittering-med-spa"
-                      />
-                    </div>
-                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">Business name<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.businessName} onChange={event => updateSetting('businessName', event.target.value)} placeholder="Glittering Med Spa" /></label>
+                  <label className="block text-sm font-semibold text-slate-700">Short tagline<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.tagline} onChange={event => updateSetting('tagline', event.target.value)} placeholder="Beauty, wellness, and confidence in one place" /></label>
+                  <label className="block text-sm font-semibold text-slate-700 lg:col-span-2">Business description<textarea className="mt-2 min-h-28 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.description} onChange={event => updateSetting('description', event.target.value)} placeholder="Tell customers what the business does, who it serves, and why they should choose it." /></label>
+                  <label className="block text-sm font-semibold text-slate-700">Business logo<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.businessLogoUrl} onChange={event => updateSetting('businessLogoUrl', event.target.value)} placeholder="https://.../logo.png" /><span className="mt-1 block text-xs font-normal text-slate-500">Paste a logo URL for now. Later this can connect to the uploader.</span></label>
+                  <label className="block text-sm font-semibold text-slate-700">Cover / banner image<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.coverImageUrl} onChange={event => updateSetting('coverImageUrl', event.target.value)} placeholder="https://.../banner.jpg" /><span className="mt-1 block text-xs font-normal text-slate-500">Used for the homepage hero or service banner.</span></label>
+                  <label className="block text-sm font-semibold text-slate-700">Brand color<div className="mt-2 flex items-center gap-3 rounded-2xl border border-slate-300 px-4 py-3 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50"><input type="color" className="h-10 w-12 cursor-pointer rounded-lg border border-slate-200 bg-white" value={settings.brandColor} onChange={event => updateSetting('brandColor', event.target.value)} /><input className="min-w-0 flex-1 outline-none" value={settings.brandColor} onChange={event => updateSetting('brandColor', normalizeBrandColor(event.target.value))} placeholder="#4f46e5" /></div></label>
+                  <label className="block text-sm font-semibold text-slate-700">Website slug<div className="mt-2 flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50 sm:flex-row"><span className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-slate-500 sm:border-b-0 sm:border-r">sites.sedifex.com/</span><input className="min-w-0 flex-1 px-4 py-3 outline-none" value={settings.slug} onChange={event => updateSetting('slug', slugify(event.target.value))} placeholder="glittering-med-spa" /></div></label>
                 </div>
 
                 <div className="mt-8">
                   <h4 className="text-lg font-semibold text-slate-950">Contact details</h4>
                   <div className="mt-4 grid gap-5 lg:grid-cols-2">
-                    <label className="block text-sm font-semibold text-slate-700">
-                      Phone number
-                      <input
-                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                        value={settings.phone}
-                        onChange={event => updateSetting('phone', event.target.value)}
-                        placeholder="+233 24 000 0000"
-                      />
-                    </label>
-                    <label className="block text-sm font-semibold text-slate-700">
-                      WhatsApp number
-                      <input
-                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                        value={settings.whatsapp}
-                        onChange={event => updateSetting('whatsapp', event.target.value)}
-                        placeholder="+233 24 000 0000"
-                      />
-                    </label>
-                    <label className="block text-sm font-semibold text-slate-700">
-                      Email
-                      <input
-                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                        value={settings.email}
-                        onChange={event => updateSetting('email', event.target.value)}
-                        placeholder="hello@business.com"
-                      />
-                    </label>
-                    <label className="block text-sm font-semibold text-slate-700">
-                      Location
-                      <input
-                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                        value={settings.location}
-                        onChange={event => updateSetting('location', event.target.value)}
-                        placeholder="Accra, Ghana"
-                      />
-                    </label>
-                    <label className="block text-sm font-semibold text-slate-700 lg:col-span-2">
-                      Opening hours
-                      <input
-                        className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                        value={settings.openingHours}
-                        onChange={event => updateSetting('openingHours', event.target.value)}
-                        placeholder="Mon - Sat, 9:00 AM - 6:00 PM"
-                      />
-                    </label>
+                    <label className="block text-sm font-semibold text-slate-700">Phone number<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.phone} onChange={event => updateSetting('phone', event.target.value)} placeholder="+233 24 000 0000" /></label>
+                    <label className="block text-sm font-semibold text-slate-700">WhatsApp number<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.whatsapp} onChange={event => updateSetting('whatsapp', event.target.value)} placeholder="+233 24 000 0000" /></label>
+                    <label className="block text-sm font-semibold text-slate-700">Email<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.email} onChange={event => updateSetting('email', event.target.value)} placeholder="hello@business.com" /></label>
+                    <label className="block text-sm font-semibold text-slate-700">Location<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.location} onChange={event => updateSetting('location', event.target.value)} placeholder="Accra, Ghana" /></label>
+                    <label className="block text-sm font-semibold text-slate-700 lg:col-span-2">Opening hours<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.openingHours} onChange={event => updateSetting('openingHours', event.target.value)} placeholder="Mon - Sat, 9:00 AM - 6:00 PM" /></label>
                   </div>
                 </div>
 
                 <div className="mt-8">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                    <div>
-                      <h4 className="text-lg font-semibold text-slate-950">Social media links</h4>
-                      <p className="mt-1 text-sm text-slate-500">Expanded socialLinks data can be reused across the header, footer, contact page, and social buttons.</p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{activeSocialLinks.length} filled</span>
-                  </div>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div><h4 className="text-lg font-semibold text-slate-950">Social media links</h4><p className="mt-1 text-sm text-slate-500">Expanded socialLinks data can be reused across header, footer, contact page, and social buttons.</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{activeSocialLinks.length} filled</span></div>
                   <div className="mt-4 grid gap-5 lg:grid-cols-2">
-                    {SOCIAL_LINK_FIELDS.map(field => (
-                      <label key={field.id} className="block text-sm font-semibold text-slate-700">
-                        {field.label}
-                        <input
-                          className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                          value={settings.socialLinks[field.id]}
-                          onChange={event => updateSocialLink(field.id, event.target.value)}
-                          placeholder={field.placeholder}
-                        />
-                      </label>
-                    ))}
+                    {SOCIAL_LINK_FIELDS.map(field => <label key={field.id} className="block text-sm font-semibold text-slate-700">{field.label}<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.socialLinks[field.id]} onChange={event => updateSocialLink(field.id, event.target.value)} placeholder={field.placeholder} /></label>)}
                   </div>
                 </div>
               </div>
@@ -834,26 +580,17 @@ export default function WebsiteBuilder() {
               <div>
                 <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website type</p>
                 <h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website structure</h3>
-                <p className="mt-2 text-sm text-slate-500">Sedifex will use this to show the right layout, call-to-action, and connected modules.</p>
-
+                <p className="mt-2 text-sm text-slate-500">When you choose a type, Sedifex automatically loads the best page list for that industry.</p>
                 <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {WEBSITE_TYPES.map(type => {
                     const isSelected = settings.websiteType === type.id
                     return (
-                      <button
-                        key={type.id}
-                        type="button"
-                        className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${
-                          isSelected
-                            ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
-                            : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
-                        }`}
-                        onClick={() => updateSetting('websiteType', type.id)}
-                      >
+                      <button key={type.id} type="button" className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'}`} onClick={() => selectWebsiteType(type.id)}>
                         <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl text-xl ring-1 ${type.accentClassName}`}>{type.icon}</span>
                         <span className="mt-4 block font-semibold text-slate-950">{type.label}</span>
                         <span className="mt-1 block text-sm leading-5 text-slate-600">{type.description}</span>
-                        {isSelected ? <span className="mt-3 inline-flex text-xs font-semibold text-indigo-700">Selected</span> : null}
+                        <span className="mt-3 flex flex-wrap gap-1.5">{PAGE_OPTIONS_BY_TYPE[type.id].slice(0, 4).map(page => <span key={page} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{page}</span>)}</span>
+                        {isSelected ? <span className="mt-3 inline-flex text-xs font-semibold text-indigo-700">Selected smart page set</span> : null}
                       </button>
                     )
                   })}
@@ -863,29 +600,19 @@ export default function WebsiteBuilder() {
 
             {activeStep === 'pages' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Pages</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Select what customers should see</h3>
-                <p className="mt-2 text-sm text-slate-500">Choose only the pages the business needs. The preview navigation updates immediately.</p>
-
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Smart pages</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">{selectedType.label} pages</h3><p className="mt-2 text-sm text-slate-500">These page options are based on the selected website type. Change the type to get a different page list.</p></div>
+                  <span className="inline-flex w-fit rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{settings.pages.length} of {smartPageOptions.length} selected</span>
+                </div>
+                <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800">Smart page set for <span className="font-bold">{selectedType.label}</span>: {smartPageOptions.join(', ')}</div>
                 <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {PAGE_OPTIONS.map(page => {
+                  {smartPageOptions.map(page => {
                     const isChecked = settings.pages.includes(page)
+                    const isPaymentPage = paymentPages.includes(page)
                     return (
-                      <label
-                        key={page}
-                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 text-sm font-semibold transition ${
-                          isChecked
-                            ? 'border-indigo-300 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-100'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                          checked={isChecked}
-                          onChange={() => updateSetting('pages', togglePage(settings.pages, page))}
-                        />
-                        <span>{page}</span>
+                      <label key={page} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 text-sm font-semibold transition ${isChecked ? 'border-indigo-300 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-100' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}>
+                        <input type="checkbox" className="mt-0.5 h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={isChecked} onChange={() => updateSetting('pages', togglePage(settings.pages, page))} />
+                        <span><span className="block">{page}</span>{isPaymentPage ? <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Payment / action page</span> : null}</span>
                       </label>
                     )
                   })}
@@ -895,330 +622,60 @@ export default function WebsiteBuilder() {
 
             {activeStep === 'theme' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Theme</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Pick the design style</h3>
-                <p className="mt-2 text-sm text-slate-500">The live preview changes immediately when a theme is selected.</p>
-
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  {THEMES.map(theme => {
-                    const isSelected = settings.theme === theme.id
-                    return (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${
-                          isSelected
-                            ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
-                            : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
-                        }`}
-                        onClick={() => updateSetting('theme', theme.id)}
-                      >
-                        <div className={`rounded-2xl bg-gradient-to-br ${theme.previewClassName} p-5`}>
-                          <div className={`h-3 w-24 rounded-full ${theme.headingClassName}`} />
-                          <div className="mt-5 space-y-2">
-                            <div className="h-2.5 rounded-full bg-white/80" />
-                            <div className="h-2.5 w-2/3 rounded-full bg-white/60" />
-                          </div>
-                          <div className={`mt-5 h-8 w-28 rounded-full ${theme.buttonClassName}`} />
-                        </div>
-                        <div className="mt-4 flex items-start justify-between gap-3">
-                          <div>
-                            <span className="block font-semibold text-slate-950">{theme.label}</span>
-                            <span className="mt-1 block text-sm leading-5 text-slate-600">{theme.description}</span>
-                          </div>
-                          {isSelected ? <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white">Active</span> : null}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Theme</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Pick the design style</h3><p className="mt-2 text-sm text-slate-500">The live preview changes immediately when a theme is selected.</p>
+                <div className="mt-6 grid gap-4 md:grid-cols-2">{THEMES.map(theme => { const isSelected = settings.theme === theme.id; return <button key={theme.id} type="button" className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'}`} onClick={() => updateSetting('theme', theme.id)}><div className={`rounded-2xl bg-gradient-to-br ${theme.previewClassName} p-5`}><div className={`h-3 w-24 rounded-full ${theme.headingClassName}`} /><div className="mt-5 space-y-2"><div className="h-2.5 rounded-full bg-white/80" /><div className="h-2.5 w-2/3 rounded-full bg-white/60" /></div><div className={`mt-5 h-8 w-28 rounded-full ${theme.buttonClassName}`} /></div><div className="mt-4 flex items-start justify-between gap-3"><div><span className="block font-semibold text-slate-950">{theme.label}</span><span className="mt-1 block text-sm leading-5 text-slate-600">{theme.description}</span></div>{isSelected ? <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white">Active</span> : null}</div></button>})}</div>
               </div>
             ) : null}
 
             {activeStep === 'content' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Content</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Connect website content to Sedifex</h3>
-                <p className="mt-2 text-sm text-slate-500">This step explains what data the public website should pull from the business workspace.</p>
-
-                <div className="mt-6 grid gap-3 md:grid-cols-2">
-                  {CONTENT_MODULES.map(module => (
-                    <div key={module.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="font-semibold text-slate-950">{module.label}</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-600">{module.description}</p>
-                      <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">Auto from Sedifex</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-5 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800">
-                  Selected pages: <span className="font-bold">{settings.pages.join(', ') || 'No pages selected yet'}</span>
-                </div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Content</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Connect website content to Sedifex</h3><p className="mt-2 text-sm text-slate-500">The public website can pull different content depending on the selected page set.</p>
+                <div className="mt-6 grid gap-3 md:grid-cols-2">{CONTENT_MODULES.map(module => <div key={module.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="font-semibold text-slate-950">{module.label}</p><p className="mt-1 text-sm leading-6 text-slate-600">{module.description}</p><span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">Auto from Sedifex</span></div>)}</div>
+                <div className="mt-5 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800">Selected smart pages: <span className="font-bold">{settings.pages.join(', ') || 'No pages selected yet'}</span></div>
               </div>
             ) : null}
 
             {activeStep === 'payments' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Payments / Quick Pay</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Prepare the website for payments</h3>
-                <p className="mt-2 text-sm text-slate-500">Quick Pay gives customers a simple way to pay from the public website.</p>
-
-                <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-slate-950">Quick Pay page</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">Add a payment page for invoices, service payments, deposits, and customer balances.</p>
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${settings.pages.includes('Quick Pay') ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {settings.pages.includes('Quick Pay') ? 'Enabled' : 'Off'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="mt-5 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white"
-                      onClick={() => updateSetting('pages', togglePage(settings.pages, 'Quick Pay'))}
-                    >
-                      {settings.pages.includes('Quick Pay') ? 'Remove Quick Pay' : 'Enable Quick Pay'}
-                    </button>
-                  </div>
-
-                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5">
-                    <p className="font-semibold text-slate-950">Payment setup checklist</p>
-                    <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-                      <li>• Confirm store payout account.</li>
-                      <li>• Connect checkout fees and split rules.</li>
-                      <li>• Allow customers to pay from products, services, or Quick Pay.</li>
-                    </ul>
-                  </div>
-                </div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Payments / Quick Pay</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Prepare the website for payments</h3><p className="mt-2 text-sm text-slate-500">Payment pages now follow the selected website type.</p>
+                <div className="mt-6 grid gap-4 lg:grid-cols-2"><div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-950">Recommended payment pages</p><p className="mt-1 text-sm leading-6 text-slate-600">{paymentPages.join(', ')}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${hasPaymentPage ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{hasPaymentPage ? 'Enabled' : 'Off'}</span></div><button type="button" className="mt-5 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white" onClick={() => updateSetting('pages', togglePage(settings.pages, primaryPaymentPage))}>{settings.pages.includes(primaryPaymentPage) ? `Remove ${primaryPaymentPage}` : `Enable ${primaryPaymentPage}`}</button></div><div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5"><p className="font-semibold text-slate-950">Payment setup checklist</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600"><li>• Confirm store payout account.</li><li>• Connect checkout fees and split rules.</li><li>• Show the right payment page for the website type.</li></ul></div></div>
               </div>
             ) : null}
 
             {activeStep === 'domain' ? (
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Domain</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website address</h3>
-                <p className="mt-2 text-sm text-slate-500">Start with a Sedifex subdomain, then connect a custom domain when the business is ready.</p>
-
-                <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5">
-                    <p className="font-semibold text-indigo-950">Sedifex subdomain</p>
-                    <p className="mt-2 break-all rounded-2xl bg-white px-4 py-3 text-sm font-bold text-indigo-700">{previewUrl}</p>
-                    <p className="mt-3 text-sm leading-6 text-indigo-800">This is ready for every business immediately after publishing.</p>
-                  </div>
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="font-semibold text-slate-950">Custom domain</p>
-                    <input
-                      className="mt-3 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500"
-                      value="www.businessname.com"
-                      readOnly
-                    />
-                    <p className="mt-3 text-sm leading-6 text-slate-600">Coming next: DNS instructions, verification status, and SSL status.</p>
-                  </div>
-                </div>
-              </div>
+              <div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Domain</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website address</h3><p className="mt-2 text-sm text-slate-500">Start with a Sedifex subdomain, then connect a custom domain when the business is ready.</p><div className="mt-6 grid gap-4 lg:grid-cols-2"><div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5"><p className="font-semibold text-indigo-950">Sedifex subdomain</p><p className="mt-2 break-all rounded-2xl bg-white px-4 py-3 text-sm font-bold text-indigo-700">{previewUrl}</p><p className="mt-3 text-sm leading-6 text-indigo-800">This is ready for every business immediately after publishing.</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><p className="font-semibold text-slate-950">Custom domain</p><input className="mt-3 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500" value="www.businessname.com" readOnly /><p className="mt-3 text-sm leading-6 text-slate-600">Coming next: DNS instructions, verification status, and SSL status.</p></div></div></div>
             ) : null}
 
             {activeStep === 'publish' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Publish</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Review and publish the website</h3>
-                <p className="mt-2 text-sm text-slate-500">Check the setup, save a draft, or publish the public website settings.</p>
-
-                <div className="mt-6 grid gap-3 md:grid-cols-2">
-                  {completionItems.map(item => (
-                    <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm">
-                      <span className="font-medium text-slate-700">{item.label}</span>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {item.complete ? 'Done' : 'Missing'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {feedback ? <p className="mt-4 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{feedback}</p> : null}
-                {error ? <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
-
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  <button
-                    className="rounded-2xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
-                    type="button"
-                    style={{ backgroundColor: canPublish ? settings.brandColor : undefined }}
-                    disabled={!canPublish}
-                    onClick={() => void saveSettings('published')}
-                  >
-                    {isSaving ? 'Publishing…' : 'Publish website'}
-                  </button>
-                  <button
-                    className="rounded-2xl border border-slate-300 bg-white px-5 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    type="submit"
-                    disabled={isSaving || isLoading}
-                  >
-                    Save draft
-                  </button>
-                </div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Publish</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Review and publish the website</h3><p className="mt-2 text-sm text-slate-500">Check the setup, save a draft, or publish the public website settings.</p>
+                <div className="mt-6 grid gap-3 md:grid-cols-2">{completionItems.map(item => <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm"><span className="font-medium text-slate-700">{item.label}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.complete ? 'Done' : 'Missing'}</span></div>)}</div>
+                {feedback ? <p className="mt-4 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{feedback}</p> : null}{error ? <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
+                <div className="mt-6 grid gap-3 sm:grid-cols-2"><button className="rounded-2xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none" type="button" style={{ backgroundColor: canPublish ? settings.brandColor : undefined }} disabled={!canPublish} onClick={() => void saveSettings('published')}>{isSaving ? 'Publishing…' : 'Publish website'}</button><button className="rounded-2xl border border-slate-300 bg-white px-5 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={isSaving || isLoading}>Save draft</button></div>
               </div>
             ) : null}
 
-            {activeStep !== 'publish' ? (
-              <div className="mt-8 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <button
-                  type="button"
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={safeStepIndex === 0}
-                  onClick={() => goToStep(-1)}
-                >
-                  Previous step
-                </button>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="submit"
-                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={isSaving || isLoading}
-                  >
-                    Save draft
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5"
-                    onClick={() => goToStep(1)}
-                  >
-                    Next step
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            {activeStep !== 'publish' ? <div className="mt-8 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={safeStepIndex === 0} onClick={() => goToStep(-1)}>Previous step</button><div className="flex flex-col gap-3 sm:flex-row"><button type="submit" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving || isLoading}>Save draft</button><button type="button" className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" onClick={() => goToStep(1)}>Next step</button></div></div> : null}
           </section>
         </div>
 
         <aside className="space-y-6">
           <section className="sticky top-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/70 md:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Preview</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">Home page preview</h3>
-                <p className="mt-1 text-sm text-slate-500">Live preview updates from identity, theme, pages, and brand color.</p>
-              </div>
-              <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}>
-                <span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />
-                {statusConfig.label}
-              </span>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
-              <button
-                type="button"
-                className={`rounded-xl px-3 py-2 transition ${previewMode === 'mobile' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                onClick={() => setPreviewMode('mobile')}
-              >
-                Mobile preview
-              </button>
-              <button
-                type="button"
-                className={`rounded-xl px-3 py-2 transition ${previewMode === 'desktop' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                onClick={() => setPreviewMode('desktop')}
-              >
-                Desktop preview
-              </button>
-            </div>
-
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Preview</p><h3 className="mt-1 text-xl font-semibold text-slate-950">Home page preview</h3><p className="mt-1 text-sm text-slate-500">Live preview updates from type, smart pages, identity, and brand color.</p></div><span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}><span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />{statusConfig.label}</span></div>
+            <div className="mt-5 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold"><button type="button" className={`rounded-xl px-3 py-2 transition ${previewMode === 'mobile' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`} onClick={() => setPreviewMode('mobile')}>Mobile preview</button><button type="button" className={`rounded-xl px-3 py-2 transition ${previewMode === 'desktop' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`} onClick={() => setPreviewMode('desktop')}>Desktop preview</button></div>
             <div className="mt-5 rounded-[2rem] border border-slate-200 bg-slate-100 p-3">
               <div className={`${previewMode === 'mobile' ? 'mx-auto max-w-[285px] rounded-[1.75rem]' : 'rounded-[1.75rem]'} overflow-hidden border border-slate-900/10 bg-white shadow-sm`}>
-                <div className="flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
-                  <span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{previewUrl}</span>
+                <div className="flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2"><span className="h-2.5 w-2.5 rounded-full bg-red-300" /><span className="h-2.5 w-2.5 rounded-full bg-amber-300" /><span className="h-2.5 w-2.5 rounded-full bg-emerald-300" /><span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{previewUrl}</span></div>
+                <div className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`} style={settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.62), rgba(15, 23, 42, 0.2)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}>
+                  <div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{settings.businessLogoUrl ? <img src={settings.businessLogoUrl} alt="Business logo" className="h-9 w-9 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" /> : <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>}<div className="min-w-0"><p className="truncate text-sm font-bold">{settings.businessName || 'My business'}</p><p className="truncate text-[11px] opacity-75">{settings.tagline || selectedType.label}</p></div></div><span className="rounded-full px-3 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: settings.brandColor }}>Pay</span></div>
+                  <div className={`mt-4 flex gap-2 overflow-hidden text-[11px] ${previewMode === 'mobile' ? 'flex-wrap' : 'flex-nowrap'}`}>{previewPages.map(page => <span key={page} className={`rounded-full px-2.5 py-1 ${selectedTheme.mutedSurfaceClassName}`}>{page}</span>)}</div>
+                  <div className={`${previewMode === 'mobile' ? 'grid gap-4' : 'grid grid-cols-[1.2fr_0.8fr] gap-4'} mt-6 items-center`}><div><p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{previewContent.eyebrow}</p><h4 className={`${previewMode === 'mobile' ? 'text-2xl' : 'text-3xl'} mt-2 font-black leading-tight tracking-tight`}>{settings.tagline || previewContent.headline}</h4><p className="mt-3 text-sm leading-6 opacity-85">{settings.description || previewContent.body}</p><button type="button" className="mt-4 rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm" style={{ backgroundColor: settings.brandColor }}>{previewContent.cta}</button></div><div className={`rounded-3xl p-3 shadow-sm ${selectedTheme.surfaceClassName}`}><div className="h-24 rounded-2xl bg-slate-200/80" /><div className="mt-3 space-y-2 text-xs"><p className="font-bold">Contact</p><p className="truncate opacity-70">{settings.phone || settings.whatsapp || 'Phone / WhatsApp'}</p><p className="truncate opacity-70">{settings.location || 'Business location'}</p></div></div></div>
                 </div>
-
-                <div
-                  className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`}
-                  style={settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.62), rgba(15, 23, 42, 0.2)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      {settings.businessLogoUrl ? (
-                        <img src={settings.businessLogoUrl} alt="Business logo" className="h-9 w-9 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" />
-                      ) : (
-                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{settings.businessName || 'My business'}</p>
-                        <p className="truncate text-[11px] opacity-75">{settings.tagline || selectedType.label}</p>
-                      </div>
-                    </div>
-                    <span className="rounded-full px-3 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: settings.brandColor }}>Pay</span>
-                  </div>
-
-                  <div className={`mt-4 flex gap-2 overflow-hidden text-[11px] ${previewMode === 'mobile' ? 'flex-wrap' : 'flex-nowrap'}`}>
-                    {previewPages.map(page => (
-                      <span key={page} className={`rounded-full px-2.5 py-1 ${selectedTheme.mutedSurfaceClassName}`}>{page}</span>
-                    ))}
-                  </div>
-
-                  <div className={`${previewMode === 'mobile' ? 'grid gap-4' : 'grid grid-cols-[1.2fr_0.8fr] gap-4'} mt-6 items-center`}>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{previewContent.eyebrow}</p>
-                      <h4 className={`${previewMode === 'mobile' ? 'text-2xl' : 'text-3xl'} mt-2 font-black leading-tight tracking-tight`}>
-                        {settings.tagline || previewContent.headline}
-                      </h4>
-                      <p className="mt-3 text-sm leading-6 opacity-85">{settings.description || previewContent.body}</p>
-                      <button type="button" className="mt-4 rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm" style={{ backgroundColor: settings.brandColor }}>
-                        {previewContent.cta}
-                      </button>
-                    </div>
-
-                    <div className={`rounded-3xl p-3 shadow-sm ${selectedTheme.surfaceClassName}`}>
-                      <div className="h-24 rounded-2xl bg-slate-200/80" />
-                      <div className="mt-3 space-y-2 text-xs">
-                        <p className="font-bold">Contact</p>
-                        <p className="truncate opacity-70">{settings.phone || settings.whatsapp || 'Phone / WhatsApp'}</p>
-                        <p className="truncate opacity-70">{settings.location || 'Business location'}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 bg-white p-4 sm:grid-cols-3">
-                  {previewContent.cards.map(card => (
-                    <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="h-8 w-8 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} />
-                      <p className="mt-3 text-xs font-bold text-slate-900">{card}</p>
-                      <div className="mt-2 h-1.5 w-16 rounded-full bg-slate-200" />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap gap-2">
-                    {settings.openingHours ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{settings.openingHours}</span> : null}
-                    {activeSocialLinks.map(field => (
-                      <span key={field.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{field.label}</span>
-                    ))}
-                    {!settings.openingHours && activeSocialLinks.length === 0 ? <span className="text-[11px] font-semibold text-slate-400">Opening hours and social links will show here.</span> : null}
-                  </div>
-                </div>
+                <div className="grid gap-3 bg-white p-4 sm:grid-cols-3">{previewContent.cards.map(card => <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="h-8 w-8 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} /><p className="mt-3 text-xs font-bold text-slate-900">{card}</p><div className="mt-2 h-1.5 w-16 rounded-full bg-slate-200" /></div>)}</div>
+                <div className="border-t border-slate-200 bg-slate-50 p-4"><div className="flex flex-wrap gap-2">{settings.openingHours ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{settings.openingHours}</span> : null}{activeSocialLinks.map(field => <span key={field.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{field.label}</span>)}{!settings.openingHours && activeSocialLinks.length === 0 ? <span className="text-[11px] font-semibold text-slate-400">Opening hours and social links will show here.</span> : null}</div></div>
               </div>
             </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <a
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5"
-                href={previewUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open public site
-              </a>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                onClick={() => void copyWebsiteLink()}
-              >
-                Copy website link
-              </button>
-            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2"><a className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" href={previewUrl} target="_blank" rel="noreferrer">Open public site</a><button type="button" className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" onClick={() => void copyWebsiteLink()}>Copy website link</button></div>
             {copyFeedback ? <p className="mt-3 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{copyFeedback}</p> : null}
           </section>
         </aside>
