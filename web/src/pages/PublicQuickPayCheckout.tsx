@@ -274,6 +274,13 @@ export default function PublicQuickPayCheckout() {
           <h1 className="qp-title">Scan, search, pay</h1>
           <p className="qp-copy">Search for the product, service, booking, registration, donation, or course you want. Pay securely and the business receives the order in Sedifex.</p>
 
+          <div className="qp-pay-steps" aria-label="How to pay">
+            <div className="qp-pay-step"><span>1</span><strong>Search</strong><small>Find product, service, booking, course, or donation.</small></div>
+            <div className="qp-pay-step"><span>2</span><strong>Select</strong><small>Choose what you want and confirm the quantity.</small></div>
+            <div className="qp-pay-step"><span>3</span><strong>Enter details</strong><small>Add your name, email, and phone for receipt.</small></div>
+            <div className="qp-pay-step"><span>4</span><strong>Pay securely</strong><small>Complete payment by mobile money or card.</small></div>
+          </div>
+
           <div className="qp-hero-search">
             <label className="qp-hero-label" htmlFor="quick-pay-search">What do you want to pay for?</label>
             <div className="qp-hero-input-shell">
