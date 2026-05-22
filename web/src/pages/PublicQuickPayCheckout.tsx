@@ -112,6 +112,24 @@ export default function PublicQuickPayCheckout() {
   const hiddenItemCount = Math.max(filteredItems.length - visibleItems.length, 0)
 
   const unitAmount = selectedItem?.price ?? 0
+
+  useEffect(() => {
+    const existingViewport = document.querySelector('meta[name="viewport"]')
+    if (existingViewport) {
+      existingViewport.setAttribute('content', 'width=device-width, initial-scale=1.0')
+      return
+    }
+
+    const meta = document.createElement('meta')
+    meta.name = 'viewport'
+    meta.content = 'width=device-width, initial-scale=1.0'
+    document.head.appendChild(meta)
+
+    return () => {
+      meta.remove()
+    }
+  }, [])
+
   const finalAmount = selectedItem?.type === 'MANUAL' ? Number(customAmount || 0) : unitAmount * quantity
 
   useEffect(() => {
