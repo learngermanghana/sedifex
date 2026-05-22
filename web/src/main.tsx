@@ -10,6 +10,7 @@ import Products from './pages/ProductsServiceFirst'
 import Sell from './pages/Sell'
 import QuickPay from './pages/QuickPay'
 import WebsiteBuilder from './pages/WebsiteBuilder'
+import WebsiteBuilderPreview from './pages/WebsiteBuilderPreview'
 import QuickPayPrint from './pages/QuickPayPrint'
 import PublicQuickPayCheckout from './pages/PublicQuickPayCheckout'
 import PublicWebsiteEngine from './pages/PublicWebsiteEngine'
@@ -109,6 +110,7 @@ const router = createBrowserRouter([
       { path: 'sell', element: <Sell /> },
       { path: 'quick-pay', element: <QuickPay /> },
       { path: 'website-builder', element: <WebsiteBuilder /> },
+      { path: 'website-builder/preview', element: <WebsiteBuilderPreview /> },
       { path: 'quick-pay/print', element: <QuickPayPrint /> },
       { path: 'customers', element: <Customers /> },
       { path: 'students', element: <Students /> },
