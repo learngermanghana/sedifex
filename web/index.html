@@ -8,6 +8,18 @@
     <meta name="theme-color" content="#4338CA" />
     <title>Sedifex — Run the business. Grow the brand.</title>
 
+    <!-- Tailwind utilities for the Website Builder UI.
+         Preflight is disabled so existing Sedifex custom CSS is not reset. -->
+    <script>
+      window.tailwind = window.tailwind || {}
+      window.tailwind.config = {
+        corePlugins: {
+          preflight: false,
+        },
+      }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
     <!-- Paystack Inline (needed for card/mobile checkout) -->
     <script src="https://js.paystack.co/v1/inline.js"></script>
 
