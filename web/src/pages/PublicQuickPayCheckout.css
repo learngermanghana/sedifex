@@ -224,16 +224,17 @@
 
 .qp-type-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  overflow-x: auto;
+  overflow: visible;
   padding: 14px 0 4px;
-  scrollbar-width: none;
 }
 
 .qp-type-tabs::-webkit-scrollbar { display: none; }
 
 .qp-type-tab {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-width: 100%;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   background: #ffffff;
@@ -241,6 +242,9 @@
   padding: 10px 14px;
   font-size: 13px;
   font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
   cursor: pointer;
 }
 
@@ -575,6 +579,19 @@
   border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #334155;
+}
+
+@media (max-width: 520px) {
+  .qp-type-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qp-type-tab {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 8px;
+  }
 }
 
 @media (min-width: 700px) {
