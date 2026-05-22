@@ -131,9 +131,9 @@ export default function QuickPayPrint() {
           flex-direction: column;
           align-items: center;
           justify-content: space-between;
-          gap: 24px;
+          gap: 22px;
           margin: 0 auto;
-          padding: 36px 32px;
+          padding: 34px 32px 28px;
           border: 1px solid #e2e8f0;
           border-radius: 32px;
           background: #ffffff;
@@ -170,7 +170,7 @@ export default function QuickPayPrint() {
         }
 
         .quick-pay-qr-frame {
-          width: min(100%, 330px);
+          width: min(100%, 320px);
           aspect-ratio: 1 / 1;
           display: flex;
           align-items: center;
@@ -194,7 +194,7 @@ export default function QuickPayPrint() {
           border-radius: 24px;
           background: #0f172a;
           color: #ffffff;
-          padding: 24px 28px;
+          padding: 22px 26px;
           text-align: left;
         }
 
@@ -202,20 +202,42 @@ export default function QuickPayPrint() {
           margin: 0;
           color: #ffffff;
           text-align: center;
-          font-size: 24px;
+          font-size: 23px;
           line-height: 1.2;
           font-weight: 950;
         }
 
         .quick-pay-steps ol {
-          margin: 18px 0 0;
+          margin: 16px 0 0;
           padding-left: 24px;
           display: grid;
-          gap: 10px;
+          gap: 9px;
           color: #ffffff;
-          font-size: 18px;
+          font-size: 17px;
           line-height: 1.35;
           font-weight: 750;
+        }
+
+        .quick-pay-powered {
+          width: 100%;
+          margin: 0;
+          padding-top: 4px;
+          color: #475569;
+          font-size: 13px;
+          line-height: 1.35;
+          font-weight: 850;
+          text-align: center;
+        }
+
+        .quick-pay-powered span {
+          color: #0f172a;
+          font-weight: 950;
+        }
+
+        .quick-pay-powered a {
+          color: #4f46e5;
+          font-weight: 950;
+          text-decoration: none;
         }
 
         @media (max-width: 520px) {
@@ -225,25 +247,29 @@ export default function QuickPayPrint() {
 
           .quick-pay-poster {
             min-height: auto;
-            padding: 26px 18px;
+            padding: 26px 18px 22px;
             border-radius: 24px;
-            gap: 20px;
+            gap: 18px;
           }
 
           .quick-pay-qr-frame {
-            width: min(100%, 300px);
+            width: min(100%, 290px);
             border-width: 6px;
             border-radius: 18px;
             padding: 8px;
           }
 
           .quick-pay-steps {
-            padding: 20px;
+            padding: 18px;
             border-radius: 20px;
           }
 
           .quick-pay-steps ol {
-            font-size: 16px;
+            font-size: 15px;
+          }
+
+          .quick-pay-powered {
+            font-size: 12px;
           }
         }
 
@@ -297,26 +323,26 @@ export default function QuickPayPrint() {
             height: 210mm !important;
             min-height: 210mm !important;
             margin: 0 !important;
-            padding: 13mm 11mm !important;
+            padding: 12mm 11mm 8mm !important;
             border: 0 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
-            gap: 7mm !important;
+            gap: 5.5mm !important;
           }
 
           .quick-pay-poster-title h1 {
-            font-size: 30px !important;
+            font-size: 29px !important;
             line-height: 1.08 !important;
           }
 
           .quick-pay-poster-title p {
-            margin-top: 6px !important;
-            font-size: 21px !important;
+            margin-top: 5px !important;
+            font-size: 20px !important;
           }
 
           .quick-pay-qr-frame {
-            width: 88mm !important;
-            height: 88mm !important;
+            width: 84mm !important;
+            height: 84mm !important;
             border-width: 5px !important;
             border-radius: 0 !important;
             padding: 3mm !important;
@@ -325,17 +351,23 @@ export default function QuickPayPrint() {
           .quick-pay-steps {
             max-width: 118mm !important;
             border-radius: 12px !important;
-            padding: 6mm 7mm !important;
+            padding: 5.5mm 7mm !important;
           }
 
           .quick-pay-steps h2 {
-            font-size: 20px !important;
+            font-size: 19px !important;
           }
 
           .quick-pay-steps ol {
-            margin-top: 5mm !important;
-            gap: 3mm !important;
-            font-size: 16px !important;
+            margin-top: 4mm !important;
+            gap: 2.4mm !important;
+            font-size: 15px !important;
+          }
+
+          .quick-pay-powered {
+            padding-top: 0 !important;
+            font-size: 11px !important;
+            line-height: 1.25 !important;
           }
         }
       `}</style>
@@ -370,6 +402,10 @@ export default function QuickPayPrint() {
             <li>Pay securely</li>
           </ol>
         </div>
+
+        <p className="quick-pay-powered">
+          Powered by <span>Sedifex</span> • <a href="https://www.sedifex.com">www.sedifex.com</a>
+        </p>
       </section>
     </main>
   )
