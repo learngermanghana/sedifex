@@ -37,6 +37,99 @@ type AccountTypeOption = Industry
 type StatusState = { tone: StatusTone; message: string }
 type PasswordStrength = { isLongEnough: boolean; hasUppercase: boolean; hasLowercase: boolean; hasNumber: boolean; hasSymbol: boolean }
 
+const PRICING_PLANS = [
+  {
+    name: 'Starter',
+    badge: 'Start free',
+    price: 'Free',
+    billing: 'GHS 0 / month',
+    bestFor: 'Testing Sedifex with a very small business.',
+    highlight: false,
+    includes: [
+      '1 workspace',
+      '1 staff/user',
+      'Basic dashboard',
+      'Basic items/products',
+      'Basic customers',
+      'Basic receipts/invoices',
+      'Public Sedifex page',
+      'QR code / public link',
+      'Limited reports',
+      'Sedifex branding',
+      'Workspace switching when invited',
+    ],
+    limits: [
+      'Up to 50 products/services',
+      'Up to 30 receipts/invoices per month',
+      'No custom domain',
+      'No API keys',
+      'No bulk email',
+      'No advanced website builder templates',
+      'No Sedifex Market product sync',
+    ],
+  },
+  {
+    name: 'Business',
+    badge: 'Most popular',
+    price: 'GHS 99',
+    billing: 'per month · GHS 999 / year',
+    bestFor: 'Sales, inventory, receipts, bookings, and marketplace visibility.',
+    highlight: true,
+    includes: [
+      'Everything in Starter',
+      'Inventory / items',
+      'POS selling',
+      'Receipts and invoices',
+      'Customers and bookings',
+      'Basic reports',
+      'Basic website builder',
+      'Quick Pay',
+      'Sedifex Market listing',
+      'Products/services sync to sedifexmarket.com',
+      'Sedifex Market sales sync back into Sedifex',
+      '2 staff/users',
+      'Up to 300 products/services',
+    ],
+    limits: [
+      '1 business workspace per subscription',
+      'No custom domain',
+      'No Products API or Bookings API',
+      'Limited automation',
+    ],
+  },
+  {
+    name: 'Growth Website',
+    badge: 'Best for online growth',
+    price: 'GHS 199',
+    billing: 'per month · GHS 1,999 / year',
+    bestFor: 'A real business website connected to Sedifex and Sedifex Market.',
+    highlight: false,
+    includes: [
+      'Everything in Business',
+      'Full website builder',
+      'Website template library',
+      'Website preview with sample templates',
+      'Custom domain setup',
+      'SEO settings',
+      'Social media links',
+      'Gallery and promo content',
+      'Website QR code and sharing tools',
+      'Products API and Bookings API',
+      'Website checkout setup',
+      'Full sedifexmarket.com sales sync',
+      'Website orders and marketplace orders sync into Sedifex',
+      'Website sales report + marketplace sales report',
+      '5 staff/users',
+      'Up to 1,000 products/services',
+    ],
+    limits: [
+      '1 business workspace per subscription',
+      'Extra workspaces require their own plan',
+      'Advanced custom integrations may require setup fee',
+    ],
+  },
+] as const
+
 function sanitizePhone(value: string): string { return normalizeGhanaPhoneE164(value) }
 function toTitleCase(value: string): string { return value.trim().toLowerCase().replace(/\b([a-z])/g, match => match.toUpperCase()) }
 function evaluatePasswordStrength(password: string): PasswordStrength { return { isLongEnough: password.length >= PASSWORD_MIN_LENGTH, hasUppercase: /[A-Z]/.test(password), hasLowercase: /[a-z]/.test(password), hasNumber: /\d/.test(password), hasSymbol: /[^A-Za-z0-9]/.test(password) } }
@@ -135,6 +228,11 @@ export default function AuthPage() {
     setAddress('')
   }
 
+  function startSignup() {
+    handleModeChange('signup')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const completeLogin = async (nextUser: User) => {
     await persistSession(nextUser)
     try { const resolution = await resolveStoreAccess(); await persistSession(nextUser, { storeId: resolution.storeId, workspaceSlug: resolution.workspaceSlug, role: resolution.role }) } catch (error) { setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'login') }); return false }
@@ -231,7 +329,50 @@ export default function AuthPage() {
         <aside className="app__visual" aria-label="Sedifex business operating system"><div className="app__visual-media" role="presentation"><img src={AUTH_VISUAL_IMAGE_URL} alt="Business team using a laptop" loading="lazy" /></div><div className="app__visual-overlay" /><div className="app__visual-dashboard" aria-hidden="true"><div><span>Today sales</span><strong>GHS 2,450</strong></div><div><span>Bookings</span><strong>18</strong></div><div><span>Website</span><strong>Published</strong></div></div><div className="app__visual-caption"><span className="app__visual-pill">Free business operating system</span><h2>Run sales, customers, bookings, websites, payments, and reports from one place.</h2><p>Log in to continue, or create a free workspace when you are ready to start with Sedifex.</p></div></aside>
       </div>
       <section className="app__promo-strategy" aria-label="Why businesses choose Sedifex"><header className="app__promo-strategy-header"><span className="app__pill">What Sedifex does</span><h2>One dashboard for daily operations and business growth.</h2><p>Sedifex helps shops, schools, NGOs, service businesses, and booking businesses manage work, customers, payments, and visibility without too many tools.</p></header><div className="app__promo-pillars"><h3>What you can run</h3><ul><li><strong>Sell:</strong> products, services, invoices, receipts, POS, and customer display.</li><li><strong>Manage:</strong> inventory, customers, bookings, students, donors, and funds.</li><li><strong>Grow:</strong> Sedifex Market, websites, Google integrations, SMS/email, and social content.</li><li><strong>Connect:</strong> client websites can send bookings, donations, registrations, and checkout data to Sedifex.</li></ul></div></section>
-      <section className="app__pricing" aria-label="Sedifex pricing plans"><header className="app__pricing-header"><span className="app__pill">Start free</span><h2>Use Sedifex free, then upgrade when you need more power.</h2><p>The free plan is not a trial. It lets you start running your business with limits. Paid plans unlock higher capacity, automation, integrations, and growth tools.</p></header></section>
+      <section className="app__pricing" aria-label="Sedifex pricing plans">
+        <header className="app__pricing-header"><span className="app__pill">Simple pricing</span><h2>Start free. Upgrade when you need marketplace sync, websites, bookings, payments, and growth tools.</h2><p>These prices are shown on the landing page first. Backend plan enforcement can be connected after the pricing is approved.</p></header>
+        <div className="grid gap-5 lg:grid-cols-3">
+          {PRICING_PLANS.map(plan => (
+            <article key={plan.name} className={`relative overflow-hidden rounded-[2rem] border p-6 shadow-2xl ${plan.highlight ? 'border-cyan-300 bg-white text-slate-950 shadow-cyan-950/30' : 'border-white/15 bg-white/10 text-white shadow-slate-950/30 backdrop-blur'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className={`mb-3 inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.18em] ${plan.highlight ? 'bg-cyan-100 text-cyan-900' : 'bg-white/10 text-cyan-100'}`}>{plan.badge}</p>
+                  <h3 className="text-2xl font-black tracking-tight">{plan.name}</h3>
+                </div>
+              </div>
+              <div className="mt-5">
+                <p className="text-4xl font-black tracking-tight">{plan.price}</p>
+                <p className={`mt-1 text-sm font-semibold ${plan.highlight ? 'text-slate-500' : 'text-slate-300'}`}>{plan.billing}</p>
+                <p className={`mt-4 text-sm leading-6 ${plan.highlight ? 'text-slate-600' : 'text-slate-300'}`}>{plan.bestFor}</p>
+              </div>
+              <div className="mt-6 grid gap-4">
+                <div>
+                  <h4 className="text-sm font-black uppercase tracking-[0.14em]">Includes</h4>
+                  <ul className="mt-3 grid gap-2 text-sm leading-6">
+                    {plan.includes.map(item => <li key={item} className="flex gap-2"><span className={plan.highlight ? 'text-cyan-600' : 'text-cyan-300'}>✓</span><span>{item}</span></li>)}
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-sm font-black uppercase tracking-[0.14em]">Limits</h4>
+                  <ul className={`mt-3 grid gap-2 text-sm leading-6 ${plan.highlight ? 'text-slate-600' : 'text-slate-300'}`}>
+                    {plan.limits.map(item => <li key={item} className="flex gap-2"><span>•</span><span>{item}</span></li>)}
+                  </ul>
+                </div>
+              </div>
+              <button type="button" onClick={startSignup} className={`mt-7 w-full rounded-2xl px-5 py-4 text-sm font-black transition hover:-translate-y-0.5 ${plan.highlight ? 'bg-slate-950 text-white' : 'bg-white text-slate-950'}`}>{plan.name === 'Starter' ? 'Start free' : 'Create account'}</button>
+            </article>
+          ))}
+        </div>
+        <div className="rounded-[2rem] border border-white/15 bg-white/10 p-6 text-slate-200 shadow-2xl shadow-slate-950/30 backdrop-blur">
+          <h3 className="text-2xl font-black text-white">Workspace rule</h3>
+          <p className="mt-3 leading-7">One subscription equals one business workspace. A user can log in once and switch between workspaces they own or have been invited to, but each business workspace has its own plan, data, staff, website, reports, and Sedifex Market sync.</p>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <p className="rounded-2xl bg-slate-950/50 p-4"><strong>1 shop</strong><br />1 workspace, 1 plan</p>
+            <p className="rounded-2xl bg-slate-950/50 p-4"><strong>2 shops</strong><br />2 workspaces, 2 plans</p>
+            <p className="rounded-2xl bg-slate-950/50 p-4"><strong>Invited staff</strong><br />Can switch between assigned workspaces</p>
+          </div>
+        </div>
+      </section>
     </main>
   )
 }

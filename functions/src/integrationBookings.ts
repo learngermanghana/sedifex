@@ -213,7 +213,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     }
 
     const body = asObject(req.body) as BookingRequestBody
-    const serviceId = normalizeServiceId(body.serviceId ?? body.service_id)
+    const serviceId = normalizeServiceId(body.serviceId)
     const slotId = clean(body.slotId, 220)
     const quantity = Math.max(1, Math.floor(toNumber(body.quantity, 1)))
     const notes = clean(body.notes, 2000)
