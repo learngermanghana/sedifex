@@ -9,7 +9,7 @@ type WebsiteTheme = 'modern' | 'luxury' | 'clean' | 'bold'
 type StoredWebsiteStatus = 'draft' | 'published'
 type DisplayWebsiteStatus = StoredWebsiteStatus | 'needs-setup'
 type PreviewMode = 'mobile' | 'desktop'
-type BuilderStepId = 'identity' | 'type' | 'pages' | 'theme' | 'content' | 'payments' | 'domain' | 'publish'
+type BuilderStepId = 'identity' | 'type' | 'pages' | 'theme' | 'content' | 'seo' | 'payments' | 'domain' | 'publish'
 type ContentDraftKey = 'homepage' | 'about' | 'serviceDescriptions' | 'seoTitle'
 
 type SocialLinks = {
@@ -27,6 +27,13 @@ type ContentDrafts = {
   about: string
   serviceDescriptions: string
   seoTitle: string
+}
+
+type SeoSettings = {
+  title: string
+  metaDescription: string
+  keywords: string
+  socialShareImage: string
 }
 
 type WebsiteBuilderSettings = {
@@ -48,6 +55,7 @@ type WebsiteBuilderSettings = {
   brandColor: string
   socialLinks: SocialLinks
   contentDrafts: ContentDrafts
+  seoSettings: SeoSettings
 }
 
 type WebsiteTypeOption = {
@@ -87,6 +95,7 @@ type ContentGeneratorProfile = {
   seoLabel: string
   tagline: string
   serviceIntro: string
+  keywords: string[]
 }
 
 const BUILDER_STEPS: Array<{ id: BuilderStepId; label: string; description: string }> = [
@@ -95,6 +104,7 @@ const BUILDER_STEPS: Array<{ id: BuilderStepId; label: string; description: stri
   { id: 'pages', label: 'Pages', description: 'Select smart pages based on the website type.' },
   { id: 'theme', label: 'Theme', description: 'Pick the visual style and feel.' },
   { id: 'content', label: 'Content', description: 'Generate first-draft website copy from business data.' },
+  { id: 'seo', label: 'SEO settings', description: 'Control Google and social share previews.' },
   { id: 'payments', label: 'Payments / Quick Pay', description: 'Prepare checkout and payment pages.' },
   { id: 'domain', label: 'Domain', description: 'Use Sedifex subdomain or custom domain.' },
   { id: 'publish', label: 'Publish', description: 'Review and send the website live.' },
@@ -115,6 +125,13 @@ const DEFAULT_CONTENT_DRAFTS: ContentDrafts = {
   about: '',
   serviceDescriptions: '',
   seoTitle: '',
+}
+
+const DEFAULT_SEO_SETTINGS: SeoSettings = {
+  title: '',
+  metaDescription: '',
+  keywords: '',
+  socialShareImage: '',
 }
 
 const SOCIAL_LINK_FIELDS: Array<{ id: keyof SocialLinks; label: string; placeholder: string }> = [
@@ -164,9 +181,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'communities and supporters',
     promise: 'create lasting impact where support is needed most',
     action: 'Support the mission',
-    seoLabel: 'Community Programs, Donations, and Volunteer Projects',
+    seoLabel: 'Programs, Donations & Volunteer Support',
     tagline: 'Supporting communities through action and impact',
     serviceIntro: 'Our programs are designed to support communities, mobilize volunteers, and turn donations into measurable impact.',
+    keywords: ['community programs', 'donations', 'volunteer support', 'foundation', 'impact projects'],
   },
   shop: {
     noun: 'shop',
@@ -174,9 +192,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'customers looking for trusted products',
     promise: 'make shopping simple, fast, and reliable',
     action: 'Start shopping',
-    seoLabel: 'Products, Categories, and Online Checkout',
+    seoLabel: 'Products, Categories & Online Checkout',
     tagline: 'Shop quality products with easy online payment',
     serviceIntro: 'Our product range is organized to help customers find what they need, compare options, and complete checkout with confidence.',
+    keywords: ['online shop', 'products', 'categories', 'checkout', 'quick pay'],
   },
   beauty: {
     noun: 'beauty studio',
@@ -184,9 +203,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'clients who want professional beauty and wellness services',
     promise: 'help every client look confident and feel cared for',
     action: 'Book an appointment',
-    seoLabel: 'Beauty Services, Salon Bookings, and Client Reviews',
+    seoLabel: 'Beauty Services, Salon Bookings & Client Reviews',
     tagline: 'Beauty services designed around confidence and care',
     serviceIntro: 'Our services are created to help clients look good, feel confident, and book professional beauty treatments with ease.',
+    keywords: ['beauty services', 'salon booking', 'client reviews', 'beauty gallery', 'quick pay'],
   },
   school: {
     noun: 'school',
@@ -194,9 +214,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'students and parents',
     promise: 'make learning, registration, and payments easier to manage',
     action: 'Register today',
-    seoLabel: 'Courses, Registration, Classes, and Student Payments',
+    seoLabel: 'Courses, Registration, Classes & Student Payments',
     tagline: 'Learn, register, and manage classes with ease',
     serviceIntro: 'Our courses and classes are organized to help students learn clearly, register easily, and stay connected to school updates.',
+    keywords: ['courses', 'registration', 'classes', 'student payments', 'school'],
   },
   travel: {
     noun: 'travel agency',
@@ -204,9 +225,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'travelers planning their next journey',
     promise: 'make travel planning clearer, safer, and easier',
     action: 'Send an enquiry',
-    seoLabel: 'Travel Packages, Destinations, Consultations, and Bookings',
+    seoLabel: 'Travel Packages, Destinations & Bookings',
     tagline: 'Clear travel planning from enquiry to booking',
     serviceIntro: 'Our travel support helps customers explore packages, compare destinations, request consultation, and move from enquiry to booking.',
+    keywords: ['travel packages', 'destinations', 'bookings', 'travel consultation', 'travel agency'],
   },
   restaurant: {
     noun: 'restaurant',
@@ -214,9 +236,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'customers who want great food and easy ordering',
     promise: 'make dining and ordering more convenient',
     action: 'View the menu',
-    seoLabel: 'Menu, Online Ordering, Reservations, and Table QR',
+    seoLabel: 'Menu, Online Ordering & Reservations',
     tagline: 'Great food with simple ordering and reservations',
     serviceIntro: 'Our menu and ordering options help customers browse meals, place orders, reserve tables, and pay with less stress.',
+    keywords: ['restaurant menu', 'online ordering', 'reservations', 'table QR', 'food ordering'],
   },
   service: {
     noun: 'service business',
@@ -224,9 +247,10 @@ const CONTENT_GENERATOR_PROFILE: Record<WebsiteType, ContentGeneratorProfile> = 
     audience: 'customers who need reliable service support',
     promise: 'make service requests, bookings, and payments simple',
     action: 'Request a service',
-    seoLabel: 'Services, Bookings, Invoices, and Quick Pay',
+    seoLabel: 'Services, Bookings, Invoices & Quick Pay',
     tagline: 'Reliable services with simple booking and payment',
     serviceIntro: 'Our service packages are built to help customers understand what we offer, request support, book appointments, and pay easily.',
+    keywords: ['services', 'bookings', 'invoices', 'quick pay', 'service business'],
   },
 }
 
@@ -280,6 +304,7 @@ function createDefaultSettings(): WebsiteBuilderSettings {
     brandColor: '#4f46e5',
     socialLinks: { ...DEFAULT_SOCIAL_LINKS },
     contentDrafts: { ...DEFAULT_CONTENT_DRAFTS },
+    seoSettings: { ...DEFAULT_SEO_SETTINGS },
   }
 }
 
@@ -333,6 +358,18 @@ function mergeContentDrafts(...sources: unknown[]): ContentDrafts {
   return merged
 }
 
+function mergeSeoSettings(...sources: unknown[]): SeoSettings {
+  const merged: SeoSettings = { ...DEFAULT_SEO_SETTINGS }
+  sources.forEach(source => {
+    const record = getRecord(source)
+    ;(['title', 'metaDescription', 'keywords', 'socialShareImage'] as Array<keyof SeoSettings>).forEach(key => {
+      const value = record[key]
+      if (typeof value === 'string' && value.trim()) merged[key] = value.trim()
+    })
+  })
+  return merged
+}
+
 function isWebsiteType(value: unknown): value is WebsiteType {
   return WEBSITE_TYPES.some(type => type.id === value)
 }
@@ -361,16 +398,41 @@ function getPreviewText(value: string, fallback: string) {
   return cleanValue.length > 180 ? `${cleanValue.slice(0, 177)}…` : cleanValue
 }
 
+function buildSeoTitle(settings: WebsiteBuilderSettings) {
+  const profile = CONTENT_GENERATOR_PROFILE[settings.websiteType]
+  const businessName = settings.businessName.trim() || 'Business website'
+  return `${businessName} | ${profile.seoLabel}`
+}
+
+function buildSeoDescription(settings: WebsiteBuilderSettings) {
+  const profile = CONTENT_GENERATOR_PROFILE[settings.websiteType]
+  const businessName = settings.businessName.trim() || 'This business'
+  const location = settings.location.trim()
+  const locationPhrase = location ? ` in ${location}` : ''
+
+  if (settings.websiteType === 'ngo') {
+    return `Support ${businessName} through donations, volunteer programs, and community impact projects${locationPhrase}.`
+  }
+
+  return `${businessName} helps ${profile.audience}${locationPhrase} through ${profile.offerPlural}. ${profile.action} and connect with us online.`
+}
+
+function buildSeoKeywords(settings: WebsiteBuilderSettings) {
+  const profile = CONTENT_GENERATOR_PROFILE[settings.websiteType]
+  const businessName = settings.businessName.trim()
+  const location = settings.location.trim()
+  return [businessName, ...profile.keywords, ...settings.pages, location].filter(Boolean).join(', ')
+}
+
 function buildGeneratedContent(settings: WebsiteBuilderSettings, key: ContentDraftKey | 'tagline') {
   const profile = CONTENT_GENERATOR_PROFILE[settings.websiteType]
   const businessName = settings.businessName.trim() || 'This business'
   const location = settings.location.trim()
   const locationPhrase = location ? ` in ${location}` : ''
   const selectedPages = settings.pages.length ? settings.pages.join(', ') : PAGE_OPTIONS_BY_TYPE[settings.websiteType].join(', ')
+  const previewCards = PREVIEW_CONTENT[settings.websiteType].cards
 
-  if (key === 'tagline') {
-    return profile.tagline
-  }
+  if (key === 'tagline') return profile.tagline
 
   if (key === 'homepage') {
     if (settings.websiteType === 'ngo') {
@@ -385,10 +447,10 @@ function buildGeneratedContent(settings: WebsiteBuilderSettings, key: ContentDra
   }
 
   if (key === 'serviceDescriptions') {
-    return `${profile.serviceIntro}\n\nKey website sections to describe first: ${selectedPages}.\n\nSuggested descriptions:\n• ${profile.cards?.[0] || selectedPages.split(', ')[0] || 'Main offer'}: Give visitors a clear overview of what is available and how it helps them.\n• ${profile.cards?.[1] || selectedPages.split(', ')[1] || 'Customer action'}: Explain how customers, students, donors, or clients can take action.\n• Contact / support: Make it easy for visitors to call, WhatsApp, email, book, donate, or pay.`
+    return `${profile.serviceIntro}\n\nKey website sections to describe first: ${selectedPages}.\n\nSuggested descriptions:\n• ${previewCards[0] || 'Main offer'}: Give visitors a clear overview of what is available and how it helps them.\n• ${previewCards[1] || 'Customer action'}: Explain how customers, students, donors, or clients can take action.\n• Contact / support: Make it easy for visitors to call, WhatsApp, email, book, donate, or pay.`
   }
 
-  return `${businessName} | ${profile.seoLabel}${locationPhrase}`
+  return buildSeoTitle(settings)
 }
 
 export default function WebsiteBuilder() {
@@ -417,6 +479,9 @@ export default function WebsiteBuilder() {
   const previewPages = settings.pages.length ? settings.pages.slice(0, 5) : ['Home']
   const activeSocialLinks = SOCIAL_LINK_FIELDS.filter(field => settings.socialLinks[field.id]).slice(0, 4)
   const hasPaymentPage = paymentPages.some(page => settings.pages.includes(page))
+  const seoTitlePreview = settings.seoSettings.title || settings.contentDrafts.seoTitle || buildSeoTitle(settings)
+  const seoDescriptionPreview = settings.seoSettings.metaDescription || buildSeoDescription(settings)
+  const seoShareImage = settings.seoSettings.socialShareImage || settings.coverImageUrl || settings.businessLogoUrl
   const canPublish = Boolean(storeId && settings.slug && settings.pages.length > 0 && !isLoading && !isSaving)
   const currentStepIndex = BUILDER_STEPS.findIndex(step => step.id === activeStep)
   const safeStepIndex = currentStepIndex >= 0 ? currentStepIndex : 0
@@ -429,6 +494,7 @@ export default function WebsiteBuilder() {
     pages: settings.pages.length > 0,
     theme: Boolean(settings.theme),
     content: Boolean(settings.contentDrafts.homepage || settings.contentDrafts.about || settings.contentDrafts.seoTitle || settings.tagline),
+    seo: Boolean(settings.seoSettings.title && settings.seoSettings.metaDescription),
     payments: hasPaymentPage,
     domain: Boolean(settings.slug),
     publish: settings.status === 'published',
@@ -440,6 +506,7 @@ export default function WebsiteBuilder() {
     { label: 'Smart pages selected', complete: stepCompletion.pages },
     { label: 'Theme selected', complete: stepCompletion.theme },
     { label: 'Generated content', complete: stepCompletion.content },
+    { label: 'SEO settings', complete: stepCompletion.seo },
     { label: 'Payment page', complete: stepCompletion.payments },
     { label: 'Domain slug', complete: stepCompletion.domain },
   ]
@@ -469,6 +536,11 @@ export default function WebsiteBuilder() {
           const websiteType = isWebsiteType(website.websiteType) ? website.websiteType : previous.websiteType
           const loadedPages = Array.isArray(website.pages) ? website.pages.filter((page): page is string => typeof page === 'string') : []
           const pages = loadedPages.length ? filterPagesForType(websiteType, loadedPages) : [...PAGE_OPTIONS_BY_TYPE[websiteType]]
+          const contentDrafts = mergeContentDrafts(website.contentDrafts)
+          const seoSettings = mergeSeoSettings(website.seoSettings, {
+            title: readString(website, 'seoTitle', contentDrafts.seoTitle),
+            socialShareImage: readString(website, 'socialShareImage'),
+          })
 
           return {
             ...previous,
@@ -489,7 +561,8 @@ export default function WebsiteBuilder() {
             coverImageUrl: readString(website, 'coverImageUrl', readString(storeData, 'coverImageUrl', readString(storeData, 'bannerImageUrl'))),
             brandColor: normalizeBrandColor(website.brandColor || storeData.brandColor),
             socialLinks: mergeSocialLinks(storeData.socialLinks, storeData.socialMediaLinks, website.socialLinks),
-            contentDrafts: mergeContentDrafts(website.contentDrafts),
+            contentDrafts,
+            seoSettings,
           }
         })
         setFeedback(null)
@@ -511,21 +584,15 @@ export default function WebsiteBuilder() {
   }
 
   function updateContentDraft(key: ContentDraftKey, value: string) {
-    setSettings(previous => ({
-      ...previous,
-      contentDrafts: {
-        ...previous.contentDrafts,
-        [key]: value,
-      },
-    }))
+    setSettings(previous => ({ ...previous, contentDrafts: { ...previous.contentDrafts, [key]: value } }))
+  }
+
+  function updateSeoSetting(key: keyof SeoSettings, value: string) {
+    setSettings(previous => ({ ...previous, seoSettings: { ...previous.seoSettings, [key]: value } }))
   }
 
   function selectWebsiteType(websiteType: WebsiteType) {
-    setSettings(previous => ({
-      ...previous,
-      websiteType,
-      pages: [...PAGE_OPTIONS_BY_TYPE[websiteType]],
-    }))
+    setSettings(previous => ({ ...previous, websiteType, pages: [...PAGE_OPTIONS_BY_TYPE[websiteType]] }))
   }
 
   function updateSocialLink(key: keyof SocialLinks, value: string) {
@@ -541,10 +608,32 @@ export default function WebsiteBuilder() {
     }
 
     updateContentDraft(key, generated)
-    if (key === 'homepage' && !settings.description.trim()) {
-      updateSetting('description', generated)
-    }
+    if (key === 'seoTitle') updateSeoSetting('title', generated)
+    if (key === 'homepage' && !settings.description.trim()) updateSetting('description', generated)
     setFeedback(`${key === 'serviceDescriptions' ? 'Service descriptions' : key} generated.`)
+  }
+
+  function generateSeoSettings() {
+    const title = buildSeoTitle(settings)
+    const metaDescription = buildSeoDescription(settings)
+    const keywords = buildSeoKeywords(settings)
+    const socialShareImage = settings.seoSettings.socialShareImage || settings.coverImageUrl || settings.businessLogoUrl
+
+    setSettings(previous => ({
+      ...previous,
+      contentDrafts: {
+        ...previous.contentDrafts,
+        seoTitle: title,
+      },
+      seoSettings: {
+        ...previous.seoSettings,
+        title,
+        metaDescription,
+        keywords,
+        socialShareImage,
+      },
+    }))
+    setFeedback('SEO settings generated.')
   }
 
   function generateAllContent() {
@@ -553,20 +642,23 @@ export default function WebsiteBuilder() {
     const serviceDescriptions = buildGeneratedContent(settings, 'serviceDescriptions')
     const seoTitle = buildGeneratedContent(settings, 'seoTitle')
     const tagline = buildGeneratedContent(settings, 'tagline')
+    const metaDescription = buildSeoDescription(settings)
+    const keywords = buildSeoKeywords(settings)
 
     setSettings(previous => ({
       ...previous,
       tagline: previous.tagline.trim() ? previous.tagline : tagline,
       description: previous.description.trim() ? previous.description : homepage,
-      contentDrafts: {
-        ...previous.contentDrafts,
-        homepage,
-        about,
-        serviceDescriptions,
-        seoTitle,
+      contentDrafts: { ...previous.contentDrafts, homepage, about, serviceDescriptions, seoTitle },
+      seoSettings: {
+        ...previous.seoSettings,
+        title: previous.seoSettings.title.trim() ? previous.seoSettings.title : seoTitle,
+        metaDescription: previous.seoSettings.metaDescription.trim() ? previous.seoSettings.metaDescription : metaDescription,
+        keywords: previous.seoSettings.keywords.trim() ? previous.seoSettings.keywords : keywords,
+        socialShareImage: previous.seoSettings.socialShareImage || previous.coverImageUrl || previous.businessLogoUrl,
       },
     }))
-    setFeedback('Website content generated from business data.')
+    setFeedback('Website content and SEO generated from business data.')
   }
 
   async function saveSettings(nextStatus: StoredWebsiteStatus) {
@@ -609,6 +701,7 @@ export default function WebsiteBuilder() {
         brandColor: normalizeBrandColor(settings.brandColor),
         socialLinks: mergeSocialLinks(settings.socialLinks),
         contentDrafts: mergeContentDrafts(settings.contentDrafts),
+        seoSettings: mergeSeoSettings(settings.seoSettings),
         status: nextStatus,
       }
 
@@ -634,6 +727,7 @@ export default function WebsiteBuilder() {
             ...payload,
             businessIdentity,
             contentDrafts: payload.contentDrafts,
+            seoSettings: payload.seoSettings,
             smartPages: PAGE_OPTIONS_BY_TYPE[payload.websiteType],
             paymentPages: PAYMENT_PAGES_BY_TYPE[payload.websiteType],
             storeId,
@@ -681,7 +775,7 @@ export default function WebsiteBuilder() {
   return (
     <PageSection
       title="Website Builder"
-      subtitle="Control your business website from Sedifex: setup, pages, theme, preview, content, and publishing from one place."
+      subtitle="Control your business website from Sedifex: setup, pages, theme, preview, SEO, content, and publishing from one place."
       className="pt-8 md:pt-10"
       actions={
         <div className="flex flex-wrap items-center gap-3">
@@ -699,8 +793,8 @@ export default function WebsiteBuilder() {
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Business website control center</p>
-                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Generate a first website draft from Sedifex data</h3>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">Use business identity, type, pages, services, products, and gallery data to prepare homepage, About, SEO, and service copy faster.</p>
+                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Prepare content, SEO, and previews before publishing</h3>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">Set website title, meta description, keywords, and share images so every generated site looks good on Google, Facebook, and WhatsApp.</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm shadow-xl backdrop-blur">
                 <p className="text-slate-300">Current website</p>
@@ -776,23 +870,8 @@ export default function WebsiteBuilder() {
 
             {activeStep === 'type' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website type</p>
-                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website structure</h3>
-                <p className="mt-2 text-sm text-slate-500">When you choose a type, Sedifex automatically loads the best page list and generator style for that industry.</p>
-                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {WEBSITE_TYPES.map(type => {
-                    const isSelected = settings.websiteType === type.id
-                    return (
-                      <button key={type.id} type="button" className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'}`} onClick={() => selectWebsiteType(type.id)}>
-                        <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl text-xl ring-1 ${type.accentClassName}`}>{type.icon}</span>
-                        <span className="mt-4 block font-semibold text-slate-950">{type.label}</span>
-                        <span className="mt-1 block text-sm leading-5 text-slate-600">{type.description}</span>
-                        <span className="mt-3 flex flex-wrap gap-1.5">{PAGE_OPTIONS_BY_TYPE[type.id].slice(0, 4).map(page => <span key={page} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{page}</span>)}</span>
-                        {isSelected ? <span className="mt-3 inline-flex text-xs font-semibold text-indigo-700">Selected smart page set</span> : null}
-                      </button>
-                    )
-                  })}
-                </div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website type</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website structure</h3><p className="mt-2 text-sm text-slate-500">When you choose a type, Sedifex automatically loads the best page list and generator style for that industry.</p>
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{WEBSITE_TYPES.map(type => { const isSelected = settings.websiteType === type.id; return <button key={type.id} type="button" className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'}`} onClick={() => selectWebsiteType(type.id)}><span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl text-xl ring-1 ${type.accentClassName}`}>{type.icon}</span><span className="mt-4 block font-semibold text-slate-950">{type.label}</span><span className="mt-1 block text-sm leading-5 text-slate-600">{type.description}</span><span className="mt-3 flex flex-wrap gap-1.5">{PAGE_OPTIONS_BY_TYPE[type.id].slice(0, 4).map(page => <span key={page} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{page}</span>)}</span>{isSelected ? <span className="mt-3 inline-flex text-xs font-semibold text-indigo-700">Selected smart page set</span> : null}</button>})}</div>
               </div>
             ) : null}
 
@@ -813,39 +892,33 @@ export default function WebsiteBuilder() {
 
             {activeStep === 'content' ? (
               <div>
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Content generator</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Generate first-draft website copy</h3><p className="mt-2 text-sm text-slate-500">Sedifex can use the business name, type, selected pages, products, services, and gallery to generate a first version automatically.</p></div>
-                  <button type="button" className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" onClick={generateAllContent}>Generate all content</button>
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800">
-                  Example style: <span className="font-bold">{settings.businessName || 'Wesoamo Foundation'}</span> {settings.websiteType === 'ngo' ? 'supports communities through programs, donations, volunteer work, and impact-driven projects.' : `helps ${CONTENT_GENERATOR_PROFILE[settings.websiteType].audience} through ${CONTENT_GENERATOR_PROFILE[settings.websiteType].offerPlural}.`}
-                </div>
-
-                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('homepage')}><span className="font-bold text-slate-950">Generate homepage content</span><span className="mt-1 block text-sm text-slate-600">Hero copy and homepage introduction.</span></button>
-                  <button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('about')}><span className="font-bold text-slate-950">Generate About section</span><span className="mt-1 block text-sm text-slate-600">Business story and purpose.</span></button>
-                  <button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('serviceDescriptions')}><span className="font-bold text-slate-950">Generate service descriptions</span><span className="mt-1 block text-sm text-slate-600">Services, products, programs, or offers.</span></button>
-                  <button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('seoTitle')}><span className="font-bold text-slate-950">Generate SEO title</span><span className="mt-1 block text-sm text-slate-600">Search-friendly page title.</span></button>
-                  <button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('tagline')}><span className="font-bold text-slate-950">Generate website tagline</span><span className="mt-1 block text-sm text-slate-600">Short brand message for the hero.</span></button>
-                </div>
-
-                <div className="mt-8 grid gap-5">
-                  <label className="block text-sm font-semibold text-slate-700">SEO title<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.seoTitle} onChange={event => updateContentDraft('seoTitle', event.target.value)} placeholder="Business name | Service keywords and location" /></label>
-                  <label className="block text-sm font-semibold text-slate-700">Homepage content<textarea className="mt-2 min-h-32 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.homepage} onChange={event => updateContentDraft('homepage', event.target.value)} placeholder="Generated homepage content will appear here." /></label>
-                  <label className="block text-sm font-semibold text-slate-700">About section<textarea className="mt-2 min-h-32 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.about} onChange={event => updateContentDraft('about', event.target.value)} placeholder="Generated About content will appear here." /></label>
-                  <label className="block text-sm font-semibold text-slate-700">Service / product / program descriptions<textarea className="mt-2 min-h-36 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.serviceDescriptions} onChange={event => updateContentDraft('serviceDescriptions', event.target.value)} placeholder="Generated service descriptions will appear here." /></label>
-                </div>
-
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Content generator</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Generate first-draft website copy</h3><p className="mt-2 text-sm text-slate-500">Sedifex can use the business name, type, selected pages, products, services, and gallery to generate a first version automatically.</p></div><button type="button" className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" onClick={generateAllContent}>Generate all content</button></div>
+                <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800">Example style: <span className="font-bold">{settings.businessName || 'Wesoamo Foundation'}</span> {settings.websiteType === 'ngo' ? 'supports communities through programs, donations, volunteer work, and impact-driven projects.' : `helps ${CONTENT_GENERATOR_PROFILE[settings.websiteType].audience} through ${CONTENT_GENERATOR_PROFILE[settings.websiteType].offerPlural}.`}</div>
+                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('homepage')}><span className="font-bold text-slate-950">Generate homepage content</span><span className="mt-1 block text-sm text-slate-600">Hero copy and homepage introduction.</span></button><button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('about')}><span className="font-bold text-slate-950">Generate About section</span><span className="mt-1 block text-sm text-slate-600">Business story and purpose.</span></button><button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('serviceDescriptions')}><span className="font-bold text-slate-950">Generate service descriptions</span><span className="mt-1 block text-sm text-slate-600">Services, products, programs, or offers.</span></button><button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('seoTitle')}><span className="font-bold text-slate-950">Generate SEO title</span><span className="mt-1 block text-sm text-slate-600">Search-friendly page title.</span></button><button type="button" className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50" onClick={() => generateContent('tagline')}><span className="font-bold text-slate-950">Generate website tagline</span><span className="mt-1 block text-sm text-slate-600">Short brand message for the hero.</span></button></div>
+                <div className="mt-8 grid gap-5"><label className="block text-sm font-semibold text-slate-700">SEO title<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.seoTitle} onChange={event => updateContentDraft('seoTitle', event.target.value)} placeholder="Business name | Service keywords and location" /></label><label className="block text-sm font-semibold text-slate-700">Homepage content<textarea className="mt-2 min-h-32 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.homepage} onChange={event => updateContentDraft('homepage', event.target.value)} placeholder="Generated homepage content will appear here." /></label><label className="block text-sm font-semibold text-slate-700">About section<textarea className="mt-2 min-h-32 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.about} onChange={event => updateContentDraft('about', event.target.value)} placeholder="Generated About content will appear here." /></label><label className="block text-sm font-semibold text-slate-700">Service / product / program descriptions<textarea className="mt-2 min-h-36 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.contentDrafts.serviceDescriptions} onChange={event => updateContentDraft('serviceDescriptions', event.target.value)} placeholder="Generated service descriptions will appear here." /></label></div>
                 <div className="mt-6 grid gap-3 md:grid-cols-2">{CONTENT_MODULES.map(module => <div key={module.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="font-semibold text-slate-950">{module.label}</p><p className="mt-1 text-sm leading-6 text-slate-600">{module.description}</p><span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">Auto from Sedifex</span></div>)}</div>
               </div>
             ) : null}
 
-            {activeStep === 'payments' ? (
+            {activeStep === 'seo' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Payments / Quick Pay</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Prepare the website for payments</h3><p className="mt-2 text-sm text-slate-500">Payment pages now follow the selected website type.</p>
-                <div className="mt-6 grid gap-4 lg:grid-cols-2"><div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-950">Recommended payment pages</p><p className="mt-1 text-sm leading-6 text-slate-600">{paymentPages.join(', ')}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${hasPaymentPage ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{hasPaymentPage ? 'Enabled' : 'Off'}</span></div><button type="button" className="mt-5 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white" onClick={() => updateSetting('pages', togglePage(settings.pages, primaryPaymentPage))}>{settings.pages.includes(primaryPaymentPage) ? `Remove ${primaryPaymentPage}` : `Enable ${primaryPaymentPage}`}</button></div><div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5"><p className="font-semibold text-slate-950">Payment setup checklist</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600"><li>• Confirm store payout account.</li><li>• Connect checkout fees and split rules.</li><li>• Show the right payment page for the website type.</li></ul></div></div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">SEO settings</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Control how the website appears online</h3><p className="mt-2 text-sm text-slate-500">Set the website title, meta description, keywords, and social share image for Google, Facebook, and WhatsApp.</p></div><button type="button" className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" onClick={generateSeoSettings}>Generate SEO settings</button></div>
+                <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800"><span className="font-bold">Example:</span> Title: Wesoamo Foundation | Programs, Donations & Volunteer Support<br />Description: Support Wesoamo Foundation through donations, volunteer programs, and community impact projects.</div>
+                <div className="mt-6 grid gap-5">
+                  <label className="block text-sm font-semibold text-slate-700">Website title<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.seoSettings.title} onChange={event => updateSeoSetting('title', event.target.value)} placeholder="Wesoamo Foundation | Programs, Donations & Volunteer Support" /><span className="mt-1 block text-xs font-normal text-slate-500">Recommended: 50–60 characters.</span></label>
+                  <label className="block text-sm font-semibold text-slate-700">Meta description<textarea className="mt-2 min-h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.seoSettings.metaDescription} onChange={event => updateSeoSetting('metaDescription', event.target.value)} placeholder="Support Wesoamo Foundation through donations, volunteer programs, and community impact projects." /><span className="mt-1 block text-xs font-normal text-slate-500">Recommended: 140–160 characters.</span></label>
+                  <label className="block text-sm font-semibold text-slate-700">Keywords<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.seoSettings.keywords} onChange={event => updateSeoSetting('keywords', event.target.value)} placeholder="donations, volunteers, programs, community impact" /><span className="mt-1 block text-xs font-normal text-slate-500">Use comma-separated words for internal SEO and page suggestions.</span></label>
+                  <label className="block text-sm font-semibold text-slate-700">Social share image<input className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={settings.seoSettings.socialShareImage} onChange={event => updateSeoSetting('socialShareImage', event.target.value)} placeholder="https://.../share-image.jpg" /><span className="mt-1 block text-xs font-normal text-slate-500">Used when the website link is shared on Facebook, WhatsApp, LinkedIn, and other platforms.</span></label>
+                </div>
+                <div className="mt-8 grid gap-5 lg:grid-cols-2">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold uppercase tracking-wide text-slate-500">Google preview</p><div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><p className="truncate text-sm text-slate-600">{previewUrl}</p><h4 className="mt-1 text-lg font-semibold leading-snug text-blue-700">{seoTitlePreview}</h4><p className="mt-1 text-sm leading-6 text-slate-700">{seoDescriptionPreview}</p></div></div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold uppercase tracking-wide text-slate-500">Facebook / WhatsApp preview</p><div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">{seoShareImage ? <img src={seoShareImage} alt="Social share preview" className="h-40 w-full object-cover" /> : <div className="flex h-40 items-center justify-center bg-slate-100 text-sm font-semibold text-slate-400">Social share image</div>}<div className="p-4"><p className="truncate text-xs uppercase tracking-wide text-slate-500">sites.sedifex.com</p><h4 className="mt-1 line-clamp-2 text-base font-bold text-slate-950">{seoTitlePreview}</h4><p className="mt-1 line-clamp-2 text-sm text-slate-600">{seoDescriptionPreview}</p></div></div></div>
+                </div>
               </div>
+            ) : null}
+
+            {activeStep === 'payments' ? (
+              <div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Payments / Quick Pay</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Prepare the website for payments</h3><p className="mt-2 text-sm text-slate-500">Payment pages now follow the selected website type.</p><div className="mt-6 grid gap-4 lg:grid-cols-2"><div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-950">Recommended payment pages</p><p className="mt-1 text-sm leading-6 text-slate-600">{paymentPages.join(', ')}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${hasPaymentPage ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{hasPaymentPage ? 'Enabled' : 'Off'}</span></div><button type="button" className="mt-5 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white" onClick={() => updateSetting('pages', togglePage(settings.pages, primaryPaymentPage))}>{settings.pages.includes(primaryPaymentPage) ? `Remove ${primaryPaymentPage}` : `Enable ${primaryPaymentPage}`}</button></div><div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5"><p className="font-semibold text-slate-950">Payment setup checklist</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600"><li>• Confirm store payout account.</li><li>• Connect checkout fees and split rules.</li><li>• Show the right payment page for the website type.</li></ul></div></div></div>
             ) : null}
 
             {activeStep === 'domain' ? (
@@ -853,12 +926,7 @@ export default function WebsiteBuilder() {
             ) : null}
 
             {activeStep === 'publish' ? (
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Publish</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Review and publish the website</h3><p className="mt-2 text-sm text-slate-500">Check the setup, save a draft, or publish the public website settings.</p>
-                <div className="mt-6 grid gap-3 md:grid-cols-2">{completionItems.map(item => <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm"><span className="font-medium text-slate-700">{item.label}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.complete ? 'Done' : 'Missing'}</span></div>)}</div>
-                {feedback ? <p className="mt-4 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{feedback}</p> : null}{error ? <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
-                <div className="mt-6 grid gap-3 sm:grid-cols-2"><button className="rounded-2xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none" type="button" style={{ backgroundColor: canPublish ? settings.brandColor : undefined }} disabled={!canPublish} onClick={() => void saveSettings('published')}>{isSaving ? 'Publishing…' : 'Publish website'}</button><button className="rounded-2xl border border-slate-300 bg-white px-5 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={isSaving || isLoading}>Save draft</button></div>
-              </div>
+              <div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Publish</p><h3 className="mt-1 text-2xl font-semibold text-slate-950">Review and publish the website</h3><p className="mt-2 text-sm text-slate-500">Check the setup, save a draft, or publish the public website settings.</p><div className="mt-6 grid gap-3 md:grid-cols-2">{completionItems.map(item => <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm"><span className="font-medium text-slate-700">{item.label}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.complete ? 'Done' : 'Missing'}</span></div>)}</div>{feedback ? <p className="mt-4 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{feedback}</p> : null}{error ? <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}<div className="mt-6 grid gap-3 sm:grid-cols-2"><button className="rounded-2xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none" type="button" style={{ backgroundColor: canPublish ? settings.brandColor : undefined }} disabled={!canPublish} onClick={() => void saveSettings('published')}>{isSaving ? 'Publishing…' : 'Publish website'}</button><button className="rounded-2xl border border-slate-300 bg-white px-5 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={isSaving || isLoading}>Save draft</button></div></div>
             ) : null}
 
             {activeStep !== 'publish' ? <div className="mt-8 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={safeStepIndex === 0} onClick={() => goToStep(-1)}>Previous step</button><div className="flex flex-col gap-3 sm:flex-row"><button type="submit" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving || isLoading}>Save draft</button><button type="button" className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" onClick={() => goToStep(1)}>Next step</button></div></div> : null}
@@ -867,20 +935,9 @@ export default function WebsiteBuilder() {
 
         <aside className="space-y-6">
           <section className="sticky top-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/70 md:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Preview</p><h3 className="mt-1 text-xl font-semibold text-slate-950">Home page preview</h3><p className="mt-1 text-sm text-slate-500">Live preview updates from type, generated content, smart pages, identity, and brand color.</p></div><span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}><span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />{statusConfig.label}</span></div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Preview</p><h3 className="mt-1 text-xl font-semibold text-slate-950">Home page preview</h3><p className="mt-1 text-sm text-slate-500">Live preview updates from type, generated content, smart pages, identity, SEO, and brand color.</p></div><span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}><span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />{statusConfig.label}</span></div>
             <div className="mt-5 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold"><button type="button" className={`rounded-xl px-3 py-2 transition ${previewMode === 'mobile' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`} onClick={() => setPreviewMode('mobile')}>Mobile preview</button><button type="button" className={`rounded-xl px-3 py-2 transition ${previewMode === 'desktop' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`} onClick={() => setPreviewMode('desktop')}>Desktop preview</button></div>
-            <div className="mt-5 rounded-[2rem] border border-slate-200 bg-slate-100 p-3">
-              <div className={`${previewMode === 'mobile' ? 'mx-auto max-w-[285px] rounded-[1.75rem]' : 'rounded-[1.75rem]'} overflow-hidden border border-slate-900/10 bg-white shadow-sm`}>
-                <div className="flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2"><span className="h-2.5 w-2.5 rounded-full bg-red-300" /><span className="h-2.5 w-2.5 rounded-full bg-amber-300" /><span className="h-2.5 w-2.5 rounded-full bg-emerald-300" /><span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{previewUrl}</span></div>
-                <div className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`} style={settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.62), rgba(15, 23, 42, 0.2)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}>
-                  <div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{settings.businessLogoUrl ? <img src={settings.businessLogoUrl} alt="Business logo" className="h-9 w-9 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" /> : <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>}<div className="min-w-0"><p className="truncate text-sm font-bold">{settings.businessName || 'My business'}</p><p className="truncate text-[11px] opacity-75">{settings.tagline || selectedType.label}</p></div></div><span className="rounded-full px-3 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: settings.brandColor }}>Pay</span></div>
-                  <div className={`mt-4 flex gap-2 overflow-hidden text-[11px] ${previewMode === 'mobile' ? 'flex-wrap' : 'flex-nowrap'}`}>{previewPages.map(page => <span key={page} className={`rounded-full px-2.5 py-1 ${selectedTheme.mutedSurfaceClassName}`}>{page}</span>)}</div>
-                  <div className={`${previewMode === 'mobile' ? 'grid gap-4' : 'grid grid-cols-[1.2fr_0.8fr] gap-4'} mt-6 items-center`}><div><p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{previewContent.eyebrow}</p><h4 className={`${previewMode === 'mobile' ? 'text-2xl' : 'text-3xl'} mt-2 font-black leading-tight tracking-tight`}>{settings.tagline || previewContent.headline}</h4><p className="mt-3 text-sm leading-6 opacity-85">{getPreviewText(settings.contentDrafts.homepage || settings.description, previewContent.body)}</p><button type="button" className="mt-4 rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm" style={{ backgroundColor: settings.brandColor }}>{previewContent.cta}</button></div><div className={`rounded-3xl p-3 shadow-sm ${selectedTheme.surfaceClassName}`}><div className="h-24 rounded-2xl bg-slate-200/80" /><div className="mt-3 space-y-2 text-xs"><p className="font-bold">Contact</p><p className="truncate opacity-70">{settings.phone || settings.whatsapp || 'Phone / WhatsApp'}</p><p className="truncate opacity-70">{settings.location || 'Business location'}</p></div></div></div>
-                </div>
-                <div className="grid gap-3 bg-white p-4 sm:grid-cols-3">{previewContent.cards.map(card => <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="h-8 w-8 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} /><p className="mt-3 text-xs font-bold text-slate-900">{card}</p><div className="mt-2 h-1.5 w-16 rounded-full bg-slate-200" /></div>)}</div>
-                <div className="border-t border-slate-200 bg-slate-50 p-4"><div className="flex flex-wrap gap-2">{settings.openingHours ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{settings.openingHours}</span> : null}{activeSocialLinks.map(field => <span key={field.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{field.label}</span>)}{settings.contentDrafts.seoTitle ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">SEO ready</span> : null}{!settings.openingHours && activeSocialLinks.length === 0 && !settings.contentDrafts.seoTitle ? <span className="text-[11px] font-semibold text-slate-400">Opening hours, SEO, and social links will show here.</span> : null}</div></div>
-              </div>
-            </div>
+            <div className="mt-5 rounded-[2rem] border border-slate-200 bg-slate-100 p-3"><div className={`${previewMode === 'mobile' ? 'mx-auto max-w-[285px] rounded-[1.75rem]' : 'rounded-[1.75rem]'} overflow-hidden border border-slate-900/10 bg-white shadow-sm`}><div className="flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2"><span className="h-2.5 w-2.5 rounded-full bg-red-300" /><span className="h-2.5 w-2.5 rounded-full bg-amber-300" /><span className="h-2.5 w-2.5 rounded-full bg-emerald-300" /><span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{previewUrl}</span></div><div className={`bg-gradient-to-br ${selectedTheme.previewClassName} p-4 ${selectedTheme.textClassName}`} style={settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.62), rgba(15, 23, 42, 0.2)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}><div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{settings.businessLogoUrl ? <img src={settings.businessLogoUrl} alt="Business logo" className="h-9 w-9 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" /> : <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 ${selectedType.accentClassName}`}>{selectedType.icon}</span>}<div className="min-w-0"><p className="truncate text-sm font-bold">{settings.businessName || 'My business'}</p><p className="truncate text-[11px] opacity-75">{settings.tagline || selectedType.label}</p></div></div><span className="rounded-full px-3 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: settings.brandColor }}>Pay</span></div><div className={`mt-4 flex gap-2 overflow-hidden text-[11px] ${previewMode === 'mobile' ? 'flex-wrap' : 'flex-nowrap'}`}>{previewPages.map(page => <span key={page} className={`rounded-full px-2.5 py-1 ${selectedTheme.mutedSurfaceClassName}`}>{page}</span>)}</div><div className={`${previewMode === 'mobile' ? 'grid gap-4' : 'grid grid-cols-[1.2fr_0.8fr] gap-4'} mt-6 items-center`}><div><p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{previewContent.eyebrow}</p><h4 className={`${previewMode === 'mobile' ? 'text-2xl' : 'text-3xl'} mt-2 font-black leading-tight tracking-tight`}>{settings.tagline || previewContent.headline}</h4><p className="mt-3 text-sm leading-6 opacity-85">{getPreviewText(settings.contentDrafts.homepage || settings.description, previewContent.body)}</p><button type="button" className="mt-4 rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm" style={{ backgroundColor: settings.brandColor }}>{previewContent.cta}</button></div><div className={`rounded-3xl p-3 shadow-sm ${selectedTheme.surfaceClassName}`}><div className="h-24 rounded-2xl bg-slate-200/80" /><div className="mt-3 space-y-2 text-xs"><p className="font-bold">Contact</p><p className="truncate opacity-70">{settings.phone || settings.whatsapp || 'Phone / WhatsApp'}</p><p className="truncate opacity-70">{settings.location || 'Business location'}</p></div></div></div></div><div className="grid gap-3 bg-white p-4 sm:grid-cols-3">{previewContent.cards.map(card => <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="h-8 w-8 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} /><p className="mt-3 text-xs font-bold text-slate-900">{card}</p><div className="mt-2 h-1.5 w-16 rounded-full bg-slate-200" /></div>)}</div><div className="border-t border-slate-200 bg-slate-50 p-4"><div className="flex flex-wrap gap-2">{settings.openingHours ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{settings.openingHours}</span> : null}{activeSocialLinks.map(field => <span key={field.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">{field.label}</span>)}{settings.seoSettings.title || settings.contentDrafts.seoTitle ? <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">SEO ready</span> : null}{!settings.openingHours && activeSocialLinks.length === 0 && !settings.seoSettings.title && !settings.contentDrafts.seoTitle ? <span className="text-[11px] font-semibold text-slate-400">Opening hours, SEO, and social links will show here.</span> : null}</div></div></div></div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2"><a className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" href={previewUrl} target="_blank" rel="noreferrer">Open public site</a><button type="button" className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" onClick={() => void copyWebsiteLink()}>Copy website link</button></div>
             {copyFeedback ? <p className="mt-3 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{copyFeedback}</p> : null}
           </section>
