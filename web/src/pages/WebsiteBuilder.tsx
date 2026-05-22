@@ -9,6 +9,7 @@ type WebsiteTheme = 'modern' | 'luxury' | 'clean' | 'bold'
 type StoredWebsiteStatus = 'draft' | 'published'
 type DisplayWebsiteStatus = StoredWebsiteStatus | 'needs-setup'
 type PreviewMode = 'mobile' | 'desktop'
+type BuilderStepId = 'identity' | 'type' | 'pages' | 'theme' | 'content' | 'payments' | 'domain' | 'publish'
 
 type WebsiteBuilderSettings = {
   slug: string
@@ -45,6 +46,17 @@ type PreviewContent = {
   cta: string
   cards: string[]
 }
+
+const BUILDER_STEPS: Array<{ id: BuilderStepId; label: string; description: string }> = [
+  { id: 'identity', label: 'Business identity', description: 'Name, logo direction, and public link.' },
+  { id: 'type', label: 'Website type', description: 'Choose the right structure for the business.' },
+  { id: 'pages', label: 'Pages', description: 'Select the pages customers should see.' },
+  { id: 'theme', label: 'Theme', description: 'Pick the visual style and feel.' },
+  { id: 'content', label: 'Content', description: 'Connect website sections to Sedifex data.' },
+  { id: 'payments', label: 'Payments / Quick Pay', description: 'Prepare checkout and payment pages.' },
+  { id: 'domain', label: 'Domain', description: 'Use Sedifex subdomain or custom domain.' },
+  { id: 'publish', label: 'Publish', description: 'Review and send the website live.' },
+]
 
 const WEBSITE_TYPES: WebsiteTypeOption[] = [
   {
@@ -158,6 +170,13 @@ const PAGE_OPTIONS = [
   'Quick Pay',
 ]
 
+const CONTENT_MODULES = [
+  { label: 'Products / Services', description: 'Pull items directly from Sedifex inventory and service records.' },
+  { label: 'Gallery', description: 'Show business photos, work samples, or treatment/course images.' },
+  { label: 'Promotions', description: 'Highlight offers, featured products, and seasonal campaigns.' },
+  { label: 'Contact details', description: 'Use store profile details so customers can call, WhatsApp, or visit.' },
+]
+
 const PREVIEW_CONTENT: Record<WebsiteType, PreviewContent> = {
   shop: {
     eyebrow: 'Online shop',
@@ -261,6 +280,7 @@ export default function WebsiteBuilder() {
   const [isSaving, setIsSaving] = useState(false)
   const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop')
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
+  const [activeStep, setActiveStep] = useState<BuilderStepId>('identity')
 
   const previewUrl = useMemo(() => {
     const slug = settings.slug || 'your-business'
@@ -274,12 +294,29 @@ export default function WebsiteBuilder() {
   const previewContent = PREVIEW_CONTENT[settings.websiteType]
   const previewPages = settings.pages.length ? settings.pages.slice(0, 5) : ['Home']
   const canPublish = Boolean(storeId && settings.slug && settings.pages.length > 0 && !isLoading && !isSaving)
+  const currentStepIndex = BUILDER_STEPS.findIndex(step => step.id === activeStep)
+  const safeStepIndex = currentStepIndex >= 0 ? currentStepIndex : 0
+  const currentStep = BUILDER_STEPS[safeStepIndex]
+  const progressPercent = Math.round(((safeStepIndex + 1) / BUILDER_STEPS.length) * 100)
+
+  const stepCompletion: Record<BuilderStepId, boolean> = {
+    identity: Boolean(businessName.trim() && settings.slug),
+    type: Boolean(settings.websiteType),
+    pages: settings.pages.length > 0,
+    theme: Boolean(settings.theme),
+    content: settings.pages.length > 0,
+    payments: settings.pages.includes('Quick Pay'),
+    domain: Boolean(settings.slug),
+    publish: settings.status === 'published',
+  }
 
   const completionItems = [
-    { label: 'Website slug', complete: Boolean(settings.slug) },
-    { label: 'Business type', complete: Boolean(settings.websiteType) },
-    { label: 'Theme selected', complete: Boolean(settings.theme) },
-    { label: 'Pages selected', complete: settings.pages.length > 0 },
+    { label: 'Business identity', complete: stepCompletion.identity },
+    { label: 'Website type', complete: stepCompletion.type },
+    { label: 'Pages selected', complete: stepCompletion.pages },
+    { label: 'Theme selected', complete: stepCompletion.theme },
+    { label: 'Quick Pay page', complete: stepCompletion.payments },
+    { label: 'Domain slug', complete: stepCompletion.domain },
   ]
 
   useEffect(() => {
@@ -401,6 +438,11 @@ export default function WebsiteBuilder() {
     window.setTimeout(() => setCopyFeedback(null), 2500)
   }
 
+  function goToStep(offset: number) {
+    const nextIndex = Math.min(Math.max(safeStepIndex + offset, 0), BUILDER_STEPS.length - 1)
+    setActiveStep(BUILDER_STEPS[nextIndex].id)
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     void saveSettings('draft')
@@ -429,9 +471,9 @@ export default function WebsiteBuilder() {
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Business website control center</p>
-                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Build and publish a website from your Sedifex data</h3>
+                <h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Build and publish a website step by step</h3>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
-                  Choose the business type, select pages, pick a theme, then publish. Your products, services, gallery, bookings, and Quick Pay can all come from Sedifex.
+                  A guided setup helps normal business owners finish their website without facing one long form.
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm shadow-xl backdrop-blur">
@@ -442,58 +484,38 @@ export default function WebsiteBuilder() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website identity</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">Set the public link</h3>
-                <p className="mt-1 text-sm text-slate-500">This is the address customers will use before you add a custom domain.</p>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Setup wizard</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-950">{currentStep.label}</h3>
+                <p className="mt-1 text-sm text-slate-500">Step {safeStepIndex + 1} of {BUILDER_STEPS.length}: {currentStep.description}</p>
               </div>
-              <span className="inline-flex w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Step 1</span>
+              <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700">{progressPercent}% complete</span>
             </div>
-
-            <label className="mt-5 block text-sm font-semibold text-slate-700">
-              Website slug
-              <div className="mt-2 flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50 sm:flex-row">
-                <span className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-slate-500 sm:border-b-0 sm:border-r">sites.sedifex.com/</span>
-                <input
-                  className="min-w-0 flex-1 px-4 py-3 outline-none"
-                  value={settings.slug}
-                  onChange={event => setSettings(previous => ({ ...previous, slug: slugify(event.target.value) }))}
-                  placeholder="glittering-med-spa"
-                />
-              </div>
-            </label>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website type</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">Choose the website structure</h3>
-                <p className="mt-1 text-sm text-slate-500">These cards replace the old grey buttons and make the choice easier to understand.</p>
-              </div>
-              <span className="inline-flex w-fit rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{selectedType.label}</span>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${progressPercent}%` }} />
             </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {WEBSITE_TYPES.map(type => {
-                const isSelected = settings.websiteType === type.id
+            <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {BUILDER_STEPS.map((step, index) => {
+                const isActive = activeStep === step.id
+                const isComplete = stepCompletion[step.id]
                 return (
                   <button
-                    key={type.id}
+                    key={step.id}
                     type="button"
-                    className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${
-                      isSelected
-                        ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
+                    className={`rounded-2xl border p-3 text-left transition ${
+                      isActive
+                        ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100'
                         : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
                     }`}
-                    onClick={() => setSettings(previous => ({ ...previous, websiteType: type.id }))}
+                    onClick={() => setActiveStep(step.id)}
                   >
-                    <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl text-xl ring-1 ${type.accentClassName}`}>{type.icon}</span>
-                    <span className="mt-4 block font-semibold text-slate-950">{type.label}</span>
-                    <span className="mt-1 block text-sm leading-5 text-slate-600">{type.description}</span>
-                    {isSelected ? <span className="mt-3 inline-flex text-xs font-semibold text-indigo-700">Selected</span> : null}
+                    <span className="flex items-center justify-between gap-2">
+                      <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{index + 1}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{isComplete ? 'Done' : 'Open'}</span>
+                    </span>
+                    <span className="mt-2 block text-sm font-bold text-slate-900">{step.label}</span>
                   </button>
                 )
               })}
@@ -501,38 +523,301 @@ export default function WebsiteBuilder() {
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            {activeStep === 'identity' ? (
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website pages</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">Select what the website should show</h3>
-                <p className="mt-1 text-sm text-slate-500">Each checkbox now has enough spacing and a clean card-style touch area.</p>
-              </div>
-              <span className="inline-flex w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{settings.pages.length} selected</span>
-            </div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Business identity</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Start with the business details</h3>
+                <p className="mt-2 text-sm text-slate-500">This controls the website name, preview header, and public Sedifex link.</p>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {PAGE_OPTIONS.map(page => {
-                const isChecked = settings.pages.includes(page)
-                return (
-                  <label
-                    key={page}
-                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 text-sm font-semibold transition ${
-                      isChecked
-                        ? 'border-indigo-300 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-100'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
+                <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Business name
                     <input
-                      type="checkbox"
-                      className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      checked={isChecked}
-                      onChange={() => setSettings(previous => ({ ...previous, pages: togglePage(previous.pages, page) }))}
+                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                      value={businessName}
+                      onChange={event => setBusinessName(event.target.value)}
+                      placeholder="Glittering Med Spa"
                     />
-                    <span>{page}</span>
                   </label>
-                )
-              })}
-            </div>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Website slug
+                    <div className="mt-2 flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50 sm:flex-row">
+                      <span className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-slate-500 sm:border-b-0 sm:border-r">sites.sedifex.com/</span>
+                      <input
+                        className="min-w-0 flex-1 px-4 py-3 outline-none"
+                        value={settings.slug}
+                        onChange={event => setSettings(previous => ({ ...previous, slug: slugify(event.target.value) }))}
+                        placeholder="glittering-med-spa"
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                  <p className="font-semibold text-slate-900">Logo and brand image</p>
+                  <p className="mt-1 text-sm text-slate-600">Next, this area can connect to the store logo uploader. For now, the preview uses the business type icon as the logo placeholder.</p>
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'type' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Website type</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website structure</h3>
+                <p className="mt-2 text-sm text-slate-500">Sedifex will use this to show the right layout, call-to-action, and connected modules.</p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {WEBSITE_TYPES.map(type => {
+                    const isSelected = settings.websiteType === type.id
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${
+                          isSelected
+                            ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
+                            : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
+                        }`}
+                        onClick={() => setSettings(previous => ({ ...previous, websiteType: type.id }))}
+                      >
+                        <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl text-xl ring-1 ${type.accentClassName}`}>{type.icon}</span>
+                        <span className="mt-4 block font-semibold text-slate-950">{type.label}</span>
+                        <span className="mt-1 block text-sm leading-5 text-slate-600">{type.description}</span>
+                        {isSelected ? <span className="mt-3 inline-flex text-xs font-semibold text-indigo-700">Selected</span> : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'pages' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Pages</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Select what customers should see</h3>
+                <p className="mt-2 text-sm text-slate-500">Choose only the pages the business needs. The preview navigation updates immediately.</p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {PAGE_OPTIONS.map(page => {
+                    const isChecked = settings.pages.includes(page)
+                    return (
+                      <label
+                        key={page}
+                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 text-sm font-semibold transition ${
+                          isChecked
+                            ? 'border-indigo-300 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-100'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          checked={isChecked}
+                          onChange={() => setSettings(previous => ({ ...previous, pages: togglePage(previous.pages, page) }))}
+                        />
+                        <span>{page}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'theme' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Theme</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Pick the design style</h3>
+                <p className="mt-2 text-sm text-slate-500">The live preview changes immediately when a theme is selected.</p>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  {THEMES.map(theme => {
+                    const isSelected = settings.theme === theme.id
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${
+                          isSelected
+                            ? 'border-indigo-500 bg-indigo-50 shadow-md ring-4 ring-indigo-100'
+                            : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'
+                        }`}
+                        onClick={() => setSettings(previous => ({ ...previous, theme: theme.id }))}
+                      >
+                        <div className={`rounded-2xl bg-gradient-to-br ${theme.previewClassName} p-5`}>
+                          <div className={`h-3 w-24 rounded-full ${theme.headingClassName}`} />
+                          <div className="mt-5 space-y-2">
+                            <div className="h-2.5 rounded-full bg-white/80" />
+                            <div className="h-2.5 w-2/3 rounded-full bg-white/60" />
+                          </div>
+                          <div className={`mt-5 h-8 w-28 rounded-full ${theme.buttonClassName}`} />
+                        </div>
+                        <div className="mt-4 flex items-start justify-between gap-3">
+                          <div>
+                            <span className="block font-semibold text-slate-950">{theme.label}</span>
+                            <span className="mt-1 block text-sm leading-5 text-slate-600">{theme.description}</span>
+                          </div>
+                          {isSelected ? <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white">Active</span> : null}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'content' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Content</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Connect website content to Sedifex</h3>
+                <p className="mt-2 text-sm text-slate-500">This step explains what data the public website should pull from the business workspace.</p>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-2">
+                  {CONTENT_MODULES.map(module => (
+                    <div key={module.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="font-semibold text-slate-950">{module.label}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">{module.description}</p>
+                      <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">Auto from Sedifex</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800">
+                  Selected pages: <span className="font-bold">{settings.pages.join(', ') || 'No pages selected yet'}</span>
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'payments' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Payments / Quick Pay</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Prepare the website for payments</h3>
+                <p className="mt-2 text-sm text-slate-500">Quick Pay gives customers a simple way to pay from the public website.</p>
+
+                <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-950">Quick Pay page</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">Add a payment page for invoices, service payments, deposits, and customer balances.</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${settings.pages.includes('Quick Pay') ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {settings.pages.includes('Quick Pay') ? 'Enabled' : 'Off'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-5 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white"
+                      onClick={() => setSettings(previous => ({ ...previous, pages: togglePage(previous.pages, 'Quick Pay') }))}
+                    >
+                      {settings.pages.includes('Quick Pay') ? 'Remove Quick Pay' : 'Enable Quick Pay'}
+                    </button>
+                  </div>
+
+                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                    <p className="font-semibold text-slate-950">Payment setup checklist</p>
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                      <li>• Confirm store payout account.</li>
+                      <li>• Connect checkout fees and split rules.</li>
+                      <li>• Allow customers to pay from products, services, or Quick Pay.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'domain' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Domain</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Choose the website address</h3>
+                <p className="mt-2 text-sm text-slate-500">Start with a Sedifex subdomain, then connect a custom domain when the business is ready.</p>
+
+                <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5">
+                    <p className="font-semibold text-indigo-950">Sedifex subdomain</p>
+                    <p className="mt-2 break-all rounded-2xl bg-white px-4 py-3 text-sm font-bold text-indigo-700">{previewUrl}</p>
+                    <p className="mt-3 text-sm leading-6 text-indigo-800">This is ready for every business immediately after publishing.</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="font-semibold text-slate-950">Custom domain</p>
+                    <input
+                      className="mt-3 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500"
+                      value="www.businessname.com"
+                      readOnly
+                    />
+                    <p className="mt-3 text-sm leading-6 text-slate-600">Coming next: DNS instructions, verification status, and SSL status.</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep === 'publish' ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Publish</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">Review and publish the website</h3>
+                <p className="mt-2 text-sm text-slate-500">Check the setup, save a draft, or publish the public website settings.</p>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-2">
+                  {completionItems.map(item => (
+                    <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm">
+                      <span className="font-medium text-slate-700">{item.label}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {item.complete ? 'Done' : 'Missing'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {feedback ? <p className="mt-4 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{feedback}</p> : null}
+                {error ? <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <button
+                    className="rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
+                    type="button"
+                    disabled={!canPublish}
+                    onClick={() => void saveSettings('published')}
+                  >
+                    {isSaving ? 'Publishing…' : 'Publish website'}
+                  </button>
+                  <button
+                    className="rounded-2xl border border-slate-300 bg-white px-5 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="submit"
+                    disabled={isSaving || isLoading}
+                  >
+                    Save draft
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {activeStep !== 'publish' ? (
+              <div className="mt-8 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  type="button"
+                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={safeStepIndex === 0}
+                  onClick={() => goToStep(-1)}
+                >
+                  Previous step
+                </button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="submit"
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isSaving || isLoading}
+                  >
+                    Save draft
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5"
+                    onClick={() => goToStep(1)}
+                  >
+                    Next step
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </section>
         </div>
 
@@ -646,106 +931,6 @@ export default function WebsiteBuilder() {
               </button>
             </div>
             {copyFeedback ? <p className="mt-3 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{copyFeedback}</p> : null}
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm md:p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-cyan-200">Theme</p>
-                <h3 className="mt-1 text-xl font-semibold">Beautiful preview cards</h3>
-              </div>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-cyan-100">{selectedTheme.label}</span>
-            </div>
-
-            <div className="mt-5 grid gap-3">
-              {THEMES.map(theme => {
-                const isSelected = settings.theme === theme.id
-                return (
-                  <button
-                    key={theme.id}
-                    type="button"
-                    className={`rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 ${
-                      isSelected
-                        ? 'border-cyan-300 bg-white/15 shadow-lg ring-4 ring-cyan-300/10'
-                        : 'border-white/10 bg-white/5 hover:bg-white/10'
-                    }`}
-                    onClick={() => setSettings(previous => ({ ...previous, theme: theme.id }))}
-                  >
-                    <div className={`rounded-2xl bg-gradient-to-br ${theme.previewClassName} p-4`}>
-                      <div className={`h-3 w-20 rounded-full ${theme.headingClassName}`} />
-                      <div className="mt-4 space-y-2">
-                        <div className="h-2 rounded-full bg-white/80" />
-                        <div className="h-2 w-2/3 rounded-full bg-white/60" />
-                      </div>
-                      <div className={`mt-4 h-7 w-24 rounded-full ${theme.buttonClassName}`} />
-                    </div>
-                    <div className="mt-3 flex items-start justify-between gap-3">
-                      <div>
-                        <span className="block font-semibold text-white">{theme.label}</span>
-                        <span className="mt-1 block text-sm leading-5 text-slate-300">{theme.description}</span>
-                      </div>
-                      {isSelected ? <span className="rounded-full bg-cyan-300 px-2 py-1 text-xs font-bold text-slate-950">Active</span> : null}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Publish status</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">Ready to go live?</h3>
-              </div>
-              <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}>
-                <span className={`h-2 w-2 rounded-full ${statusConfig.dotClassName}`} />
-                {statusConfig.label}
-              </span>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {completionItems.map(item => (
-                <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm">
-                  <span className="font-medium text-slate-700">{item.label}</span>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                    {item.complete ? 'Done' : 'Missing'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {feedback ? <p className="mt-4 rounded-2xl bg-indigo-50 p-3 text-sm font-medium text-indigo-700">{feedback}</p> : null}
-            {error ? <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}
-
-            <div className="mt-5 grid gap-3">
-              <button
-                className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
-                type="button"
-                disabled={!canPublish}
-                onClick={() => void saveSettings('published')}
-              >
-                {isSaving ? 'Publishing…' : 'Publish website'}
-              </button>
-              <button
-                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                type="submit"
-                disabled={isSaving || isLoading}
-              >
-                Save draft
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <h3 className="text-lg font-semibold text-slate-950">Website summary</h3>
-            <dl className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between gap-4"><dt className="text-slate-500">Business</dt><dd className="text-right font-semibold text-slate-900">{businessName || 'Loading…'}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-500">Type</dt><dd className="text-right font-semibold text-slate-900">{selectedType.label}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-500">Theme</dt><dd className="text-right font-semibold text-slate-900">{selectedTheme.label}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-500">Pages</dt><dd className="text-right font-semibold text-slate-900">{settings.pages.length}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-500">Status</dt><dd className="text-right font-semibold text-slate-900">{statusConfig.label}</dd></div>
-            </dl>
           </section>
         </aside>
       </form>
