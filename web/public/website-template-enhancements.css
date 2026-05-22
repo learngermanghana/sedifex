@@ -189,6 +189,10 @@
   background: #f1f5f9;
 }
 
+.sedifex-template-card[data-template-tone='travel'] .sedifex-template-card__preview {
+  background: linear-gradient(135deg, #075985, #2563eb, #14b8a6);
+}
+
 .sedifex-template-card[data-template-tone='beauty'] .sedifex-template-card__preview {
   background: linear-gradient(135deg, #831843, #c026d3, #fb7185);
 }
