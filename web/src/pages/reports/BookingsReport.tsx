@@ -32,6 +32,13 @@ type BookingRow = {
   createdAt: Date | null
 }
 
+type SummaryCard = {
+  label: string
+  value: string | number
+  helper: string
+  tone: string
+}
+
 function sourceLabel(sourceChannel: string) {
   if (sourceChannel === 'client_website') return 'Client website'
   if (sourceChannel === 'sedifex_market') return 'Sedifex Market'
@@ -136,6 +143,97 @@ function isPaidLike(status: string) {
   return ['paid', 'success', 'confirmed', 'completed'].some(token => status.toLowerCase().includes(token))
 }
 
+function badgeClass(status: string, type: 'booking' | 'payment' | 'sync' = 'booking') {
+  const value = status.toLowerCase()
+  if (type === 'payment' && isPaidLike(value)) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (type === 'sync' && value === 'synced') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (value.includes('confirmed') || value.includes('completed')) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (value.includes('pending') || value.includes('not_ready')) return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (value.includes('cancel') || value.includes('failed')) return 'border-rose-200 bg-rose-50 text-rose-700'
+  return 'border-slate-200 bg-slate-100 text-slate-600'
+}
+
+function formatLabel(value: string) {
+  return value.replace(/_/g, ' ')
+}
+
+function bookingSlotLabel(booking: BookingRow) {
+  if (booking.slotStartAt !== '—') return `${booking.slotStartAt} - ${booking.slotEndAt}`
+  return 'No slot'
+}
+
+function SummaryMetric({ item }: { item: SummaryCard }) {
+  return (
+    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" style={{ borderLeft: `6px solid ${item.tone}` }}>
+      <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: item.tone }}>{item.label}</p>
+      <strong className="mt-3 block text-3xl font-semibold tracking-tight text-slate-950">{item.value}</strong>
+      <p className="mt-2 text-sm leading-6 text-slate-500">{item.helper}</p>
+    </article>
+  )
+}
+
+function StatusPill({ label, type = 'booking' }: { label: string; type?: 'booking' | 'payment' | 'sync' }) {
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold capitalize ${badgeClass(label, type)}`}>{formatLabel(label)}</span>
+}
+
+function BookingCard({ booking }: { booking: BookingRow }) {
+  return (
+    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.95fr)_minmax(220px,0.7fr)] xl:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-indigo-700">{booking.sourceLabel}</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{booking.sourcePath === 'root' ? 'Root record' : 'Store record'}</span>
+          </div>
+          <h3 className="mt-3 text-xl font-bold leading-snug text-slate-950">{booking.serviceName}</h3>
+          <p className="mt-1 text-sm text-slate-500">{booking.recordType}</p>
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Reference</p>
+            <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-900">{booking.reference}</p>
+            <p className="mt-1 text-xs text-slate-500">Created: {formatDate(booking.createdAt)}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Customer</p>
+            <p className="mt-1 text-base font-bold text-slate-950">{booking.customerName}</p>
+            <p className="mt-1 break-all text-sm text-slate-600">{booking.customerPhone || 'No contact'}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Schedule</p>
+            <p className="mt-1 text-base font-bold text-slate-950">{booking.bookingDate}</p>
+            <p className="mt-1 text-sm text-slate-600">{booking.bookingTime}</p>
+            <p className="mt-1 text-xs text-slate-500">{bookingSlotLabel(booking)}</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <div className="flex flex-wrap gap-2">
+            <StatusPill label={booking.bookingStatus} />
+            <StatusPill label={booking.paymentStatus} type="payment" />
+            <StatusPill label={booking.syncStatus} type="sync" />
+          </div>
+          <div className="mt-4 space-y-2 text-sm text-slate-600">
+            <p><span className="font-semibold text-slate-900">Reminder:</span> {booking.reminderStatus}</p>
+            <p><span className="font-semibold text-slate-900">Sync reason:</span> {booking.syncReason}</p>
+            <p><span className="font-semibold text-slate-900">Registration:</span> {booking.registrationStatus}</p>
+          </div>
+          <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Amount</p>
+              <p className="text-xl font-bold text-slate-950">{formatMoney(booking.amount)}</p>
+            </div>
+            <Link className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" to={`/bookings/${booking.id}`}>
+              Open
+            </Link>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export default function BookingsReport() {
   const { storeId } = useActiveStore()
   const [rootBookings, setRootBookings] = useState<BookingRow[]>([])
@@ -190,6 +288,17 @@ export default function BookingsReport() {
     value: filtered.reduce((sum, booking) => sum + booking.amount, 0),
   }), [filtered])
 
+  const summaryCards: SummaryCard[] = [
+    { label: 'Total bookings', value: totals.count, helper: 'All bookings in the selected range', tone: '#4f46e5' },
+    { label: 'Confirmed', value: totals.confirmed, helper: 'Approved booking records', tone: '#16a34a' },
+    { label: 'Sync pending', value: totals.syncPending, helper: 'Waiting for App Script sync', tone: '#a855f7' },
+    { label: 'Booking value', value: formatMoney(totals.value), helper: 'Total value from filtered rows', tone: '#0f766e' },
+    { label: 'Pending', value: totals.pending, helper: 'Needs confirmation or payment review', tone: '#f97316' },
+    { label: 'Paid', value: totals.paid, helper: 'Payment marked as paid or successful', tone: '#059669' },
+    { label: 'Cancelled', value: totals.cancelled, helper: 'Cancelled booking records', tone: '#ef4444' },
+    { label: 'Completed', value: totals.completed, helper: 'Finished booking records', tone: '#2563eb' },
+  ]
+
   function exportRows() {
     downloadCsv('sedifex-bookings-report.csv', filtered.map(booking => ({
       reference: booking.reference,
@@ -242,100 +351,88 @@ export default function BookingsReport() {
   }
 
   return (
-    <div className="workspace-page">
-      <section className="workspace-card">
-        <p className="workspace-eyebrow">Reports / Bookings</p>
-        <h1>Bookings report</h1>
-        <p className="workspace-muted">Track Sedifex Market, website, and manual bookings with payment, confirmation, App Script sync, and reminder status.</p>
-      </section>
-
-      <section className="workspace-grid workspace-grid--four">
-        <article className="workspace-card"><strong>{totals.count}</strong><span>Total bookings</span></article>
-        <article className="workspace-card"><strong>{totals.confirmed}</strong><span>Confirmed</span></article>
-        <article className="workspace-card"><strong>{totals.syncPending}</strong><span>Sync pending</span></article>
-        <article className="workspace-card"><strong>{formatMoney(totals.value)}</strong><span>Booking value</span></article>
-      </section>
-
-      <section className="workspace-grid workspace-grid--four">
-        <article className="workspace-card"><strong>{totals.pending}</strong><span>Pending</span></article>
-        <article className="workspace-card"><strong>{totals.paid}</strong><span>Paid</span></article>
-        <article className="workspace-card"><strong>{totals.cancelled}</strong><span>Cancelled</span></article>
-        <article className="workspace-card"><strong>{totals.completed}</strong><span>Completed</span></article>
-      </section>
-
-      <section className="workspace-card">
-        <div className="workspace-section-header">
-          <div><h2>Booking details</h2><p className="workspace-muted">Filter by date, source, status, and sync state. Open any booking for action.</p></div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button>
-            <button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
+    <div className="space-y-6">
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Reports / Bookings</p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">Bookings report</h1>
+            <p className="mt-4 max-w-4xl text-lg leading-8 text-slate-600">Track Sedifex Market, website, and manual bookings with payment, confirmation, App Script sync, and reminder status.</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button>
+            <button type="button" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
           </div>
         </div>
-        <div className="workspace-toolbar">
-          <select value={range} onChange={event => setRange(event.target.value)}>
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="month">This month</option>
-            <option value="last_month">Last month</option>
-            <option value="all">All time</option>
-          </select>
-          <select value={source} onChange={event => setSource(event.target.value)}>
-            <option value="all">All sources</option>
-            <option value="sedifex_market">Sedifex Market</option>
-            <option value="client_website">Client website</option>
-            <option value="sedifex_custom_page">Sedifex public page</option>
-            <option value="manual_admin">Manual/admin</option>
-          </select>
-          <select value={status} onChange={event => setStatus(event.target.value)}>
-            <option value="all">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="paid">Paid</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="completed">Completed</option>
-          </select>
-          <select value={sync} onChange={event => setSync(event.target.value)}>
-            <option value="all">All sync states</option>
-            <option value="pending">Sync pending</option>
-            <option value="synced">Synced</option>
-            <option value="not_ready">Not ready / not configured</option>
-          </select>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map(item => <SummaryMetric key={item.label} item={item} />)}
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Booking details</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Filter by date, source, status, and sync state. Each booking is shown as a readable card so customer, schedule, payment, sync, and reminders do not squeeze together.</p>
+          </div>
+          <span className="w-fit rounded-full bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700">{filtered.length} showing</span>
         </div>
-        <div className="workspace-table-wrap">
-          <table className="workspace-table">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Service/Course/Event</th>
-                <th>Customer</th>
-                <th>Source</th>
-                <th>Schedule</th>
-                <th>Status</th>
-                <th>Sync / reminders</th>
-                <th>Amount</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(booking => (
-                <tr key={booking.id}>
-                  <td>{booking.reference}<br /><small>{formatDate(booking.createdAt)}</small></td>
-                  <td>{booking.serviceName}<br /><small>{booking.recordType}</small></td>
-                  <td><strong>{booking.customerName}</strong><br /><small>{booking.customerPhone || 'No contact'}</small></td>
-                  <td>{booking.sourceLabel}<br /><small>{booking.sourcePath === 'root' ? 'Root record' : 'Store record'}</small></td>
-                  <td>{booking.bookingDate}<br /><small>{booking.bookingTime}</small><br /><small>{booking.slotStartAt !== '—' ? `${booking.slotStartAt} - ${booking.slotEndAt}` : 'No slot'}</small></td>
-                  <td>{booking.bookingStatus}<br /><small>Payment: {booking.paymentStatus}</small><br /><small>{booking.registrationStatus}</small></td>
-                  <td>{booking.syncStatus}<br /><small>{booking.syncReason}</small><br /><small>Reminders: {booking.reminderStatus}</small></td>
-                  <td>{formatMoney(booking.amount)}</td>
-                  <td><Link className="btn btn-secondary" to={`/bookings/${booking.id}`}>Open</Link></td>
-                </tr>
-              ))}
-              {!filtered.length ? <tr><td colSpan={9}>No booking records found for this filter.</td></tr> : null}
-            </tbody>
-          </table>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="block text-sm font-semibold text-slate-700">
+            Date range
+            <select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={range} onChange={event => setRange(event.target.value)}>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="month">This month</option>
+              <option value="last_month">Last month</option>
+              <option value="all">All time</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">
+            Source
+            <select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={source} onChange={event => setSource(event.target.value)}>
+              <option value="all">All sources</option>
+              <option value="sedifex_market">Sedifex Market</option>
+              <option value="client_website">Client website</option>
+              <option value="sedifex_custom_page">Sedifex public page</option>
+              <option value="manual_admin">Manual/admin</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">
+            Status
+            <select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={status} onChange={event => setStatus(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="paid">Paid</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="completed">Completed</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">
+            Sync state
+            <select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" value={sync} onChange={event => setSync(event.target.value)}>
+              <option value="all">All sync states</option>
+              <option value="pending">Sync pending</option>
+              <option value="synced">Synced</option>
+              <option value="not_ready">Not ready / not configured</option>
+            </select>
+          </label>
         </div>
+      </section>
+
+      <section className="space-y-4">
+        {filtered.map(booking => <BookingCard key={booking.id} booking={booking} />)}
+        {!filtered.length ? (
+          <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+            <h3 className="text-xl font-semibold text-slate-950">No booking records found</h3>
+            <p className="mt-2 text-slate-500">Change the date range or filters to see more booking records.</p>
+          </div>
+        ) : null}
       </section>
     </div>
   )
