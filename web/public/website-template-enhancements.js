@@ -11,6 +11,16 @@
       tags: ['Products', 'Checkout', 'Quick Pay'],
     },
     {
+      id: 'travel-consultancy',
+      name: 'Travel & Visa Consultancy',
+      type: 'Travel / booking website',
+      theme: 'Modern',
+      tone: 'travel',
+      description: 'Packages, visa services, consultation bookings, programs, client stories, Quick Pay, and contact.',
+      pages: ['Home', 'Travel packages', 'Visa services', 'Bookings', 'Programs', 'Gallery', 'Client reviews', 'Quick Pay', 'Contact'],
+      tags: ['Visa', 'Bookings', 'Packages'],
+    },
+    {
       id: 'beauty-booking',
       name: 'Beauty Booking',
       type: 'Beauty / salon website',
