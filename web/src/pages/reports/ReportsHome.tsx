@@ -4,7 +4,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { useStorePreferences } from '../../hooks/useStorePreferences'
-import { asNumber, formatMoney, getNestedObject, toDate } from './reportUtils'
+import { asNumber, exportReportPdf, formatMoney, getNestedObject, toDate } from './reportUtils'
 
 type ReportCard = {
   title: string
@@ -158,7 +158,8 @@ export default function ReportsHome() {
   const { preferences } = useStorePreferences(storeId)
   const enabledModules = preferences.navigation.enabledModules
   const visibleReports = reports.filter(report => reportAllowed(report, enabledModules, preferences.navigation.industry))
-  const hiddenCount = Math.max(0, reports.length - visibleReports.length)
+  const hiddenReports = reports.filter(report => !reportAllowed(report, enabledModules, preferences.navigation.industry))
+  const hiddenCount = hiddenReports.length
   const [products, setProducts] = useState<Array<Record<string, unknown>>>([])
   const [sales, setSales] = useState<Array<Record<string, unknown>>>([])
   const [orders, setOrders] = useState<Array<Record<string, unknown>>>([])
@@ -224,12 +225,12 @@ export default function ReportsHome() {
     }).length
 
     return [
-      { id: 'today-sales', label: 'Today sales', value: formatMoney(todayPos), hint: 'POS sales recorded today', tone: '#059669', href: '/reports/pos-sales' },
-      { id: 'month-sales', label: 'This month value', value: formatMoney(monthPos + monthOnline), hint: 'POS + online order value', tone: '#2563eb', href: '/reports/website-sales' },
-      { id: 'pending-bookings', label: 'Pending bookings', value: pendingBookings, hint: 'Need confirmation or payment review', tone: '#d97706', href: '/reports/bookings' },
+      { id: 'today-sales', label: 'Today sales', value: formatMoney(todayPos), hint: 'POS sales recorded today', tone: '#4f46e5', href: '/reports/pos-sales' },
+      { id: 'month-sales', label: 'This month value', value: formatMoney(monthPos + monthOnline), hint: 'POS + online order value', tone: '#4f46e5', href: '/reports/website-sales' },
+      { id: 'pending-bookings', label: 'Pending bookings', value: pendingBookings, hint: 'Need confirmation or payment review', tone: '#f97316', href: '/reports/bookings' },
       { id: 'confirmed-bookings', label: 'Confirmed bookings', value: confirmedBookings, hint: 'Paid/confirmed booking records', tone: '#16a34a', href: '/reports/bookings' },
-      { id: 'sync-pending', label: 'Sync pending', value: syncPending, hint: 'Bookings waiting for App Script sync', tone: '#7c3aed', href: '/reports/bookings' },
-      { id: 'stock-alerts', label: 'Stock alerts', value: lowStock, hint: 'Low or out-of-stock products', tone: '#dc2626', href: '/reports/inventory' },
+      { id: 'sync-pending', label: 'Sync pending', value: syncPending, hint: 'Bookings waiting for App Script sync', tone: '#a855f7', href: '/reports/bookings' },
+      { id: 'stock-alerts', label: 'Stock alerts', value: lowStock, hint: 'Low or out-of-stock products', tone: '#ef4444', href: '/reports/inventory' },
     ] satisfies OverviewRow[]
   }, [bookings, orders, products, sales])
 
@@ -238,98 +239,108 @@ export default function ReportsHome() {
     return false
   })
 
+  function exportOverviewPdf() {
+    exportReportPdf({
+      title: 'Business reports overview',
+      subtitle: `Visible reports: ${visibleReports.length} | Hidden: ${hiddenCount} | Industry: ${preferences.navigation.industry.toUpperCase()}`,
+      summary: overview.map(item => ({ label: item.label, value: item.value })),
+      rows: visibleReports.map(report => ({
+        Report: report.title,
+        Badge: report.badge,
+        Focus: report.metricHint,
+        Description: report.description,
+        Link: report.href,
+      })),
+    })
+  }
+
   return (
-    <div className="workspace-page">
-      <section className="workspace-card" style={{ background: '#ffffff' }}>
-        <div className="workspace-section-header">
+    <div className="workspace-page space-y-8">
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm md:p-8 print:shadow-none">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="workspace-eyebrow">Reports</p>
-            <h1>Business reports</h1>
-            <p className="workspace-muted">Live business overview plus detailed reports for sales, bookings, settlement, inventory, customers, and exports.</p>
+            <p className="text-sm font-medium text-slate-500">Reports</p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">Business reports</h1>
+            <p className="mt-4 max-w-4xl text-lg leading-8 text-slate-600">Live business overview plus detailed reports for sales, bookings, settlement, inventory, customers, and exports.</p>
           </div>
-          <Link className="button button--secondary" to="/account">
-            Manage account modules
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-700" to="/account">
+              Manage account modules
+            </Link>
+            <button type="button" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-slate-50" onClick={exportOverviewPdf}>
+              Export PDF
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-          <span style={{ borderRadius: 999, background: '#e0f2fe', color: '#075985', padding: '7px 12px', fontWeight: 800, fontSize: 12 }}>{visibleReports.length} visible</span>
-          {hiddenCount > 0 ? <span style={{ borderRadius: 999, background: '#f1f5f9', color: '#475569', padding: '7px 12px', fontWeight: 800, fontSize: 12 }}>{hiddenCount} hidden</span> : null}
-          <span style={{ borderRadius: 999, background: '#f8fafc', color: '#334155', padding: '7px 12px', fontWeight: 800, fontSize: 12 }}>{preferences.navigation.industry.toUpperCase()}</span>
+        <div className="mt-7 flex flex-wrap border-b border-slate-200 text-lg font-medium text-slate-500">
+          <span className="border-b-2 border-indigo-600 px-2 pb-3 text-indigo-600">{visibleReports.length} visible</span>
+          <span className="px-6 pb-3">{hiddenCount} hidden</span>
+          <span className="px-2 pb-3 uppercase">{preferences.navigation.industry}</span>
         </div>
       </section>
 
-      <section className="workspace-grid workspace-grid--three">
+      <section className="grid gap-5 md:grid-cols-2">
         {overview.map(item => (
-          <Link key={item.id} to={item.href} className="workspace-card" style={{ textDecoration: 'none', color: 'inherit', borderLeft: `5px solid ${item.tone}` }}>
-            <span style={{ color: '#64748b', fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{item.label}</span>
-            <strong style={{ display: 'block', fontSize: 26, marginTop: 8 }}>{item.value}</strong>
-            <span className="workspace-muted" style={{ display: 'block', marginTop: 6 }}>{item.hint}</span>
+          <Link key={item.id} to={item.href} className="group rounded-3xl border border-slate-200 bg-white p-7 text-slate-950 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md" style={{ borderLeft: `7px solid ${item.tone}` }}>
+            <span className="text-sm font-medium uppercase tracking-wide" style={{ color: item.tone }}>{item.label}</span>
+            <strong className="mt-5 block text-4xl font-normal tracking-tight md:text-5xl">{item.value}</strong>
+            <span className="mt-5 block text-lg leading-7 text-slate-600">{item.hint}</span>
           </Link>
         ))}
       </section>
 
-      <section className="workspace-card">
-        <div className="workspace-section-header">
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h2>Action needed</h2>
-            <p className="workspace-muted">Quick list of report signals that may need attention.</p>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Action needed</h2>
+            <p className="mt-3 text-lg text-slate-600">Quick list of report signals that may need attention.</p>
+            {!actionItems.length ? <p className="mt-7 text-xl text-slate-700">No urgent report alerts right now.</p> : null}
           </div>
+          {actionItems.length ? <span className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-700">{actionItems.length} alert{actionItems.length === 1 ? '' : 's'}</span> : <span className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700">Clear</span>}
         </div>
+
         {actionItems.length ? (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div className="mt-6 grid gap-3">
             {actionItems.map(item => (
-              <Link key={item.id} to={item.href} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 12, textDecoration: 'none', color: 'inherit' }}>
-                <span><strong>{item.label}</strong><br /><small className="workspace-muted">{item.hint}</small></span>
-                <strong style={{ color: item.tone }}>{item.value}</strong>
+              <Link key={item.id} to={item.href} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-slate-950 transition hover:border-indigo-200 hover:bg-white hover:shadow-sm">
+                <span>
+                  <strong className="block text-lg">{item.label}</strong>
+                  <small className="text-base text-slate-500">{item.hint}</small>
+                </span>
+                <strong className="text-2xl" style={{ color: item.tone }}>{item.value}</strong>
               </Link>
             ))}
           </div>
-        ) : (
-          <p className="workspace-muted">No urgent report alerts right now.</p>
-        )}
+        ) : null}
       </section>
 
       {visibleReports.length ? (
-        <section className="workspace-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'grid' }}>
-            {visibleReports.map((report, index) => (
-              <Link
-                key={report.href}
-                to={report.href}
-                style={{
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  display: 'grid',
-                  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-                  gap: 14,
-                  alignItems: 'center',
-                  padding: '14px 18px',
-                  borderTop: index === 0 ? 'none' : '1px solid #e2e8f0',
-                  background: '#ffffff',
-                }}
-              >
-                <span style={{ width: 10, height: 10, borderRadius: 999, background: report.tone }} aria-hidden="true" />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <strong style={{ fontSize: 16 }}>{report.title}</strong>
-                    <span style={{ borderRadius: 999, background: `${report.tone}16`, color: report.tone, padding: '3px 9px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase' }}>
-                      {report.badge}
-                    </span>
-                    <span style={{ color: '#64748b', fontSize: 12 }}>{report.metricHint}</span>
+        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div className="grid divide-y divide-slate-200">
+            {visibleReports.map(report => (
+              <Link key={report.href} to={report.href} className="grid gap-4 py-6 text-slate-950 first:pt-0 last:pb-0 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: report.tone }} aria-hidden="true" />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-2xl font-medium tracking-tight">{report.title}</h3>
+                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">{report.badge}</span>
+                    <span className="text-lg text-slate-500">{report.metricHint}</span>
                   </div>
-                  <p className="workspace-muted" style={{ margin: '4px 0 0', fontSize: 13 }}>{report.description}</p>
+                  <p className="mt-2 text-lg leading-7 text-slate-600">{report.description}</p>
                 </div>
-                <span style={{ color: '#334155', fontWeight: 800 }}>Open →</span>
+                <span className="inline-flex w-fit items-center gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-3 text-lg font-medium text-slate-950 shadow-sm transition group-hover:border-indigo-200">
+                  Open <span aria-hidden="true">→</span>
+                </span>
               </Link>
             ))}
           </div>
         </section>
       ) : (
-        <section className="workspace-card">
-          <h2>No reports enabled yet</h2>
-          <p className="workspace-muted">Enable modules in Account settings to show the matching reports here.</p>
-          <Link className="button button--primary" to="/account">Go to Account</Link>
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+          <h2 className="text-2xl font-semibold text-slate-950">No reports enabled yet</h2>
+          <p className="mt-2 text-slate-600">Enable modules in Account settings to show the matching reports here.</p>
+          <Link className="mt-5 inline-flex rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white" to="/account">Go to Account</Link>
         </section>
       )}
     </div>
