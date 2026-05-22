@@ -38,6 +38,57 @@ function resolveUploadEndpoint(): string {
   return DEFAULT_UPLOAD_ENDPOINT
 }
 
+function resolveFileExtension(file: File): string {
+  const fromName = file.name.match(/\.([a-zA-Z0-9_-]{1,10})$/)?.[0]
+  if (fromName) return fromName.toLowerCase()
+
+  if (file.type === 'image/png') return '.png'
+  if (file.type === 'image/webp') return '.webp'
+  if (file.type === 'image/gif') return '.gif'
+  if (file.type === 'image/avif') return '.avif'
+  if (file.type === 'image/svg+xml') return '.svg'
+  return '.jpg'
+}
+
+function normalizeStoragePath(value: string): string {
+  return value.trim().replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/')
+}
+
+function storagePathLooksLikeFile(value: string): boolean {
+  const lastSegment = value.split('/').pop() ?? ''
+  return /\.[a-zA-Z0-9_-]{1,10}$/.test(lastSegment)
+}
+
+function safePathSegment(value: string): string {
+  const cleaned = value.trim().replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_')
+  return cleaned.replace(/^_+|_+$/g, '') || 'upload'
+}
+
+function randomUploadSuffix(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function resolveStoragePathForUpload(storagePath: string | undefined, file: File): string | undefined {
+  if (!storagePath || !storagePath.trim()) return undefined
+
+  const normalized = normalizeStoragePath(storagePath)
+  if (!normalized) return undefined
+
+  // When callers pass a folder such as stores/{storeId}/products, create a unique
+  // object inside that folder. Without this, every upload saves to the same object
+  // and new course/product photos overwrite older ones.
+  if (!storagePathLooksLikeFile(normalized)) {
+    const baseName = safePathSegment(file.name)
+    const extension = resolveFileExtension(file)
+    return `${normalized}/${Date.now()}-${randomUploadSuffix()}-${baseName}${extension}`
+  }
+
+  return normalized
+}
+
 async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   const objectUrl = URL.createObjectURL(file)
   try {
@@ -115,6 +166,7 @@ async function createUploadCandidate(file: File): Promise<File> {
 export async function uploadProductImage(file: File, options: UploadImageOptions = {}): Promise<string> {
   const endpoint = resolveUploadEndpoint()
   const uploadFile = await createUploadCandidate(file)
+  const resolvedStoragePath = resolveStoragePathForUpload(options.storagePath, uploadFile)
 
   let response: Response
   try {
@@ -124,8 +176,8 @@ export async function uploadProductImage(file: File, options: UploadImageOptions
         'Content-Type': uploadFile.type || 'application/octet-stream',
         'X-Upload-Filename': encodeURIComponent(uploadFile.name),
         'X-Upload-MimeType': uploadFile.type || 'application/octet-stream',
-        ...(options.storagePath
-          ? { 'X-Upload-Storage-Path': encodeURIComponent(options.storagePath) }
+        ...(resolvedStoragePath
+          ? { 'X-Upload-Storage-Path': encodeURIComponent(resolvedStoragePath) }
           : {}),
       },
       body: uploadFile,
