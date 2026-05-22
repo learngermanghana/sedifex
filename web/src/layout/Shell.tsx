@@ -497,6 +497,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     </div>
   )
 
+  if (location.pathname === '/quick-pay/print') {
+    return <div className="shell shell--standalone-print">{children}</div>
+  }
+
   return (
     <div className="shell">
       {isMenuOpen && (
