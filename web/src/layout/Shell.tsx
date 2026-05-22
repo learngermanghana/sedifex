@@ -42,6 +42,7 @@ type BillingNotice = {
 const CONTRACT_END_WARNING_DAYS = 14
 const DISMISS_KEY_PREFIX = 'sedifex-billing-dismissed-'
 const LAST_PATH_KEY_PREFIX = 'sedifex-last-path-'
+const NAV_COLLAPSED_KEY_PREFIX = 'sedifex-nav-collapsed-'
 
 function formatRequestCount(count: number) {
   if (count <= 0) return 'queued request'
@@ -96,6 +97,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [navSearchQuery, setNavSearchQuery] = useState('')
   const [resumePath, setResumePath] = useState<string | null>(null)
   const [dismissedResumePath, setDismissedResumePath] = useState<string | null>(null)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isDesktopNavCollapsed, setIsDesktopNavCollapsed] = useState(false)
   const shouldSkipInitialPathPersist = useRef(true)
 
   const trialEndsAt = billing?.trialEndsAt?.toDate?.() ?? null
@@ -194,10 +197,27 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
 
     const key = `${DISMISS_KEY_PREFIX}${storeId}`
-    const stored =
-      typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null
     setDismissedOn(stored)
   }, [storeId])
+
+  useEffect(() => {
+    const key = `${NAV_COLLAPSED_KEY_PREFIX}${user?.uid || 'guest'}`
+    try {
+      setIsDesktopNavCollapsed(localStorage.getItem(key) === 'true')
+    } catch (error) {
+      console.warn('[shell] Unable to load navigation collapsed preference', error)
+    }
+  }, [user?.uid])
+
+  useEffect(() => {
+    const key = `${NAV_COLLAPSED_KEY_PREFIX}${user?.uid || 'guest'}`
+    try {
+      localStorage.setItem(key, String(isDesktopNavCollapsed))
+    } catch (error) {
+      console.warn('[shell] Unable to persist navigation collapsed preference', error)
+    }
+  }, [isDesktopNavCollapsed, user?.uid])
 
   const todayStamp = useMemo(
     () => new Date().toISOString().slice(0, 10),
@@ -209,10 +229,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     billingNotice && !isBillingNoticeDismissed && !isStaff,
   )
 
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-
   useEffect(() => {
-    setIsMenuOpen(false)
+    setIsMobileMenuOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -264,12 +282,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }, [dismissedResumePath, location.hash, location.pathname, location.search, user?.uid])
 
   useEffect(() => {
-    document.body.classList.toggle('shell--menu-open', isMenuOpen)
+    document.body.classList.toggle('shell--menu-open', isMobileMenuOpen)
 
     return () => {
       document.body.classList.remove('shell--menu-open')
     }
-  }, [isMenuOpen])
+  }, [isMobileMenuOpen])
 
   useEffect(() => {
     if (membershipsLoading || !isStaff) return
@@ -490,13 +508,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="shell">
-      {isMenuOpen && (
+    <div className={`shell${isDesktopNavCollapsed ? ' shell--nav-collapsed' : ''}`}>
+      {isMobileMenuOpen && (
         <button
           type="button"
           className="shell__backdrop"
           aria-label="Close navigation"
-          onClick={() => setIsMenuOpen(false)}
+          onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
       <header className="shell__header">
@@ -513,10 +531,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
             <button
               type="button"
-              className="shell__menu-toggle"
-              aria-expanded={isMenuOpen}
+              className="shell__mobile-menu-toggle"
+              aria-expanded={isMobileMenuOpen}
               aria-controls="primary-nav"
-              onClick={() => setIsMenuOpen(open => !open)}
+              onClick={() => setIsMobileMenuOpen(open => !open)}
             >
               <span className="shell__menu-icon" aria-hidden="true">
                 <span />
@@ -524,7 +542,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 <span />
               </span>
               <span className="shell__menu-label">
-                {isMenuOpen ? 'Close' : 'Menu'}
+                {isMobileMenuOpen ? 'Close' : 'Menu'}
               </span>
               <span className="shell__sr-only">Toggle navigation</span>
             </button>
@@ -532,7 +550,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
           <div
             className={`shell__toolbar${
-              isMenuOpen ? ' is-open' : ''
+              isMobileMenuOpen ? ' is-open' : ''
             }`}
           >
             {navSection}
@@ -588,9 +606,36 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       <main className="shell__main">
         <div className="shell__container shell__layout">
-          <aside className="shell__sidebar">
-            {navSection}
-          </aside>
+          {isDesktopNavCollapsed ? (
+            <aside className="shell__nav-rail" aria-label="Collapsed navigation">
+              <button
+                type="button"
+                className="shell__nav-rail-button"
+                onClick={() => setIsDesktopNavCollapsed(false)}
+              >
+                <span className="shell__menu-icon" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span>Show nav</span>
+              </button>
+            </aside>
+          ) : (
+            <aside className="shell__sidebar">
+              <div className="shell__sidebar-tools">
+                <button
+                  type="button"
+                  className="shell__nav-collapse-button"
+                  onClick={() => setIsDesktopNavCollapsed(true)}
+                >
+                  <span aria-hidden="true">←</span>
+                  <span>Hide navigation</span>
+                </button>
+              </div>
+              {navSection}
+            </aside>
+          )}
           <section className="shell__content">
             {resumePath && (
               <div className="shell__resume-banner" role="status" aria-live="polite">
