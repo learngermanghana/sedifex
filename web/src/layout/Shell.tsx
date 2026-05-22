@@ -11,6 +11,7 @@ import SupportTicketLauncher from '../components/SupportTicketLauncher'
 import { NavRole, resolveNavItems } from '../config/navigation'
 import './Shell.css'
 import './Workspace.css'
+import './ShellNavigationEnhancements.css'
 import { usePwaContext } from '../context/PwaContext'
 import { useStorePreferences } from '../hooks/useStorePreferences'
 
@@ -140,16 +141,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     return resolveNavItems(role, preferences.navigation)
   }, [hasTrialEnded, role, preferences.navigation])
 
-  const navTree = useMemo(
-    () =>
-      navItems
-        .filter(item => !item.parentTarget)
-        .map(item => ({
-          item,
-          children: navItems.filter(child => child.parentTarget === item.target),
-        })),
-    [navItems],
-  )
   const filteredNavItems = useMemo(() => {
     const normalizedQuery = navSearchQuery.trim().toLowerCase()
     if (!normalizedQuery) return navItems
@@ -194,7 +185,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
 
     return null
-  }, [billing])
+  }, [billing, hasTrialEnded])
 
   useEffect(() => {
     if (!storeId) {
@@ -360,8 +351,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       const normalizedStoreId =
         typeof membership.storeId === 'string' ? membership.storeId.trim() : ''
 
-      // A workspace qualifies only when it has a valid storeId and belongs to
-      // the currently signed-in user identity.
       if (!normalizedStoreId || membership.uid !== user?.uid) return
 
       const existing = byStore.get(normalizedStoreId)
@@ -370,7 +359,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         return
       }
 
-      // If duplicate rows exist for the same store, prefer owner visibility.
       if (existing.role !== 'owner' && membership.role === 'owner') {
         byStore.set(normalizedStoreId, membership)
       }
