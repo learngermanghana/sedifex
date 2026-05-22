@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import { defaultDb } from './firestore'
+import { admin } from './firestore'
 
 type CatalogType = 'PRODUCT' | 'SERVICE' | 'COURSE'
 
@@ -54,7 +55,7 @@ function buildSearchTerms(value: string) {
     for (let i = 2; i <= Math.min(word.length, 12); i += 1) output.push(word.slice(0, i))
     return output
   })
-  return Array.from(new Set([...words, ...prefixes, normalized]))
+  return Array.from(new Set([...words, ...prefixes, normalized])).slice(0, 180)
 }
 
 function normalizeType(value: unknown, fallback: CatalogType): CatalogType {
@@ -137,6 +138,19 @@ function storeMatchesQuery(store: PublicStore, query: string) {
   return haystack.includes(normalizedQuery)
 }
 
+function buildStoreIndexRecord(storeId: string, data: Record<string, unknown>) {
+  const store = normalizeStore(storeId, data)
+  if (!store) return null
+  const searchSource = [store.name, store.city ?? '', store.phone ?? ''].join(' ')
+  return {
+    ...store,
+    normalizedName: normalizeSearchText(store.name),
+    searchText: normalizeSearchText(searchSource),
+    searchTerms: buildSearchTerms(searchSource),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }
+}
+
 async function fetchCollectionItems(path: string, fallbackType: CatalogType) {
   const snapshot = await defaultDb.collection(path).limit(MAX_READ_PER_COLLECTION).get()
   return snapshot.docs
@@ -175,6 +189,28 @@ async function fetchFallbackStores(query: string) {
     .filter(store => storeMatchesQuery(store, query))
     .slice(0, MAX_STORE_RESULTS)
 }
+
+export const syncQuickPayStoreIndex = functions.firestore
+  .document('stores/{storeId}')
+  .onWrite(async (change, context) => {
+    const storeId = context.params.storeId
+    const indexRef = defaultDb.collection('quickPayStoreIndex').doc(storeId)
+
+    if (!change.after.exists) {
+      await indexRef.delete()
+      return
+    }
+
+    const data = change.after.data() as Record<string, unknown>
+    const indexRecord = buildStoreIndexRecord(storeId, data)
+
+    if (!indexRecord || indexRecord.searchTerms.length === 0) {
+      await indexRef.delete()
+      return
+    }
+
+    await indexRef.set(indexRecord, { merge: true })
+  })
 
 export const publicQuickPayStores = functions.https.onRequest(async (req, res) => {
   setCors(res)
