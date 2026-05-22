@@ -12,6 +12,7 @@ import QuickPay from './pages/QuickPay'
 import WebsiteBuilder from './pages/WebsiteBuilder'
 import QuickPayPrint from './pages/QuickPayPrint'
 import PublicQuickPayCheckout from './pages/PublicQuickPayCheckout'
+import PublicWebsiteEngine from './pages/PublicWebsiteEngine'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
 import Students from './pages/Students'
@@ -81,6 +82,7 @@ const router = createBrowserRouter([
   { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/login', element: <Navigate to="/" replace /> },
   { path: '/s/:storeId', element: <PublicQuickPayCheckout /> },
+  { path: '/sites/:slug', element: <PublicWebsiteEngine /> },
   { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
