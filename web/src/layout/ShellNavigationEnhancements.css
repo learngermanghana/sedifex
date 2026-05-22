@@ -1,0 +1,137 @@
+/* Shell navigation improvements
+   - Mobile keeps the hamburger drawer.
+   - Desktop shows the hide/show navigation control beside the left nav.
+   - Sidebar can scroll independently when many modules are visible.
+   - Website Builder gets full edit width; preview opens from the public-site action. */
+
+@media (min-width: 961px) {
+  body.shell--menu-open {
+    overflow: auto !important;
+  }
+
+  .shell__layout {
+    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) !important;
+    align-items: start;
+  }
+
+  .shell__sidebar {
+    position: sticky;
+    top: 122px;
+    max-height: calc(100dvh - 144px);
+    overflow-y: auto;
+    padding-top: 56px;
+    scrollbar-width: thin;
+    scrollbar-color: #c7d2fe #f8fafc;
+  }
+
+  .shell__sidebar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .shell__sidebar::-webkit-scrollbar-track {
+    background: #f8fafc;
+    border-radius: 999px;
+  }
+
+  .shell__sidebar::-webkit-scrollbar-thumb {
+    background: #c7d2fe;
+    border-radius: 999px;
+  }
+
+  .shell__menu-toggle {
+    position: fixed !important;
+    top: 134px;
+    left: max(16px, calc((100vw - 1200px) / 2 + 48px));
+    z-index: 45;
+    display: inline-flex !important;
+    min-width: 132px;
+    justify-content: center;
+    border: 1px solid rgba(67, 56, 202, 0.18) !important;
+    background: #ffffff !important;
+    color: #312e81 !important;
+    box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.45) !important;
+  }
+
+  .shell__menu-toggle .shell__menu-label {
+    font-size: 0 !important;
+  }
+
+  .shell__menu-toggle .shell__menu-label::after {
+    content: 'Hide nav';
+    font-size: 13px;
+    letter-spacing: 0.01em;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__menu-toggle {
+    min-width: 118px;
+    left: max(16px, calc((100vw - 1600px) / 2 + 24px));
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__menu-toggle .shell__menu-label::after {
+    content: 'Show nav';
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__backdrop,
+  .shell:has(.shell__toolbar.is-open) .shell__toolbar {
+    display: none !important;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__sidebar {
+    display: none !important;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__container {
+    max-width: min(1600px, 100%) !important;
+  }
+
+  .shell:has(.shell__toolbar.is-open) .shell__content-inner {
+    width: 100%;
+  }
+}
+
+@media (max-width: 960px) {
+  .shell__menu-toggle {
+    position: static !important;
+    min-width: auto;
+  }
+
+  .shell__menu-toggle .shell__menu-label {
+    font-size: 14px !important;
+  }
+
+  .shell__menu-toggle .shell__menu-label::after {
+    content: '' !important;
+  }
+}
+
+/* Website Builder: give the page full editing space like Google Sites.
+   The preview remains available through Preview website / Open public site. */
+.page[data-page-title='Website Builder'] > .card > form {
+  display: block !important;
+}
+
+.page[data-page-title='Website Builder'] > .card > form > aside {
+  display: none !important;
+}
+
+.page[data-page-title='Website Builder'] > .card > form > div:first-child {
+  width: 100% !important;
+  max-width: 1120px;
+}
+
+.page[data-page-title='Website Builder'] .card {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+.page[data-page-title='Website Builder'] .page__actions {
+  align-items: center;
+}
+
+.page[data-page-title='Website Builder'] .page__actions .button--ghost::after {
+  content: ' ↗';
+}
