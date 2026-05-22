@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import './QuickPayLanding.css'
 
 type PublicStore = {
   storeId: string
@@ -28,8 +29,8 @@ function getStorePayUrl(storeId: string) {
 
 function StoreAvatar({ store }: { store: PublicStore }) {
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-violet-700 text-lg font-black text-white shadow-sm">
-      {store.logoUrl ? <img src={store.logoUrl} alt="" className="h-full w-full object-cover" /> : store.name.slice(0, 1).toUpperCase()}
+    <div className="quickpay-avatar">
+      {store.logoUrl ? <img src={store.logoUrl} alt="" /> : store.name.slice(0, 1).toUpperCase()}
     </div>
   )
 }
@@ -39,22 +40,22 @@ function StoreRow({ store, compact = false }: { store: PublicStore; compact?: bo
   const content = (
     <>
       <StoreAvatar store={store} />
-      <div className="min-w-0 flex-1 text-left">
-        <p className="truncate text-base font-black text-slate-950">{store.name}</p>
-        <p className="mt-1 truncate text-sm text-slate-500">
+      <div className="quickpay-store-meta">
+        <p className="quickpay-store-name">{store.name}</p>
+        <p className="quickpay-store-category">
           {store.category || [store.city, store.phone].filter(Boolean).join(' • ') || 'Sedifex business'}
         </p>
       </div>
-      {!compact ? <span className="text-2xl text-slate-300">›</span> : null}
+      {!compact ? <span className="quickpay-chevron">›</span> : null}
     </>
   )
 
   if (isDemo) {
-    return <div className="flex items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">{content}</div>
+    return <div className="quickpay-store-row">{content}</div>
   }
 
   return (
-    <Link to={getStorePayUrl(store.storeId)} className="flex items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <Link to={getStorePayUrl(store.storeId)} className="quickpay-store-row">
       {content}
     </Link>
   )
@@ -120,99 +121,95 @@ export default function QuickPayLanding() {
   }
 
   return (
-    <main className="min-h-[100dvh] overflow-x-hidden bg-slate-50 text-slate-950">
-      <section className="mx-auto w-full max-w-md px-4 py-6 sm:max-w-2xl sm:px-6">
-        <header className="rounded-[2rem] bg-white px-5 py-8 text-center shadow-sm ring-1 ring-slate-200">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 to-violet-700 text-white shadow-lg">
-            <span className="text-3xl">▭</span>
+    <main className="quickpay-root">
+      <section className="quickpay-shell">
+        <header className="quickpay-card quickpay-hero">
+          <div className="quickpay-logo">
+            <span>▭</span>
           </div>
-          <h1 className="mt-5 text-3xl font-black tracking-tight text-blue-700 sm:text-4xl">Sedifex Quick Pay</h1>
-          <p className="mt-3 text-lg font-black text-slate-950">Choose a business and pay</p>
-          <p className="mx-auto mt-4 max-w-sm text-base leading-7 text-slate-600">
+          <h1 className="quickpay-title">Sedifex Quick Pay</h1>
+          <p className="quickpay-subtitle">Choose a business and pay</p>
+          <p className="quickpay-copy">
             Search the business you want to pay, choose the right store, then pay for products, services, or courses securely.
           </p>
         </header>
 
-        <form onSubmit={handleSubmit} className="mt-5 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <label className="block text-xl font-black text-slate-950" htmlFor="store-search">
+        <form onSubmit={handleSubmit} className="quickpay-card quickpay-search-card">
+          <label className="quickpay-label" htmlFor="store-search">
             Which business do you want to pay?
           </label>
-          <div className="mt-4 flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
-            <span className="text-2xl text-slate-400">⌕</span>
+          <div className="quickpay-input-shell">
+            <span className="quickpay-search-icon">⌕</span>
             <input
               id="store-search"
               type="search"
               value={query}
               onChange={event => setQuery(event.target.value)}
               placeholder="Type the business name to find where you pay"
-              className="min-w-0 flex-1 bg-transparent py-4 text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
+              className="quickpay-input"
             />
           </div>
-          <p className="mt-3 text-sm leading-6 text-slate-500">{helperText}</p>
-          {error ? <p className="mt-3 rounded-2xl bg-red-50 p-3 text-sm leading-6 text-red-700">{error}</p> : null}
+          <p className="quickpay-helper">{helperText}</p>
+          {error ? <p className="quickpay-error">{error}</p> : null}
 
           <button
             type="submit"
-            className="mt-4 min-h-14 w-full rounded-2xl bg-gradient-to-r from-blue-500 to-violet-600 px-5 py-3 text-base font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            className="quickpay-primary"
             disabled={stores.length !== 1}
           >
             Continue
           </button>
           <button
             type="button"
-            className="mt-3 min-h-14 w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 text-base font-black text-slate-950"
+            className="quickpay-secondary"
             onClick={() => setError('Use your phone camera to scan the QR code displayed by the business.')}
           >
             ⌗ Scan QR Code
           </button>
 
           {stores.length > 0 ? (
-            <div className="mt-5 grid gap-3">
+            <div className="quickpay-results">
               {stores.map(store => <StoreRow key={store.storeId} store={store} />)}
             </div>
           ) : null}
         </form>
 
-        <section className="mt-6 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <div className="space-y-0">
+        <section className="quickpay-card quickpay-steps">
+          <div>
             {[
               ['1', 'Find business', 'Search by business name or scan their QR code.'],
               ['2', 'Search item', 'Choose the product, service, or course you want.'],
               ['3', 'Pay securely', 'Your order is recorded for the business in Sedifex.'],
             ].map((step, index) => (
-              <div key={step[0]} className="grid grid-cols-[3rem_1fr] gap-4">
-                <div className="flex flex-col items-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-700 text-lg font-black text-white">
-                    {step[0]}
-                  </div>
-                  {index < 2 ? <div className="h-14 w-px bg-slate-200" /> : null}
+              <div key={step[0]} className="quickpay-step">
+                <div className="quickpay-step-number-wrap">
+                  <div className="quickpay-step-number">{step[0]}</div>
+                  {index < 2 ? <div className="quickpay-step-line" /> : null}
                 </div>
-                <div className="pb-6">
-                  <h2 className="text-xl font-black text-slate-950">{step[1]}</h2>
-                  <p className="mt-2 text-base leading-7 text-slate-600">{step[2]}</p>
+                <div className="quickpay-step-body">
+                  <h2 className="quickpay-step-title">{step[1]}</h2>
+                  <p className="quickpay-step-copy">{step[2]}</p>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="mt-6">
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {QUICK_CATEGORIES.map(category => (
-              <button
-                key={category}
-                type="button"
-                className={`shrink-0 rounded-2xl border px-5 py-3 text-sm font-bold ${category === 'All' ? 'border-violet-700 bg-violet-700 text-white' : 'border-slate-200 bg-white text-slate-700'}`}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
+        <section className="quickpay-chip-row">
+          {QUICK_CATEGORIES.map(category => (
+            <button
+              key={category}
+              type="button"
+              className={`quickpay-chip ${category === 'All' ? 'quickpay-chip-active' : ''}`}
+            >
+              {category}
+            </button>
+          ))}
         </section>
 
-        <section className="mt-6 pb-8">
-          <h2 className="text-2xl font-black text-slate-950">Popular on Sedifex</h2>
-          <div className="mt-4 grid gap-3">
+        <section className="quickpay-popular">
+          <h2 className="quickpay-section-title">Popular on Sedifex</h2>
+          <div className="quickpay-popular-list">
             {recentStores.map(store => <StoreRow key={store.storeId} store={store} compact />)}
           </div>
         </section>
