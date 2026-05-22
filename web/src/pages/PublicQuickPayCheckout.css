@@ -46,6 +46,87 @@
   line-height: 1.7;
 }
 
+.qp-hero-search {
+  max-width: 860px;
+  margin-top: 42px;
+}
+
+.qp-hero-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.qp-hero-input-shell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0 16px;
+}
+
+.qp-hero-input-shell:focus-within {
+  border-color: rgba(199, 210, 254, 0.95);
+  box-shadow: 0 0 0 4px rgba(199, 210, 254, 0.14);
+}
+
+.qp-hero-search-icon {
+  color: #c7d2fe;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.qp-hero-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.qp-hero-input::placeholder {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.qp-clear-search {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.qp-hero-help {
+  margin: 10px 0 0;
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qp-trust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 32px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .qp-grid {
   display: grid;
   gap: 16px;
@@ -328,6 +409,139 @@
   text-align: center;
   color: #64748b;
   font-size: 12px;
+}
+
+.qp-success-shell {
+  width: 100%;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background:
+    radial-gradient(circle at top left, rgba(79, 70, 229, 0.16), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.16), transparent 32%),
+    #f8fafc;
+}
+
+.qp-success-card {
+  width: 100%;
+  max-width: 620px;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  border-radius: 34px;
+  background: #ffffff;
+  padding: 34px 22px;
+  text-align: center;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.14);
+}
+
+.qp-success-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 82px;
+  height: 82px;
+  margin: 0 auto 22px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #ffffff;
+  font-size: 42px;
+  font-weight: 900;
+  box-shadow: 0 18px 38px rgba(34, 197, 94, 0.28);
+}
+
+.qp-success-eyebrow {
+  color: #4f46e5;
+}
+
+.qp-success-title {
+  margin: 14px auto 0;
+  max-width: 480px;
+  color: #0f172a;
+  font-size: clamp(32px, 8vw, 52px);
+  line-height: 1.04;
+  font-weight: 950;
+  letter-spacing: -0.05em;
+}
+
+.qp-success-copy {
+  max-width: 500px;
+  margin: 16px auto 0;
+  color: #475569;
+  font-size: 16px;
+  line-height: 1.7;
+  font-weight: 500;
+}
+
+.qp-success-reference {
+  margin: 24px auto 0;
+  max-width: 460px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #f8fafc;
+  padding: 16px;
+  text-align: left;
+}
+
+.qp-success-reference span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.qp-success-reference strong {
+  display: block;
+  margin-top: 7px;
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 900;
+}
+
+.qp-success-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.qp-success-primary,
+.qp-success-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  border-radius: 18px;
+  font-size: 15px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.qp-success-primary {
+  background: linear-gradient(90deg, #4f46e5, #7c3aed);
+  color: #ffffff;
+  box-shadow: 0 16px 28px rgba(79, 70, 229, 0.22);
+}
+
+.qp-success-secondary {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+}
+
+@media (min-width: 700px) {
+  .qp-success-card {
+    padding: 44px;
+  }
+
+  .qp-success-actions {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (min-width: 940px) {
