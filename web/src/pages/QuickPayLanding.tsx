@@ -71,7 +71,7 @@ export default function QuickPayLanding() {
   const canSearch = query.trim().length >= 2
 
   const helperText = useMemo(() => {
-    if (!query.trim()) return 'Search by store name or scan their QR code.'
+    if (!query.trim()) return 'Search by store name when you do not have a business QR link.'
     if (!canSearch) return 'Type at least 2 letters to search.'
     return status ?? 'Choose the correct business from the results.'
   }, [canSearch, query, status])
@@ -105,7 +105,7 @@ export default function QuickPayLanding() {
         console.warn('[quick-pay] Store search failed', searchError)
         setStores([])
         setStatus(null)
-        setError('Store search is not available yet. Please scan the business QR code or use their payment link.')
+        setError('Store search is not available yet. Please use the business payment link or try again later.')
       }
     }, 350)
 
@@ -128,9 +128,9 @@ export default function QuickPayLanding() {
             <span>▭</span>
           </div>
           <h1 className="quickpay-title">Sedifex Quick Pay</h1>
-          <p className="quickpay-subtitle">Choose a business and pay</p>
+          <p className="quickpay-subtitle">Find a business and pay</p>
           <p className="quickpay-copy">
-            Search the business you want to pay, choose the right store, then pay for products, services, or courses securely.
+            Search for a Sedifex business when you do not have their printed QR code or payment link.
           </p>
         </header>
 
@@ -145,7 +145,7 @@ export default function QuickPayLanding() {
               type="search"
               value={query}
               onChange={event => setQuery(event.target.value)}
-              placeholder="Type the business name to find where you pay"
+              placeholder="Type the business name"
               className="quickpay-input"
             />
           </div>
@@ -159,13 +159,6 @@ export default function QuickPayLanding() {
           >
             Continue
           </button>
-          <button
-            type="button"
-            className="quickpay-secondary"
-            onClick={() => setError('Use your phone camera to scan the QR code displayed by the business.')}
-          >
-            ⌗ Scan QR Code
-          </button>
 
           {stores.length > 0 ? (
             <div className="quickpay-results">
@@ -177,7 +170,7 @@ export default function QuickPayLanding() {
         <section className="quickpay-card quickpay-steps">
           <div>
             {[
-              ['1', 'Find business', 'Search by business name or scan their QR code.'],
+              ['1', 'Find business', 'Search and select the business you want to pay.'],
               ['2', 'Search item', 'Choose the product, service, or course you want.'],
               ['3', 'Pay securely', 'Your order is recorded for the business in Sedifex.'],
             ].map((step, index) => (
