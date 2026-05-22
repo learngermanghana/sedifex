@@ -1,12 +1,78 @@
-/* Shell navigation improvements
-   - Mobile keeps the hamburger drawer.
-   - Desktop shows the hide/show navigation control beside the left nav.
-   - Sidebar can scroll independently when many modules are visible.
-   - Website Builder gets full edit width; preview opens from the public-site action. */
+/* Clean Shell navigation behavior
+   - Desktop: left sidebar includes Hide navigation and remembers collapsed state.
+   - Desktop collapsed: small rail remains on the left with Show nav.
+   - Mobile/tablet: hamburger controls the drawer only.
+   - Sidebar scrolls independently when many modules are visible.
+   - Website Builder uses full edit width; preview opens via the public-site action. */
+
+.shell__mobile-menu-toggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #4338ca;
+  font-weight: 700;
+  box-shadow: 0 10px 28px -18px rgba(15, 23, 42, 0.25);
+}
+
+.shell__sidebar-tools {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -4px -4px 12px;
+  padding: 4px 4px 10px;
+  background: linear-gradient(180deg, #ffffff 72%, rgba(255, 255, 255, 0));
+}
+
+.shell__nav-collapse-button,
+.shell__nav-rail-button {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(67, 56, 202, 0.18);
+  background: #f8f7ff;
+  color: #312e81;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 10px 12px;
+  box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.45);
+}
+
+.shell__nav-rail {
+  position: sticky;
+  top: 92px;
+  align-self: start;
+  z-index: 3;
+}
+
+.shell__nav-rail-button {
+  writing-mode: vertical-rl;
+  min-height: 132px;
+  width: 48px;
+  padding: 14px 10px;
+}
+
+.shell__nav-rail-button .shell__menu-icon {
+  transform: rotate(90deg);
+}
 
 @media (min-width: 961px) {
   body.shell--menu-open {
     overflow: auto !important;
+  }
+
+  .shell__menu-toggle {
+    display: none !important;
+  }
+
+  .shell__mobile-menu-toggle {
+    display: none !important;
   }
 
   .shell__layout {
@@ -14,12 +80,19 @@
     align-items: start;
   }
 
+  .shell--nav-collapsed .shell__layout {
+    grid-template-columns: 56px minmax(0, 1fr) !important;
+  }
+
+  .shell--nav-collapsed .shell__container {
+    max-width: min(1600px, 100%) !important;
+  }
+
   .shell__sidebar {
     position: sticky;
-    top: 122px;
-    max-height: calc(100dvh - 144px);
+    top: 92px;
+    max-height: calc(100dvh - 112px);
     overflow-y: auto;
-    padding-top: 56px;
     scrollbar-width: thin;
     scrollbar-color: #c7d2fe #f8fafc;
   }
@@ -38,72 +111,31 @@
     border-radius: 999px;
   }
 
-  .shell__menu-toggle {
-    position: fixed !important;
-    top: 134px;
-    left: max(16px, calc((100vw - 1200px) / 2 + 48px));
-    z-index: 45;
-    display: inline-flex !important;
-    min-width: 132px;
-    justify-content: center;
-    border: 1px solid rgba(67, 56, 202, 0.18) !important;
-    background: #ffffff !important;
-    color: #312e81 !important;
-    box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.45) !important;
-  }
-
-  .shell__menu-toggle .shell__menu-label {
-    font-size: 0 !important;
-  }
-
-  .shell__menu-toggle .shell__menu-label::after {
-    content: 'Hide nav';
-    font-size: 13px;
-    letter-spacing: 0.01em;
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__menu-toggle {
-    min-width: 118px;
-    left: max(16px, calc((100vw - 1600px) / 2 + 24px));
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__menu-toggle .shell__menu-label::after {
-    content: 'Show nav';
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__backdrop,
-  .shell:has(.shell__toolbar.is-open) .shell__toolbar {
-    display: none !important;
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__layout {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__sidebar {
-    display: none !important;
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__container {
-    max-width: min(1600px, 100%) !important;
-  }
-
-  .shell:has(.shell__toolbar.is-open) .shell__content-inner {
+  .shell--nav-collapsed .shell__content-inner {
     width: 100%;
   }
 }
 
 @media (max-width: 960px) {
-  .shell__menu-toggle {
-    position: static !important;
-    min-width: auto;
+  .shell__mobile-menu-toggle {
+    display: inline-flex;
+    margin-left: auto;
   }
 
-  .shell__menu-toggle .shell__menu-label {
+  .shell__menu-toggle {
+    display: none !important;
+  }
+
+  .shell__nav-rail,
+  .shell__sidebar-tools {
+    display: none !important;
+  }
+
+  .shell__mobile-menu-toggle .shell__menu-label {
     font-size: 14px !important;
   }
 
-  .shell__menu-toggle .shell__menu-label::after {
+  .shell__mobile-menu-toggle .shell__menu-label::after {
     content: '' !important;
   }
 }
