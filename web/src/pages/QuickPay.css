@@ -1,0 +1,283 @@
+.quick-pay-admin {
+  display: grid;
+  gap: 18px;
+}
+
+.quick-pay-admin__hero,
+.quick-pay-admin__panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.quick-pay-admin__hero {
+  padding: 18px;
+  background: linear-gradient(135deg, #eef2ff, #ffffff 54%, #f8fafc);
+}
+
+.quick-pay-admin__store {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.quick-pay-admin__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 950;
+  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.22);
+}
+
+.quick-pay-admin__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.quick-pay-admin__avatar span {
+  color: #ffffff;
+  line-height: 1;
+}
+
+.quick-pay-admin__eyebrow {
+  margin: 0;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.quick-pay-admin h3,
+.quick-pay-admin h4 {
+  margin: 8px 0 0;
+  color: #0f172a;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.quick-pay-admin h3 {
+  font-size: clamp(24px, 6vw, 34px);
+  line-height: 1.1;
+}
+
+.quick-pay-admin h4 {
+  font-size: 20px;
+}
+
+.quick-pay-admin p {
+  margin: 10px 0 0;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.quick-pay-admin__tabs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #f8fafc;
+  padding: 8px;
+}
+
+.quick-pay-admin__tabs button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.quick-pay-admin__tabs button.is-active {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
+}
+
+.quick-pay-admin__panel {
+  padding: 18px;
+}
+
+.quick-pay-admin__panel-header {
+  display: grid;
+  gap: 14px;
+}
+
+.quick-pay-admin__small-link {
+  width: fit-content;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+
+.quick-pay-admin__link-box,
+.quick-pay-admin__print-card,
+.quick-pay-admin__message-card {
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.quick-pay-admin__link-box label {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.quick-pay-admin__link-row {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.quick-pay-admin__link-row input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+  outline: none;
+}
+
+.quick-pay-admin__link-row input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+}
+
+.quick-pay-admin__print-card {
+  display: grid;
+  gap: 16px;
+  align-items: center;
+}
+
+.quick-pay-admin__print-card code {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #312e81;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quick-pay-admin__message-card {
+  background: #f8fafc;
+}
+
+.quick-pay-admin__message-card > p {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.quick-pay-admin__message-card > div {
+  margin-top: 14px;
+  border: 1px solid #e0e7ff;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.quick-pay-admin__message-card span {
+  display: block;
+  color: #4f46e5;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.quick-pay-admin__message-card strong {
+  overflow-wrap: anywhere;
+}
+
+.quick-pay-admin__message-card div strong {
+  display: block;
+  margin-top: 7px;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.quick-pay-admin__message-card ol {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding-left: 20px;
+}
+
+.quick-pay-admin__message-card li {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.quick-pay-admin__status {
+  border-radius: 16px;
+  background: #eef2ff;
+  color: #4338ca;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+@media (min-width: 700px) {
+  .quick-pay-admin__hero,
+  .quick-pay-admin__panel {
+    padding: 24px;
+  }
+
+  .quick-pay-admin__store {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .quick-pay-admin__tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quick-pay-admin__panel-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .quick-pay-admin__link-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .quick-pay-admin__print-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
