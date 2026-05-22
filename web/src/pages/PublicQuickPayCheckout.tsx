@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import './PublicQuickPayCheckout.css'
 
 type QuickPayItem = {
@@ -26,6 +26,7 @@ const FUNCTION_BASE_URL =
 
 const CONTRACT_VERSION = import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || '2026-04-13'
 const TYPE_FILTERS: Array<'ALL' | QuickPayItem['type']> = ['ALL', 'PRODUCT', 'SERVICE', 'COURSE']
+const DEFAULT_VISIBLE_ITEMS = 6
 
 const DEMO_ITEMS: QuickPayItem[] = [
   {
@@ -55,6 +56,9 @@ export default function PublicQuickPayCheckout() {
   const { storeId = '' } = useParams()
   const [searchParams] = useSearchParams()
   const initialMode = searchParams.get('mode') || 'store'
+  const paymentReturnStatus = searchParams.get('status')
+  const paymentReference = searchParams.get('reference') || searchParams.get('trxref') || ''
+  const shouldShowSuccess = paymentReturnStatus === 'success' || paymentReturnStatus === 'returning' || Boolean(paymentReference)
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<'ALL' | QuickPayItem['type']>('ALL')
   const [items, setItems] = useState<QuickPayItem[]>([])
@@ -75,6 +79,10 @@ export default function PublicQuickPayCheckout() {
       return haystack.includes(normalized)
     })
   }, [items, query, typeFilter])
+
+  const hasSearch = query.trim().length > 0
+  const visibleItems = hasSearch ? filteredItems : filteredItems.slice(0, DEFAULT_VISIBLE_ITEMS)
+  const hiddenItemCount = Math.max(filteredItems.length - visibleItems.length, 0)
 
   const unitAmount = selectedItem?.price ?? 0
   const finalAmount = selectedItem?.id === 'manual-service' ? Number(customAmount || 0) : unitAmount * quantity
@@ -102,9 +110,9 @@ export default function PublicQuickPayCheckout() {
         setStatus('Catalog is not available yet. Manual payment mode is available.')
       }
     }
-    void loadCatalog()
+    if (!shouldShowSuccess) void loadCatalog()
     return () => { isMounted = false }
-  }, [storeId])
+  }, [storeId, shouldShowSuccess])
 
   async function createCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -117,7 +125,7 @@ export default function PublicQuickPayCheckout() {
     setStatus('Preparing secure payment…')
     try {
       const reference = `qp_${storeId}_${Date.now()}`
-      const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=returning`
+      const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=success&reference=${encodeURIComponent(reference)}`
       const body = {
         storeId,
         merchantId: storeId,
@@ -161,6 +169,31 @@ export default function PublicQuickPayCheckout() {
     }
   }
 
+  if (shouldShowSuccess) {
+    return (
+      <main className="qp-checkout-root">
+        <div className="qp-success-shell">
+          <section className="qp-success-card">
+            <div className="qp-success-icon">✓</div>
+            <p className="qp-eyebrow qp-success-eyebrow">Sedifex Quick Pay</p>
+            <h1 className="qp-success-title">Thank you for your payment</h1>
+            <p className="qp-success-copy">Your payment has been received or is being confirmed. The business will receive your order in Sedifex.</p>
+            {paymentReference ? (
+              <div className="qp-success-reference">
+                <span>Payment reference</span>
+                <strong>{paymentReference}</strong>
+              </div>
+            ) : null}
+            <div className="qp-success-actions">
+              <Link className="qp-success-primary" to={`/s/${encodeURIComponent(storeId)}?mode=store`}>Pay for another item</Link>
+              <Link className="qp-success-secondary" to="/">Find another business</Link>
+            </div>
+          </section>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="qp-checkout-root">
       <div className="qp-checkout-shell">
@@ -171,15 +204,19 @@ export default function PublicQuickPayCheckout() {
 
           <div className="qp-hero-search">
             <label className="qp-hero-label" htmlFor="quick-pay-search">What do you want to buy or pay for?</label>
-            <input
-              id="quick-pay-search"
-              type="search"
-              placeholder="Example: hair braiding, massage, fitness course"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              className="qp-hero-input"
-            />
-            <button type="button" className="qp-qr-button">⌗ Scan QR Code</button>
+            <div className="qp-hero-input-shell">
+              <span className="qp-hero-search-icon">⌕</span>
+              <input
+                id="quick-pay-search"
+                type="search"
+                placeholder="Search products, services, courses..."
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                className="qp-hero-input"
+              />
+              {query ? <button type="button" className="qp-clear-search" onClick={() => setQuery('')}>Clear</button> : null}
+            </div>
+            <p className="qp-hero-help">Showing a few popular items first. Search to find more items quickly.</p>
           </div>
 
           <div className="qp-trust-row">
@@ -193,19 +230,15 @@ export default function PublicQuickPayCheckout() {
           <section className="qp-panel qp-search-panel">
             <div className="qp-type-tabs">
               {TYPE_FILTERS.map(type => (
-                <button
-                  key={type}
-                  type="button"
-                  className={`qp-type-tab ${typeFilter === type ? 'qp-type-tab-active' : ''}`}
-                  onClick={() => setTypeFilter(type)}
-                >
+                <button key={type} type="button" className={`qp-type-tab ${typeFilter === type ? 'qp-type-tab-active' : ''}`} onClick={() => setTypeFilter(type)}>
                   {type === 'ALL' ? 'All' : type.toLowerCase()}
                 </button>
               ))}
             </div>
             {status ? <p className="qp-status">{status}</p> : null}
+            {!hasSearch && hiddenItemCount > 0 ? <p className="qp-status">Showing {visibleItems.length} popular items. Search above to find from {filteredItems.length} available items.</p> : null}
             <div className="qp-items-grid">
-              {filteredItems.map(item => {
+              {visibleItems.map(item => {
                 const isSelected = selectedItem?.id === item.id
                 return (
                   <button key={item.id} type="button" className={`qp-item-card ${isSelected ? 'qp-item-card-selected' : ''}`} onClick={() => setSelectedItem(item)}>
@@ -224,7 +257,7 @@ export default function PublicQuickPayCheckout() {
                   </button>
                 )
               })}
-              {filteredItems.length === 0 ? <div className="qp-empty">No item matched your search. Use manual service payment or contact the business.</div> : null}
+              {visibleItems.length === 0 ? <div className="qp-empty">No item matched your search. Try another word or contact the business.</div> : null}
             </div>
           </section>
 
