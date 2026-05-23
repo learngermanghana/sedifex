@@ -1,0 +1,17 @@
+/* Keep the Student Registration tab controls horizontal on desktop and mobile. */
+section[style*="padding: 14px"] > div[style*="flex-wrap: wrap"]:has(> button[style*="border-radius: 999px"]:first-child:nth-last-child(3)) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  white-space: nowrap !important;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+section[style*="padding: 14px"] > div[style*="flex-wrap: wrap"]:has(> button[style*="border-radius: 999px"]:first-child:nth-last-child(3)) > button {
+  flex: 0 0 auto !important;
+}
