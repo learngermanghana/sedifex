@@ -55,10 +55,10 @@ const mediaFields: ProfileField[] = [
   ['socialShareImage', 'Social share image URL'],
 ]
 
-const mediaUploadOptions: Array<{ key: MediaUploadKey; label: string; buttonLabel: string; storageFolder: string }> = [
-  { key: 'logoUrl', label: 'Logo', buttonLabel: 'Browse & upload logo', storageFolder: 'logos' },
-  { key: 'coverImageUrl', label: 'Cover / banner', buttonLabel: 'Browse & upload banner', storageFolder: 'banners' },
-  { key: 'socialShareImage', label: 'Social share image', buttonLabel: 'Browse & upload social image', storageFolder: 'social-share' },
+const mediaUploadOptions: Array<{ key: MediaUploadKey; label: string; storageFolder: string }> = [
+  { key: 'logoUrl', label: 'Logo', storageFolder: 'logos' },
+  { key: 'coverImageUrl', label: 'Cover / banner', storageFolder: 'banners' },
+  { key: 'socialShareImage', label: 'Social share image', storageFolder: 'social-share' },
 ]
 
 const fields = [...identityFields, ...contactFields, ...socialFields, ...mediaFields] as const
@@ -192,7 +192,6 @@ export default function SocialLinksSettings() {
   const [profile, setProfile] = useState<PublicProfile>({})
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [mediaFiles, setMediaFiles] = useState<Partial<Record<MediaUploadKey, File>>>({})
   const [uploadingMediaKey, setUploadingMediaKey] = useState<MediaUploadKey | null>(null)
   const [message, setMessage] = useState('')
   const [isEditing, setIsEditing] = useState(false)
@@ -371,28 +370,27 @@ export default function SocialLinksSettings() {
     }
   }
 
-  async function uploadMediaFile(key: MediaUploadKey, label: string, storageFolder: string) {
-    if (!storeId || !canEdit) return
-    const file = mediaFiles[key]
-    if (!file) {
-      setMessage(`Choose a ${label.toLowerCase()} image first.`)
+  async function uploadMediaFile(file: File | null, key: MediaUploadKey, label: string, storageFolder: string) {
+    if (!storeId || !canEdit || !file) return
+    if (!file.type.startsWith('image/')) {
+      setMessage(`Choose a valid ${label.toLowerCase()} image.`)
       return
     }
     setUploadingMediaKey(key)
-    setMessage('')
+    setMessage(`Uploading ${label.toLowerCase()}…`)
+    setIsEditing(true)
     try {
       const uploadedUrl = await uploadProductImage(file, {
         storagePath: `stores/${storeId}/assets/${storageFolder}`,
       })
-      const nextProfile = await persistPublicProfile({ ...profile, [key]: uploadedUrl })
+      const optimisticProfile = { ...profile, [key]: uploadedUrl }
+      setProfile(optimisticProfile)
+      setMessage(`${label} URL filled. Saving profile…`)
+      const nextProfile = await persistPublicProfile(optimisticProfile)
       setProfile(nextProfile)
-      setMediaFiles(current => {
-        const next = { ...current }
-        delete next[key]
-        return next
-      })
       setIsEditing(false)
-      publish({ tone: 'success', message: `${label} uploaded and saved. It will remain after refresh.` })
+      setMessage('')
+      publish({ tone: 'success', message: `${label} uploaded, URL filled, and saved. It will remain after refresh.` })
     } catch (uploadError) {
       console.error('[social-links] media upload failed', uploadError)
       setMessage(`Unable to upload ${label.toLowerCase()}.`)
@@ -490,7 +488,7 @@ export default function SocialLinksSettings() {
 
           <section className="account-overview__card" onClick={beginEditing}>
             <h2>Logo and media</h2>
-            <p className="account-overview__subtitle">Logo, banner, and social share images are saved immediately and shared with Website Builder and public previews.</p>
+            <p className="account-overview__subtitle">Choose an image and Sedifex will upload it, fill the URL field, and save it immediately.</p>
             <div className="account-overview__form-grid">
               {mediaFields.map(renderField)}
             </div>
@@ -502,21 +500,13 @@ export default function SocialLinksSettings() {
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={event => {
-                        beginEditing()
-                        setMediaFiles(current => ({ ...current, [option.key]: event.target.files?.[0] ?? undefined }))
-                      }}
+                      onChange={event => void uploadMediaFile(event.target.files?.[0] ?? null, option.key, option.label, option.storageFolder)}
                       disabled={saving || isUploadingMedia}
                     />
                   </label>
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => uploadMediaFile(option.key, option.label, option.storageFolder)}
-                    disabled={!mediaFiles[option.key] || saving || isUploadingMedia}
-                  >
-                    {uploadingMediaKey === option.key ? 'Uploading and saving…' : option.buttonLabel}
-                  </button>
+                  <small style={{ color: '#64748b' }}>
+                    {uploadingMediaKey === option.key ? 'Uploading, filling URL, and saving…' : `${option.label} URL fills automatically after upload.`}
+                  </small>
                 </div>
               ))}
             </div>
