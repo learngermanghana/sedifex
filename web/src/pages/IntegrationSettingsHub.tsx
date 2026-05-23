@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { doc, getDoc, serverTimestamp, setDoc, type Timestamp } from 'firebase/firestore'
 import { db, functions } from '../firebase'
@@ -7,10 +7,16 @@ import { useAuthUser } from '../hooks/useAuthUser'
 import { useToast } from '../components/ToastProvider'
 import './AccountOverview.css'
 
-type IntegrationTab = 'website' | 'products' | 'bookingsApi' | 'booking' | 'email' | 'keys'
-type KeyPurpose = 'products' | 'bookings' | 'checkout'
+type IntegrationTab = 'website' | 'api' | 'booking' | 'email' | 'keys'
 type Props = { defaultTab?: IntegrationTab }
-type KeyRow = { id: string; name: string; status: string; keyPreview: string; createdAt: Timestamp | null }
+type KeyRow = {
+  id: string
+  name: string
+  purpose: string
+  status: string
+  keyPreview: string
+  createdAt: Timestamp | null
+}
 
 type Draft = {
   websiteDomain: string
@@ -31,28 +37,8 @@ type Draft = {
 const DEFAULT_BASE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net'
 const DEFAULT_CHECKOUT_CREATE_URL = 'https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate'
 const DEFAULT_CONTRACT_VERSION = '2026-04-13'
-const API_KEY_PLACEHOLDER = 'PASTE_CREATED_SEDIFEX_API_KEY_HERE'
-
-const KEY_PURPOSE_CONFIG: Record<KeyPurpose, { title: string; name: string; description: string; button: string }> = {
-  products: {
-    title: 'Product key',
-    name: 'Products API production key',
-    description: 'Use this for products, services, promo content, gallery, and catalog data.',
-    button: 'Create product key',
-  },
-  bookings: {
-    title: 'Booking key',
-    name: 'Bookings API production key',
-    description: 'Use this for website booking forms and availability checks.',
-    button: 'Create booking key',
-  },
-  checkout: {
-    title: 'Checkout key',
-    name: 'Checkout Website API production key',
-    description: 'Use this for checkout and payment creation.',
-    button: 'Create checkout key',
-  },
-}
+const WEBSITE_KEY_NAME = 'Website Integration API key'
+const WEBSITE_KEY_PURPOSE = 'website'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : ''
@@ -69,6 +55,11 @@ function normalize(value: string) {
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, '')
+}
+
+function formatDate(value: Timestamp | null) {
+  if (!value || typeof value.toDate !== 'function') return 'Date not available'
+  return value.toDate().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props) {
@@ -92,11 +83,10 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     emailFromName: '',
   })
   const [isSaving, setIsSaving] = useState(false)
-  const [creatingKeyPurpose, setCreatingKeyPurpose] = useState<KeyPurpose | null>(null)
+  const [isCreatingKey, setIsCreatingKey] = useState(false)
   const [keys, setKeys] = useState<KeyRow[]>([])
   const [keysLoading, setKeysLoading] = useState(false)
   const [latestToken, setLatestToken] = useState('')
-  const [latestTokenPurpose, setLatestTokenPurpose] = useState<KeyPurpose | null>(null)
 
   const canSave = Boolean(storeId && user)
   const apiBaseUrl = trimTrailingSlash(draft.apiBaseUrl || DEFAULT_BASE_URL)
@@ -117,14 +107,16 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
   }
 
   async function refreshKeys() {
+    if (!storeId) return
     try {
       setKeysLoading(true)
       const callable = httpsCallable(functions, 'listIntegrationApiKeys')
-      const response = await callable({})
+      const response = await callable({ storeId })
       const data = (response.data ?? {}) as { keys?: Array<Record<string, unknown>> }
       setKeys((data.keys ?? []).map(item => ({
         id: text(item.id),
-        name: text(item.name) || 'Unnamed key',
+        name: text(item.name) || 'Website integration key',
+        purpose: text(item.purpose) || 'website',
         status: text(item.status) || 'active',
         keyPreview: text(item.keyPreview) || 'sedx••••',
         createdAt: item.createdAt && typeof item.createdAt === 'object' && typeof (item.createdAt as Timestamp).toDate === 'function' ? item.createdAt as Timestamp : null,
@@ -194,11 +186,13 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
           updatedAt: serverTimestamp(),
         },
         integrationApi: {
+          enabled: true,
           baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
           checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
           contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
           updatedAt: serverTimestamp(),
         },
+        integrationApiEnabled: true,
         updatedAt: serverTimestamp(),
       }
       await Promise.all([
@@ -268,14 +262,6 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         integrationBookingConfig: bookingSync,
         appScriptBookingSyncEnabled: true,
         bookingSyncEnabled: true,
-        integrationApi: {
-          enabled: true,
-          baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
-          checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
-          contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
-          updatedAt: serverTimestamp(),
-        },
-        integrationApiEnabled: true,
         updatedAt: serverTimestamp(),
       }
       await Promise.all([
@@ -318,31 +304,29 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
     }
   }
 
-  async function createKeyForPurpose(purpose: KeyPurpose) {
-    const config = KEY_PURPOSE_CONFIG[purpose]
+  async function createWebsiteKey() {
+    if (!storeId || !canSave) return
     try {
-      setCreatingKeyPurpose(purpose)
+      setIsCreatingKey(true)
       setIsSaving(true)
       const callable = httpsCallable(functions, 'createIntegrationApiKey')
-      const response = await callable({ name: config.name, storeId, purpose })
+      const response = await callable({ name: WEBSITE_KEY_NAME, storeId, purpose: WEBSITE_KEY_PURPOSE })
       const token = text((response.data as Record<string, unknown> | undefined)?.token)
-      const keyPreview = 'masked preview only'
-      const purposePayloadKey = `${purpose}ApiKeyName`
-      const purposePreviewKey = `${purpose}ApiKeyPreview`
+      const keyPreview = text((response.data as Record<string, unknown> | undefined)?.keyHint) || 'masked preview only'
       const integrationApiPayload = {
         integrationApi: {
           enabled: true,
           baseUrl: normalize(draft.apiBaseUrl) || DEFAULT_BASE_URL,
           checkoutCreateUrl: normalize(draft.checkoutCreateUrl) || DEFAULT_CHECKOUT_CREATE_URL,
           contractVersion: normalize(draft.contractVersion) || DEFAULT_CONTRACT_VERSION,
-          [purposePayloadKey]: config.name,
-          [purposePreviewKey]: keyPreview,
-          latestPurpose: purpose,
+          websiteApiKeyName: WEBSITE_KEY_NAME,
+          websiteApiKeyPreview: keyPreview,
+          latestPurpose: WEBSITE_KEY_PURPOSE,
           updatedAt: serverTimestamp(),
         },
         integrationApiEnabled: true,
         latestIntegrationApiKeyPreview: keyPreview,
-        latestIntegrationApiKeyPurpose: purpose,
+        latestIntegrationApiKeyPurpose: WEBSITE_KEY_PURPOSE,
         updatedAt: serverTimestamp(),
       }
       await Promise.all([
@@ -351,17 +335,16 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       ])
       if (token) {
         setLatestToken(token)
-        setLatestTokenPurpose(purpose)
-        await copy(token, `${config.title}`)
-        publish({ message: `${config.title} copied. Save it now; it is shown once.`, tone: 'success' })
+        await copy(token, 'Website integration key')
+        publish({ message: 'Website integration key copied. Save it now; it is shown once.', tone: 'success' })
       }
       await refreshKeys()
     } catch (err) {
-      console.error('[integrations] failed to create key', err)
-      publish({ message: `Unable to create ${config.title}.`, tone: 'error' })
+      console.error('[integrations] failed to create website key', err)
+      publish({ message: 'Unable to create website integration key.', tone: 'error' })
     } finally {
       setIsSaving(false)
-      setCreatingKeyPurpose(null)
+      setIsCreatingKey(false)
     }
   }
 
@@ -369,19 +352,30 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
   if (isLoading) return <p role="status">Loading integrations…</p>
   if (!storeId) return <p>Select a workspace to manage integrations.</p>
 
+  const envTemplate = [
+    `SEDIFEX_API_BASE_URL=${apiBaseUrl}`,
+    `SEDIFEX_INTEGRATION_API_BASE_URL=${apiBaseUrl}`,
+    `SEDIFEX_STORE_ID=${storeId}`,
+    `NEXT_PUBLIC_SEDIFEX_STORE_ID=${storeId}`,
+    `SEDIFEX_BOOKING_TARGET_STORE_ID=${storeId}`,
+    'SEDIFEX_INTEGRATION_API_KEY=PASTE_WEBSITE_KEY_HERE',
+    'SEDIFEX_PRODUCTS_API_KEY=PASTE_WEBSITE_KEY_HERE',
+    'SEDIFEX_BOOKING_API_KEY=PASTE_WEBSITE_KEY_HERE',
+    `SEDIFEX_CONTRACT_VERSION=${contractVersion}`,
+  ].join('\n')
+
   return (
     <section className="account-overview" aria-labelledby="integrations-title">
       <h1 id="integrations-title">Integrations</h1>
-      <p className="account-overview__subtitle">Save website, product feed, checkout, booking, sheet, and API settings here. No Firestore editing needed.</p>
+      <p className="account-overview__subtitle">Connect websites, checkout, bookings, sheets, and Apps Script tools without editing Firestore.</p>
 
       <nav className="account-overview__tabs" aria-label="Integration sections">
         {([
           ['website', 'Website + checkout'],
-          ['products', 'Products API'],
-          ['bookingsApi', 'Bookings API'],
+          ['api', 'API endpoints'],
           ['booking', 'Booking sheet sync'],
           ['email', 'Email Apps Script'],
-          ['keys', 'API keys'],
+          ['keys', 'Website API key'],
         ] as Array<[IntegrationTab, string]>).map(([id, label]) => (
           <button key={id} type="button" className={`account-overview__tab ${tab === id ? 'is-active' : ''}`} onClick={() => setTab(id)}>{label}</button>
         ))}
@@ -390,7 +384,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'website' && (
         <div className="account-overview__website-sync">
           <h2>Website + checkout setup</h2>
-          <p className="account-overview__hint">Connect a website to checkout. Create a checkout key in API keys when the website needs payment creation.</p>
+          <p className="account-overview__hint">Save the website URLs and checkout configuration. Use one Website API key for products, bookings, availability, and checkout.</p>
           <div className="account-overview__form-grid">
             <label><span>Website domain</span><input value={draft.websiteDomain} onChange={event => update('websiteDomain', event.target.value)} placeholder="https://www.example.com" /></label>
             <label><span>Checkout return URL</span><input value={draft.checkoutReturnUrl} onChange={event => update('checkoutReturnUrl', event.target.value)} placeholder="https://www.example.com/payment/return" /></label>
@@ -407,34 +401,19 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         </div>
       )}
 
-      {tab === 'products' && (
+      {tab === 'api' && (
         <div className="account-overview__website-sync">
-          <h2>Products API</h2>
-          <p className="account-overview__hint">Use this for websites that need products, services, promo content, gallery images, or top-selling items.</p>
+          <h2>API endpoints</h2>
+          <p className="account-overview__hint">These endpoints all use the same Website API key. No separate Product key and Booking key are needed.</p>
           <div className="account-overview__form-grid">
             <label><span>Sedifex API base URL</span><input value={draft.apiBaseUrl} onChange={event => update('apiBaseUrl', event.target.value)} /></label>
             <label><span>Contract version</span><input value={draft.contractVersion} onChange={event => update('contractVersion', event.target.value)} /></label>
           </div>
           <div className="account-overview__website-sync-actions">
-            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationProducts'), 'Products endpoint')}>Copy products endpoint</button>
-            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationPromo'), 'Promo endpoint')}>Copy promo endpoint</button>
-            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/integrationGallery'), 'Gallery endpoint')}>Copy gallery endpoint</button>
-            <button type="button" className="button" onClick={saveApiBaseSettings} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save API settings'}</button>
-          </div>
-        </div>
-      )}
-
-      {tab === 'bookingsApi' && (
-        <div className="account-overview__website-sync">
-          <h2>Bookings API</h2>
-          <p className="account-overview__hint">Use this for websites that need booking forms or appointment availability.</p>
-          <div className="account-overview__form-grid">
-            <label><span>Sedifex API base URL</span><input value={draft.apiBaseUrl} onChange={event => update('apiBaseUrl', event.target.value)} /></label>
-            <label><span>Contract version</span><input value={draft.contractVersion} onChange={event => update('contractVersion', event.target.value)} /></label>
-          </div>
-          <div className="account-overview__website-sync-actions">
-            <button type="button" className="button button--secondary" onClick={() => copy(`${endpoint('/v1IntegrationAvailability')}&serviceId=SERVICE_ID&from=FROM_ISO&to=TO_ISO`, 'Availability endpoint')}>Copy availability endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationProducts'), 'Products/services endpoint')}>Copy products/services endpoint</button>
             <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationBookings'), 'Bookings endpoint')}>Copy bookings endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(`${endpoint('/v1IntegrationAvailability')}&serviceId=SERVICE_ID&from=FROM_ISO&to=TO_ISO`, 'Availability endpoint')}>Copy availability endpoint</button>
+            <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/integrationGallery'), 'Gallery endpoint')}>Copy gallery endpoint</button>
             <button type="button" className="button" onClick={saveApiBaseSettings} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save API settings'}</button>
           </div>
         </div>
@@ -443,11 +422,11 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'booking' && (
         <div className="account-overview__website-sync">
           <h2>Booking sheet sync</h2>
-          <p className="account-overview__hint">This is only for syncing Sedifex bookings into a Google Sheet through Apps Script. For client website booking forms, use the Bookings API tab.</p>
+          <p className="account-overview__hint">This is only for sending Sedifex booking records into a Google Sheet through Apps Script. Website booking forms use the Website API key.</p>
           <div className="account-overview__form-grid">
             <label><span>Booking Apps Script Web App URL</span><input value={draft.bookingWebAppUrl} onChange={event => update('bookingWebAppUrl', event.target.value)} placeholder="https://script.google.com/macros/s/.../exec" /></label>
             <label><span>Booking webhook secret (optional)</span><input type="password" value={draft.bookingSecret} onChange={event => update('bookingSecret', event.target.value)} placeholder="Optional shared secret" /></label>
-            <label><span>From name</span><input value={draft.bookingFromName} onChange={event => update('bookingFromName', event.target.value)} placeholder="Glittering Med Spa" /></label>
+            <label><span>From name</span><input value={draft.bookingFromName} onChange={event => update('bookingFromName', event.target.value)} placeholder="Kwaku Lotteryy" /></label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={draft.bookingRequireSecret} onChange={event => update('bookingRequireSecret', event.target.checked)} />Require secret in Apps Script</label>
           </div>
           <button type="button" className="button" onClick={saveBooking} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save booking sync'}</button>
@@ -468,37 +447,53 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
 
       {tab === 'keys' && (
         <div className="account-overview__website-sync">
-          <h2>API keys</h2>
-          <p className="account-overview__hint">Create only the key you need. The full key is shown once and copied automatically.</p>
+          <h2>Website API key</h2>
+          <p className="account-overview__hint">Create one key and use it for products/services, gallery, bookings, availability, and checkout. Creating a new key is a rotation action; save it immediately because it is shown once.</p>
 
-          <div className="account-overview__form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-            {(['products', 'bookings'] as KeyPurpose[]).map(purpose => {
-              const config = KEY_PURPOSE_CONFIG[purpose]
-              const isCreating = creatingKeyPurpose === purpose
-              return (
-                <section key={purpose} className="account-overview__card" style={{ margin: 0 }}>
-                  <h3>{purpose === 'products' ? 'Product key' : 'Booking key'}</h3>
-                  <p className="account-overview__hint">{config.description}</p>
-                  <button type="button" className="button" onClick={() => createKeyForPurpose(purpose)} disabled={isSaving}>
-                    {isCreating ? 'Creating…' : config.button}
-                  </button>
-                </section>
-              )
-            })}
-          </div>
+          <section className="account-overview__card" style={{ margin: 0 }}>
+            <h3>One key for this website</h3>
+            <p className="account-overview__hint">Use this same key in Vercel as SEDIFEX_INTEGRATION_API_KEY, SEDIFEX_PRODUCTS_API_KEY, and SEDIFEX_BOOKING_API_KEY.</p>
+            <button type="button" className="button" onClick={createWebsiteKey} disabled={isSaving}>
+              {isCreatingKey ? 'Creating…' : keys.length ? 'Rotate / create new website key' : 'Create website API key'}
+            </button>
+          </section>
 
           {latestToken ? (
             <div className="account-overview__integration-token-notice">
               <p><strong>Save this key now. It is shown once.</strong></p>
-              <p className="account-overview__hint">Key type: {latestTokenPurpose ? KEY_PURPOSE_CONFIG[latestTokenPurpose].title : 'API key'}</p>
+              <p className="account-overview__hint">Paste this same key into all three Vercel key variables.</p>
               <code className="account-overview__integration-token-value">{latestToken}</code>
               <div className="account-overview__website-sync-actions">
-                <button type="button" className="button button--secondary" onClick={() => copy(latestToken, 'Latest API key')}>Copy key again</button>
+                <button type="button" className="button button--secondary" onClick={() => copy(latestToken, 'Website API key')}>Copy key again</button>
+                <button type="button" className="button button--secondary" onClick={() => copy(envTemplate, 'Vercel env template')}>Copy Vercel env template</button>
               </div>
             </div>
           ) : null}
 
-          {keysLoading ? <p>Loading keys…</p> : keys.length ? <p className="account-overview__hint">{keys.length} saved key{keys.length === 1 ? '' : 's'} in this workspace.</p> : null}
+          <div className="account-overview__integration-token-notice">
+            <p><strong>Vercel values to use</strong></p>
+            <code className="account-overview__integration-token-value" style={{ whiteSpace: 'pre-wrap' }}>{envTemplate}</code>
+            <div className="account-overview__website-sync-actions">
+              <button type="button" className="button button--secondary" onClick={() => copy(envTemplate, 'Vercel env template')}>Copy env template</button>
+            </div>
+          </div>
+
+          {keysLoading ? <p>Loading keys…</p> : keys.length ? (
+            <div className="account-overview__card" style={{ marginTop: 16 }}>
+              <h3>Saved keys in this workspace</h3>
+              <p className="account-overview__hint">Use the latest active website key. Old product/booking keys are kept for compatibility, but new websites only need one key.</p>
+              <div className="account-overview__form-grid">
+                {keys.map(key => (
+                  <div key={key.id} className="account-overview__card" style={{ margin: 0 }}>
+                    <strong>{key.name}</strong>
+                    <p className="account-overview__hint">Purpose: {key.purpose} · Status: {key.status}</p>
+                    <code>{key.keyPreview}</code>
+                    <p className="account-overview__hint">Created: {formatDate(key.createdAt)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : <p className="account-overview__hint">No saved API keys yet.</p>}
         </div>
       )}
     </section>
