@@ -53,6 +53,12 @@ const PAYSTACK_SECRET = defineString('PAYSTACK_SECRET_KEY')
 const PAYSTACK_PUBLIC = defineString('PAYSTACK_PUBLIC_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL')
 
+const YEARLY_CONTRACT_MONTHS = 12
+const YEARLY_PLAN_AMOUNTS_GHS: Record<string, number> = {
+  business: 999,
+  growth_website: 1999,
+}
+
 let paystackConfigLogged = false
 function getPaystackConfig() {
   const secret = PAYSTACK_SECRET.value()
@@ -103,6 +109,27 @@ function isDonationEvent(data: PaystackEventData) {
       toTrimmedString(metadata.fundTransactionId) ||
       toTrimmedString(data.reference).startsWith('DON-'),
   )
+}
+
+function getContractMonths(metadata: Record<string, any> | null | undefined): number {
+  const raw = Number(metadata?.contractMonths)
+  if (Number.isFinite(raw) && raw > 0) return Math.max(1, Math.min(36, Math.floor(raw)))
+  return YEARLY_CONTRACT_MONTHS
+}
+
+function buildContractPeriod(paidAt: string | null | undefined, months: number) {
+  const start = paidAt ? new Date(paidAt) : new Date()
+  const end = new Date(start)
+  end.setMonth(end.getMonth() + months)
+  return {
+    startTimestamp: admin.firestore.Timestamp.fromDate(start),
+    endTimestamp: admin.firestore.Timestamp.fromDate(end),
+  }
+}
+
+function expectedYearlyAmount(plan: string | null): number | null {
+  if (!plan) return null
+  return YEARLY_PLAN_AMOUNTS_GHS[plan] ?? null
 }
 
 async function updateDonationTransactionFromPaystackEvent(evtType: string, data: PaystackEventData) {
@@ -523,7 +550,10 @@ export const createCheckout = functions.https.onCall(async (data, context) => {
       ? (data.metadata as Record<string, any>)
       : {}
 
-  const amount = Number(data?.amount)
+  const requestedAmount = Number(data?.amount)
+  const configuredAmount = expectedYearlyAmount(plan)
+  const amount = configuredAmount ?? requestedAmount
+  const contractMonths = getContractMonths(metadataIn)
 
   if (!email) {
     throw new functions.https.HttpsError('invalid-argument', 'A valid email is required')
@@ -531,10 +561,22 @@ export const createCheckout = functions.https.onCall(async (data, context) => {
   if (!storeId) {
     throw new functions.https.HttpsError('invalid-argument', 'storeId is required')
   }
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (!plan || !configuredAmount) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Choose Business or Growth Website for yearly Paystack checkout.',
+    )
+  }
+  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'Amount must be greater than zero',
+    )
+  }
+  if (Math.round(requestedAmount) !== Math.round(configuredAmount)) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Invalid amount for ${plan}. Expected GHS ${configuredAmount}.`,
     )
   }
 
@@ -548,6 +590,9 @@ export const createCheckout = functions.https.onCall(async (data, context) => {
     metadata: {
       storeId,
       plan: plan,
+      billingCadence: 'yearly',
+      contractMonths,
+      yearlyAmountGhs: amount,
       createdBy: context.auth!.uid,
       ...metadataIn,
     },
@@ -584,6 +629,9 @@ export const createCheckout = functions.https.onCall(async (data, context) => {
           plan,
           reference,
           amount,
+          yearlyAmountGhs: amount,
+          billingCadence: 'yearly',
+          contractMonths,
           email,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           createdBy: context.auth!.uid,
@@ -714,6 +762,8 @@ export const paystackWebhook = functions.https.onRequest(
           const reference = data.reference || null
           const fees = typeof data.fees === 'number' ? data.fees / 100 : null
           const metadata = data.metadata || null
+          const contractMonths = getContractMonths(metadata)
+          const period = buildContractPeriod(paidAt, contractMonths)
           const posChannel =
             data.channel ||
             (typeof data.metadata?.channel === 'string'
@@ -731,7 +781,13 @@ export const paystackWebhook = functions.https.onRequest(
                 customerEmail: email,
                 reference,
                 amount,
-                currency: data.currency || 'NGN',
+                yearlyAmountGhs: amount,
+                billingCadence: 'yearly',
+                contractMonths,
+                currentPeriodStart: period.startTimestamp,
+                currentPeriodEnd: period.endTimestamp,
+                lastPaymentAt: paidAt ? admin.firestore.Timestamp.fromDate(new Date(paidAt)) : period.startTimestamp,
+                currency: data.currency || 'GHS',
                 channel: data.channel || null,
                 posChannel,
                 fees,
@@ -739,6 +795,29 @@ export const paystackWebhook = functions.https.onRequest(
                 paidAt,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastEvent: evtType,
+              },
+              { merge: true },
+            )
+
+          await defaultDb
+            .collection('stores')
+            .doc(storeId)
+            .set(
+              {
+                contractStatus: 'active',
+                billingPlan: plan,
+                paymentProvider: 'paystack',
+                billing: {
+                  status: 'active',
+                  planKey: plan,
+                  provider: 'paystack',
+                  cadence: 'yearly',
+                  contractMonths,
+                  currentPeriodStart: period.startTimestamp,
+                  currentPeriodEnd: period.endTimestamp,
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                },
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
               },
               { merge: true },
             )
@@ -799,3 +878,4 @@ export const paystackWebhook = functions.https.onRequest(
 )
 
 export const handlePaystackWebhook = paystackWebhook
+export const createPaystackCheckout = createCheckout
