@@ -19,6 +19,7 @@ type StoreSettingsDoc = Record<string, unknown> & {
 }
 
 type ProfileField = readonly [string, string, string?]
+type MediaUploadKey = 'logoUrl' | 'coverImageUrl' | 'socialShareImage'
 
 const identityFields: ProfileField[] = [
   ['displayName', 'Business / store name', 'Used as the public business name on websites and marketplace pages.'],
@@ -52,6 +53,12 @@ const mediaFields: ProfileField[] = [
   ['logoUrl', 'Logo URL'],
   ['coverImageUrl', 'Cover / banner image URL'],
   ['socialShareImage', 'Social share image URL'],
+]
+
+const mediaUploadOptions: Array<{ key: MediaUploadKey; label: string; buttonLabel: string; storageFolder: string }> = [
+  { key: 'logoUrl', label: 'Logo upload', buttonLabel: 'Browse & upload logo', storageFolder: 'logos' },
+  { key: 'coverImageUrl', label: 'Cover / banner upload', buttonLabel: 'Browse & upload banner', storageFolder: 'banners' },
+  { key: 'socialShareImage', label: 'Social share upload', buttonLabel: 'Browse & upload social image', storageFolder: 'social-share' },
 ]
 
 const fields = [...identityFields, ...contactFields, ...socialFields, ...mediaFields] as const
@@ -160,7 +167,7 @@ function buildProfileFromSources(data: StoreProfile | null, settings: StoreSetti
     tiktokHandle: firstText(publicProfile.tiktokHandle, websiteSocialLinks.tiktok, socialLinks.tiktokHandle, socialLinks.tiktok, data?.tiktokHandle, data?.tiktokUrl),
     youtubeUrl: firstText(publicProfile.youtubeUrl, websiteSocialLinks.youtube, socialLinks.youtubeUrl, socialLinks.youtube, data?.youtubeUrl),
     xHandle: firstText(publicProfile.xHandle, websiteSocialLinks.x, socialLinks.xHandle, socialLinks.x, data?.xHandle, data?.twitterUrl, data?.xUrl),
-    linkedinUrl: firstText(publicProfile.linkedinUrl, websiteSocialLinks.linkedin, socialLinks.linkedinUrl, socialLinks.linkedin, data?.linkedinUrl),
+    linkedinUrl: firstText(publicProfile.linkedinUrl, websiteSocialLinks.linkedin, socialLinks.linkedinUrl, data?.linkedinUrl),
     logoUrl: firstText(publicProfile.logoUrl, website.businessLogoUrl, businessIdentity.businessLogoUrl, socialLinks.logoUrl, data?.logoUrl, data?.storeLogoUrl, data?.businessLogoUrl),
     coverImageUrl: firstText(publicProfile.coverImageUrl, website.coverImageUrl, businessIdentity.coverImageUrl, data?.coverImageUrl, data?.bannerImageUrl),
     socialShareImage: firstText(publicProfile.socialShareImage, seoSettings.socialShareImage, data?.socialShareImage),
@@ -182,13 +189,14 @@ export default function SocialLinksSettings() {
   const [profile, setProfile] = useState<PublicProfile>({})
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [mediaFiles, setMediaFiles] = useState<Partial<Record<MediaUploadKey, File>>>({})
+  const [uploadingMediaKey, setUploadingMediaKey] = useState<MediaUploadKey | null>(null)
   const [message, setMessage] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const activeMembership = useMemo(() => storeId ? memberships.find(member => member.storeId === storeId) ?? null : null, [memberships, storeId])
   const canEdit = activeMembership?.role === 'owner' || activeMembership?.role === 'staff'
   const filledSocialCount = socialFields.filter(([key]) => text(profile[key]).trim()).length
+  const isUploadingMedia = Boolean(uploadingMediaKey)
 
   useEffect(() => {
     let cancelled = false
@@ -223,7 +231,7 @@ export default function SocialLinksSettings() {
   }
 
   function beginEditing() {
-    if (!canEdit || saving || uploadingLogo) return
+    if (!canEdit || saving || isUploadingMedia) return
     setMessage('')
     setIsEditing(true)
   }
@@ -355,27 +363,32 @@ export default function SocialLinksSettings() {
     }
   }
 
-  async function uploadLogoFile() {
+  async function uploadMediaFile(key: MediaUploadKey, label: string, storageFolder: string) {
     if (!storeId || !canEdit) return
-    if (!logoFile) {
-      setMessage('Choose a logo image first.')
+    const file = mediaFiles[key]
+    if (!file) {
+      setMessage(`Choose a ${label.toLowerCase()} image first.`)
       return
     }
-    setUploadingLogo(true)
+    setUploadingMediaKey(key)
     setMessage('')
     try {
-      const uploadedUrl = await uploadProductImage(logoFile, {
-        storagePath: `stores/${storeId}/assets/logo.jpg`,
+      const uploadedUrl = await uploadProductImage(file, {
+        storagePath: `stores/${storeId}/assets/${storageFolder}`,
       })
-      setProfile(current => ({ ...current, logoUrl: uploadedUrl }))
-      setLogoFile(null)
+      setProfile(current => ({ ...current, [key]: uploadedUrl }))
+      setMediaFiles(current => {
+        const next = { ...current }
+        delete next[key]
+        return next
+      })
       setIsEditing(true)
-      publish({ tone: 'success', message: 'Logo uploaded. Click Save shared profile to apply it everywhere.' })
+      publish({ tone: 'success', message: `${label} uploaded. Click Save shared profile to apply it everywhere.` })
     } catch (uploadError) {
-      console.error('[social-links] logo upload failed', uploadError)
-      setMessage('Unable to upload logo.')
+      console.error('[social-links] media upload failed', uploadError)
+      setMessage(`Unable to upload ${label.toLowerCase()}.`)
     } finally {
-      setUploadingLogo(false)
+      setUploadingMediaKey(null)
     }
   }
 
@@ -390,8 +403,8 @@ export default function SocialLinksSettings() {
             value={text(profile[key])}
             onFocus={beginEditing}
             onChange={event => updateField(key, event.target.value)}
-            readOnly={!isEditing || saving || uploadingLogo}
-            aria-readonly={!isEditing || saving || uploadingLogo}
+            readOnly={!isEditing || saving || isUploadingMedia}
+            aria-readonly={!isEditing || saving || isUploadingMedia}
             rows={4}
           />
         ) : isColor ? (
@@ -401,15 +414,15 @@ export default function SocialLinksSettings() {
               value={/^#[0-9a-f]{6}$/i.test(text(profile[key])) ? text(profile[key]) : '#4f46e5'}
               onFocus={beginEditing}
               onChange={event => updateField(key, event.target.value)}
-              disabled={!isEditing || saving || uploadingLogo}
+              disabled={!isEditing || saving || isUploadingMedia}
               style={{ width: 54, padding: 4 }}
             />
             <input
               value={text(profile[key])}
               onFocus={beginEditing}
               onChange={event => updateField(key, event.target.value)}
-              readOnly={!isEditing || saving || uploadingLogo}
-              aria-readonly={!isEditing || saving || uploadingLogo}
+              readOnly={!isEditing || saving || isUploadingMedia}
+              aria-readonly={!isEditing || saving || isUploadingMedia}
               placeholder="#4f46e5"
             />
           </div>
@@ -418,8 +431,8 @@ export default function SocialLinksSettings() {
             value={text(profile[key])}
             onFocus={beginEditing}
             onChange={event => updateField(key, event.target.value)}
-            readOnly={!isEditing || saving || uploadingLogo}
-            aria-readonly={!isEditing || saving || uploadingLogo}
+            readOnly={!isEditing || saving || isUploadingMedia}
+            aria-readonly={!isEditing || saving || isUploadingMedia}
           />
         )}
         {hint ? <small>{hint}</small> : null}
@@ -475,19 +488,38 @@ export default function SocialLinksSettings() {
             <div className="account-overview__form-grid">
               {mediaFields.map(renderField)}
             </div>
-            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <label>
-                <span>Logo upload</span>
-                <input type="file" accept="image/*" onChange={event => { beginEditing(); setLogoFile(event.target.files?.[0] ?? null) }} disabled={saving || uploadingLogo} />
-              </label>
-              <button className="button" type="button" onClick={uploadLogoFile} disabled={!logoFile || saving || uploadingLogo}>{uploadingLogo ? 'Uploading…' : 'Browse & upload logo'}</button>
+            <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+              {mediaUploadOptions.map(option => (
+                <div key={option.key} style={{ display: 'grid', gap: '0.5rem' }}>
+                  <label>
+                    <span>{option.label}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={event => {
+                        beginEditing()
+                        setMediaFiles(current => ({ ...current, [option.key]: event.target.files?.[0] ?? undefined }))
+                      }}
+                      disabled={saving || isUploadingMedia}
+                    />
+                  </label>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => uploadMediaFile(option.key, option.label.replace(' upload', ''), option.storageFolder)}
+                    disabled={!mediaFiles[option.key] || saving || isUploadingMedia}
+                  >
+                    {uploadingMediaKey === option.key ? 'Uploading…' : option.buttonLabel}
+                  </button>
+                </div>
+              ))}
             </div>
           </section>
 
           {isEditing ? (
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <button className="button" type="button" onClick={cancelEditing} disabled={saving || uploadingLogo}>Cancel</button>
-              <button className="button button--primary" type="submit" disabled={saving || uploadingLogo}>{saving ? 'Saving…' : 'Save shared profile'}</button>
+              <button className="button" type="button" onClick={cancelEditing} disabled={saving || isUploadingMedia}>Cancel</button>
+              <button className="button button--primary" type="submit" disabled={saving || isUploadingMedia}>{saving ? 'Saving…' : 'Save shared profile'}</button>
             </div>
           ) : (
             <button className="button button--primary" type="button" onClick={beginEditing}>Edit shared profile</button>
