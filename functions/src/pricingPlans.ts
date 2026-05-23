@@ -190,9 +190,34 @@ export const SEDIFEX_PRICING_PLANS: Record<SedifexPlanId, SedifexPlanEntitlement
   },
 }
 
+const LEGACY_PLAN_MAP: Record<string, SedifexPlanId> = {
+  free: 'starter',
+  trial: 'starter',
+  old_starter: 'starter',
+  starter_monthly: 'starter',
+  growth: 'business',
+  old_growth: 'business',
+  scale: 'growth_website',
+  scale_plus: 'growth_website',
+  old_scale: 'growth_website',
+  old_scale_plus: 'growth_website',
+}
+
+export function normalizePlanId(planId: string | null | undefined): SedifexPlanId {
+  const normalized = String(planId || 'starter').trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
+  if (normalized === 'starter' || normalized === 'business' || normalized === 'growth_website') {
+    return normalized
+  }
+  return LEGACY_PLAN_MAP[normalized] ?? 'starter'
+}
+
 export function getPlanEntitlements(planId: string | null | undefined): SedifexPlanEntitlements {
-  const normalized = String(planId || 'starter').trim().toLowerCase() as SedifexPlanId
-  return SEDIFEX_PRICING_PLANS[normalized] ?? SEDIFEX_PRICING_PLANS.starter
+  return SEDIFEX_PRICING_PLANS[normalizePlanId(planId)]
+}
+
+export function isLegacyPlanId(planId: string | null | undefined): boolean {
+  const normalized = String(planId || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
+  return Boolean(normalized && LEGACY_PLAN_MAP[normalized])
 }
 
 export function canUploadProduct(planId: string | null | undefined, currentProductCount: number): boolean {
@@ -209,9 +234,11 @@ export function canUseBrandedSms(planId: string | null | undefined, smsCreditBal
 export const getPricingPlans = functions.https.onCall(async () => ({
   ok: true,
   plans: Object.values(SEDIFEX_PRICING_PLANS),
+  legacyPlanMap: LEGACY_PLAN_MAP,
   rules: {
     productUpload: 'Starter is limited to 50 products/services. Paid plans are unlimited under fair use.',
     brandedSms: 'Branded SMS is available on all plans when SMS credits are purchased.',
     workspace: 'One subscription includes one owned workspace. Paid plans can add extra owned workspaces at the configured add-on price.',
+    legacyContracts: 'Existing paid legacy contracts keep access until their current period ends. On renewal, customers choose Business or Growth Website.',
   },
 }))
