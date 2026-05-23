@@ -13,6 +13,7 @@ export {
 } from './integrationCheckout'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationBookings } from './integrationBookings'
+export { v1IntegrationProducts } from './integrationProducts'
 export { v1IntegrationStudentRegistrations } from './integrationStudentRegistrations'
 export { publicQuickPayCatalog, publicQuickPayStores, syncQuickPayStoreIndex } from './quickPay'
 export { volunteerIntake, supportRequestIntake } from './ngoIntake'
