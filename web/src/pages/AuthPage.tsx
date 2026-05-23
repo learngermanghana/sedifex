@@ -25,6 +25,7 @@ import { auth, db } from '../firebase'
 import { setOnboardingStatus } from '../utils/onboarding'
 import { normalizeGhanaPhoneE164 } from '../utils/phone'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, type Industry } from '../config/navigation'
+import { SEDIFEX_PRICING_PLANS, SEDIFEX_PRICING_RULES } from '../config/pricingPlans'
 
 const AUTH_VISUAL_IMAGE_URL = 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1200&q=80'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -135,6 +136,11 @@ export default function AuthPage() {
     setAddress('')
   }
 
+  function startSignup() {
+    handleModeChange('signup')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const completeLogin = async (nextUser: User) => {
     await persistSession(nextUser)
     try { const resolution = await resolveStoreAccess(); await persistSession(nextUser, { storeId: resolution.storeId, workspaceSlug: resolution.workspaceSlug, role: resolution.role }) } catch (error) { setStatus({ tone: 'error', message: getAuthErrorMessage(error, 'login') }); return false }
@@ -206,14 +212,14 @@ export default function AuthPage() {
 
   const formTitle = mode === 'login' ? 'Log in to your workspace' : 'Create your free workspace'
   const formSubtitle = mode === 'login'
-    ? 'Access your Sedifex dashboard, sales, customers, bookings, reports, and website tools.'
+    ? 'Access your Sedifex dashboard, sales, customers, bookings, reports, website tools, and growth features.'
     : 'Start free with your business details. Upgrade later only when you need more power.'
 
   return (
     <main className="app" style={{ minHeight: '100dvh' }}>
       <div className="app__layout">
         <div className="app__card">
-          <div className="app__brand"><span className="app__logo">Sx</span><div><h1 className="app__title">Sedifex</h1><p className="app__tagline">Run your business from one <span className="app__highlight">free Sedifex account.</span></p><p className="app__trial-note">No trial pressure. Start free and upgrade only when you need more uploads, automation, integrations, or growth tools.</p></div></div>
+          <div className="app__brand"><span className="app__logo">Sx</span><div><h1 className="app__title">Sedifex</h1><p className="app__tagline">A business operating system for <span className="app__highlight">growing businesses in Africa and beyond.</span></p><p className="app__trial-note">Manage operations, publish connected websites, sync to Sedifex Market, accept payments, and grow with automation tools — all from one workspace.</p></div></div>
           <div className="app__auth-heading"><h2>{formTitle}</h2><p>{formSubtitle}</p></div>
           <div className="app__mode-toggle" role="tablist" aria-label="Authentication mode"><button className={`app__mode-button${mode === 'login' ? ' is-active' : ''}`} role="tab" aria-selected={mode === 'login'} onClick={() => handleModeChange('login')} type="button" disabled={isLoading}>Log in</button><button className={`app__mode-button${mode === 'signup' ? ' is-active' : ''}`} role="tab" aria-selected={mode === 'signup'} onClick={() => handleModeChange('signup')} type="button" disabled={isLoading}>Sign up free</button></div>
           <p className="app__auth-switch">{mode === 'login' ? 'New to Sedifex?' : 'Already have an account?'} <button type="button" onClick={() => handleModeChange(mode === 'login' ? 'signup' : 'login')} disabled={isLoading}>{mode === 'login' ? 'Create a free account' : 'Log in instead'}</button></p>
@@ -228,10 +234,23 @@ export default function AuthPage() {
           </form>
           {status.tone !== 'idle' && status.message && <p className={`status status--${status.tone}`} role={status.tone === 'error' ? 'alert' : 'status'}>{status.message}</p>}
         </div>
-        <aside className="app__visual" aria-label="Sedifex business operating system"><div className="app__visual-media" role="presentation"><img src={AUTH_VISUAL_IMAGE_URL} alt="Business team using a laptop" loading="lazy" /></div><div className="app__visual-overlay" /><div className="app__visual-dashboard" aria-hidden="true"><div><span>Today sales</span><strong>GHS 2,450</strong></div><div><span>Bookings</span><strong>18</strong></div><div><span>Website</span><strong>Published</strong></div></div><div className="app__visual-caption"><span className="app__visual-pill">Free business operating system</span><h2>Run sales, customers, bookings, websites, payments, and reports from one place.</h2><p>Log in to continue, or create a free workspace when you are ready to start with Sedifex.</p></div></aside>
+        <aside className="app__visual" aria-label="Sedifex business operating system"><div className="app__visual-media" role="presentation"><img src={AUTH_VISUAL_IMAGE_URL} alt="Business team using a laptop" loading="lazy" /></div><div className="app__visual-overlay" /><div className="app__visual-dashboard" aria-hidden="true"><div><span>Today sales</span><strong>GHS 2,450</strong></div><div><span>Bookings</span><strong>18</strong></div><div><span>Website</span><strong>Published</strong></div></div><div className="app__visual-caption"><span className="app__visual-pill">Africa-first. Global-ready.</span><h2>Run your business. Sell online. Grow from one workspace.</h2><p>Manage operations, publish connected websites, sync to Sedifex Market, accept payments, and grow with automation tools.</p></div></aside>
       </div>
-      <section className="app__promo-strategy" aria-label="Why businesses choose Sedifex"><header className="app__promo-strategy-header"><span className="app__pill">What Sedifex does</span><h2>One dashboard for daily operations and business growth.</h2><p>Sedifex helps shops, schools, NGOs, service businesses, and booking businesses manage work, customers, payments, and visibility without too many tools.</p></header><div className="app__promo-pillars"><h3>What you can run</h3><ul><li><strong>Sell:</strong> products, services, invoices, receipts, POS, and customer display.</li><li><strong>Manage:</strong> inventory, customers, bookings, students, donors, and funds.</li><li><strong>Grow:</strong> Sedifex Market, websites, Google integrations, SMS/email, and social content.</li><li><strong>Connect:</strong> client websites can send bookings, donations, registrations, and checkout data to Sedifex.</li></ul></div></section>
-      <section className="app__pricing" aria-label="Sedifex pricing plans"><header className="app__pricing-header"><span className="app__pill">Start free</span><h2>Use Sedifex free, then upgrade when you need more power.</h2><p>The free plan is not a trial. It lets you start running your business with limits. Paid plans unlock higher capacity, automation, integrations, and growth tools.</p></header></section>
+      <section className="app__promo-strategy" aria-label="Why businesses choose Sedifex"><header className="app__promo-strategy-header"><span className="app__pill">What Sedifex does</span><h2>One connected workspace for growing businesses in Africa and beyond.</h2><p>Sedifex helps shops, schools, NGOs, service businesses, travel businesses, and booking businesses manage operations, websites, payments, marketplace sales, customers, and growth tools without switching between many systems.</p></header><div className="app__promo-pillars"><h3>What you can run</h3><ul><li><strong>Operate:</strong> sales, inventory, receipts, invoices, bookings, customers, students, donors, and funds.</li><li><strong>Publish:</strong> connected websites with products, services, bookings, gallery, social links, SEO, and custom domains.</li><li><strong>Sell:</strong> accept payments, use Quick Pay, sync products/services to Sedifex Market, and track marketplace sales.</li><li><strong>Grow:</strong> branded text messaging, email, automation tools, reports, and integrations from one business workspace.</li></ul></div></section>
+      <section className="app__pricing" aria-label="Sedifex pricing plans">
+        <header className="app__pricing-header"><span className="app__pill">Simple pricing</span><h2>Start free. Upgrade when you need marketplace sync, websites, bookings, payments, and growth tools.</h2><p>Paid plans include unlimited products/services under fair use. Branded text messaging is available when message credits are purchased.</p></header>
+        <div className="grid gap-5 lg:grid-cols-3">
+          {SEDIFEX_PRICING_PLANS.map(plan => (
+            <article key={plan.name} className={`relative overflow-hidden rounded-[2rem] border p-6 shadow-2xl ${plan.highlight ? 'border-cyan-300 bg-white text-slate-950 shadow-cyan-950/30' : 'border-white/15 bg-white/10 text-white shadow-slate-950/30 backdrop-blur'}`}>
+              <div className="flex items-start justify-between gap-3"><div><p className={`mb-3 inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.18em] ${plan.highlight ? 'bg-cyan-100 text-cyan-900' : 'bg-white/10 text-cyan-100'}`}>{plan.badge}</p><h3 className="text-2xl font-black tracking-tight">{plan.name}</h3></div></div>
+              <div className="mt-5"><p className="text-4xl font-black tracking-tight">{plan.price}</p><p className={`mt-1 text-sm font-semibold ${plan.highlight ? 'text-slate-500' : 'text-slate-300'}`}>{plan.billing}</p><p className={`mt-4 text-sm leading-6 ${plan.highlight ? 'text-slate-600' : 'text-slate-300'}`}>{plan.bestFor}</p></div>
+              <div className="mt-6 grid gap-4"><div><h4 className="text-sm font-black uppercase tracking-[0.14em]">Includes</h4><ul className="mt-3 grid gap-2 text-sm leading-6">{plan.includes.map(item => <li key={item} className="flex gap-2"><span className={plan.highlight ? 'text-cyan-600' : 'text-cyan-300'}>✓</span><span>{item}</span></li>)}</ul></div><div><h4 className="text-sm font-black uppercase tracking-[0.14em]">Limits</h4><ul className={`mt-3 grid gap-2 text-sm leading-6 ${plan.highlight ? 'text-slate-600' : 'text-slate-300'}`}>{plan.limits.map(item => <li key={item} className="flex gap-2"><span>•</span><span>{item}</span></li>)}</ul></div></div>
+              <button type="button" onClick={startSignup} className={`mt-7 w-full rounded-2xl px-5 py-4 text-sm font-black transition hover:-translate-y-0.5 ${plan.highlight ? 'bg-slate-950 text-white' : 'bg-white text-slate-950'}`}>{plan.name === 'Starter' ? 'Start free' : 'Create account'}</button>
+            </article>
+          ))}
+        </div>
+        <div className="rounded-[2rem] border border-white/15 bg-white/10 p-6 text-slate-200 shadow-2xl shadow-slate-950/30 backdrop-blur"><h3 className="text-2xl font-black text-white">Plan rules</h3><div className="mt-5 grid gap-3 md:grid-cols-3">{SEDIFEX_PRICING_RULES.map(rule => <p key={rule} className="rounded-2xl bg-slate-950/50 p-4">{rule}</p>)}</div></div>
+      </section>
     </main>
   )
 }

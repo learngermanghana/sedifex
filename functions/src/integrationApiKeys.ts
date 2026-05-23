@@ -22,19 +22,6 @@ function hashToken(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex')
 }
 
-
-async function getSettingsDocsForStore(storeId: string) {
-  const directRef = defaultDb.collection('storeSettings').doc(storeId)
-  const directSnap = await directRef.get()
-  const byFieldSnap = await defaultDb.collection('storeSettings').where('storeId', '==', storeId).limit(20).get()
-
-  const refs = new Map<string, FirebaseFirestore.DocumentReference>()
-  if (directSnap.exists) refs.set(directRef.id, directRef)
-  byFieldSnap.docs.forEach(doc => refs.set(doc.id, doc.ref))
-  if (!refs.size) refs.set(directRef.id, directRef)
-  return Array.from(refs.values())
-}
-
 function canManageStore(authUid: string, storeId: string) {
   return defaultDb.collection('teamMembers').doc(authUid).get().then(snap => {
     if (!snap.exists) return false
@@ -78,6 +65,7 @@ export const createIntegrationApiKey = functions.https.onCall(async (rawData: un
 
   const globalRef = defaultDb.collection('integrationApiKeys').doc()
   const storeRef = defaultDb.collection('stores').doc(storeId).collection('integrationApiKeys').doc(globalRef.id)
+  const settingsRef = defaultDb.collection('storeSettings').doc(storeId).collection('integrationApiKeys').doc(globalRef.id)
 
   const topLevelKeyFields = {
     integrationApiKey: token,
@@ -86,31 +74,13 @@ export const createIntegrationApiKey = functions.https.onCall(async (rawData: un
     updatedAt: now,
   }
 
-  const settingsDocRefs = await getSettingsDocsForStore(storeId)
-
-  const integrationApiPatch = {
-    integrationApi: {
-      enabled: true,
-      latestPurpose: purpose,
-      latestIntegrationApiKeyPreview: 'masked preview only',
-      updatedAt: now,
-    },
-    latestIntegrationApiKeyPreview: 'masked preview only',
-    latestIntegrationApiKeyPurpose: purpose,
-  }
-
-  const writes: Array<Promise<FirebaseFirestore.WriteResult>> = [
+  await Promise.all([
     globalRef.set(keyRecord, { merge: true }),
     storeRef.set(keyRecord, { merge: true }),
+    settingsRef.set(keyRecord, { merge: true }),
     defaultDb.collection('stores').doc(storeId).set(topLevelKeyFields, { merge: true }),
-  ]
-
-  for (const settingsDocRef of settingsDocRefs) {
-    writes.push(settingsDocRef.collection('integrationApiKeys').doc(globalRef.id).set(keyRecord, { merge: true }))
-    writes.push(settingsDocRef.set({ ...topLevelKeyFields, ...integrationApiPatch, storeId }, { merge: true }))
-  }
-
-  await Promise.all(writes)
+    defaultDb.collection('storeSettings').doc(storeId).set(topLevelKeyFields, { merge: true }),
+  ])
 
   functions.logger.info('Created integration API key', { storeId, uid, purpose, keyHint: redact(token) })
 
