@@ -346,6 +346,53 @@ Fix: create the booking first, then pass `bookingId` into checkout metadata.
 
 Likely cause: the website is not using `v1IntegrationBookings`, or the payload lacks `customer.name`, `customer.phone`, and `customer.email`.
 
+### `Service price is required before Paystack checkout can open.`
+
+This means the website reached checkout without a numeric service amount. Sedifex can only open Paystack when the final amount is already set.
+
+Most common causes:
+
+- The website sends only `serviceId` and `serviceName` but does not send `paymentAmount` when creating the booking.
+- The website creates checkout with missing `amount`, `items[0].unitPrice`, or `items[0].price`.
+- The selected service was loaded from a UI label, not from the real Sedifex service object that contains price.
+- The frontend reads the amount as a string with currency symbols (for example `"GHS 250"`), then fails numeric conversion.
+- The integration uses one store for loading services and another store for checkout, so the selected service has no valid price in the checkout store context.
+
+How to obtain the service price correctly from Sedifex:
+
+1. Load services server-side from Sedifex first:
+
+```http
+GET /v1IntegrationProducts?storeId=store_123
+```
+
+2. From `publicServices`, find the selected service by id and read its numeric price field.
+3. Convert and validate once in backend code:
+
+```ts
+const service = publicServices.find((item) => item.id === selectedServiceId)
+const servicePrice = Number(service?.price ?? service?.unitPrice ?? 0)
+if (!Number.isFinite(servicePrice) || servicePrice <= 0) {
+  throw new Error('Service price is missing from Sedifex service data.')
+}
+```
+
+4. Reuse the same `servicePrice` in both requests:
+   - booking payload: `paymentAmount: servicePrice`
+   - checkout payload: `amount: servicePrice`, `items[0].unitPrice: servicePrice`, `items[0].price: servicePrice`
+5. Never trust a client-edited amount from browser form inputs. Resolve price from Sedifex service data in the website backend before creating booking/checkout.
+
+Quick backend check before opening checkout:
+
+```ts
+if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
+  return res.status(400).json({
+    ok: false,
+    message: 'Service price is required before Paystack checkout can open.',
+  })
+}
+```
+
 ### Return page crashes
 
 Add a route like `/payment/return` that safely reads `reference` and `trxref`, then shows a processing/verification message.
