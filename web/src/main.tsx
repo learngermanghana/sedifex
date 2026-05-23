@@ -77,6 +77,7 @@ import HowToUseSedifexPage from './pages/docs/HowToUseSedifexPage'
 import DonorWebsiteIntegrationPage from './pages/docs/DonorWebsiteIntegrationPage'
 import PublicBlogPage from './pages/PublicBlogPage'
 import { ToastProvider } from './components/ToastProvider'
+import './studentRegistrationTabs.css'
 
 const router = createBrowserRouter([
   { path: '/receipt/:saleId', element: <ReceiptView /> },
