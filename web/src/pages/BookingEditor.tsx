@@ -142,6 +142,14 @@ function statusLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
+function syncReasonForStatus(status: string, paymentStatus: string) {
+  if (status === 'completed') return 'booking_completed'
+  if (status === 'cancelled') return 'booking_cancelled'
+  if (status === 'confirmed' && paymentStatus.toLowerCase() === 'paid') return 'booking_confirmed_paid'
+  if (status === 'confirmed') return 'booking_confirmed'
+  return 'booking_updated'
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -227,7 +235,7 @@ export default function BookingEditor() {
       status: nextStatus,
       paymentStatus: nextPaymentStatus ?? prev.paymentStatus,
     }))
-    const message = `Status set to ${statusLabel(nextStatus)}. Click Save changes to sync this booking.`
+    const message = `Status set to ${statusLabel(nextStatus)}. Click Save changes to send the update.`
     setSuccessMessage(message)
     publish({ tone: 'info', message })
   }
@@ -250,6 +258,17 @@ export default function BookingEditor() {
     try {
       const normalizedStatus = (form.status.trim() || 'pending_approval').toLowerCase()
       const normalizedPaymentStatus = form.paymentStatus.trim() || 'payment_pending'
+      const now = Timestamp.now()
+      const statusTimestamps = {
+        ...(normalizedStatus === 'confirmed' ? { confirmedAt: now, confirmedBy: 'staff_admin' } : {}),
+        ...(normalizedStatus === 'completed' ? { completedAt: now } : {}),
+        ...(normalizedStatus === 'cancelled' ? { cancelledAt: now } : {}),
+        ...(['paid', 'confirmed'].includes(normalizedPaymentStatus.toLowerCase()) ? {
+          paymentConfirmedAt: now,
+          paymentVerifiedAt: now,
+          paymentVerifiedBy: 'staff_admin',
+        } : {}),
+      }
       const payload = {
           name: form.fullName.trim(),
           fullName: form.fullName.trim(),
@@ -294,6 +313,11 @@ export default function BookingEditor() {
           },
           bookingId: targetId,
           booking_id: targetId,
+          syncStatus: 'pending',
+          syncReason: syncReasonForStatus(normalizedStatus, normalizedPaymentStatus),
+          syncRequestedAt: now,
+          syncConfigDetected: true,
+          ...statusTimestamps,
           updatedAt: serverTimestamp(),
           ...(isCreateMode ? {
             createdAt: serverTimestamp(),
@@ -312,12 +336,12 @@ export default function BookingEditor() {
       )
 
       const saveMessage = isCreateMode
-        ? 'Booking created and queued for the connected booking records.'
-        : 'Booking changes saved successfully. Connected sheets/webhooks can now pick up the updated status.'
+        ? 'Booking created successfully. Email will be sent to the customer.'
+        : 'Booking changes saved successfully. Email will be sent to the customer.'
       setSuccessMessage(saveMessage)
       publish({ tone: 'success', message: saveMessage })
       void playSound('success')
-      if (isCreateMode) navigate('/bookings')
+      navigate('/bookings')
     } catch (error) {
       console.error('[booking-editor] Failed to save booking', error)
       const failureMessage = 'Unable to save booking right now.'
@@ -338,7 +362,7 @@ export default function BookingEditor() {
           </p>
           <h1>{isCreateMode ? 'Add booking' : 'Edit booking'}</h1>
           <p className="form__hint">
-            Update the booking status in this form, then click <strong>Save changes</strong>. This keeps Sedifex, the connected website, and any sheet/webhook sync using the same saved booking record.
+            Update the booking status in this form, then click <strong>Save changes</strong>. Sedifex will save the update and send the customer email when notifications are enabled.
           </p>
         </header>
 
@@ -394,12 +418,9 @@ export default function BookingEditor() {
               <div className="booking-editor-page__quick-status" aria-label="Quick status shortcuts">
                 <div>
                   <strong>Quick status</strong>
-                  <p className="form__hint">These buttons only set the fields above. Click Save changes to communicate the update to connected records.</p>
+                  <p className="form__hint">These buttons only set the fields above. Click Save changes to send the update.</p>
                 </div>
                 <div className="booking-editor-page__quick-status-actions">
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed')}>
-                    Set confirmed
-                  </button>
                   <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('completed')}>
                     Set completed
                   </button>
@@ -414,6 +435,7 @@ export default function BookingEditor() {
             )}
 
             <div className="booking-editor-page__actions">
+              <Link to="/bookings" className="button button--outline">Back</Link>
               <button type="submit" className="button button--primary" disabled={saving}>
                 {saving ? 'Saving…' : isCreateMode ? 'Create booking' : 'Save changes'}
               </button>
