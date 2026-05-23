@@ -32,5 +32,5 @@ export {
 export * from './googleShopping'
 export * from './googleBusinessProfile'
 
-export { createIntegrationApiKey } from './integrationApiKeys'
+export { createIntegrationApiKey, listIntegrationApiKeys } from './integrationApiKeys'
 export { getPricingPlans } from './pricingPlans'
