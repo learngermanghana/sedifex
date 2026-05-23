@@ -8,6 +8,10 @@ type CreateIntegrationApiKeyRequest = {
   purpose?: unknown
 }
 
+type ListIntegrationApiKeysRequest = {
+  storeId?: unknown
+}
+
 function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
@@ -30,13 +34,21 @@ function canManageStore(authUid: string, storeId: string) {
   })
 }
 
+function getKeyPreview(data: Record<string, unknown>) {
+  const explicitPreview = clean(data.keyPreview ?? data.preview ?? data.keyHint, 80)
+  if (explicitPreview) return explicitPreview
+
+  const token = clean(data.token ?? data.key ?? data.apiKey ?? data.value, 1000)
+  return redact(token) ?? 'sedx...'
+}
+
 export const createIntegrationApiKey = functions.https.onCall(async (rawData: unknown, context) => {
   const uid = context.auth?.uid
   if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Sign in required.')
 
   const body = (rawData ?? {}) as CreateIntegrationApiKeyRequest
   const storeId = clean(body.storeId, 180)
-  const purpose = clean(body.purpose, 80).toLowerCase() || 'general'
+  const purpose = clean(body.purpose, 80).toLowerCase() || 'website'
   const name = clean(body.name, 180) || `${purpose}-key`
 
   if (!storeId) throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
@@ -57,6 +69,7 @@ export const createIntegrationApiKey = functions.https.onCall(async (rawData: un
     key: token,
     apiKey: token,
     value: token,
+    keyPreview: redact(token),
     createdBy: uid,
     status: 'active',
     createdAt: now,
@@ -92,4 +105,44 @@ export const createIntegrationApiKey = functions.https.onCall(async (rawData: un
     storeId,
     purpose,
   }
+})
+
+export const listIntegrationApiKeys = functions.https.onCall(async (rawData: unknown, context) => {
+  const uid = context.auth?.uid
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Sign in required.')
+
+  const body = (rawData ?? {}) as ListIntegrationApiKeysRequest
+  const explicitStoreId = clean(body.storeId, 180)
+
+  const teamSnap = await defaultDb.collection('teamMembers').doc(uid).get()
+  const teamData = (teamSnap.data() ?? {}) as Record<string, unknown>
+  const storeId = explicitStoreId || clean(teamData.storeId, 180)
+
+  if (!storeId) throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
+  if (!(await canManageStore(uid, storeId))) {
+    throw new functions.https.HttpsError('permission-denied', 'You cannot view keys for this store.')
+  }
+
+  const snapshot = await defaultDb
+    .collection('integrationApiKeys')
+    .where('storeId', '==', storeId)
+    .limit(50)
+    .get()
+
+  const keys = snapshot.docs
+    .map(doc => {
+      const data = (doc.data() ?? {}) as Record<string, unknown>
+      return {
+        id: doc.id,
+        name: clean(data.name, 180) || 'Website integration key',
+        purpose: clean(data.purpose, 80) || 'website',
+        status: clean(data.status, 40) || 'active',
+        keyPreview: getKeyPreview(data),
+        createdAt: data.createdAt ?? null,
+        updatedAt: data.updatedAt ?? null,
+      }
+    })
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+
+  return { ok: true, storeId, keys }
 })
