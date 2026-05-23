@@ -18,11 +18,6 @@ const FUNCTION_BASE_URL =
 
 const QUICK_CATEGORIES = ['All', 'Products', 'Beauty', 'Food', 'Electronics', 'Fashion', 'Home']
 
-const SAMPLE_STORES: PublicStore[] = [
-  { storeId: 'demo-kwaku-lottery', name: 'Kwaku Lottery', category: 'Beauty & Wellness' },
-  { storeId: 'demo-grace-bakery', name: 'Grace Bakery', category: 'Food & Beverages' },
-]
-
 function getStorePayUrl(storeId: string) {
   return `/s/${encodeURIComponent(storeId)}?mode=store`
 }
@@ -64,7 +59,7 @@ function StoreRow({ store, compact = false }: { store: PublicStore; compact?: bo
 export default function QuickPayLanding() {
   const [query, setQuery] = useState('')
   const [stores, setStores] = useState<PublicStore[]>([])
-  const [recentStores, setRecentStores] = useState<PublicStore[]>(SAMPLE_STORES)
+  const [recentStores, setRecentStores] = useState<PublicStore[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,6 +70,29 @@ export default function QuickPayLanding() {
     if (!canSearch) return 'Type at least 2 letters to search.'
     return status ?? 'Choose the correct business from the results.'
   }, [canSearch, query, status])
+
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadRecentStores() {
+      try {
+        const response = await fetch(`${FUNCTION_BASE_URL}/publicQuickPayStores`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`Popular stores failed (${response.status})`)
+        const payload = await response.json() as { stores?: PublicStore[] }
+        const nextStores = Array.isArray(payload.stores) ? payload.stores : []
+        setRecentStores(nextStores.slice(0, 4))
+      } catch (popularError) {
+        if (controller.signal.aborted) return
+        console.warn('[quick-pay] Popular stores load failed', popularError)
+        setRecentStores([])
+      }
+    }
+
+    void loadRecentStores()
+
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     if (!canSearch) {
