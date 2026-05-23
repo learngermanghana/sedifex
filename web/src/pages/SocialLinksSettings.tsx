@@ -56,9 +56,9 @@ const mediaFields: ProfileField[] = [
 ]
 
 const mediaUploadOptions: Array<{ key: MediaUploadKey; label: string; buttonLabel: string; storageFolder: string }> = [
-  { key: 'logoUrl', label: 'Logo upload', buttonLabel: 'Browse & upload logo', storageFolder: 'logos' },
-  { key: 'coverImageUrl', label: 'Cover / banner upload', buttonLabel: 'Browse & upload banner', storageFolder: 'banners' },
-  { key: 'socialShareImage', label: 'Social share upload', buttonLabel: 'Browse & upload social image', storageFolder: 'social-share' },
+  { key: 'logoUrl', label: 'Logo', buttonLabel: 'Browse & upload logo', storageFolder: 'logos' },
+  { key: 'coverImageUrl', label: 'Cover / banner', buttonLabel: 'Browse & upload banner', storageFolder: 'banners' },
+  { key: 'socialShareImage', label: 'Social share image', buttonLabel: 'Browse & upload social image', storageFolder: 'social-share' },
 ]
 
 const fields = [...identityFields, ...contactFields, ...socialFields, ...mediaFields] as const
@@ -137,6 +137,9 @@ function buildSocialLinkAliases(profile: PublicProfile) {
     publicPhone: profile.publicPhone ?? null,
     whatsappNumber: profile.whatsappNumber ?? null,
     publicEmail: profile.publicEmail ?? null,
+    logoUrl: profile.logoUrl ?? null,
+    coverImageUrl: profile.coverImageUrl ?? null,
+    socialShareImage: profile.socialShareImage ?? null,
   }
 }
 
@@ -169,8 +172,8 @@ function buildProfileFromSources(data: StoreProfile | null, settings: StoreSetti
     xHandle: firstText(publicProfile.xHandle, websiteSocialLinks.x, socialLinks.xHandle, socialLinks.x, data?.xHandle, data?.twitterUrl, data?.xUrl),
     linkedinUrl: firstText(publicProfile.linkedinUrl, websiteSocialLinks.linkedin, socialLinks.linkedinUrl, data?.linkedinUrl),
     logoUrl: firstText(publicProfile.logoUrl, website.businessLogoUrl, businessIdentity.businessLogoUrl, socialLinks.logoUrl, data?.logoUrl, data?.storeLogoUrl, data?.businessLogoUrl),
-    coverImageUrl: firstText(publicProfile.coverImageUrl, website.coverImageUrl, businessIdentity.coverImageUrl, data?.coverImageUrl, data?.bannerImageUrl),
-    socialShareImage: firstText(publicProfile.socialShareImage, seoSettings.socialShareImage, data?.socialShareImage),
+    coverImageUrl: firstText(publicProfile.coverImageUrl, website.coverImageUrl, businessIdentity.coverImageUrl, socialLinks.coverImageUrl, data?.coverImageUrl, data?.bannerImageUrl),
+    socialShareImage: firstText(publicProfile.socialShareImage, seoSettings.socialShareImage, socialLinks.socialShareImage, data?.socialShareImage),
   }
 }
 
@@ -240,80 +243,89 @@ export default function SocialLinksSettings() {
     setIsEditing(false)
   }
 
-  async function saveSocialLinks(event: React.FormEvent) {
-    event.preventDefault()
-    if (!storeId || !canEdit) return
-    setSaving(true)
-    setMessage('')
-    try {
-      const publicProfile = buildPublicProfilePayload(profile)
-      const socialLinks = buildSocialLinkAliases(publicProfile)
-      const websiteBuilderSocialLinks = socialLinksForWebsiteBuilder(publicProfile)
-      const displayName = publicProfile.displayName ?? null
-      const logoUrl = publicProfile.logoUrl ?? null
-      const coverImageUrl = publicProfile.coverImageUrl ?? null
-      const publicPhone = publicProfile.publicPhone ?? null
-      const whatsappNumber = publicProfile.whatsappNumber ?? null
-      const publicEmail = publicProfile.publicEmail ?? null
-      const websiteUrl = publicProfile.websiteUrl ?? null
-      const brandColor = publicProfile.brandColor ?? null
-      const description = publicProfile.businessDescription ?? null
-      const location = publicProfile.addressLine1 ?? null
-      const now = Timestamp.now()
+  async function persistPublicProfile(profileToSave: PublicProfile) {
+    if (!storeId || !canEdit) return profileToSave
+    const publicProfile = buildPublicProfilePayload(profileToSave)
+    const socialLinks = buildSocialLinkAliases(publicProfile)
+    const websiteBuilderSocialLinks = socialLinksForWebsiteBuilder(publicProfile)
+    const displayName = publicProfile.displayName ?? null
+    const logoUrl = publicProfile.logoUrl ?? null
+    const coverImageUrl = publicProfile.coverImageUrl ?? null
+    const publicPhone = publicProfile.publicPhone ?? null
+    const whatsappNumber = publicProfile.whatsappNumber ?? null
+    const publicEmail = publicProfile.publicEmail ?? null
+    const websiteUrl = publicProfile.websiteUrl ?? null
+    const brandColor = publicProfile.brandColor ?? null
+    const description = publicProfile.businessDescription ?? null
+    const location = publicProfile.addressLine1 ?? null
+    const now = Timestamp.now()
 
-      await Promise.all([
-        setDoc(doc(db, 'stores', storeId), {
-          displayName,
-          name: displayName,
+    await Promise.all([
+      setDoc(doc(db, 'stores', storeId), {
+        displayName,
+        name: displayName,
+        businessName: displayName,
+        publicProfile,
+        socialLinks,
+        logoUrl,
+        storeLogoUrl: logoUrl,
+        businessLogoUrl: logoUrl,
+        coverImageUrl,
+        bannerImageUrl: coverImageUrl,
+        socialShareImage: publicProfile.socialShareImage ?? null,
+        tagline: publicProfile.tagline ?? null,
+        description,
+        openingHours: publicProfile.openingHours ?? null,
+        brandColor,
+        phone: publicPhone,
+        phoneNumber: publicPhone,
+        storePhone: publicPhone,
+        contactPhone: publicPhone,
+        whatsappNumber,
+        whatsapp: whatsappNumber,
+        waLink: whatsappNumber,
+        telegramNumber: publicProfile.telegramNumber ?? null,
+        publicEmail,
+        email: publicEmail,
+        businessEmail: publicEmail,
+        websiteUrl,
+        websiteLink: websiteUrl,
+        storeWebsiteUrl: websiteUrl,
+        addressLine1: location,
+        address: location,
+        location,
+        city: publicProfile.city ?? null,
+        storeCity: publicProfile.city ?? null,
+        country: publicProfile.country ?? null,
+        storeCountry: publicProfile.country ?? null,
+        instagramHandle: publicProfile.instagramHandle ?? null,
+        instagramUrl: publicProfile.instagramHandle ?? null,
+        facebookUrl: publicProfile.facebookUrl ?? null,
+        tiktokHandle: publicProfile.tiktokHandle ?? null,
+        tiktokUrl: publicProfile.tiktokHandle ?? null,
+        youtubeUrl: publicProfile.youtubeUrl ?? null,
+        xHandle: publicProfile.xHandle ?? null,
+        twitterUrl: publicProfile.xHandle ?? null,
+        xUrl: publicProfile.xHandle ?? null,
+        linkedinUrl: publicProfile.linkedinUrl ?? null,
+        publicProfileUpdatedAt: now,
+        updatedAt: now,
+      }, { merge: true }),
+      setDoc(doc(db, 'storeSettings', storeId), {
+        websiteBuilder: {
           businessName: displayName,
-          publicProfile,
-          socialLinks,
-          logoUrl,
-          storeLogoUrl: logoUrl,
-          businessLogoUrl: logoUrl,
-          coverImageUrl,
-          bannerImageUrl: coverImageUrl,
-          socialShareImage: publicProfile.socialShareImage ?? null,
           tagline: publicProfile.tagline ?? null,
           description,
-          openingHours: publicProfile.openingHours ?? null,
-          brandColor,
           phone: publicPhone,
-          phoneNumber: publicPhone,
-          storePhone: publicPhone,
-          contactPhone: publicPhone,
-          whatsappNumber,
           whatsapp: whatsappNumber,
-          waLink: whatsappNumber,
-          telegramNumber: publicProfile.telegramNumber ?? null,
-          publicEmail,
           email: publicEmail,
-          businessEmail: publicEmail,
-          websiteUrl,
-          websiteLink: websiteUrl,
-          storeWebsiteUrl: websiteUrl,
-          addressLine1: location,
-          address: location,
           location,
-          city: publicProfile.city ?? null,
-          storeCity: publicProfile.city ?? null,
-          country: publicProfile.country ?? null,
-          storeCountry: publicProfile.country ?? null,
-          instagramHandle: publicProfile.instagramHandle ?? null,
-          instagramUrl: publicProfile.instagramHandle ?? null,
-          facebookUrl: publicProfile.facebookUrl ?? null,
-          tiktokHandle: publicProfile.tiktokHandle ?? null,
-          tiktokUrl: publicProfile.tiktokHandle ?? null,
-          youtubeUrl: publicProfile.youtubeUrl ?? null,
-          xHandle: publicProfile.xHandle ?? null,
-          twitterUrl: publicProfile.xHandle ?? null,
-          xUrl: publicProfile.xHandle ?? null,
-          linkedinUrl: publicProfile.linkedinUrl ?? null,
-          publicProfileUpdatedAt: now,
-          updatedAt: now,
-        }, { merge: true }),
-        setDoc(doc(db, 'storeSettings', storeId), {
-          websiteBuilder: {
+          openingHours: publicProfile.openingHours ?? null,
+          businessLogoUrl: logoUrl,
+          coverImageUrl,
+          brandColor,
+          socialLinks: websiteBuilderSocialLinks,
+          businessIdentity: {
             businessName: displayName,
             tagline: publicProfile.tagline ?? null,
             description,
@@ -326,32 +338,29 @@ export default function SocialLinksSettings() {
             coverImageUrl,
             brandColor,
             socialLinks: websiteBuilderSocialLinks,
-            businessIdentity: {
-              businessName: displayName,
-              tagline: publicProfile.tagline ?? null,
-              description,
-              phone: publicPhone,
-              whatsapp: whatsappNumber,
-              email: publicEmail,
-              location,
-              openingHours: publicProfile.openingHours ?? null,
-              businessLogoUrl: logoUrl,
-              coverImageUrl,
-              brandColor,
-              socialLinks: websiteBuilderSocialLinks,
-            },
-            seoSettings: {
-              socialShareImage: publicProfile.socialShareImage ?? null,
-            },
-            updatedAt: now,
           },
-          publicProfile,
-          socialLinks,
+          seoSettings: {
+            socialShareImage: publicProfile.socialShareImage ?? null,
+          },
           updatedAt: now,
-        }, { merge: true }),
-      ])
-      setStoreName(text(displayName))
-      setProfile(publicProfile)
+        },
+        publicProfile,
+        socialLinks,
+        updatedAt: now,
+      }, { merge: true }),
+    ])
+    setStoreName(text(displayName))
+    setProfile(publicProfile)
+    return publicProfile
+  }
+
+  async function saveSocialLinks(event: React.FormEvent) {
+    event.preventDefault()
+    if (!storeId || !canEdit) return
+    setSaving(true)
+    setMessage('')
+    try {
+      await persistPublicProfile(profile)
       publish({ message: 'Public profile saved and shared with Website Builder, Sedifex Market, and public pages.', tone: 'success' })
       setIsEditing(false)
     } catch (saveError) {
@@ -375,14 +384,15 @@ export default function SocialLinksSettings() {
       const uploadedUrl = await uploadProductImage(file, {
         storagePath: `stores/${storeId}/assets/${storageFolder}`,
       })
-      setProfile(current => ({ ...current, [key]: uploadedUrl }))
+      const nextProfile = await persistPublicProfile({ ...profile, [key]: uploadedUrl })
+      setProfile(nextProfile)
       setMediaFiles(current => {
         const next = { ...current }
         delete next[key]
         return next
       })
-      setIsEditing(true)
-      publish({ tone: 'success', message: `${label} uploaded. Click Save shared profile to apply it everywhere.` })
+      setIsEditing(false)
+      publish({ tone: 'success', message: `${label} uploaded and saved. It will remain after refresh.` })
     } catch (uploadError) {
       console.error('[social-links] media upload failed', uploadError)
       setMessage(`Unable to upload ${label.toLowerCase()}.`)
@@ -480,7 +490,7 @@ export default function SocialLinksSettings() {
 
           <section className="account-overview__card" onClick={beginEditing}>
             <h2>Logo and media</h2>
-            <p className="account-overview__subtitle">Logo, banner, and social share images are shared with Website Builder and public previews.</p>
+            <p className="account-overview__subtitle">Logo, banner, and social share images are saved immediately and shared with Website Builder and public previews.</p>
             <div className="account-overview__form-grid">
               {mediaFields.map(renderField)}
             </div>
@@ -488,7 +498,7 @@ export default function SocialLinksSettings() {
               {mediaUploadOptions.map(option => (
                 <div key={option.key} style={{ display: 'grid', gap: '0.5rem' }}>
                   <label>
-                    <span>{option.label}</span>
+                    <span>{option.label} upload</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -502,10 +512,10 @@ export default function SocialLinksSettings() {
                   <button
                     className="button"
                     type="button"
-                    onClick={() => uploadMediaFile(option.key, option.label.replace(' upload', ''), option.storageFolder)}
+                    onClick={() => uploadMediaFile(option.key, option.label, option.storageFolder)}
                     disabled={!mediaFiles[option.key] || saving || isUploadingMedia}
                   >
-                    {uploadingMediaKey === option.key ? 'Uploading…' : option.buttonLabel}
+                    {uploadingMediaKey === option.key ? 'Uploading and saving…' : option.buttonLabel}
                   </button>
                 </div>
               ))}
