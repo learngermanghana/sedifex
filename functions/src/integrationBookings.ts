@@ -9,6 +9,7 @@ const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', 
 
 type BookingRequestBody = {
   serviceId?: unknown
+  service_id?: unknown
   slotId?: unknown
   customer?: unknown
   quantity?: unknown
@@ -31,9 +32,16 @@ function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
+
+function normalizeServiceId(rawValue: unknown) {
+  const value = clean(rawValue, 220)
+  if (!value) return ''
+  return value.toLowerCase().startsWith('draft-') ? value.slice(6).trim() : value
+}
+
 function setCors(res: functions.Response) {
   res.set('Access-Control-Allow-Origin', '*')
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, X-Sedifex-Contract-Version')
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, x-sedifex-api-key, api-key, X-Sedifex-Contract-Version')
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
 }
 
@@ -59,14 +67,31 @@ async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReferen
   return !snapshot.empty
 }
 
+
+async function queryStoreSettingsByStoreId(storeId: string) {
+  const snapshot = await defaultDb.collection('storeSettings').where('storeId', '==', storeId).limit(5).get()
+  return snapshot.docs
+}
+
 function recordContainsKey(record: Record<string, unknown>, apiKey: string) {
   const candidates = [record.integrationApiKey, record.integrationKey, record.integrationToken, record.apiKey, record.token, record.key]
   return candidates.some(value => clean(value, 1000) === apiKey)
 }
 
-async function isAuthorized(req: functions.https.Request, storeId: string) {
+function resolveRequestApiKey(req: functions.https.Request) {
   const bearer = clean(req.get('authorization'), 1000).replace(/^Bearer\s+/i, '')
-  const apiKey = clean(req.get('x-api-key'), 1000) || bearer
+  return (
+    clean(req.get('x-api-key'), 1000)
+    || clean(req.get('x-sedifex-api-key'), 1000)
+    || clean(req.get('api-key'), 1000)
+    || clean(req.query.apiKey, 1000)
+    || clean(req.query.api_key, 1000)
+    || bearer
+  )
+}
+
+async function isAuthorized(req: functions.https.Request, storeId: string) {
+  const apiKey = resolveRequestApiKey(req)
   if (!apiKey) return false
 
   const master = SEDIFEX_INTEGRATION_API_KEY.value()?.trim() || process.env.SEDIFEX_INTEGRATION_API_KEY?.trim() || ''
@@ -80,6 +105,16 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
     const settingsSnap = await defaultDb.collection('storeSettings').doc(storeId).get()
     const settingsData = (settingsSnap.data() ?? {}) as Record<string, unknown>
     if (recordContainsKey(settingsData, apiKey)) return true
+
+    const matchingSettingsDocs = await queryStoreSettingsByStoreId(storeId)
+    for (const settingsDoc of matchingSettingsDocs) {
+      const data = (settingsDoc.data() ?? {}) as Record<string, unknown>
+      if (recordContainsKey(data, apiKey)) return true
+      const nestedCollection = defaultDb.collection('storeSettings').doc(settingsDoc.id).collection('integrationApiKeys')
+      for (const field of ['token', 'key', 'apiKey', 'value']) {
+        if (await queryHasMatch(nestedCollection, field, apiKey)) return true
+      }
+    }
 
     const storeKeyCollections = [
       defaultDb.collection('stores').doc(storeId).collection('integrationApiKeys'),
@@ -144,14 +179,23 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
   }
 
   if (!(await isAuthorized(req, storeId))) {
-    res.status(401).json({ error: 'unauthorized' })
+    const requestKey = resolveRequestApiKey(req)
+    res.status(401).json({
+      error: 'unauthorized',
+      message: 'Invalid API key for storeId or missing credentials.',
+      debug: {
+        storeId,
+        hasApiKey: Boolean(requestKey),
+        apiKeyHint: requestKey ? `${requestKey.slice(0, 4)}...${requestKey.slice(-4)}` : null,
+      },
+    })
     return
   }
 
   try {
     if (req.method === 'GET') {
       const status = clean(req.query.status, 80).toLowerCase()
-      const serviceId = clean(req.query.serviceId, 220)
+      const serviceId = normalizeServiceId(req.query.serviceId)
 
       let query: FirebaseFirestore.Query = defaultDb
         .collection('stores')
@@ -169,7 +213,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     }
 
     const body = asObject(req.body) as BookingRequestBody
-    const serviceId = clean(body.serviceId, 220)
+    const serviceId = normalizeServiceId(body.serviceId ?? body.service_id)
     const slotId = clean(body.slotId, 220)
     const quantity = Math.max(1, Math.floor(toNumber(body.quantity, 1)))
     const notes = clean(body.notes, 2000)
