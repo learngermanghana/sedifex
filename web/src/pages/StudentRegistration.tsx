@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, doc as firestoreDoc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where, type Timestamp } from 'firebase/firestore'
+import { collection, doc as firestoreDoc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where, type Timestamp } from 'firebase/firestore'
 import { uploadProductImage } from '../api/productImageUpload'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -73,12 +73,12 @@ const pageStyles = {
   actions: { display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 8, marginTop: 16 },
   primaryButton: { border: 0, borderRadius: 13, padding: '11px 17px', background: 'linear-gradient(135deg, #4338ca, #4f46e5)', color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: '0 18px 36px -24px rgba(67, 56, 202, 0.85)' },
   successButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#059669', color: '#fff', fontWeight: 900, cursor: 'pointer' },
-  warningButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#d97706', color: '#fff', fontWeight: 900, cursor: 'pointer' },
   dangerButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#dc2626', color: '#fff', fontWeight: 900, cursor: 'pointer' },
   secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 13, padding: '9px 12px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
-  tabButton: { border: '1px solid #cbd5e1', borderRadius: 999, padding: '8px 13px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  tabButton: { flex: '0 0 auto', border: '1px solid #cbd5e1', borderRadius: 999, padding: '8px 13px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
   activeTabButton: { background: '#312e81', borderColor: '#312e81', color: '#fff' },
   disabledButton: { opacity: 0.48, cursor: 'not-allowed' },
+  approvedPill: { borderRadius: 13, padding: '9px 12px', background: '#ccfbf1', color: '#0f766e', fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
   tableWrap: { width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto' as const, borderRadius: 16, border: '1px solid #e2e8f0', boxSizing: 'border-box' as const },
   table: { width: '100%', minWidth: 1120, borderCollapse: 'collapse' as const, tableLayout: 'auto' as const },
   th: { textAlign: 'left' as const, padding: '12px 12px', fontSize: 11, color: '#64748b', background: '#f8fafc', textTransform: 'uppercase' as const, letterSpacing: '0.07em', whiteSpace: 'nowrap' as const },
@@ -87,6 +87,8 @@ const pageStyles = {
   stickyStudentTd: { position: 'sticky' as const, left: 0, zIndex: 2, background: '#fff', minWidth: 250, boxShadow: '8px 0 14px -16px rgba(15,23,42,.8)' },
   alert: { borderRadius: 16, padding: '12px 14px', fontWeight: 800 },
   photoPreview: { width: 72, height: 82, borderRadius: 14, border: '1px solid #cbd5e1', background: '#eef2ff', display: 'grid', placeItems: 'center', overflow: 'hidden', color: '#3730a3', fontSize: 11, fontWeight: 900 },
+  modalOverlay: { position: 'fixed' as const, inset: 0, zIndex: 9998, background: 'rgba(15,23,42,.72)', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box' as const },
+  modalPanel: { background: '#fff', borderRadius: 24, padding: 22, width: 'min(920px, 100%)', maxHeight: '92vh', overflowY: 'auto' as const, boxSizing: 'border-box' as const },
 }
 
 const textFrom = (...values: unknown[]) => values.find((value) => typeof value === 'string' && value.trim()) as string | undefined
@@ -96,6 +98,7 @@ function formatAmount(payment?: RegistrationDoc['payment']) { if (!payment || ty
 function cleanText(value: string, max = 200) { return value.trim().slice(0, max) }
 function normalizeEmail(value: string) { return cleanText(value, 160).toLowerCase() }
 function normalizePaymentStatus(mode: ManualForm['paymentMode'], status: string) { const normalized = cleanText(status, 80); if (normalized) return normalized; if (mode === 'manual') return 'pending_manual_review'; if (mode === 'online') return 'pending'; return 'not_required' }
+function normalizePaymentMode(value?: string): ManualForm['paymentMode'] { return value === 'manual' || value === 'online' ? value : 'none' }
 function buildManualReference(storeId: string) { return `REG-${storeId.slice(0, 6).toUpperCase()}-${Date.now()}` }
 function buildStudentCode(storeId: string, id: string) { return `${storeId.replace(/[^a-z0-9]/gi, '').slice(0, 4).toUpperCase() || 'STU'}-${new Date().getFullYear()}-${id.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}` }
 function safeDocId(value: string) { return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 180) }
@@ -110,6 +113,34 @@ function studentStatusOf(item: RegistrationDoc) { return item.studentStatus || i
 function isIncomingRegistration(item: RegistrationDoc) { return item.source !== 'manual_dashboard' }
 function isPaidStatus(value?: string | null) { return ['paid', 'success', 'captured', 'confirmed'].includes((value || '').toLowerCase()) }
 function isActiveStatus(value?: string | null) { return ['active', 'confirmed'].includes((value || '').toLowerCase()) }
+function formFromRegistration(item: RegistrationDoc): ManualForm {
+  const amount = typeof item.payment?.amount === 'number' ? String(item.payment.amount) : ''
+  return {
+    name: studentNameOf(item) === 'Unnamed student' ? '' : studentNameOf(item),
+    phone: studentPhoneOf(item),
+    email: studentEmailOf(item),
+    course: textFrom(item.data?.course) || '',
+    preferredClassTime: textFrom(item.data?.preferredClassTime) || '',
+    branch: textFrom(item.data?.branch) || '',
+    notes: textFrom(item.data?.notes) || '',
+    paymentMode: normalizePaymentMode(item.payment?.mode),
+    paymentStatus: item.payment?.status || 'not_required',
+    amount,
+    reference: item.payment?.reference || '',
+    studentPhotoUrl: studentPhotoOf(item),
+    studentStatus: studentStatusOf(item),
+    idCardExpiresAt: typeof item.idCardExpiresAt === 'string' ? item.idCardExpiresAt : '',
+  }
+}
+
+function printStudentIdCard() {
+  const node = document.getElementById('student-id-card-print-area')
+  if (!node) { window.print(); return }
+  const printWindow = window.open('', '_blank', 'width=620,height=860')
+  if (!printWindow) { window.print(); return }
+  printWindow.document.write(`<!doctype html><html><head><title>Print Student ID</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:start center;background:#fff;font-family:Inter,system-ui,sans-serif}.card-wrap{width:440px;max-width:100%;margin:0 auto}img{max-width:100%}@media print{body{display:block}.card-wrap{margin:0 auto}}</style></head><body><div class="card-wrap">${node.outerHTML}</div><script>window.onload=function(){setTimeout(function(){window.focus();window.print();window.close();},350)}</script></body></html>`)
+  printWindow.document.close()
+}
 
 function StatCard({ label, value, accent }: { label: string; value: number; accent: string }) {
   return <article style={{ ...pageStyles.statCard, borderTop: `4px solid ${accent}` }}><p style={{ ...pageStyles.statValue, color: accent }}>{value}</p><p style={pageStyles.statLabel}>{label}</p></article>
@@ -123,7 +154,7 @@ function PrintableIdCard({ student, schoolName, onClose }: { student: Registrati
   const title = schoolName || 'Student ID'
   return <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.72)', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box' }}>
     <div style={{ background: '#fff', borderRadius: 24, padding: 22, width: 'min(720px, 100%)', boxSizing: 'border-box' }}>
-      <div id="student-id-card-print-area" style={{ width: 440, maxWidth: '100%', margin: '0 auto', border: '1px solid #cbd5e1', borderRadius: 22, overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif' }}>
+      <div id="student-id-card-print-area" style={{ width: 440, maxWidth: '100%', margin: '0 auto', border: '1px solid #cbd5e1', borderRadius: 22, overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif', background: '#fff' }}>
         <div style={{ background: 'linear-gradient(135deg, #312e81, #7c3aed)', color: '#fff', padding: 18 }}>
           <p style={{ margin: 0, fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase', fontWeight: 800 }}>Student ID Card</p>
           <h2 style={{ margin: '5px 0 0', fontSize: 21 }}>{title}</h2>
@@ -136,6 +167,7 @@ function PrintableIdCard({ student, schoolName, onClose }: { student: Registrati
             <p style={{ margin: '12px 0 0', fontSize: 13, color: '#334155' }}>Course: <strong>{student.data?.course || '—'}</strong></p>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#334155' }}>Class: <strong>{student.data?.preferredClassTime || '—'}</strong></p>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#334155' }}>Branch: <strong>{student.data?.branch || '—'}</strong></p>
+            {student.idCardExpiresAt ? <p style={{ margin: '4px 0 0', fontSize: 13, color: '#334155' }}>Expires: <strong>{student.idCardExpiresAt}</strong></p> : null}
           </div>
         </div>
         <div style={{ borderTop: '1px solid #e2e8f0', padding: 14, display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, color: '#475569' }}>
@@ -143,14 +175,52 @@ function PrintableIdCard({ student, schoolName, onClose }: { student: Registrati
         </div>
       </div>
       <div style={pageStyles.actions}>
-        <button type="button" style={pageStyles.primaryButton} onClick={() => window.print()}>Print card</button>
+        <button type="button" style={pageStyles.primaryButton} onClick={printStudentIdCard}>Print card</button>
         <button type="button" style={pageStyles.secondaryButton} onClick={onClose}>Close</button>
       </div>
     </div>
   </div>
 }
 
-function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefresh, onPrint, onConfirm, onMarkPaid, onReject, actioningId, mode = 'all' }: {
+function EditStudentModal({ form, saving, uploadingPhoto, studentName, onClose, onSubmit, onChange, onPhotoUpload }: {
+  form: ManualForm
+  saving: boolean
+  uploadingPhoto: boolean
+  studentName: string
+  onClose: () => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onChange: (key: keyof ManualForm, value: string) => void
+  onPhotoUpload: (file: File | null) => void
+}) {
+  return <div style={pageStyles.modalOverlay}>
+    <section style={pageStyles.modalPanel}>
+      <div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Edit student</h2><p style={pageStyles.muted}>Update {studentName || 'student'} details, payment status, and ID photo.</p></div><button type="button" style={pageStyles.secondaryButton} onClick={onClose} disabled={saving || uploadingPhoto}>Close</button></div>
+      <form onSubmit={onSubmit}>
+        <div style={pageStyles.formGrid}>
+          <label style={pageStyles.label}>Student name *<input style={pageStyles.input} value={form.name} onChange={event => onChange('name', event.target.value)} /></label>
+          <label style={pageStyles.label}>Phone<input style={pageStyles.input} value={form.phone} onChange={event => onChange('phone', event.target.value)} /></label>
+          <label style={pageStyles.label}>Email<input style={pageStyles.input} type="email" value={form.email} onChange={event => onChange('email', event.target.value)} /></label>
+          <label style={pageStyles.label}>Course / program<input style={pageStyles.input} value={form.course} onChange={event => onChange('course', event.target.value)} /></label>
+          <label style={pageStyles.label}>Preferred class time<input style={pageStyles.input} value={form.preferredClassTime} onChange={event => onChange('preferredClassTime', event.target.value)} /></label>
+          <label style={pageStyles.label}>Branch<input style={pageStyles.input} value={form.branch} onChange={event => onChange('branch', event.target.value)} /></label>
+          <label style={pageStyles.label}>Upload/change photo<input style={pageStyles.input} type="file" accept="image/*" onChange={event => onPhotoUpload(event.target.files?.[0] ?? null)} disabled={uploadingPhoto || saving} />{uploadingPhoto ? <small>Uploading photo…</small> : null}</label>
+          <label style={pageStyles.label}>Student photo URL<input style={pageStyles.input} value={form.studentPhotoUrl} onChange={event => onChange('studentPhotoUrl', event.target.value)} /></label>
+          <div style={{ ...pageStyles.label, gap: 8 }}>Photo preview<div style={pageStyles.photoPreview}>{form.studentPhotoUrl ? <img src={form.studentPhotoUrl} alt="Student preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}</div></div>
+          <label style={pageStyles.label}>Student status<select style={pageStyles.input} value={form.studentStatus} onChange={event => onChange('studentStatus', event.target.value)}><option value="pending">Pending</option><option value="active">Active</option><option value="completed">Completed</option><option value="suspended">Suspended</option><option value="rejected">Rejected</option></select></label>
+          <label style={pageStyles.label}>ID expiry date<input style={pageStyles.input} type="date" value={form.idCardExpiresAt} onChange={event => onChange('idCardExpiresAt', event.target.value)} /></label>
+          <label style={pageStyles.label}>Payment mode<select style={pageStyles.input} value={form.paymentMode} onChange={event => onChange('paymentMode', event.target.value)}><option value="none">No payment required</option><option value="manual">Manual payment</option><option value="online">Online payment</option></select></label>
+          <label style={pageStyles.label}>Payment status<input style={pageStyles.input} value={form.paymentStatus} onChange={event => onChange('paymentStatus', event.target.value)} /></label>
+          <label style={pageStyles.label}>Amount<input style={pageStyles.input} inputMode="decimal" value={form.amount} onChange={event => onChange('amount', event.target.value)} /></label>
+          <label style={pageStyles.label}>Reference<input style={pageStyles.input} value={form.reference} onChange={event => onChange('reference', event.target.value)} /></label>
+        </div>
+        <label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={form.notes} onChange={event => onChange('notes', event.target.value)} /></label>
+        <div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving || uploadingPhoto}>{saving ? 'Saving…' : 'Save changes'}</button><button type="button" style={pageStyles.secondaryButton} onClick={onClose} disabled={saving || uploadingPhoto}>Cancel</button></div>
+      </form>
+    </section>
+  </div>
+}
+
+function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefresh, onPrint, onApprove, onEdit, onReject, actioningId, mode = 'all' }: {
   title: string
   subtitle: string
   items: RegistrationDoc[]
@@ -158,8 +228,8 @@ function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefre
   emptyText: string
   onRefresh: () => void
   onPrint: (item: RegistrationDoc) => void
-  onConfirm: (item: RegistrationDoc) => void
-  onMarkPaid: (item: RegistrationDoc) => void
+  onApprove: (item: RegistrationDoc) => void
+  onEdit?: (item: RegistrationDoc) => void
   onReject: (item: RegistrationDoc) => void
   actioningId: string | null
   mode?: 'all' | 'incoming' | 'approved'
@@ -170,15 +240,16 @@ function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefre
     {!loading && items.length === 0 ? <div style={{ border: '1px dashed #cbd5e1', borderRadius: 18, padding: 24, textAlign: 'center', color: '#64748b' }}><strong style={{ color: '#334155' }}>{emptyText}</strong></div> : null}
     {items.length > 0 ? <div style={pageStyles.tableWrap}><table style={pageStyles.table}><thead><tr><th style={{ ...pageStyles.th, ...pageStyles.stickyStudentTh }}>Student</th><th style={pageStyles.th}>Student ID</th><th style={pageStyles.th}>Course</th><th style={pageStyles.th}>Class time</th><th style={pageStyles.th}>Status</th><th style={pageStyles.th}>Payment</th><th style={pageStyles.th}>Reference</th><th style={pageStyles.th}>Actions</th></tr></thead><tbody>{items.map(item => {
       const isBusy = actioningId === item.id
-      const isConfirmed = isActiveStatus(studentStatusOf(item))
+      const isConfirmed = isActiveStatus(studentStatusOf(item)) || item.status === 'confirmed'
       const isPaid = isPaidStatus(item.payment?.status)
+      const isApprovedAndPaid = isConfirmed && isPaid
       const name = studentNameOf(item)
       const contact = studentPhoneOf(item) || studentEmailOf(item) || 'No contact'
       return <tr key={item.id}><td style={{ ...pageStyles.td, ...pageStyles.stickyStudentTd }}><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><div style={{ ...pageStyles.photoPreview, width: 44, height: 50 }}>{studentPhotoOf(item) ? <img src={studentPhotoOf(item)} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}</div><div><strong style={{ color: '#0f172a' }}>{name}</strong><br /><small>{contact}</small></div></div></td><td style={pageStyles.td}><strong>{studentCodeOf(item)}</strong></td><td style={pageStyles.td}>{item.data?.course ?? '—'}</td><td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td><td style={pageStyles.td}><span style={{ ...statusStyle(studentStatusOf(item)), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(studentStatusOf(item))}</span></td><td style={pageStyles.td}><span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(item.payment?.status)}</span><br /><small>{formatAmount(item.payment)}</small></td><td style={pageStyles.td}>{item.payment?.reference ?? '—'}<br /><small>{formatDate(item.createdAt)}</small></td><td style={pageStyles.td}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {(mode === 'all' || mode === 'approved') ? <button type="button" style={{ ...pageStyles.successButton, ...(isConfirmed ? pageStyles.disabledButton : {}) }} onClick={() => onConfirm(item)} disabled={isBusy || isConfirmed}>{isConfirmed ? 'Confirmed' : 'Confirm'}</button> : null}
-        <button type="button" style={{ ...pageStyles.warningButton, ...(isPaid ? pageStyles.disabledButton : {}) }} onClick={() => onMarkPaid(item)} disabled={isBusy || isPaid}>{isPaid ? 'Paid' : 'Mark paid'}</button>
-        {(mode === 'all' || mode === 'approved') ? <button type="button" style={pageStyles.secondaryButton} onClick={() => onPrint(item)} disabled={isBusy}>Print ID</button> : null}
-        {(mode === 'all' || mode === 'approved') ? <button type="button" style={pageStyles.dangerButton} onClick={() => onReject(item)} disabled={isBusy}>Reject</button> : null}
+        {isApprovedAndPaid && mode !== 'incoming' ? <span style={pageStyles.approvedPill}>Approved + paid</span> : <button type="button" style={{ ...pageStyles.successButton, ...(isApprovedAndPaid ? pageStyles.disabledButton : {}) }} onClick={() => onApprove(item)} disabled={isBusy || isApprovedAndPaid}>{isApprovedAndPaid ? 'Approved + paid' : 'Approve + paid'}</button>}
+        {mode !== 'incoming' && onEdit ? <button type="button" style={pageStyles.secondaryButton} onClick={() => onEdit(item)} disabled={isBusy}>Edit</button> : null}
+        {mode !== 'incoming' ? <button type="button" style={pageStyles.secondaryButton} onClick={() => onPrint(item)} disabled={isBusy}>Print ID</button> : null}
+        <button type="button" style={pageStyles.dangerButton} onClick={() => onReject(item)} disabled={isBusy}>Reject</button>
       </div></td></tr>
     })}</tbody></table></div> : null}
   </section>
@@ -188,10 +259,13 @@ export default function StudentRegistration() {
   const { storeId } = useActiveStore()
   const [registrations, setRegistrations] = useState<RegistrationDoc[]>([])
   const [selectedCardStudent, setSelectedCardStudent] = useState<RegistrationDoc | null>(null)
+  const [editingStudent, setEditingStudent] = useState<RegistrationDoc | null>(null)
+  const [editForm, setEditForm] = useState<ManualForm>(initialManualForm)
   const [schoolName, setSchoolName] = useState('School ID')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [uploadingEditPhoto, setUploadingEditPhoto] = useState(false)
   const [actioningId, setActioningId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
@@ -279,8 +353,8 @@ export default function StudentRegistration() {
   }
 
   async function handlePrintCard(item: RegistrationDoc) {
-    await ensureStudentCode(item)
-    setSelectedCardStudent({ ...item, studentCode: studentCodeOf(item) })
+    const studentCode = await ensureStudentCode(item)
+    setSelectedCardStudent({ ...item, studentCode, data: { ...(item.data || {}), studentCode } })
   }
 
   async function updateRegistrationStatus(item: RegistrationDoc, changes: Partial<RegistrationDoc> & { data?: RegistrationDoc['data']; payment?: RegistrationDoc['payment'] }, message: string, studentRecordChanges: { studentStatus?: string; paymentStatus?: string } = {}) {
@@ -308,18 +382,85 @@ export default function StudentRegistration() {
     }
   }
 
-  function confirmStudent(item: RegistrationDoc) {
+  function approveAndMarkPaid(item: RegistrationDoc) {
     const code = studentCodeOf(item)
-    void updateRegistrationStatus(item, { status: 'confirmed', studentStatus: 'active', data: { ...(item.data || {}), studentStatus: 'active', studentCode: code } }, 'Student confirmed and saved to Students/Customers records.', { studentStatus: 'active' })
-  }
-
-  function markPaid(item: RegistrationDoc) {
-    void updateRegistrationStatus(item, { payment: { ...(item.payment || {}), status: 'paid', currency: item.payment?.currency ?? 'GHS' }, status: item.status === 'rejected' ? 'confirmed' : item.status }, 'Payment marked as paid and saved to student record.', { paymentStatus: 'paid' })
+    void updateRegistrationStatus(item, { status: 'confirmed', studentStatus: 'active', data: { ...(item.data || {}), studentStatus: 'active', studentCode: code }, payment: { ...(item.payment || {}), status: 'paid', currency: item.payment?.currency ?? 'GHS' } }, 'Student approved and payment marked as paid.', { studentStatus: 'active', paymentStatus: 'paid' })
   }
 
   function rejectStudent(item: RegistrationDoc) {
     if (!window.confirm(`Reject registration for ${studentNameOf(item)}?`)) return
     void updateRegistrationStatus(item, { status: 'rejected', studentStatus: 'rejected', data: { ...(item.data || {}), studentStatus: 'rejected' } }, 'Registration rejected.', { studentStatus: 'rejected' })
+  }
+
+  function startEditStudent(item: RegistrationDoc) {
+    setError(null)
+    setSaveMessage(null)
+    setEditingStudent(item)
+    setEditForm(formFromRegistration(item))
+  }
+
+  function updateEditForm(key: keyof ManualForm, value: string) {
+    setEditForm(current => ({ ...current, [key]: value, ...(key === 'paymentMode' ? { paymentStatus: value === 'manual' ? 'pending_manual_review' : value === 'online' ? 'pending' : 'not_required' } : {}) } as ManualForm))
+  }
+
+  async function handleEditPhotoUpload(file: File | null) {
+    if (!file || !storeId) return
+    if (!file.type.startsWith('image/')) { setError('Choose a valid image file.'); return }
+    setUploadingEditPhoto(true)
+    setError(null)
+    try {
+      const url = await uploadProductImage(file, { storagePath: `stores/${storeId}/student-photos` })
+      updateEditForm('studentPhotoUrl', url)
+      setSaveMessage('Student photo uploaded. Save changes to update the student ID card.')
+    } catch (uploadError) {
+      console.error(uploadError)
+      setError('Unable to upload student photo. You can paste a photo URL instead.')
+    } finally {
+      setUploadingEditPhoto(false)
+    }
+  }
+
+  async function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!storeId || !editingStudent) return
+    const studentName = cleanText(editForm.name, 140)
+    const phone = cleanText(editForm.phone, 60)
+    const email = normalizeEmail(editForm.email)
+    const course = cleanText(editForm.course, 160)
+    const amount = Number(editForm.amount)
+    const hasAmount = Number.isFinite(amount) && amount > 0
+    if (!studentName) { setSaveMessage(null); setError('Student name is required.'); return }
+    if (!phone && !email) { setSaveMessage(null); setError('Enter at least one contact: phone or email.'); return }
+    try {
+      setSaving(true); setError(null); setSaveMessage(null)
+      const studentCode = await ensureStudentCode(editingStudent)
+      const paymentMode = normalizePaymentMode(editForm.paymentMode)
+      const paymentStatus = normalizePaymentStatus(paymentMode, editForm.paymentStatus)
+      const photoUrl = cleanText(editForm.studentPhotoUrl, 500) || null
+      const updatedItem: RegistrationDoc = {
+        ...editingStudent,
+        storeId,
+        status: 'confirmed',
+        studentCode,
+        studentStatus: cleanText(editForm.studentStatus, 80) || 'active',
+        studentPhotoUrl: photoUrl,
+        idCardExpiresAt: cleanText(editForm.idCardExpiresAt, 80) || null,
+        customer: { name: studentName, email: email || null, phone: phone || null },
+        data: { ...(editingStudent.data || {}), course: course || null, preferredClassTime: cleanText(editForm.preferredClassTime, 120) || null, branch: cleanText(editForm.branch, 120) || null, notes: cleanText(editForm.notes, 1000) || null, studentCode, studentStatus: cleanText(editForm.studentStatus, 80) || 'active', studentPhotoUrl: photoUrl },
+        payment: { ...(editingStudent.payment || {}), mode: paymentMode, status: paymentStatus, amount: hasAmount ? amount : null, currency: editingStudent.payment?.currency ?? 'GHS', reference: cleanText(editForm.reference, 140) || editingStudent.payment?.reference || buildManualReference(storeId) },
+      }
+      await setDoc(firestoreDoc(db, 'student_registrations', editingStudent.id), { status: updatedItem.status, studentCode, studentStatus: updatedItem.studentStatus, studentPhotoUrl: photoUrl, idCardExpiresAt: updatedItem.idCardExpiresAt, customer: updatedItem.customer, data: updatedItem.data, payment: updatedItem.payment, updatedAt: serverTimestamp() }, { merge: true })
+      await saveStudentRecord(updatedItem, { studentStatus: updatedItem.studentStatus || 'active', paymentStatus })
+      setEditingStudent(null)
+      setEditForm(initialManualForm)
+      setSaveMessage('Student details updated successfully.')
+      await loadRegistrations(true)
+    } catch (editError) {
+      console.error(editError)
+      setError('Unable to save student changes. Check Firestore rules or try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handlePhotoUpload(file: File | null) {
@@ -361,21 +502,22 @@ export default function StudentRegistration() {
   function updateManualForm<K extends keyof ManualForm>(key: K, value: ManualForm[K]) { setManualForm(current => ({ ...current, [key]: value, ...(key === 'paymentMode' ? { paymentStatus: value === 'manual' ? 'pending_manual_review' : value === 'online' ? 'pending' : 'not_required' } : {}) })) }
 
   return <div style={pageStyles.page}>{selectedCardStudent ? <PrintableIdCard student={selectedCardStudent} schoolName={schoolName} onClose={() => setSelectedCardStudent(null)} /> : null}
-    <section style={pageStyles.hero}><p style={pageStyles.eyebrow}>Admissions workspace</p><h1 style={pageStyles.title}>Student registration</h1><p style={pageStyles.subtitle}>Review website registrations separately from manual entries. Confirm students, mark payments, upload photos, and print student ID cards. Confirmed records are saved into Students and Customers.</p></section>
+    {editingStudent ? <EditStudentModal form={editForm} saving={saving} uploadingPhoto={uploadingEditPhoto} studentName={studentNameOf(editingStudent)} onClose={() => { setEditingStudent(null); setEditForm(initialManualForm) }} onSubmit={handleEditSubmit} onChange={updateEditForm} onPhotoUpload={(file) => void handleEditPhotoUpload(file)} /> : null}
+    <section style={pageStyles.hero}><p style={pageStyles.eyebrow}>Admissions workspace</p><h1 style={pageStyles.title}>Student registration</h1><p style={pageStyles.subtitle}>Review website registrations separately from manual entries. Approve students, update records, upload photos, and print student ID cards. Approved records are saved into Students and Customers.</p></section>
     <section style={pageStyles.statsGrid} aria-label="Registration summary"><StatCard label="Total registrations" value={totals.total} accent="#4f46e5" /><StatCard label="Paid" value={totals.paid} accent="#059669" /><StatCard label="Incoming pending" value={totals.pending} accent="#d97706" /><StatCard label="Manual entries" value={totals.manual} accent="#7c3aed" /></section>
     {error ? <p style={{ ...pageStyles.alert, background: '#fef2f2', color: '#b91c1c' }}>{error}</p> : null}
     {saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}
 
-    <section style={{ ...pageStyles.card, padding: 14 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <section style={{ ...pageStyles.card, padding: 14, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', gap: 8, overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 4 }}>
         <button type="button" style={{ ...pageStyles.tabButton, ...(activeTab === 'incoming_integration' ? pageStyles.activeTabButton : {}) }} onClick={() => setActiveTab('incoming_integration')}>Incoming through integration</button>
         <button type="button" style={{ ...pageStyles.tabButton, ...(activeTab === 'approved_students' ? pageStyles.activeTabButton : {}) }} onClick={() => setActiveTab('approved_students')}>Approved students</button>
         <button type="button" style={{ ...pageStyles.tabButton, ...(activeTab === 'manual_add_form' ? pageStyles.activeTabButton : {}) }} onClick={() => setActiveTab('manual_add_form')}>Manual add form</button>
       </div>
     </section>
 
-    {activeTab === 'incoming_integration' ? <RegistrationTable title="Incoming website registrations" subtitle="Incoming students from website/integration are listed here. Keep actions simple: Mark paid will also save them into Students and Customers." items={incomingRegistrations} loading={loading} emptyText="No incoming website registrations yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} mode="incoming" /> : null}
-    {activeTab === 'approved_students' ? <RegistrationTable title="Approved student registrations" subtitle="Registrations already approved (confirmed/active/paid). You can still print ID cards, mark payment, or reject if needed." items={approvedRegistrations} loading={loading} emptyText="No approved students yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} mode="approved" /> : null}
+    {activeTab === 'incoming_integration' ? <RegistrationTable title="Incoming website registrations" subtitle="Incoming students from website/integration are listed here. Use one action to approve the student and mark payment as paid." items={incomingRegistrations} loading={loading} emptyText="No incoming website registrations yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onApprove={approveAndMarkPaid} onEdit={startEditStudent} onReject={rejectStudent} actioningId={actioningId} mode="incoming" /> : null}
+    {activeTab === 'approved_students' ? <RegistrationTable title="Approved student registrations" subtitle="Approved students are kept here. Edit data, change/upload photos, and print ID cards from this tab." items={approvedRegistrations} loading={loading} emptyText="No approved students yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onApprove={approveAndMarkPaid} onEdit={startEditStudent} onReject={rejectStudent} actioningId={actioningId} mode="approved" /> : null}
 
     {activeTab === 'manual_add_form' ? <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Add student manually</h2><p style={pageStyles.muted}>Use this for walk-ins or phone registrations. Upload a student photo or paste a photo URL before printing the ID card.</p></div></div><form onSubmit={handleManualSubmit}><div style={pageStyles.formGrid}>
       <label style={pageStyles.label}>Student name *<input style={pageStyles.input} value={manualForm.name} onChange={event => updateManualForm('name', event.target.value)} placeholder="Student full name" /></label>
@@ -394,6 +536,6 @@ export default function StudentRegistration() {
       <label style={pageStyles.label}>Amount<input style={pageStyles.input} inputMode="decimal" value={manualForm.amount} onChange={event => updateManualForm('amount', event.target.value)} placeholder="0.00" /></label>
       <label style={pageStyles.label}>Reference<input style={pageStyles.input} value={manualForm.reference} onChange={event => updateManualForm('reference', event.target.value)} placeholder="Optional" /></label>
     </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving || uploadingPhoto}>{saving ? 'Saving…' : 'Add manual student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving || uploadingPhoto}>Clear form</button></div></form></section> : null}
-    {activeTab === 'manual_add_form' ? <RegistrationTable title="Manual entries" subtitle="Students added by staff from this dashboard." items={manualRegistrations} loading={loading} emptyText="No manual entries yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} /> : null}
+    {activeTab === 'manual_add_form' ? <RegistrationTable title="Manual entries" subtitle="Students added by staff from this dashboard." items={manualRegistrations} loading={loading} emptyText="No manual entries yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onApprove={approveAndMarkPaid} onEdit={startEditStudent} onReject={rejectStudent} actioningId={actioningId} /> : null}
   </div>
 }
