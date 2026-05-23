@@ -227,15 +227,32 @@ export const publicQuickPayStores = functions.https.onRequest(async (req, res) =
 
   try {
     const query = cleanText(req.query.q, 200)
-    if (normalizeSearchText(query).length < 2) {
-      res.status(200).json({ ok: true, count: 0, stores: [] })
-      return
+    const normalizedQuery = normalizeSearchText(query)
+
+    let stores: PublicStore[] = []
+    let source: 'index' | 'fallback' = 'index'
+
+    if (normalizedQuery.length < 2) {
+      const snapshot = await defaultDb.collection('quickPayStoreIndex')
+        .orderBy('updatedAt', 'desc')
+        .limit(MAX_STORE_RESULTS)
+        .get()
+
+      stores = snapshot.docs
+        .map(doc => normalizeStore(doc.id, doc.data() as Record<string, unknown>))
+        .filter((store): store is PublicStore => store !== null)
+
+      if (!stores.length) {
+        stores = await fetchFallbackStores('')
+        source = 'fallback'
+      }
+    } else {
+      const indexedStores = await fetchIndexedStores(query)
+      stores = indexedStores.length ? indexedStores : await fetchFallbackStores(query)
+      source = indexedStores.length ? 'index' : 'fallback'
     }
 
-    const indexedStores = await fetchIndexedStores(query)
-    const stores = indexedStores.length ? indexedStores : await fetchFallbackStores(query)
-
-    res.status(200).json({ ok: true, count: stores.length, stores: stores.slice(0, MAX_STORE_RESULTS), source: indexedStores.length ? 'index' : 'fallback' })
+    res.status(200).json({ ok: true, count: stores.length, stores: stores.slice(0, MAX_STORE_RESULTS), source })
   } catch (error) {
     functions.logger.error('publicQuickPayStores failed', { error })
     res.status(500).json({ error: 'quick-pay-store-search-failed' })
