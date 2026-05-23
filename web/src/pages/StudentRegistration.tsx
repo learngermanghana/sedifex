@@ -47,6 +47,7 @@ type ManualForm = {
   studentStatus: string
   idCardExpiresAt: string
 }
+type RegistrationTab = 'incoming_integration' | 'approved_students' | 'manual_add_form'
 
 const initialManualForm: ManualForm = {
   name: '', phone: '', email: '', course: '', preferredClassTime: '', branch: '', notes: '', paymentMode: 'none', paymentStatus: 'not_required', amount: '', reference: '', studentPhotoUrl: '', studentStatus: 'pending', idCardExpiresAt: '',
@@ -75,6 +76,8 @@ const pageStyles = {
   warningButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#d97706', color: '#fff', fontWeight: 900, cursor: 'pointer' },
   dangerButton: { border: 0, borderRadius: 13, padding: '9px 12px', background: '#dc2626', color: '#fff', fontWeight: 900, cursor: 'pointer' },
   secondaryButton: { border: '1px solid #cbd5e1', borderRadius: 13, padding: '9px 12px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  tabButton: { border: '1px solid #cbd5e1', borderRadius: 999, padding: '8px 13px', background: '#fff', color: '#334155', fontWeight: 850, cursor: 'pointer' },
+  activeTabButton: { background: '#312e81', borderColor: '#312e81', color: '#fff' },
   disabledButton: { opacity: 0.48, cursor: 'not-allowed' },
   tableWrap: { width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto' as const, borderRadius: 16, border: '1px solid #e2e8f0', boxSizing: 'border-box' as const },
   table: { width: '100%', minWidth: 1120, borderCollapse: 'collapse' as const, tableLayout: 'auto' as const },
@@ -147,7 +150,7 @@ function PrintableIdCard({ student, schoolName, onClose }: { student: Registrati
   </div>
 }
 
-function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefresh, onPrint, onConfirm, onMarkPaid, onReject, actioningId }: {
+function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefresh, onPrint, onConfirm, onMarkPaid, onReject, actioningId, mode = 'all' }: {
   title: string
   subtitle: string
   items: RegistrationDoc[]
@@ -159,6 +162,7 @@ function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefre
   onMarkPaid: (item: RegistrationDoc) => void
   onReject: (item: RegistrationDoc) => void
   actioningId: string | null
+  mode?: 'all' | 'incoming' | 'approved'
 }) {
   return <section style={pageStyles.card}>
     <div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>{title}</h2><p style={pageStyles.muted}>{subtitle}</p></div><button type="button" style={pageStyles.secondaryButton} onClick={onRefresh} disabled={loading}>Refresh</button></div>
@@ -170,7 +174,12 @@ function RegistrationTable({ title, subtitle, items, loading, emptyText, onRefre
       const isPaid = isPaidStatus(item.payment?.status)
       const name = studentNameOf(item)
       const contact = studentPhoneOf(item) || studentEmailOf(item) || 'No contact'
-      return <tr key={item.id}><td style={{ ...pageStyles.td, ...pageStyles.stickyStudentTd }}><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><div style={{ ...pageStyles.photoPreview, width: 44, height: 50 }}>{studentPhotoOf(item) ? <img src={studentPhotoOf(item)} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}</div><div><strong style={{ color: '#0f172a' }}>{name}</strong><br /><small>{contact}</small></div></div></td><td style={pageStyles.td}><strong>{studentCodeOf(item)}</strong></td><td style={pageStyles.td}>{item.data?.course ?? '—'}</td><td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td><td style={pageStyles.td}><span style={{ ...statusStyle(studentStatusOf(item)), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(studentStatusOf(item))}</span></td><td style={pageStyles.td}><span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(item.payment?.status)}</span><br /><small>{formatAmount(item.payment)}</small></td><td style={pageStyles.td}>{item.payment?.reference ?? '—'}<br /><small>{formatDate(item.createdAt)}</small></td><td style={pageStyles.td}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}><button type="button" style={{ ...pageStyles.successButton, ...(isConfirmed ? pageStyles.disabledButton : {}) }} onClick={() => onConfirm(item)} disabled={isBusy || isConfirmed}>{isConfirmed ? 'Confirmed' : 'Confirm'}</button><button type="button" style={{ ...pageStyles.warningButton, ...(isPaid ? pageStyles.disabledButton : {}) }} onClick={() => onMarkPaid(item)} disabled={isBusy || isPaid}>{isPaid ? 'Paid' : 'Mark paid'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => onPrint(item)} disabled={isBusy}>Print ID</button><button type="button" style={pageStyles.dangerButton} onClick={() => onReject(item)} disabled={isBusy}>Reject</button></div></td></tr>
+      return <tr key={item.id}><td style={{ ...pageStyles.td, ...pageStyles.stickyStudentTd }}><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><div style={{ ...pageStyles.photoPreview, width: 44, height: 50 }}>{studentPhotoOf(item) ? <img src={studentPhotoOf(item)} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}</div><div><strong style={{ color: '#0f172a' }}>{name}</strong><br /><small>{contact}</small></div></div></td><td style={pageStyles.td}><strong>{studentCodeOf(item)}</strong></td><td style={pageStyles.td}>{item.data?.course ?? '—'}</td><td style={pageStyles.td}>{item.data?.preferredClassTime ?? '—'}</td><td style={pageStyles.td}><span style={{ ...statusStyle(studentStatusOf(item)), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(studentStatusOf(item))}</span></td><td style={pageStyles.td}><span style={{ ...statusStyle(item.payment?.status), display: 'inline-flex', borderRadius: 999, padding: '5px 9px', fontSize: 12, fontWeight: 900 }}>{statusLabel(item.payment?.status)}</span><br /><small>{formatAmount(item.payment)}</small></td><td style={pageStyles.td}>{item.payment?.reference ?? '—'}<br /><small>{formatDate(item.createdAt)}</small></td><td style={pageStyles.td}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {(mode === 'all' || mode === 'approved') ? <button type="button" style={{ ...pageStyles.successButton, ...(isConfirmed ? pageStyles.disabledButton : {}) }} onClick={() => onConfirm(item)} disabled={isBusy || isConfirmed}>{isConfirmed ? 'Confirmed' : 'Confirm'}</button> : null}
+        <button type="button" style={{ ...pageStyles.warningButton, ...(isPaid ? pageStyles.disabledButton : {}) }} onClick={() => onMarkPaid(item)} disabled={isBusy || isPaid}>{isPaid ? 'Paid' : 'Mark paid'}</button>
+        {(mode === 'all' || mode === 'approved') ? <button type="button" style={pageStyles.secondaryButton} onClick={() => onPrint(item)} disabled={isBusy}>Print ID</button> : null}
+        {(mode === 'all' || mode === 'approved') ? <button type="button" style={pageStyles.dangerButton} onClick={() => onReject(item)} disabled={isBusy}>Reject</button> : null}
+      </div></td></tr>
     })}</tbody></table></div> : null}
   </section>
 }
@@ -187,6 +196,7 @@ export default function StudentRegistration() {
   const [error, setError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [manualForm, setManualForm] = useState<ManualForm>(initialManualForm)
+  const [activeTab, setActiveTab] = useState<RegistrationTab>('incoming_integration')
 
   async function loadStoreName(active = true) {
     if (!storeId) return
@@ -216,6 +226,7 @@ export default function StudentRegistration() {
 
   const incomingRegistrations = useMemo(() => registrations.filter(isIncomingRegistration), [registrations])
   const manualRegistrations = useMemo(() => registrations.filter(item => !isIncomingRegistration(item)), [registrations])
+  const approvedRegistrations = useMemo(() => registrations.filter(item => isActiveStatus(studentStatusOf(item)) || isPaidStatus(item.payment?.status) || item.status === 'confirmed'), [registrations])
   const totals = useMemo(() => {
     const total = registrations.length
     const paid = registrations.filter(item => isPaidStatus(item.payment?.status)).length
@@ -355,9 +366,18 @@ export default function StudentRegistration() {
     {error ? <p style={{ ...pageStyles.alert, background: '#fef2f2', color: '#b91c1c' }}>{error}</p> : null}
     {saveMessage ? <p style={{ ...pageStyles.alert, background: '#dcfce7', color: '#166534' }}>{saveMessage}</p> : null}
 
-    <RegistrationTable title="Incoming website registrations" subtitle="New registrations submitted from connected websites appear here first. Confirm saves the student into Students and Customers. Mark paid updates payment records." items={incomingRegistrations} loading={loading} emptyText="No incoming website registrations yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} />
+    <section style={{ ...pageStyles.card, padding: 14 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <button type="button" style={{ ...pageStyles.tabButton, ...(activeTab === 'incoming_integration' ? pageStyles.activeTabButton : {}) }} onClick={() => setActiveTab('incoming_integration')}>Incoming through integration</button>
+        <button type="button" style={{ ...pageStyles.tabButton, ...(activeTab === 'approved_students' ? pageStyles.activeTabButton : {}) }} onClick={() => setActiveTab('approved_students')}>Approved students</button>
+        <button type="button" style={{ ...pageStyles.tabButton, ...(activeTab === 'manual_add_form' ? pageStyles.activeTabButton : {}) }} onClick={() => setActiveTab('manual_add_form')}>Manual add form</button>
+      </div>
+    </section>
 
-    <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Add student manually</h2><p style={pageStyles.muted}>Use this for walk-ins or phone registrations. Upload a student photo or paste a photo URL before printing the ID card.</p></div></div><form onSubmit={handleManualSubmit}><div style={pageStyles.formGrid}>
+    {activeTab === 'incoming_integration' ? <RegistrationTable title="Incoming website registrations" subtitle="Incoming students from website/integration are listed here. Keep actions simple: Mark paid will also save them into Students and Customers." items={incomingRegistrations} loading={loading} emptyText="No incoming website registrations yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} mode="incoming" /> : null}
+    {activeTab === 'approved_students' ? <RegistrationTable title="Approved student registrations" subtitle="Registrations already approved (confirmed/active/paid). You can still print ID cards, mark payment, or reject if needed." items={approvedRegistrations} loading={loading} emptyText="No approved students yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} mode="approved" /> : null}
+
+    {activeTab === 'manual_add_form' ? <section style={pageStyles.card}><div style={pageStyles.cardHeader}><div><h2 style={pageStyles.cardTitle}>Add student manually</h2><p style={pageStyles.muted}>Use this for walk-ins or phone registrations. Upload a student photo or paste a photo URL before printing the ID card.</p></div></div><form onSubmit={handleManualSubmit}><div style={pageStyles.formGrid}>
       <label style={pageStyles.label}>Student name *<input style={pageStyles.input} value={manualForm.name} onChange={event => updateManualForm('name', event.target.value)} placeholder="Student full name" /></label>
       <label style={pageStyles.label}>Phone<input style={pageStyles.input} value={manualForm.phone} onChange={event => updateManualForm('phone', event.target.value)} placeholder="+233..." /></label>
       <label style={pageStyles.label}>Email<input style={pageStyles.input} type="email" value={manualForm.email} onChange={event => updateManualForm('email', event.target.value)} placeholder="student@example.com" /></label>
@@ -373,8 +393,7 @@ export default function StudentRegistration() {
       <label style={pageStyles.label}>Payment status<input style={pageStyles.input} value={manualForm.paymentStatus} onChange={event => updateManualForm('paymentStatus', event.target.value)} /></label>
       <label style={pageStyles.label}>Amount<input style={pageStyles.input} inputMode="decimal" value={manualForm.amount} onChange={event => updateManualForm('amount', event.target.value)} placeholder="0.00" /></label>
       <label style={pageStyles.label}>Reference<input style={pageStyles.input} value={manualForm.reference} onChange={event => updateManualForm('reference', event.target.value)} placeholder="Optional" /></label>
-    </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving || uploadingPhoto}>{saving ? 'Saving…' : 'Add manual student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving || uploadingPhoto}>Clear form</button></div></form></section>
-
-    <RegistrationTable title="Manual entries" subtitle="Students added by staff from this dashboard." items={manualRegistrations} loading={loading} emptyText="No manual entries yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} />
+    </div><label style={{ ...pageStyles.label, marginTop: 14 }}>Notes<textarea style={{ ...pageStyles.input, minHeight: 82, resize: 'vertical' }} rows={3} value={manualForm.notes} onChange={event => updateManualForm('notes', event.target.value)} placeholder="Student goals, parent contact, payment note, etc." /></label><div style={pageStyles.actions}><button type="submit" style={{ ...pageStyles.primaryButton, opacity: saving ? 0.65 : 1 }} disabled={saving || uploadingPhoto}>{saving ? 'Saving…' : 'Add manual student'}</button><button type="button" style={pageStyles.secondaryButton} onClick={() => setManualForm(initialManualForm)} disabled={saving || uploadingPhoto}>Clear form</button></div></form></section> : null}
+    {activeTab === 'manual_add_form' ? <RegistrationTable title="Manual entries" subtitle="Students added by staff from this dashboard." items={manualRegistrations} loading={loading} emptyText="No manual entries yet." onRefresh={() => void loadRegistrations(true)} onPrint={(item) => void handlePrintCard(item)} onConfirm={confirmStudent} onMarkPaid={markPaid} onReject={rejectStudent} actioningId={actioningId} /> : null}
   </div>
 }
