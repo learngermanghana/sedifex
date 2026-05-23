@@ -195,7 +195,6 @@ export default function SocialLinksSettings() {
   const [isEditing, setIsEditing] = useState(false)
   const activeMembership = useMemo(() => storeId ? memberships.find(member => member.storeId === storeId) ?? null : null, [memberships, storeId])
   const canEdit = activeMembership?.role === 'owner' || activeMembership?.role === 'staff'
-  const filledSocialCount = socialFields.filter(([key]) => text(profile[key]).trim()).length
   const isUploadingMedia = Boolean(uploadingMediaKey)
 
   useEffect(() => {
@@ -447,11 +446,8 @@ export default function SocialLinksSettings() {
       <header className="account-overview__section-header">
         <div>
           <h1>Shared public profile</h1>
-          <p className="account-overview__subtitle">Save business identity, contact details, media, and social links once. Website Builder, Sedifex Market, booking pages, public pages, and integrations can reuse the same profile.</p>
         </div>
       </header>
-      <div className="account-overview__banner" role="note"><p><strong>Shared data source.</strong> This page now reads and writes <code>stores/{storeId}.publicProfile</code>, <code>stores/{storeId}.socialLinks</code>, and <code>storeSettings/{storeId}.websiteBuilder</code>. Updating here will update Website Builder too.</p></div>
-      <div className="account-overview__banner" role="note"><p><strong>{filledSocialCount} social link{filledSocialCount === 1 ? '' : 's'} filled.</strong> Click any box to edit, then save once to share everywhere.</p></div>
       {isLoading || loadingProfile ? <p>Loading shared public profile…</p> : null}
       {!storeId && !isLoading ? <p>Select a workspace first.</p> : null}
       {storeId && !canEdit ? <p className="account-overview__error">You do not have permission to edit this public profile.</p> : null}
