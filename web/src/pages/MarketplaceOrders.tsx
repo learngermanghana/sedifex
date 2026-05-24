@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 
@@ -12,6 +12,8 @@ type OnlineOrderTab =
   | 'manual-payment'
   | 'online-paid'
   | 'pending'
+
+type FulfillmentAction = 'accept' | 'preparing' | 'out_for_delivery' | 'delivered'
 
 type OnlineOrderRecord = {
   id: string
@@ -28,6 +30,8 @@ type OnlineOrderRecord = {
   paymentStatus: string
   orderStatus: string
   bookingStatus: string
+  fulfillmentStatus: string
+  deliveryStatus: string
   paymentCollectionMode: string
   sourceChannel: string
   sourceLabel: string
@@ -35,6 +39,7 @@ type OnlineOrderRecord = {
   clientOrderId: string
   sedifexOrderId: string
   createdAt: Date | null
+  deliveredAt: Date | null
   deliveryLocation: string
   bookingDate: string
   bookingTime: string
@@ -44,6 +49,13 @@ type OnlineOrderRecord = {
   merchantNet: number
   feePolicyKey: string
 }
+
+const FULFILLMENT_ACTIONS: Array<{ id: FulfillmentAction; label: string; hint: string }> = [
+  { id: 'accept', label: 'Accept', hint: 'Store has accepted the order' },
+  { id: 'preparing', label: 'Preparing', hint: 'Order is being prepared' },
+  { id: 'out_for_delivery', label: 'Out for delivery', hint: 'Order is on the way' },
+  { id: 'delivered', label: 'Delivered', hint: 'Order has reached the customer' },
+]
 
 function asText(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -76,7 +88,7 @@ function statusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral
   const normalized = status.toLowerCase()
   if (['success', 'confirmed', 'paid', 'captured', 'completed', 'delivered', 'cash_collected'].some(token => normalized.includes(token))) return 'success'
   if (['failed', 'cancelled', 'canceled', 'rejected', 'abandoned'].some(token => normalized.includes(token))) return 'danger'
-  if (['pending', 'manual', 'delivery', 'processing', 'cash', 'checkout'].some(token => normalized.includes(token))) return 'warning'
+  if (['pending', 'manual', 'delivery', 'processing', 'cash', 'checkout', 'preparing', 'out for delivery'].some(token => normalized.includes(token))) return 'warning'
   return 'neutral'
 }
 
@@ -223,6 +235,8 @@ function mapOnlineOrderRecord(
     paymentStatus: asText(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending'),
     orderStatus: asText(data.orderStatus ?? data.order_status, 'pending'),
     bookingStatus: asText(data.bookingStatus, ''),
+    fulfillmentStatus: asText(data.fulfillmentStatus ?? data.fulfillment_status, ''),
+    deliveryStatus: asText(data.deliveryStatus ?? data.delivery_status, ''),
     paymentCollectionMode: asText(data.paymentCollectionMode ?? payment.mode, 'online_checkout'),
     sourceChannel: channel,
     sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceLabel(channel)),
@@ -230,6 +244,7 @@ function mapOnlineOrderRecord(
     clientOrderId: asText(data.clientOrderId ?? data.client_order_id ?? metadata.clientOrderId, ''),
     sedifexOrderId: asText(data.sedifexOrderId ?? data.sedifex_order_id ?? metadata.sedifexOrderId, ''),
     createdAt: toDate(data.createdAtServer ?? data.createdAt),
+    deliveredAt: toDate(data.deliveredAt ?? data.delivered_at),
     deliveryLocation: asText(data.deliveryLocation ?? delivery.location, ''),
     bookingDate: asText(data.bookingDate ?? booking.preferredDate, ''),
     bookingTime: asText(data.bookingTime ?? booking.preferredTime, ''),
@@ -263,7 +278,7 @@ function isOnlinePaid(record: OnlineOrderRecord) {
 }
 
 function isPending(record: OnlineOrderRecord) {
-  const joined = `${record.paymentStatus} ${record.orderStatus} ${record.bookingStatus}`.toLowerCase()
+  const joined = `${record.paymentStatus} ${record.orderStatus} ${record.bookingStatus} ${record.fulfillmentStatus} ${record.deliveryStatus}`.toLowerCase()
   return joined.includes('pending') || joined.includes('waiting') || joined.includes('manual')
 }
 
@@ -279,7 +294,7 @@ function filterRecords(records: OnlineOrderRecord[], tab: OnlineOrderTab) {
 }
 
 function getPrimaryStatus(record: OnlineOrderRecord) {
-  return isServiceBooking(record) ? record.bookingStatus || record.orderStatus : record.orderStatus
+  return record.deliveryStatus || record.fulfillmentStatus || (isServiceBooking(record) ? record.bookingStatus || record.orderStatus : record.orderStatus)
 }
 
 function buildCustomerContactHref(record: OnlineOrderRecord) {
@@ -294,6 +309,59 @@ function buildCustomerContactHref(record: OnlineOrderRecord) {
     return `mailto:${record.customerEmail}?subject=${subject}&body=${body}`
   }
   return ''
+}
+
+function fulfillmentPatch(record: OnlineOrderRecord, action: FulfillmentAction, storeId: string) {
+  const nowIso = new Date().toISOString()
+  const actionMap: Record<FulfillmentAction, { orderStatus: string; fulfillmentStatus: string; deliveryStatus: string; bookingStatus?: string }> = {
+    accept: { orderStatus: 'confirmed_by_store', fulfillmentStatus: 'confirmed_by_store', deliveryStatus: 'not_started', bookingStatus: 'confirmed' },
+    preparing: { orderStatus: 'preparing', fulfillmentStatus: 'preparing', deliveryStatus: 'not_started', bookingStatus: 'preparing' },
+    out_for_delivery: { orderStatus: 'out_for_delivery', fulfillmentStatus: 'out_for_delivery', deliveryStatus: 'out_for_delivery', bookingStatus: 'in_progress' },
+    delivered: { orderStatus: 'delivered', fulfillmentStatus: 'completed', deliveryStatus: 'delivered', bookingStatus: 'completed' },
+  }
+  const next = actionMap[action]
+  const patch: Record<string, unknown> = {
+    orderStatus: next.orderStatus,
+    order_status: next.orderStatus,
+    fulfillmentStatus: next.fulfillmentStatus,
+    fulfillment_status: next.fulfillmentStatus,
+    deliveryStatus: next.deliveryStatus,
+    delivery_status: next.deliveryStatus,
+    storeFulfillmentUpdatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    statusHistory: arrayUnion({
+      status: next.orderStatus,
+      fulfillmentStatus: next.fulfillmentStatus,
+      deliveryStatus: next.deliveryStatus,
+      action,
+      actor: 'store',
+      storeId,
+      createdAt: nowIso,
+      note: FULFILLMENT_ACTIONS.find(item => item.id === action)?.hint || '',
+    }),
+  }
+
+  if (isServiceBooking(record) && next.bookingStatus) {
+    patch.bookingStatus = next.bookingStatus
+  }
+
+  if (action === 'delivered') {
+    patch.deliveredAt = serverTimestamp()
+    patch.deliveredBy = 'store'
+    patch.customerDeliveredEmailSent = false
+    patch.customerDeliveredNotificationQueued = false
+  }
+
+  return patch
+}
+
+function actionIsActive(record: OnlineOrderRecord, action: FulfillmentAction) {
+  const status = getPrimaryStatus(record).toLowerCase()
+  if (action === 'accept') return ['confirmed_by_store', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'].some(token => status.includes(token))
+  if (action === 'preparing') return ['preparing', 'out_for_delivery', 'delivered', 'completed'].some(token => status.includes(token))
+  if (action === 'out_for_delivery') return ['out_for_delivery', 'delivered', 'completed'].some(token => status.includes(token))
+  if (action === 'delivered') return ['delivered', 'completed'].some(token => status.includes(token))
+  return false
 }
 
 function StatCard({ label, value, hint, active, onClick }: { label: string; value: string; hint: string; active?: boolean; onClick?: () => void }) {
@@ -318,6 +386,30 @@ function StatCard({ label, value, hint, active, onClick }: { label: string; valu
   )
 }
 
+function FulfillmentButton({ active, disabled, loading, children, onClick }: { active?: boolean; disabled?: boolean; loading?: boolean; children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || loading}
+      onClick={onClick}
+      style={{
+        border: active ? '1px solid #16A34A' : '1px solid #CBD5E1',
+        background: active ? '#DCFCE7' : '#FFFFFF',
+        color: active ? '#166534' : '#334155',
+        borderRadius: 999,
+        padding: '6px 10px',
+        fontSize: 12,
+        fontWeight: 800,
+        cursor: disabled || loading ? 'not-allowed' : 'pointer',
+        opacity: disabled || loading ? 0.65 : 1,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {loading ? 'Saving…' : children}
+    </button>
+  )
+}
+
 export default function MarketplaceOrders({ compactHeader = false }: { compactHeader?: boolean }) {
   const { storeId } = useActiveStore()
   const [orders, setOrders] = useState<OnlineOrderRecord[]>([])
@@ -326,6 +418,8 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
   const [searchText, setSearchText] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [pendingActionKey, setPendingActionKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!storeId) {
@@ -372,6 +466,21 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
       unsubscribeBookings()
     }
   }, [storeId])
+
+  async function updateFulfillment(record: OnlineOrderRecord, action: FulfillmentAction) {
+    if (!storeId) return
+    const key = `${record.collectionName}-${record.id}-${action}`
+    setActionError(null)
+    setPendingActionKey(key)
+    try {
+      await updateDoc(doc(db, record.collectionName, record.id), fulfillmentPatch(record, action, storeId))
+    } catch (err) {
+      console.error('[online-orders] Failed to update fulfillment status', err)
+      setActionError(err instanceof Error ? err.message : 'Unable to update order status.')
+    } finally {
+      setPendingActionKey(null)
+    }
+  }
 
   const allRecords = useMemo(
     () => [...orders, ...bookings].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)),
@@ -429,6 +538,8 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
         record.paymentStatus,
         record.orderStatus,
         record.bookingStatus,
+        record.fulfillmentStatus,
+        record.deliveryStatus,
       ]
         .join(' ')
         .toLowerCase()
@@ -461,7 +572,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={{ margin: 0, color: '#111827' }}>Orders workspace</h2>
-            <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 14 }}>This replaces the separate Online Orders page as the main daily dashboard area.</p>
+            <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 14 }}>Use the fulfilment buttons to move each order from accepted to delivered.</p>
           </div>
           <label style={{ display: 'grid', gap: 4, color: '#475569', fontSize: 13, minWidth: 250 }}>
             Search
@@ -498,13 +609,14 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
         </div>
 
         {error ? <p style={{ margin: 0, color: '#B91C1C', fontWeight: 700 }}>{error}</p> : null}
+        {actionError ? <p style={{ margin: 0, color: '#B91C1C', fontWeight: 700 }}>Status update failed: {actionError}</p> : null}
         {isLoading ? <p style={{ margin: 0, color: '#64748B' }}>Loading online order records…</p> : null}
         {!isLoading && !storeId ? <p style={{ margin: 0, color: '#64748B' }}>Select a workspace to view online orders.</p> : null}
         {!isLoading && storeId && filteredRecords.length === 0 ? <p style={{ margin: 0, color: '#64748B' }}>No records found for this view yet.</p> : null}
 
         {filteredRecords.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1120 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1320 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: '#475569', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Customer</th>
@@ -513,6 +625,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Amount</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Payment</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Status</th>
+                  <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Fulfilment</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Details</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Contact</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Created</th>
@@ -566,6 +679,25 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                         >
                           {normalizeStatus(primaryStatus || record.paymentStatus)}
                         </span>
+                        {record.deliveredAt ? <><br /><span style={{ color: '#64748B', fontSize: 12 }}>Delivered: {record.deliveredAt.toLocaleString()}</span></> : null}
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 320 }}>
+                          {FULFILLMENT_ACTIONS.map(action => {
+                            const actionKey = `${record.collectionName}-${record.id}-${action.id}`
+                            return (
+                              <FulfillmentButton
+                                key={action.id}
+                                active={actionIsActive(record, action.id)}
+                                loading={pendingActionKey === actionKey}
+                                disabled={!storeId}
+                                onClick={() => updateFulfillment(record, action.id)}
+                              >
+                                {action.label}
+                              </FulfillmentButton>
+                            )
+                          })}
+                        </div>
                       </td>
                       <td style={{ padding: '12px 8px', color: '#475569', fontSize: 13 }}>
                         <strong>Ref:</strong> {record.reference}
