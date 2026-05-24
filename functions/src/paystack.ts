@@ -4,6 +4,7 @@ import * as functions from 'firebase-functions/v1'
 import * as crypto from 'crypto'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { paidFulfillmentUpdateFields, paymentFailedFulfillmentUpdateFields } from './orderFulfillment'
 
 /**
  * Types
@@ -90,6 +91,11 @@ function assertAuthenticated(context: functions.https.CallableContext) {
 }
 
 const toTrimmedString = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+
+function getFulfillmentTypeFromMetadata(metadata: Record<string, any>) {
+  const value = toTrimmedString(metadata.fulfillmentType || metadata.fulfillment_type || metadata.deliveryMethod || metadata.delivery_method).toLowerCase()
+  return ['pickup', 'self_pickup', 'collection'].includes(value) ? 'pickup' : 'delivery'
+}
 
 function isIntegrationCheckoutEvent(data: PaystackEventData) {
   const metadata = data.metadata ?? {}
@@ -268,6 +274,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
   const amount = typeof data.amount === 'number' ? data.amount / 100 : null
   const fees = typeof data.fees === 'number' ? data.fees / 100 : null
   const now = admin.firestore.FieldValue.serverTimestamp()
+  const fulfillmentType = getFulfillmentTypeFromMetadata(metadata)
   const orderRef = defaultDb
     .collection('stores')
     .doc(storeId)
@@ -294,19 +301,17 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
   }
 
   if (isSuccess) {
+    Object.assign(orderUpdate, paidFulfillmentUpdateFields(reference, storeId, fulfillmentType))
     orderUpdate.paymentStatus = 'paid'
     orderUpdate.payment_status = 'paid'
-    orderUpdate.orderStatus = 'paid'
-    orderUpdate.order_status = 'paid'
     orderUpdate.paidAt = data.paid_at ?? null
     orderUpdate.paymentConfirmedAt = now
     orderUpdate.syncStatus = 'pending'
     orderUpdate.syncRequestedAt = now
   } else {
+    Object.assign(orderUpdate, paymentFailedFulfillmentUpdateFields(reference, storeId, fulfillmentType))
     orderUpdate.paymentStatus = 'failed'
     orderUpdate.payment_status = 'failed'
-    orderUpdate.orderStatus = 'payment_failed'
-    orderUpdate.order_status = 'payment_failed'
     orderUpdate.paymentFailedAt = now
   }
 
@@ -387,11 +392,9 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     }
 
     if (isSuccess) {
-      topLevelUpdate.paymentStatus = 'success'
-      topLevelUpdate.payment_status = 'success'
-      topLevelUpdate.orderStatus = 'confirmed'
-      topLevelUpdate.order_status = 'confirmed'
-      topLevelUpdate.status = 'confirmed'
+      Object.assign(topLevelUpdate, paidFulfillmentUpdateFields(reference, storeId, fulfillmentType))
+      topLevelUpdate.paymentStatus = 'paid'
+      topLevelUpdate.payment_status = 'paid'
       topLevelUpdate.paystackChannel = data.channel ?? null
       topLevelUpdate.paystackFees = fees
       topLevelUpdate.amountPaid = amount
@@ -400,11 +403,9 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
       topLevelUpdate.syncStatus = 'pending'
       topLevelUpdate.syncRequestedAt = now
     } else {
+      Object.assign(topLevelUpdate, paymentFailedFulfillmentUpdateFields(reference, storeId, fulfillmentType))
       topLevelUpdate.paymentStatus = 'failed'
       topLevelUpdate.payment_status = 'failed'
-      topLevelUpdate.orderStatus = 'payment_failed'
-      topLevelUpdate.order_status = 'payment_failed'
-      topLevelUpdate.status = 'payment_failed'
       topLevelUpdate.paymentFailedAt = now
     }
 
@@ -422,7 +423,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     storeId,
     reference,
     matchedCount: topLevelMatched.size,
-    paymentStatus: isSuccess ? 'success' : 'failed',
+    paymentStatus: isSuccess ? 'paid' : 'failed',
   })
 
   const bookingId = toTrimmedString(orderData.bookingId) || toTrimmedString(metadata.bookingId)
