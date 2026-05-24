@@ -79,6 +79,7 @@ import DonorWebsiteIntegrationPage from './pages/docs/DonorWebsiteIntegrationPag
 import PublicBlogPage from './pages/PublicBlogPage'
 import { ToastProvider } from './components/ToastProvider'
 import './studentRegistrationTabs.css'
+import './pages/PublicQuickPayCheckout.mobile.css'
 
 const router = createBrowserRouter([
   { path: '/receipt/:saleId', element: <ReceiptView /> },
