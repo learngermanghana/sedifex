@@ -31,6 +31,7 @@ function eventCopy(eventType: string, storeName: string, itemName: string) {
     case 'order.confirmed': return { customerTitle: 'Order confirmed', customerIntro: `Your order for ${itemName} has been received and confirmed. Thank you for buying from ${storeName}.`, adminTitle: 'New paid order received', adminAction: 'Prepare delivery or contact the customer if you need extra details.' }
     case 'order.pay_on_delivery': return { customerTitle: 'Order received', customerIntro: `Your order for ${itemName} has been received. Payment will be handled on delivery.`, adminTitle: 'New pay on delivery order', adminAction: 'Contact the customer and prepare delivery.' }
     case 'order.manual_payment': return { customerTitle: 'Order received', customerIntro: `Your order for ${itemName} has been received and is pending payment review.`, adminTitle: 'New manual payment order', adminAction: 'Review the payment details and follow up with the customer.' }
+    case 'order.delivered': return { customerTitle: 'Order delivered', customerIntro: `Your order for ${itemName} from ${storeName} has been marked as delivered. Thank you for shopping with ${storeName}.`, adminTitle: 'Order marked delivered', adminAction: 'No action is needed unless the customer reports a delivery issue.' }
     case 'booking.confirmed': return { customerTitle: 'Booking confirmed', customerIntro: `Your booking for ${itemName} is confirmed by ${storeName}.`, adminTitle: 'Booking confirmed', adminAction: 'Prepare to deliver the booked service.' }
     case 'booking.created': return { customerTitle: 'Payment received', customerIntro: `Payment received. Your booking for ${itemName} is waiting for store confirmation.`, adminTitle: 'Service payment received', adminAction: 'Review the booking and confirm it with the customer.' }
     case 'student_registration.paid':
@@ -58,7 +59,7 @@ function detailRows(payload: NotificationPayload, itemName: string) {
   rows.push(['Payment', text(payment.status, 80) ? titleCase(text(payment.status, 80)) : null])
   rows.push(['Method', text(payment.method, 80) ? titleCase(text(payment.method, 80)) : null])
   const data = payload.data ?? {}
-  for (const key of ['bookingDate', 'bookingTime', 'preferredClassTime', 'branch', 'location', 'skill', 'availability', 'notes', 'needSummary']) {
+  for (const key of ['bookingDate', 'bookingTime', 'preferredClassTime', 'branch', 'location', 'deliveryStatus', 'fulfillmentStatus', 'deliveredAt', 'deliveredBy', 'deliveryNote', 'deliveryReference', 'skill', 'availability', 'notes', 'needSummary']) {
     const value = text(data[key], 1000)
     if (value) rows.push([titleCase(key), value])
   }
@@ -217,7 +218,7 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
   if (settings.customerEmailEnabled && customerEmail) {
     const title = copy.customerTitle
     const intro = `Hello ${customerName}, ${copy.customerIntro}`
-    deliveries.push(createDelivery({ payload: { ...payload, reference }, brand, settings, recipientType: 'customer', to: customerEmail, subject: `${title} - ${brand.storeName}`, html: buildHtmlEmail({ brand, title, intro, rows, footerNote: 'Keep this email for your records. Contact the store directly if you need help with this request.' }), text: buildTextEmail(title, intro, rows) }))
+    deliveries.push(createDelivery({ payload: { ...payload, reference }, brand, settings, recipientType: 'customer', to: customerEmail, subject: `${title} - ${brand.storeName}`, html: buildHtmlEmail({ brand, title, intro, rows, footerNote: 'Keep this email for your records. If you did not receive this order or there is a problem, contact the store or Sedifex support as soon as possible.' }), text: buildTextEmail(title, intro, rows) }))
   }
   const forceStoreAlert = payload.forceStoreAlert || REQUIRED_STORE_ALERT_EVENTS.has(payload.eventType)
   const adminEmails = settings.adminEmails.length ? settings.adminEmails : [brand.email].filter((value): value is string => Boolean(value))
@@ -236,6 +237,20 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
 export const initializeStoreNotificationDefaults = functions.firestore.document('stores/{storeId}').onWrite(async (_change, context) => { const storeId = text(context.params.storeId, 180); if (storeId) await ensureNotificationSettings(storeId) })
 function isSettled(value: unknown) { const normalized = text(value, 80).toLowerCase().replace(/\s+/g, '_'); return ['paid', 'success', 'confirmed', 'captured', 'completed'].includes(normalized) }
 function hasAlreadySettled(before: Record<string, unknown> | null) { if (!before) return false; return isSettled(before.paymentStatus) || isSettled(before.payment_status) || isSettled(before.orderStatus) || isSettled(before.order_status) || isSettled(before.status) }
+function normalizedStatus(value: unknown) { return text(value, 80).toLowerCase().trim().replace(/[\s-]+/g, '_') }
+function isDeliveryTerminalStatus(value: unknown) { return ['delivered', 'delivered_by_store', 'confirmed_by_customer', 'customer_confirmed', 'picked_up', 'pickedup'].includes(normalizedStatus(value)) }
+function isFulfillmentCompleteStatus(value: unknown) { return ['completed', 'complete', 'fulfilled', 'delivered', 'picked_up'].includes(normalizedStatus(value)) }
+function isOrderDeliveredStatus(value: unknown) { return ['delivered', 'delivered_by_store', 'confirmed_by_customer', 'picked_up'].includes(normalizedStatus(value)) }
+function isDeliveredRecord(data: Record<string, unknown> | null) {
+  if (!data) return false
+  return isDeliveryTerminalStatus(data.deliveryStatus ?? data.delivery_status)
+    || isFulfillmentCompleteStatus(data.fulfillmentStatus ?? data.fulfillment_status)
+    || isOrderDeliveredStatus(data.orderStatus ?? data.order_status ?? data.status)
+}
+function hasAlreadyDelivered(before: Record<string, unknown> | null) {
+  if (!before) return false
+  return before.customerDeliveredEmailSent === true || before.customerDeliveryEmailSent === true || isDeliveredRecord(before)
+}
 function paymentFromOrder(data: Record<string, unknown>): PaymentInfo { return { status: text(data.paymentStatus ?? data.payment_status ?? data.orderStatus ?? data.order_status ?? data.status, 80) || null, amount: numberValue(data.amountPaid ?? data.amount), currency: text(data.currency, 20) || 'GHS', method: text(data.paymentCollectionMode ?? data.paymentMethod ?? data.sourceChannel, 80) || null, reference: text(data.paymentReference ?? data.payment_reference ?? data.paystackReference ?? data.reference, 220) || null } }
 function customerFromRecord(data: Record<string, unknown>): CustomerInfo { const customer = getNestedRecord(data, 'customer'); const person = getNestedRecord(data, 'person'); return { name: text(customer.name ?? person.name ?? data.customerName ?? data.name, 160) || null, email: email(customer.email ?? person.email ?? data.customerEmail ?? data.email) || null, phone: text(customer.phone ?? person.phone ?? data.customerPhone ?? data.phone, 80) || null } }
 function isGenericSourceLabel(value: string) {
@@ -250,6 +265,7 @@ function orderData(data: Record<string, unknown>) {
   const snapshotItem = Array.isArray(pricingSnapshot.items) && pricingSnapshot.items.length ? getRecord(pricingSnapshot.items[0]) : {}
   const snapshotLegacyItem = Array.isArray(pricingSnapshotLegacy.items) && pricingSnapshotLegacy.items.length ? getRecord(pricingSnapshotLegacy.items[0]) : {}
   const nestedData = getNestedRecord(data, 'data')
+  const deliveryProof = getNestedRecord(data, 'deliveryProof')
   const directName = getFirstText(firstItem, ['name', 'title', 'serviceName', 'productName', 'itemName'], 220)
     || getFirstText(snapshotItem, ['name', 'title', 'serviceName', 'productName', 'itemName'], 220)
     || getFirstText(snapshotLegacyItem, ['name', 'title', 'serviceName', 'productName', 'itemName'], 220)
@@ -262,6 +278,12 @@ function orderData(data: Record<string, unknown>) {
 
   return {
     itemName: directName || sourceFallback || finalFallback,
+    deliveryStatus: text(data.deliveryStatus ?? data.delivery_status, 80),
+    fulfillmentStatus: text(data.fulfillmentStatus ?? data.fulfillment_status, 80),
+    deliveredAt: text(data.deliveredAt ?? data.delivered_at, 120),
+    deliveredBy: text(data.deliveredBy ?? data.delivered_by, 120),
+    deliveryNote: getFirstText(data, ['deliveryNote', 'delivery_note'], 1000) || getFirstText(deliveryProof, ['note', 'message'], 1000),
+    deliveryReference: getFirstText(data, ['deliveryReference', 'delivery_reference'], 220) || getFirstText(deliveryProof, ['reference', 'code'], 220),
     notes: getFirstText(nestedData, ['notes', 'message'], 1000) || getFirstText(data, ['notes'], 1000),
   }
 }
@@ -276,6 +298,22 @@ export const notifyIntegrationOrderStatus = functions.firestore.document('integr
   const reference = text(context.params.reference, 220) || payment.reference
   const orderStatus = text(data.orderStatus ?? data.order_status ?? data.status, 80).toLowerCase()
   const paymentMode = text(data.paymentCollectionMode ?? data.paymentMethod, 80).toLowerCase()
+
+  if (isDeliveredRecord(data) && !hasAlreadyDelivered(before)) {
+    const result = await queueBrandedNotification({ eventType: 'order.delivered', storeId, reference, customer: customerFromRecord(data), payment, data: orderData(data), forceStoreAlert: false })
+    await change.after.ref.set({
+      customerDeliveredEmailSent: true,
+      customerDeliveredEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      deliveryConfirmationNotification: {
+        eventType: 'order.delivered',
+        reference,
+        queuedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deliveries: result.ok ? result.deliveries : 0,
+      },
+    }, { merge: true })
+    return
+  }
+
   if ((paymentMode.includes('delivery') || orderStatus.includes('cash_collection')) && !change.before.exists) {
     await queueBrandedNotification({ eventType: 'order.pay_on_delivery', storeId, reference, customer: customerFromRecord(data), payment, data: orderData(data), forceStoreAlert: true })
     return
