@@ -34,17 +34,23 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handlePaystackWebhook = exports.paystackWebhook = exports.checkSignupUnlock = exports.createCheckout = void 0;
+exports.createPaystackCheckout = exports.handlePaystackWebhook = exports.paystackWebhook = exports.checkSignupUnlock = exports.createCheckout = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const crypto = __importStar(require("crypto"));
 const params_1 = require("firebase-functions/params");
 const firestore_1 = require("./firestore");
+const orderFulfillment_1 = require("./orderFulfillment");
 /**
  * Config
  */
 const PAYSTACK_SECRET = (0, params_1.defineString)('PAYSTACK_SECRET_KEY');
 const PAYSTACK_PUBLIC = (0, params_1.defineString)('PAYSTACK_PUBLIC_KEY');
 const APP_BASE_URL = (0, params_1.defineString)('APP_BASE_URL');
+const YEARLY_CONTRACT_MONTHS = 12;
+const YEARLY_PLAN_AMOUNTS_GHS = {
+    business: 999,
+    growth_website: 1999,
+};
 let paystackConfigLogged = false;
 function getPaystackConfig() {
     const secret = PAYSTACK_SECRET.value();
@@ -69,6 +75,10 @@ function assertAuthenticated(context) {
     }
 }
 const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '');
+function getFulfillmentTypeFromMetadata(metadata) {
+    const value = toTrimmedString(metadata.fulfillmentType || metadata.fulfillment_type || metadata.deliveryMethod || metadata.delivery_method).toLowerCase();
+    return ['pickup', 'self_pickup', 'collection'].includes(value) ? 'pickup' : 'delivery';
+}
 function isIntegrationCheckoutEvent(data) {
     const metadata = data.metadata ?? {};
     const channel = toTrimmedString(metadata.channel);
@@ -82,6 +92,26 @@ function isDonationEvent(data) {
     return Boolean(toTrimmedString(metadata.pageType) === 'donation' ||
         toTrimmedString(metadata.fundTransactionId) ||
         toTrimmedString(data.reference).startsWith('DON-'));
+}
+function getContractMonths(metadata) {
+    const raw = Number(metadata?.contractMonths);
+    if (Number.isFinite(raw) && raw > 0)
+        return Math.max(1, Math.min(36, Math.floor(raw)));
+    return YEARLY_CONTRACT_MONTHS;
+}
+function buildContractPeriod(paidAt, months) {
+    const start = paidAt ? new Date(paidAt) : new Date();
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + months);
+    return {
+        startTimestamp: firestore_1.admin.firestore.Timestamp.fromDate(start),
+        endTimestamp: firestore_1.admin.firestore.Timestamp.fromDate(end),
+    };
+}
+function expectedYearlyAmount(plan) {
+    if (!plan)
+        return null;
+    return YEARLY_PLAN_AMOUNTS_GHS[plan] ?? null;
 }
 async function updateDonationTransactionFromPaystackEvent(evtType, data) {
     if (!isDonationEvent(data))
@@ -210,6 +240,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
     const amount = typeof data.amount === 'number' ? data.amount / 100 : null;
     const fees = typeof data.fees === 'number' ? data.fees / 100 : null;
     const now = firestore_1.admin.firestore.FieldValue.serverTimestamp();
+    const fulfillmentType = getFulfillmentTypeFromMetadata(metadata);
     const orderRef = firestore_1.defaultDb
         .collection('stores')
         .doc(storeId)
@@ -233,20 +264,18 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
         orderUpdate.amountPaid = amount;
     }
     if (isSuccess) {
+        Object.assign(orderUpdate, (0, orderFulfillment_1.paidFulfillmentUpdateFields)(reference, storeId, fulfillmentType));
         orderUpdate.paymentStatus = 'paid';
         orderUpdate.payment_status = 'paid';
-        orderUpdate.orderStatus = 'paid';
-        orderUpdate.order_status = 'paid';
         orderUpdate.paidAt = data.paid_at ?? null;
         orderUpdate.paymentConfirmedAt = now;
         orderUpdate.syncStatus = 'pending';
         orderUpdate.syncRequestedAt = now;
     }
     else {
+        Object.assign(orderUpdate, (0, orderFulfillment_1.paymentFailedFulfillmentUpdateFields)(reference, storeId, fulfillmentType));
         orderUpdate.paymentStatus = 'failed';
         orderUpdate.payment_status = 'failed';
-        orderUpdate.orderStatus = 'payment_failed';
-        orderUpdate.order_status = 'payment_failed';
         orderUpdate.paymentFailedAt = now;
     }
     await orderRef.set(orderUpdate, { merge: true });
@@ -320,11 +349,9 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
             updatedAt: now,
         };
         if (isSuccess) {
-            topLevelUpdate.paymentStatus = 'success';
-            topLevelUpdate.payment_status = 'success';
-            topLevelUpdate.orderStatus = 'confirmed';
-            topLevelUpdate.order_status = 'confirmed';
-            topLevelUpdate.status = 'confirmed';
+            Object.assign(topLevelUpdate, (0, orderFulfillment_1.paidFulfillmentUpdateFields)(reference, storeId, fulfillmentType));
+            topLevelUpdate.paymentStatus = 'paid';
+            topLevelUpdate.payment_status = 'paid';
             topLevelUpdate.paystackChannel = data.channel ?? null;
             topLevelUpdate.paystackFees = fees;
             topLevelUpdate.amountPaid = amount;
@@ -334,11 +361,9 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
             topLevelUpdate.syncRequestedAt = now;
         }
         else {
+            Object.assign(topLevelUpdate, (0, orderFulfillment_1.paymentFailedFulfillmentUpdateFields)(reference, storeId, fulfillmentType));
             topLevelUpdate.paymentStatus = 'failed';
             topLevelUpdate.payment_status = 'failed';
-            topLevelUpdate.orderStatus = 'payment_failed';
-            topLevelUpdate.order_status = 'payment_failed';
-            topLevelUpdate.status = 'payment_failed';
             topLevelUpdate.paymentFailedAt = now;
         }
         const matchedRefs = Array.from(topLevelMatched.values());
@@ -354,7 +379,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
         storeId,
         reference,
         matchedCount: topLevelMatched.size,
-        paymentStatus: isSuccess ? 'success' : 'failed',
+        paymentStatus: isSuccess ? 'paid' : 'failed',
     });
     const bookingId = toTrimmedString(orderData.bookingId) || toTrimmedString(metadata.bookingId);
     if (bookingId) {
@@ -454,15 +479,24 @@ exports.createCheckout = functions.https.onCall(async (data, context) => {
     const metadataIn = data?.metadata && typeof data.metadata === 'object'
         ? data.metadata
         : {};
-    const amount = Number(data?.amount);
+    const requestedAmount = Number(data?.amount);
+    const configuredAmount = expectedYearlyAmount(plan);
+    const amount = configuredAmount ?? requestedAmount;
+    const contractMonths = getContractMonths(metadataIn);
     if (!email) {
         throw new functions.https.HttpsError('invalid-argument', 'A valid email is required');
     }
     if (!storeId) {
         throw new functions.https.HttpsError('invalid-argument', 'storeId is required');
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!plan || !configuredAmount) {
+        throw new functions.https.HttpsError('invalid-argument', 'Choose Business or Growth Website for yearly Paystack checkout.');
+    }
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
         throw new functions.https.HttpsError('invalid-argument', 'Amount must be greater than zero');
+    }
+    if (Math.round(requestedAmount) !== Math.round(configuredAmount)) {
+        throw new functions.https.HttpsError('invalid-argument', `Invalid amount for ${plan}. Expected GHS ${configuredAmount}.`);
     }
     const reference = `${storeId}_${Date.now()}`;
     const payload = {
@@ -473,6 +507,9 @@ exports.createCheckout = functions.https.onCall(async (data, context) => {
         metadata: {
             storeId,
             plan: plan,
+            billingCadence: 'yearly',
+            contractMonths,
+            yearlyAmountGhs: amount,
             createdBy: context.auth.uid,
             ...metadataIn,
         },
@@ -500,6 +537,9 @@ exports.createCheckout = functions.https.onCall(async (data, context) => {
             plan,
             reference,
             amount,
+            yearlyAmountGhs: amount,
+            billingCadence: 'yearly',
+            contractMonths,
             email,
             createdAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
             createdBy: context.auth.uid,
@@ -606,6 +646,8 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
                 const reference = data.reference || null;
                 const fees = typeof data.fees === 'number' ? data.fees / 100 : null;
                 const metadata = data.metadata || null;
+                const contractMonths = getContractMonths(metadata);
+                const period = buildContractPeriod(paidAt, contractMonths);
                 const posChannel = data.channel ||
                     (typeof data.metadata?.channel === 'string'
                         ? data.metadata.channel
@@ -620,7 +662,13 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
                     customerEmail: email,
                     reference,
                     amount,
-                    currency: data.currency || 'NGN',
+                    yearlyAmountGhs: amount,
+                    billingCadence: 'yearly',
+                    contractMonths,
+                    currentPeriodStart: period.startTimestamp,
+                    currentPeriodEnd: period.endTimestamp,
+                    lastPaymentAt: paidAt ? firestore_1.admin.firestore.Timestamp.fromDate(new Date(paidAt)) : period.startTimestamp,
+                    currency: data.currency || 'GHS',
                     channel: data.channel || null,
                     posChannel,
                     fees,
@@ -628,6 +676,25 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
                     paidAt,
                     updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                     lastEvent: evtType,
+                }, { merge: true });
+                await firestore_1.defaultDb
+                    .collection('stores')
+                    .doc(storeId)
+                    .set({
+                    contractStatus: 'active',
+                    billingPlan: plan,
+                    paymentProvider: 'paystack',
+                    billing: {
+                        status: 'active',
+                        planKey: plan,
+                        provider: 'paystack',
+                        cadence: 'yearly',
+                        contractMonths,
+                        currentPeriodStart: period.startTimestamp,
+                        currentPeriodEnd: period.endTimestamp,
+                        updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
+                    },
+                    updatedAt: firestore_1.admin.firestore.FieldValue.serverTimestamp(),
                 }, { merge: true });
                 await recordPaystackEvent(storeId, evtType, data);
                 break;
@@ -676,3 +743,4 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
     }
 });
 exports.handlePaystackWebhook = exports.paystackWebhook;
+exports.createPaystackCheckout = exports.createCheckout;

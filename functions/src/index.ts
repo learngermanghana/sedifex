@@ -34,3 +34,6 @@ export * from './googleBusinessProfile'
 
 export { createIntegrationApiKey, listIntegrationApiKeys } from './integrationApiKeys'
 export { getPricingPlans } from './pricingPlans'
+
+export { commitSale } from './pos/commitSale'
+export { receiveStock } from './pos/receiveStock'
