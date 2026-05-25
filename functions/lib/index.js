@@ -14,8 +14,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleAdsMetricsSync = exports.googleAdsCampaign = exports.googleAdsOAuthCallback = exports.googleAdsOAuthStart = exports.sendBrandedNotificationPreview = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.notifyNgoDonationConfirmed = exports.notifyNgoDonationSubmitted = exports.notifyNgoSupportRequestReceived = exports.notifyNgoVolunteerApplicationReceived = exports.supportRequestIntake = exports.volunteerIntake = exports.v1IntegrationStudentRegistrations = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
-const params_1 = require("firebase-functions/params");
+exports.receiveStock = exports.commitSale = exports.getPricingPlans = exports.listIntegrationApiKeys = exports.createIntegrationApiKey = exports.sendBrandedNotificationPreview = exports.notifyStudentRegistrationCreated = exports.notifyIntegrationOrderStatus = exports.initializeStoreNotificationDefaults = exports.notifyNgoDonationConfirmed = exports.notifyNgoDonationSubmitted = exports.notifyNgoSupportRequestReceived = exports.notifyNgoVolunteerApplicationReceived = exports.supportRequestIntake = exports.volunteerIntake = exports.syncQuickPayStoreIndex = exports.publicQuickPayStores = exports.publicQuickPayCatalog = exports.v1IntegrationStudentRegistrations = exports.v1IntegrationProducts = exports.v1IntegrationBookings = exports.v1IntegrationAvailability = exports.integrationOrderStatus = exports.integrationCheckoutPreview = exports.integrationCheckoutCreate = exports.fetchPaystackSettlementBanks = exports.fetchPaystackMerchantSubaccount = exports.createPaystackMerchantSubaccount = exports.handlePaystackWebhook = exports.paystackWebhook = exports.createCheckout = exports.checkSignupUnlock = void 0;
+// functions/src/index.ts
 var paystack_1 = require("./paystack");
 Object.defineProperty(exports, "checkSignupUnlock", { enumerable: true, get: function () { return paystack_1.checkSignupUnlock; } });
 Object.defineProperty(exports, "createCheckout", { enumerable: true, get: function () { return paystack_1.createCheckout; } });
@@ -34,8 +34,14 @@ var integrationAvailability_1 = require("./integrationAvailability");
 Object.defineProperty(exports, "v1IntegrationAvailability", { enumerable: true, get: function () { return integrationAvailability_1.v1IntegrationAvailability; } });
 var integrationBookings_1 = require("./integrationBookings");
 Object.defineProperty(exports, "v1IntegrationBookings", { enumerable: true, get: function () { return integrationBookings_1.v1IntegrationBookings; } });
+var integrationProducts_1 = require("./integrationProducts");
+Object.defineProperty(exports, "v1IntegrationProducts", { enumerable: true, get: function () { return integrationProducts_1.v1IntegrationProducts; } });
 var integrationStudentRegistrations_1 = require("./integrationStudentRegistrations");
 Object.defineProperty(exports, "v1IntegrationStudentRegistrations", { enumerable: true, get: function () { return integrationStudentRegistrations_1.v1IntegrationStudentRegistrations; } });
+var quickPay_1 = require("./quickPay");
+Object.defineProperty(exports, "publicQuickPayCatalog", { enumerable: true, get: function () { return quickPay_1.publicQuickPayCatalog; } });
+Object.defineProperty(exports, "publicQuickPayStores", { enumerable: true, get: function () { return quickPay_1.publicQuickPayStores; } });
+Object.defineProperty(exports, "syncQuickPayStoreIndex", { enumerable: true, get: function () { return quickPay_1.syncQuickPayStoreIndex; } });
 var ngoIntake_1 = require("./ngoIntake");
 Object.defineProperty(exports, "volunteerIntake", { enumerable: true, get: function () { return ngoIntake_1.volunteerIntake; } });
 Object.defineProperty(exports, "supportRequestIntake", { enumerable: true, get: function () { return ngoIntake_1.supportRequestIntake; } });
@@ -49,32 +55,14 @@ Object.defineProperty(exports, "initializeStoreNotificationDefaults", { enumerab
 Object.defineProperty(exports, "notifyIntegrationOrderStatus", { enumerable: true, get: function () { return notifications_1.notifyIntegrationOrderStatus; } });
 Object.defineProperty(exports, "notifyStudentRegistrationCreated", { enumerable: true, get: function () { return notifications_1.notifyStudentRegistrationCreated; } });
 Object.defineProperty(exports, "sendBrandedNotificationPreview", { enumerable: true, get: function () { return notifications_1.sendBrandedNotificationPreview; } });
-var googleAds_1 = require("./googleAds");
-Object.defineProperty(exports, "googleAdsOAuthStart", { enumerable: true, get: function () { return googleAds_1.googleAdsOAuthStart; } });
-Object.defineProperty(exports, "googleAdsOAuthCallback", { enumerable: true, get: function () { return googleAds_1.googleAdsOAuthCallback; } });
-Object.defineProperty(exports, "googleAdsCampaign", { enumerable: true, get: function () { return googleAds_1.googleAdsCampaign; } });
-Object.defineProperty(exports, "googleAdsMetricsSync", { enumerable: true, get: function () { return googleAds_1.googleAdsMetricsSync; } });
 __exportStar(require("./googleShopping"), exports);
-__exportStar(require("./reporting"), exports);
-__exportStar(require("./publicCatalogSync"), exports);
-__exportStar(require("./blogAutomation"), exports);
-const VALID_ROLES = new Set(['owner', 'staff']);
-const GRACE_DAYS = 7;
-const MILLIS_PER_DAY = 1000 * 60 * 60 * 24;
-const BULK_MESSAGE_LIMIT = 1000;
-const BULK_MESSAGE_BATCH_LIMIT = 200;
-const BULK_EMAIL_BATCH_LIMIT = 500;
-const SMS_SEGMENT_SIZE = 160;
-const OPENAI_API_KEY = (0, params_1.defineString)('OPENAI_API_KEY', { default: '' });
-const OPENAI_MODEL = (0, params_1.defineString)('OPENAI_MODEL', { default: 'gpt-4o-mini' });
-const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
-const INTEGRATION_CONTRACT_VERSION = (0, params_1.defineString)('INTEGRATION_CONTRACT_VERSION', {
-    default: '2026-04-13',
-});
-const SEDIFEX_INTEGRATION_API_KEY = (0, params_1.defineString)('SEDIFEX_INTEGRATION_API_KEY', { default: '' });
-const BOOKING_DEFAULT_SERVICE_ID_ENV_KEY = 'BOOKING_DEFAULT_SERVICE_ID';
-/** ============================================================================
- *  HELPERS
- * ==========================================================================*/
-let openAiConfigWarned = false;
-let integrationApiKeyWarned = false;
+__exportStar(require("./googleBusinessProfile"), exports);
+var integrationApiKeys_1 = require("./integrationApiKeys");
+Object.defineProperty(exports, "createIntegrationApiKey", { enumerable: true, get: function () { return integrationApiKeys_1.createIntegrationApiKey; } });
+Object.defineProperty(exports, "listIntegrationApiKeys", { enumerable: true, get: function () { return integrationApiKeys_1.listIntegrationApiKeys; } });
+var pricingPlans_1 = require("./pricingPlans");
+Object.defineProperty(exports, "getPricingPlans", { enumerable: true, get: function () { return pricingPlans_1.getPricingPlans; } });
+var commitSale_1 = require("./pos/commitSale");
+Object.defineProperty(exports, "commitSale", { enumerable: true, get: function () { return commitSale_1.commitSale; } });
+var receiveStock_1 = require("./pos/receiveStock");
+Object.defineProperty(exports, "receiveStock", { enumerable: true, get: function () { return receiveStock_1.receiveStock; } });
