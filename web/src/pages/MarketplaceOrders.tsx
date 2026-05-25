@@ -294,7 +294,10 @@ function filterRecords(records: OnlineOrderRecord[], tab: OnlineOrderTab) {
 }
 
 function getPrimaryStatus(record: OnlineOrderRecord) {
-  return record.deliveryStatus || record.fulfillmentStatus || (isServiceBooking(record) ? record.bookingStatus || record.orderStatus : record.orderStatus)
+  const deliveryStatus = record.deliveryStatus.toLowerCase()
+  const shouldUseDeliveryFirst = ['out_for_delivery', 'delivered', 'completed'].some(token => deliveryStatus.includes(token))
+  if (shouldUseDeliveryFirst) return record.deliveryStatus
+  return record.fulfillmentStatus || (isServiceBooking(record) ? record.bookingStatus || record.orderStatus : record.orderStatus) || record.deliveryStatus
 }
 
 function buildCustomerContactHref(record: OnlineOrderRecord) {
