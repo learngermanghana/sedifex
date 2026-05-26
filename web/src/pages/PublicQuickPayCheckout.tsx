@@ -80,6 +80,11 @@ function getManualPaymentName(type: ManualPaymentType) {
   return `Manual ${getTypeLabel(type)} payment`
 }
 
+function makeFallbackEmail(reference: string) {
+  const safeReference = reference.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `quickpay-${Date.now()}`
+  return `quickpay-${safeReference}@sedifex.com`
+}
+
 export default function PublicQuickPayCheckout() {
   const { storeId = '' } = useParams()
   const [searchParams] = useSearchParams()
@@ -179,15 +184,22 @@ export default function PublicQuickPayCheckout() {
   async function createCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    const cleanCustomer: CustomerDetails = {
+      name: customer.name.trim(),
+      email: customer.email.trim().toLowerCase(),
+      phone: customer.phone.trim(),
+    }
     if (!selectedItem || !effectiveQuickPayType) return setError('Select what you want to pay for.')
     if (selectedItem.type === 'MANUAL' && !sanitizedManualPaymentName) return setError('Enter the service or item name.')
-    if (!customer.email.trim() && !customer.phone.trim()) return setError('Enter customer phone number. Email is optional.')
+    if (!cleanCustomer.email && !cleanCustomer.phone) return setError('Enter customer phone number. Email is optional.')
     if (!finalAmount || finalAmount <= 0) return setError('Enter a valid amount.')
 
     setIsSubmitting(true)
     setStatus(paymentMethod === 'CASH' ? 'Saving cash order…' : 'Preparing secure payment…')
     try {
       const reference = `qp_${storeId}_${Date.now()}`
+      const checkoutEmail = cleanCustomer.email || (paymentMethod === 'ONLINE' ? makeFallbackEmail(reference) : '')
+      const checkoutCustomer = { ...cleanCustomer, email: checkoutEmail }
       const returnStatus = paymentMethod === 'CASH' ? 'cash_pending' : 'success'
       const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=${encodeURIComponent(returnStatus)}&reference=${encodeURIComponent(reference)}&paymentMethod=${encodeURIComponent(paymentMethod.toLowerCase())}`
       const accountingType = effectiveAccountingType
@@ -199,10 +211,10 @@ export default function PublicQuickPayCheckout() {
         clientOrderId: reference,
         amount: finalAmount,
         currency: 'GHS',
-        customer,
-        customerEmail: customer.email,
-        customerName: customer.name,
-        customerPhone: customer.phone,
+        customer: checkoutCustomer,
+        customerEmail: checkoutEmail,
+        customerName: cleanCustomer.name,
+        customerPhone: cleanCustomer.phone,
         returnUrl,
         sourceChannel: paymentMethod === 'CASH' ? 'quick_pay_cash' : 'quick_pay_qr',
         sourceLabel: paymentMethod === 'CASH' ? 'Sedifex Quick Pay Cash' : 'Sedifex Quick Pay',
@@ -263,6 +275,8 @@ export default function PublicQuickPayCheckout() {
           paymentMethod,
           paymentCollectionMode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
           cashCheckout: paymentMethod === 'CASH',
+          customerEmailProvided: Boolean(cleanCustomer.email),
+          generatedCustomerEmail: !cleanCustomer.email && checkoutEmail ? checkoutEmail : undefined,
           accountingType,
           quantity: effectiveQuantity,
         },
