@@ -93,6 +93,7 @@ export default function PublicQuickPayCheckout() {
   const [items, setItems] = useState<QuickPayItem[]>([])
   const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(null)
   const [manualPaymentType, setManualPaymentType] = useState<ManualPaymentType>('SERVICE')
+  const [manualPaymentName, setManualPaymentName] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [customAmount, setCustomAmount] = useState('')
   const [customer, setCustomer] = useState<CustomerDetails>({ name: '', email: '', phone: '' })
@@ -119,13 +120,14 @@ export default function PublicQuickPayCheckout() {
   const hiddenItemCount = Math.max(filteredItems.length - visibleItems.length, 0)
 
   const unitAmount = selectedItem?.price ?? 0
+  const sanitizedManualPaymentName = manualPaymentName.trim()
   const effectiveQuickPayType: QuickPayItemType | null = selectedItem
     ? selectedItem.type === 'MANUAL'
       ? manualPaymentType
       : selectedItem.type
     : null
   const effectiveAccountingType = effectiveQuickPayType ? getAccountingType(effectiveQuickPayType) : 'manual_quick_sale'
-  const effectiveItemName = selectedItem?.type === 'MANUAL' ? getManualPaymentName(manualPaymentType) : selectedItem?.name ?? ''
+  const effectiveItemName = selectedItem?.type === 'MANUAL' ? sanitizedManualPaymentName || getManualPaymentName(manualPaymentType) : selectedItem?.name ?? ''
   const effectiveQuantity = selectedItem?.type === 'MANUAL' ? 1 : quantity
 
   useEffect(() => {
@@ -178,6 +180,7 @@ export default function PublicQuickPayCheckout() {
     event.preventDefault()
     setError(null)
     if (!selectedItem || !effectiveQuickPayType) return setError('Select what you want to pay for.')
+    if (selectedItem.type === 'MANUAL' && !sanitizedManualPaymentName) return setError('Enter the service or item name.')
     if (!customer.email.trim()) return setError('Enter your email so the payment can be processed.')
     if (!finalAmount || finalAmount <= 0) return setError('Enter a valid amount.')
 
@@ -187,6 +190,7 @@ export default function PublicQuickPayCheckout() {
       const reference = `qp_${storeId}_${Date.now()}`
       const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=success&reference=${encodeURIComponent(reference)}`
       const accountingType = effectiveAccountingType
+      const manualPaymentCategory = selectedItem.type === 'MANUAL' ? getTypeLabel(manualPaymentType) : null
       const body = {
         storeId,
         merchantId: storeId,
@@ -208,6 +212,7 @@ export default function PublicQuickPayCheckout() {
           item_id: selectedItem.id,
           itemId: selectedItem.id,
           name: effectiveItemName,
+          category: manualPaymentCategory || selectedItem.category || null,
           type: normalizeCheckoutItemType(effectiveQuickPayType),
           item_type: normalizeCheckoutItemType(effectiveQuickPayType),
           quickPayType: effectiveQuickPayType,
@@ -225,6 +230,7 @@ export default function PublicQuickPayCheckout() {
           items: [{
             item_id: selectedItem.id,
             name: effectiveItemName,
+            category: manualPaymentCategory || selectedItem.category || null,
             qty: effectiveQuantity,
             unit_price: selectedItem.type === 'MANUAL' ? Math.round(finalAmount * 100) : Math.round(unitAmount * 100),
             line_total: Math.round(finalAmount * 100),
@@ -245,6 +251,8 @@ export default function PublicQuickPayCheckout() {
           quickPayType: effectiveQuickPayType,
           originalQuickPayType: selectedItem.type,
           manualPayment: selectedItem.type === 'MANUAL',
+          manualPaymentName: selectedItem.type === 'MANUAL' ? sanitizedManualPaymentName : undefined,
+          manualPaymentCategory,
           accountingType,
           quantity: effectiveQuantity,
         },
@@ -377,7 +385,7 @@ export default function PublicQuickPayCheckout() {
             <div className="qp-checkout-marker">Step 2 of 2</div>
             <h2 className="qp-payment-title">Checkout</h2>
             <p className="qp-selected-name">{selectedItem ? effectiveItemName : 'Select an item above to continue.'}</p>
-            {selectedItem?.type === 'MANUAL' ? <p className="qp-manual-note">Choose what this manual payment is for, so the business can record it correctly.</p> : null}
+            {selectedItem?.type === 'MANUAL' ? <p className="qp-manual-note">Choose the category and type the exact service or item name so the business can record it correctly.</p> : null}
             {selectedItem ? (
               <div className="qp-summary">
                 {selectedItem.type === 'MANUAL' ? (
@@ -389,6 +397,10 @@ export default function PublicQuickPayCheckout() {
                           <option key={type} value={type}>{getTypeLabel(type)}</option>
                         ))}
                       </select>
+                    </label>
+                    <label className="qp-field-label">
+                      Service / item name
+                      <input type="text" value={manualPaymentName} onChange={event => setManualPaymentName(event.target.value)} className="qp-field" placeholder="E.g. Facial treatment, delivery fee, consultation" required />
                     </label>
                     <label className="qp-field-label">
                       Amount to pay
