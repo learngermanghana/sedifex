@@ -29,9 +29,7 @@ const FUNCTION_BASE_URL =
   'https://us-central1-sedifex-web.cloudfunctions.net'
 
 const CONTRACT_VERSION = import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || '2026-04-13'
-const TYPE_FILTERS: Array<'ALL' | QuickPayItemType> = ['ALL', 'PRODUCT', 'SERVICE', 'COURSE', 'BOOKING', 'STUDENT_REGISTRATION', 'DONATION']
 const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = ['SERVICE', 'PRODUCT', 'COURSE', 'BOOKING', 'STUDENT_REGISTRATION', 'DONATION']
-const DEFAULT_VISIBLE_ITEMS = 4
 
 const DEMO_ITEMS: QuickPayItem[] = [
   {
@@ -39,7 +37,7 @@ const DEMO_ITEMS: QuickPayItem[] = [
     name: 'Manual payment request',
     type: 'MANUAL',
     price: 0,
-    description: 'Use this only when you cannot find the exact product, service, booking, course, donation, or registration. The business will review it later.',
+    description: 'Enter the exact service, item, registration, booking, donation, or course manually.',
   },
 ]
 
@@ -92,12 +90,11 @@ export default function PublicQuickPayCheckout() {
   const isCashReturn = returnedPaymentMethod.toLowerCase() === 'cash' || paymentReturnStatus === 'cash_pending'
   const shouldShowSuccess = paymentReturnStatus === 'success' || paymentReturnStatus === 'returning' || paymentReturnStatus === 'cash_pending' || Boolean(paymentReference)
   const [query, setQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'ALL' | QuickPayItemType>('ALL')
   const [items, setItems] = useState<QuickPayItem[]>([])
-  const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(null)
+  const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(DEMO_ITEMS[0])
   const [manualPaymentType, setManualPaymentType] = useState<ManualPaymentType>('SERVICE')
   const [manualPaymentName, setManualPaymentName] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<QuickPayPaymentMethod>('ONLINE')
+  const [paymentMethod, setPaymentMethod] = useState<QuickPayPaymentMethod>('CASH')
   const [quantity, setQuantity] = useState(1)
   const [customAmount, setCustomAmount] = useState('')
   const [customer, setCustomer] = useState<CustomerDetails>({ name: '', email: '', phone: '' })
@@ -111,17 +108,16 @@ export default function PublicQuickPayCheckout() {
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase()
+    if (!normalized) return []
     return catalogWithManual.filter(item => {
-      if (typeFilter !== 'ALL' && item.type !== typeFilter) return false
-      if (!normalized) return item.type !== 'MANUAL'
+      if (item.type === 'MANUAL') return false
       const haystack = `${item.name} ${item.description ?? ''} ${item.category ?? ''} ${item.type}`.toLowerCase()
       return haystack.includes(normalized)
     })
-  }, [catalogWithManual, query, typeFilter])
+  }, [catalogWithManual, query])
 
   const hasSearch = query.trim().length > 0
-  const visibleItems = hasSearch ? filteredItems : filteredItems.slice(0, DEFAULT_VISIBLE_ITEMS)
-  const hiddenItemCount = Math.max(filteredItems.length - visibleItems.length, 0)
+  const visibleItems = filteredItems
 
   const unitAmount = selectedItem?.price ?? 0
   const sanitizedManualPaymentName = manualPaymentName.trim()
@@ -168,12 +164,12 @@ export default function PublicQuickPayCheckout() {
         if (!isMounted) return
         const loadedItems = Array.isArray(payload.items) ? payload.items : []
         setItems(loadedItems)
-        setStatus(loadedItems.length ? null : 'No published items found yet. Use manual payment if needed.')
+        setStatus(null)
       } catch (catalogError) {
         if (!isMounted) return
         console.warn('[quick-pay] Catalog load failed', catalogError)
         setItems([])
-        setStatus('Catalog is not available yet. Manual payment mode is available.')
+        setStatus(null)
       }
     }
     if (!shouldShowSuccess) void loadCatalog()
@@ -299,6 +295,12 @@ export default function PublicQuickPayCheckout() {
     document.getElementById('quick-pay-checkout-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  function useManualInput() {
+    setSelectedItem(DEMO_ITEMS[0])
+    setQuery('')
+    window.setTimeout(scrollToCheckout, 100)
+  }
+
   if (shouldShowSuccess) {
     return (
       <main className="qp-checkout-root">
@@ -333,89 +335,80 @@ export default function PublicQuickPayCheckout() {
       <div className="qp-checkout-shell">
         <section className="qp-checkout-hero">
           <p className="qp-eyebrow">Sedifex Quick Pay</p>
-          <h1 className="qp-title">Scan, search, pay</h1>
-          <p className="qp-copy">Search for the product, service, booking, registration, donation, or course you want. Pay online or choose cash so the store can confirm it in Sedifex.</p>
+          <h1 className="qp-title">Quick payment</h1>
+          <p className="qp-copy">Search an item or use manual input to record a product, service, booking, registration, donation, or course payment.</p>
 
-          <div className="qp-pay-steps" aria-label="How to pay">
-            <div className="qp-pay-step"><span>1</span><strong>Search</strong><small>Find product, service, booking, course, or donation.</small></div>
-            <div className="qp-pay-step"><span>2</span><strong>Select</strong><small>Choose what you want and confirm the quantity.</small></div>
-            <div className="qp-pay-step"><span>3</span><strong>Enter details</strong><small>Add your name, email, and phone for receipt.</small></div>
-            <div className="qp-pay-step"><span>4</span><strong>Pay</strong><small>Pay online or pay cash to the store.</small></div>
-          </div>
+          <button type="button" className="qp-pay-button" onClick={useManualInput} style={{ width: '100%', margin: '18px 0 10px' }}>
+            Input manually
+          </button>
 
           <div className="qp-hero-search">
-            <label className="qp-hero-label" htmlFor="quick-pay-search">What do you want to pay for?</label>
+            <label className="qp-hero-label" htmlFor="quick-pay-search">Search existing item</label>
             <div className="qp-hero-input-shell">
               <span className="qp-hero-search-icon">⌕</span>
               <input
                 id="quick-pay-search"
                 type="search"
-                placeholder="Search products, services, bookings, donations..."
+                placeholder="Search product, service, booking, course..."
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 className="qp-hero-input"
               />
               {query ? <button type="button" className="qp-clear-search" onClick={() => setQuery('')}>Clear</button> : null}
             </div>
-            <p className="qp-hero-help">Showing a few popular items first. Search above to find more items quickly.</p>
+            <p className="qp-hero-help">Manual input is selected by default for faster staff entry.</p>
           </div>
 
           <div className="qp-trust-row">
-            <span>♢ Secure payments</span>
-            <span>◇ Store recorded</span>
-            <span>▯ Mobile money, card & cash</span>
+            <span>♢ Store recorded</span>
+            <span>◇ Cash supported</span>
+            <span>▯ Mobile money & card optional</span>
           </div>
         </section>
 
         <div className="qp-grid">
           <section className="qp-panel qp-search-panel">
-            <div className="qp-type-tabs">
-              {TYPE_FILTERS.map(type => (
-                <button key={type} type="button" className={`qp-type-tab ${typeFilter === type ? 'qp-type-tab-active' : ''}`} onClick={() => setTypeFilter(type)}>
-                  {type === 'ALL' ? 'All' : getTypeLabel(type)}
-                </button>
-              ))}
-            </div>
-            {status ? <p className="qp-status">{status}</p> : null}
-            {!hasSearch && hiddenItemCount > 0 ? <p className="qp-status">Showing {visibleItems.length} popular items. Search above to find from {filteredItems.length} available items.</p> : null}
-            <div className="qp-items-grid">
-              {visibleItems.map(item => {
-                const isSelected = selectedItem?.id === item.id
-                return (
-                  <button key={item.id} type="button" className={`qp-item-card ${item.type === 'MANUAL' ? 'qp-item-card-manual' : ''} ${isSelected ? 'qp-item-card-selected' : ''}`} onClick={() => { setSelectedItem(item); window.setTimeout(scrollToCheckout, 100) }}>
-                    <div className="qp-item-top">
-                      <div className="qp-item-icon">{getItemIcon(item.type)}</div>
-                      <div className="qp-item-main">
-                        <h2 className="qp-item-name">{item.name}</h2>
-                        <div className="qp-item-meta">
-                          <span className="qp-badge">{getTypeLabel(item.type)}</span>
-                          {item.category ? <span className="qp-badge">{item.category}</span> : null}
-                        </div>
-                      </div>
-                      <strong className="qp-price">{item.price > 0 ? money(item.price) : 'Custom'}</strong>
-                    </div>
-                    {item.description ? <p className="qp-description">{item.description}</p> : null}
-                  </button>
-                )
-              })}
-              {visibleItems.length === 0 ? <div className="qp-empty">No item matched your search. Try another word or use manual payment.</div> : null}
-            </div>
-            <button type="button" className="qp-manual-link" onClick={() => { setSelectedItem(DEMO_ITEMS[0]); window.setTimeout(scrollToCheckout, 100) }}>
-              Cannot find it? Use manual payment request
+            <button type="button" className="qp-manual-link" onClick={useManualInput} style={{ fontSize: 16, padding: '14px 18px' }}>
+              + Input manually
             </button>
+            {status ? <p className="qp-status">{status}</p> : null}
+            {!hasSearch ? <p className="qp-status">Use manual input, or search above to select an existing item from the store.</p> : null}
+            {hasSearch ? (
+              <div className="qp-items-grid">
+                {visibleItems.map(item => {
+                  const isSelected = selectedItem?.id === item.id
+                  return (
+                    <button key={item.id} type="button" className={`qp-item-card ${isSelected ? 'qp-item-card-selected' : ''}`} onClick={() => { setSelectedItem(item); window.setTimeout(scrollToCheckout, 100) }}>
+                      <div className="qp-item-top">
+                        <div className="qp-item-icon">{getItemIcon(item.type)}</div>
+                        <div className="qp-item-main">
+                          <h2 className="qp-item-name">{item.name}</h2>
+                          <div className="qp-item-meta">
+                            <span className="qp-badge">{getTypeLabel(item.type)}</span>
+                            {item.category ? <span className="qp-badge">{item.category}</span> : null}
+                          </div>
+                        </div>
+                        <strong className="qp-price">{item.price > 0 ? money(item.price) : 'Custom'}</strong>
+                      </div>
+                      {item.description ? <p className="qp-description">{item.description}</p> : null}
+                    </button>
+                  )
+                })}
+                {visibleItems.length === 0 ? <div className="qp-empty">No item matched your search. Use manual input instead.</div> : null}
+              </div>
+            ) : null}
           </section>
 
           <form id="quick-pay-checkout-panel" onSubmit={createCheckout} className="qp-panel qp-payment-panel">
-            <div className="qp-checkout-marker">Step 2 of 2</div>
-            <h2 className="qp-payment-title">Checkout</h2>
-            <p className="qp-selected-name">{selectedItem ? effectiveItemName : 'Select an item above to continue.'}</p>
-            {selectedItem?.type === 'MANUAL' ? <p className="qp-manual-note">Choose the category and type the exact service or item name so the business can record it correctly.</p> : null}
+            <h2 className="qp-payment-title">Payment details</h2>
+            <p className="qp-selected-name">{selectedItem ? effectiveItemName : 'Manual payment request'}</p>
+            {selectedItem?.type === 'MANUAL' ? <p className="qp-manual-note">Type exactly what the customer is paying for.</p> : null}
             {selectedItem ? (
               <div className="qp-summary">
                 {selectedItem.type === 'MANUAL' ? (
                   <>
                     <label className="qp-field-label">
-                      Payment type
+                      Category
                       <select value={manualPaymentType} onChange={event => setManualPaymentType(event.target.value as ManualPaymentType)} className="qp-field">
                         {MANUAL_PAYMENT_TYPES.map(type => (
                           <option key={type} value={type}>{getTypeLabel(type)}</option>
@@ -442,15 +435,15 @@ export default function PublicQuickPayCheckout() {
                 <label className="qp-field-label">
                   Payment method
                   <select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as QuickPayPaymentMethod)} className="qp-field">
-                    <option value="ONLINE">Pay online with Mobile Money / Card</option>
                     <option value="CASH">Pay cash to store</option>
+                    <option value="ONLINE">Pay online with Mobile Money / Card</option>
                   </select>
                 </label>
                 {paymentMethod === 'CASH' ? <p className="qp-manual-note">No Paystack checkout. Sedifex will save this as pending cash until the store confirms cash received.</p> : null}
               </div>
             ) : null}
             <div className="qp-form-fields">
-              <input type="text" placeholder="Your name" value={customer.name} onChange={event => setCustomer(previous => ({ ...previous, name: event.target.value }))} className="qp-field" />
+              <input type="text" placeholder="Customer name" value={customer.name} onChange={event => setCustomer(previous => ({ ...previous, name: event.target.value }))} className="qp-field" />
               <input type="email" placeholder={paymentMethod === 'CASH' ? 'Email for receipt (optional if phone is added)' : 'Email for receipt'} value={customer.email} onChange={event => setCustomer(previous => ({ ...previous, email: event.target.value }))} className="qp-field" required={paymentMethod === 'ONLINE'} />
               <input type="tel" placeholder="Phone / WhatsApp" value={customer.phone} onChange={event => setCustomer(previous => ({ ...previous, phone: event.target.value }))} className="qp-field" />
             </div>
@@ -460,9 +453,9 @@ export default function PublicQuickPayCheckout() {
                 ? paymentMethod === 'CASH' ? 'Saving cash order…' : 'Opening payment…'
                 : selectedItem
                   ? paymentMethod === 'CASH' ? `Save cash order ${money(finalAmount || 0)}` : `Pay ${money(finalAmount || 0)}`
-                  : 'Select item to pay'}
+                  : 'Enter payment details'}
             </button>
-            <p className="qp-powered">Powered by Sedifex. Online payments are processed securely. Cash orders are recorded for store confirmation.</p>
+            <p className="qp-powered">Powered by Sedifex. Cash orders are recorded for store confirmation.</p>
           </form>
         </div>
       </div>
@@ -473,7 +466,7 @@ export default function PublicQuickPayCheckout() {
             <strong>{effectiveItemName}</strong>
             <small>{selectedItem.type === 'MANUAL' ? getTypeLabel(manualPaymentType) : `${quantity} × ${money(unitAmount || finalAmount || 0)}`}</small>
           </span>
-          <b>{finalAmount > 0 ? `${paymentMethod === 'CASH' ? 'Cash order' : 'Checkout'} ${money(finalAmount)}` : 'Checkout'}</b>
+          <b>{finalAmount > 0 ? `${paymentMethod === 'CASH' ? 'Cash order' : 'Checkout'} ${money(finalAmount)}` : 'Enter amount'}</b>
         </button>
       ) : null}
     </main>
