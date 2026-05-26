@@ -4,6 +4,7 @@ import './PublicQuickPayCheckout.css'
 
 type QuickPayItemType = 'PRODUCT' | 'SERVICE' | 'COURSE' | 'DONATION' | 'STUDENT_REGISTRATION' | 'BOOKING' | 'MANUAL'
 type ManualPaymentType = Exclude<QuickPayItemType, 'MANUAL'>
+type QuickPayPaymentMethod = 'ONLINE' | 'CASH'
 
 type QuickPayItem = {
   id: string
@@ -87,13 +88,16 @@ export default function PublicQuickPayCheckout() {
   const initialMode = searchParams.get('mode') || 'store'
   const paymentReturnStatus = searchParams.get('status')
   const paymentReference = searchParams.get('reference') || searchParams.get('trxref') || ''
-  const shouldShowSuccess = paymentReturnStatus === 'success' || paymentReturnStatus === 'returning' || Boolean(paymentReference)
+  const returnedPaymentMethod = searchParams.get('paymentMethod') || searchParams.get('payment_method') || ''
+  const isCashReturn = returnedPaymentMethod.toLowerCase() === 'cash' || paymentReturnStatus === 'cash_pending'
+  const shouldShowSuccess = paymentReturnStatus === 'success' || paymentReturnStatus === 'returning' || paymentReturnStatus === 'cash_pending' || Boolean(paymentReference)
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<'ALL' | QuickPayItemType>('ALL')
   const [items, setItems] = useState<QuickPayItem[]>([])
   const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(null)
   const [manualPaymentType, setManualPaymentType] = useState<ManualPaymentType>('SERVICE')
   const [manualPaymentName, setManualPaymentName] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<QuickPayPaymentMethod>('ONLINE')
   const [quantity, setQuantity] = useState(1)
   const [customAmount, setCustomAmount] = useState('')
   const [customer, setCustomer] = useState<CustomerDetails>({ name: '', email: '', phone: '' })
@@ -181,14 +185,16 @@ export default function PublicQuickPayCheckout() {
     setError(null)
     if (!selectedItem || !effectiveQuickPayType) return setError('Select what you want to pay for.')
     if (selectedItem.type === 'MANUAL' && !sanitizedManualPaymentName) return setError('Enter the service or item name.')
-    if (!customer.email.trim()) return setError('Enter your email so the payment can be processed.')
+    if (paymentMethod === 'ONLINE' && !customer.email.trim()) return setError('Enter your email so the payment can be processed.')
+    if (paymentMethod === 'CASH' && !customer.email.trim() && !customer.phone.trim()) return setError('Enter your phone number or email so the store can confirm the cash payment.')
     if (!finalAmount || finalAmount <= 0) return setError('Enter a valid amount.')
 
     setIsSubmitting(true)
-    setStatus('Preparing secure payment…')
+    setStatus(paymentMethod === 'CASH' ? 'Saving cash order…' : 'Preparing secure payment…')
     try {
       const reference = `qp_${storeId}_${Date.now()}`
-      const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=success&reference=${encodeURIComponent(reference)}`
+      const returnStatus = paymentMethod === 'CASH' ? 'cash_pending' : 'success'
+      const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=${encodeURIComponent(returnStatus)}&reference=${encodeURIComponent(reference)}&paymentMethod=${encodeURIComponent(paymentMethod.toLowerCase())}`
       const accountingType = effectiveAccountingType
       const manualPaymentCategory = selectedItem.type === 'MANUAL' ? getTypeLabel(manualPaymentType) : null
       const body = {
@@ -203,8 +209,14 @@ export default function PublicQuickPayCheckout() {
         customerName: customer.name,
         customerPhone: customer.phone,
         returnUrl,
-        sourceChannel: 'quick_pay_qr',
-        sourceLabel: 'Sedifex Quick Pay',
+        sourceChannel: paymentMethod === 'CASH' ? 'quick_pay_cash' : 'quick_pay_qr',
+        sourceLabel: paymentMethod === 'CASH' ? 'Sedifex Quick Pay Cash' : 'Sedifex Quick Pay',
+        paymentMethod,
+        payment_method: paymentMethod,
+        paymentProvider: paymentMethod === 'CASH' ? 'cash' : 'paystack',
+        payment_provider: paymentMethod === 'CASH' ? 'cash' : 'paystack',
+        paymentCollectionMode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
+        payment_collection_mode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
         quickPayType: effectiveQuickPayType,
         accountingType,
         orderType: accountingType,
@@ -253,17 +265,25 @@ export default function PublicQuickPayCheckout() {
           manualPayment: selectedItem.type === 'MANUAL',
           manualPaymentName: selectedItem.type === 'MANUAL' ? sanitizedManualPaymentName : undefined,
           manualPaymentCategory,
+          paymentMethod,
+          paymentCollectionMode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
+          cashCheckout: paymentMethod === 'CASH',
           accountingType,
           quantity: effectiveQuantity,
         },
       }
-      const response = await fetch(`${FUNCTION_BASE_URL}/integrationCheckoutCreate`, {
+      const endpoint = paymentMethod === 'CASH' ? 'integrationCashCheckoutCreate' : 'integrationCheckoutCreate'
+      const response = await fetch(`${FUNCTION_BASE_URL}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Sedifex-Contract-Version': CONTRACT_VERSION },
         body: JSON.stringify(body),
       })
-      const payload = await response.json().catch(() => null) as { authorizationUrl?: string; checkoutUrl?: string; error?: string } | null
+      const payload = await response.json().catch(() => null) as { authorizationUrl?: string; checkoutUrl?: string; error?: string; cashCheckout?: boolean } | null
       if (!response.ok || !payload) throw new Error(payload?.error || `Checkout failed (${response.status})`)
+      if (paymentMethod === 'CASH' || payload.cashCheckout) {
+        window.location.href = returnUrl
+        return
+      }
       const checkoutUrl = payload.authorizationUrl || payload.checkoutUrl
       if (!checkoutUrl) throw new Error('Checkout URL was not returned.')
       window.location.href = checkoutUrl
@@ -286,11 +306,15 @@ export default function PublicQuickPayCheckout() {
           <section className="qp-success-card">
             <div className="qp-success-icon">✓</div>
             <p className="qp-eyebrow qp-success-eyebrow">Sedifex Quick Pay</p>
-            <h1 className="qp-success-title">Thank you for your payment</h1>
-            <p className="qp-success-copy">Your payment has been received or is being confirmed. The business will receive your order in Sedifex.</p>
+            <h1 className="qp-success-title">{isCashReturn ? 'Cash order sent to the store' : 'Thank you for your payment'}</h1>
+            <p className="qp-success-copy">
+              {isCashReturn
+                ? 'Your cash payment request has been recorded. Please pay the store directly. The store will confirm cash received in Sedifex.'
+                : 'Your payment has been received or is being confirmed. The business will receive your order in Sedifex.'}
+            </p>
             {paymentReference ? (
               <div className="qp-success-reference">
-                <span>Payment reference</span>
+                <span>{isCashReturn ? 'Cash order reference' : 'Payment reference'}</span>
                 <strong>{paymentReference}</strong>
               </div>
             ) : null}
@@ -310,13 +334,13 @@ export default function PublicQuickPayCheckout() {
         <section className="qp-checkout-hero">
           <p className="qp-eyebrow">Sedifex Quick Pay</p>
           <h1 className="qp-title">Scan, search, pay</h1>
-          <p className="qp-copy">Search for the product, service, booking, registration, donation, or course you want. Pay securely and the business receives the order in Sedifex.</p>
+          <p className="qp-copy">Search for the product, service, booking, registration, donation, or course you want. Pay online or choose cash so the store can confirm it in Sedifex.</p>
 
           <div className="qp-pay-steps" aria-label="How to pay">
             <div className="qp-pay-step"><span>1</span><strong>Search</strong><small>Find product, service, booking, course, or donation.</small></div>
             <div className="qp-pay-step"><span>2</span><strong>Select</strong><small>Choose what you want and confirm the quantity.</small></div>
             <div className="qp-pay-step"><span>3</span><strong>Enter details</strong><small>Add your name, email, and phone for receipt.</small></div>
-            <div className="qp-pay-step"><span>4</span><strong>Pay securely</strong><small>Complete payment by mobile money or card.</small></div>
+            <div className="qp-pay-step"><span>4</span><strong>Pay</strong><small>Pay online or pay cash to the store.</small></div>
           </div>
 
           <div className="qp-hero-search">
@@ -339,7 +363,7 @@ export default function PublicQuickPayCheckout() {
           <div className="qp-trust-row">
             <span>♢ Secure payments</span>
             <span>◇ Store recorded</span>
-            <span>▯ Mobile money & cards</span>
+            <span>▯ Mobile money, card & cash</span>
           </div>
         </section>
 
@@ -413,14 +437,32 @@ export default function PublicQuickPayCheckout() {
                 <div className="qp-total-row"><span className="qp-total-label">Total</span><strong className="qp-total-value">{money(finalAmount || 0)}</strong></div>
               </div>
             ) : null}
+            {selectedItem ? (
+              <div className="qp-form-fields">
+                <label className="qp-field-label">
+                  Payment method
+                  <select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as QuickPayPaymentMethod)} className="qp-field">
+                    <option value="ONLINE">Pay online with Mobile Money / Card</option>
+                    <option value="CASH">Pay cash to store</option>
+                  </select>
+                </label>
+                {paymentMethod === 'CASH' ? <p className="qp-manual-note">No Paystack checkout. Sedifex will save this as pending cash until the store confirms cash received.</p> : null}
+              </div>
+            ) : null}
             <div className="qp-form-fields">
               <input type="text" placeholder="Your name" value={customer.name} onChange={event => setCustomer(previous => ({ ...previous, name: event.target.value }))} className="qp-field" />
-              <input type="email" placeholder="Email for receipt" value={customer.email} onChange={event => setCustomer(previous => ({ ...previous, email: event.target.value }))} className="qp-field" required />
+              <input type="email" placeholder={paymentMethod === 'CASH' ? 'Email for receipt (optional if phone is added)' : 'Email for receipt'} value={customer.email} onChange={event => setCustomer(previous => ({ ...previous, email: event.target.value }))} className="qp-field" required={paymentMethod === 'ONLINE'} />
               <input type="tel" placeholder="Phone / WhatsApp" value={customer.phone} onChange={event => setCustomer(previous => ({ ...previous, phone: event.target.value }))} className="qp-field" />
             </div>
             {error ? <p className="qp-error">{error}</p> : null}
-            <button type="submit" disabled={isSubmitting || !selectedItem} className="qp-pay-button">{isSubmitting ? 'Opening payment…' : selectedItem ? `Pay ${money(finalAmount || 0)}` : 'Select item to pay'}</button>
-            <p className="qp-powered">Powered by Sedifex. Payment is processed securely and recorded for the business.</p>
+            <button type="submit" disabled={isSubmitting || !selectedItem} className="qp-pay-button">
+              {isSubmitting
+                ? paymentMethod === 'CASH' ? 'Saving cash order…' : 'Opening payment…'
+                : selectedItem
+                  ? paymentMethod === 'CASH' ? `Save cash order ${money(finalAmount || 0)}` : `Pay ${money(finalAmount || 0)}`
+                  : 'Select item to pay'}
+            </button>
+            <p className="qp-powered">Powered by Sedifex. Online payments are processed securely. Cash orders are recorded for store confirmation.</p>
           </form>
         </div>
       </div>
@@ -431,7 +473,7 @@ export default function PublicQuickPayCheckout() {
             <strong>{effectiveItemName}</strong>
             <small>{selectedItem.type === 'MANUAL' ? getTypeLabel(manualPaymentType) : `${quantity} × ${money(unitAmount || finalAmount || 0)}`}</small>
           </span>
-          <b>{finalAmount > 0 ? `Checkout ${money(finalAmount)}` : 'Checkout'}</b>
+          <b>{finalAmount > 0 ? `${paymentMethod === 'CASH' ? 'Cash order' : 'Checkout'} ${money(finalAmount)}` : 'Checkout'}</b>
         </button>
       ) : null}
     </main>
