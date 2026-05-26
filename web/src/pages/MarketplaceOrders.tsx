@@ -121,36 +121,12 @@ function readAmount(source: Record<string, unknown>) {
   const payment = getNestedObject(source, 'payment')
   const pricingSnapshot = getNestedObject(source, 'pricingSnapshot')
   const pricingSnapshotSnake = getNestedObject(source, 'pricing_snapshot')
-
   const directAmountMinor = asNumber(source.amountMinor, 0)
-  const finalTotalMinor = asNumber(
-    pricingSnapshot.final_total_minor ??
-      pricingSnapshot.finalTotalMinor ??
-      pricingSnapshotSnake.final_total_minor ??
-      pricingSnapshotSnake.finalTotalMinor,
-    0,
-  )
+  const finalTotalMinor = asNumber(pricingSnapshot.final_total_minor ?? pricingSnapshot.finalTotalMinor ?? pricingSnapshotSnake.final_total_minor ?? pricingSnapshotSnake.finalTotalMinor, 0)
 
   return asNumber(
-    payment.customerTotal ??
-      payment.amount ??
-      source.amountPaid ??
-      source.amount_paid ??
-      source.confirmedAmount ??
-      source.amount ??
-      source.total ??
-      source.grandTotal ??
-      pricingSnapshot.subtotal ??
-      pricingSnapshot.finalTotal ??
-      pricingSnapshot.final_total ??
-      pricingSnapshotSnake.subtotal ??
-      pricingSnapshotSnake.finalTotal ??
-      pricingSnapshotSnake.final_total,
-    directAmountMinor > 0
-      ? directAmountMinor / 100
-      : finalTotalMinor > 0
-        ? finalTotalMinor / 100
-        : 0,
+    payment.customerTotal ?? payment.amount ?? source.amountPaid ?? source.amount_paid ?? source.confirmedAmount ?? source.amount ?? source.total ?? source.grandTotal ?? pricingSnapshot.subtotal ?? pricingSnapshot.finalTotal ?? pricingSnapshot.final_total ?? pricingSnapshotSnake.subtotal ?? pricingSnapshotSnake.finalTotal ?? pricingSnapshotSnake.final_total,
+    directAmountMinor > 0 ? directAmountMinor / 100 : finalTotalMinor > 0 ? finalTotalMinor / 100 : 0,
   )
 }
 
@@ -201,26 +177,11 @@ function readSourceChannel(source: Record<string, unknown>) {
   const metadata = getNestedObject(source, 'metadata')
   const attributes = getNestedObject(source, 'attributes')
   const payment = getNestedObject(source, 'payment')
-  const raw = asText(
-    source.sourceChannel ??
-      source.source_channel ??
-      source.channel ??
-      metadata.sourceChannel ??
-      metadata.channel ??
-      attributes.sourceChannel ??
-      attributes.source ??
-      payment.sourceChannel ??
-      source.source,
-    'sedifex_market',
-  )
+  const raw = asText(source.sourceChannel ?? source.source_channel ?? source.channel ?? metadata.sourceChannel ?? metadata.channel ?? attributes.sourceChannel ?? attributes.source ?? payment.sourceChannel ?? source.source, 'sedifex_market')
   return normalizeSourceChannel(raw)
 }
 
-function mapOnlineOrderRecord(
-  id: string,
-  collectionName: 'integrationOrders' | 'integrationBookings',
-  data: Record<string, unknown>,
-): OnlineOrderRecord {
+function mapOnlineOrderRecord(id: string, collectionName: 'integrationOrders' | 'integrationBookings', data: Record<string, unknown>): OnlineOrderRecord {
   const customer = getNestedObject(data, 'customer')
   const booking = getNestedObject(data, 'booking')
   const delivery = getNestedObject(data, 'delivery')
@@ -294,17 +255,20 @@ function isCashAwaitingConfirmation(record: OnlineOrderRecord) {
   return true
 }
 
+function isCashConvertible(record: OnlineOrderRecord) {
+  if (isCashOrder(record)) return false
+  const joined = `${record.paymentStatus} ${record.orderStatus} ${record.paymentCollectionMode}`.toLowerCase()
+  if (['paid', 'success', 'confirmed', 'completed', 'cancelled', 'canceled', 'failed'].some(token => joined.includes(token))) return false
+  return joined.includes('pending') || joined.includes('checkout') || joined.includes('awaiting') || joined.includes('waiting')
+}
+
 function isManualPayment(record: OnlineOrderRecord) {
   return ['manual', 'manual_transfer', 'momo_manual', 'cash', 'bank_transfer'].includes(record.paymentCollectionMode) || isCashOrder(record)
 }
 
 function isOnlinePaid(record: OnlineOrderRecord) {
   const paymentStatus = record.paymentStatus.toLowerCase()
-  return (
-    !isPayOnDelivery(record) &&
-    !isManualPayment(record) &&
-    ['success', 'confirmed', 'paid', 'captured'].some(token => paymentStatus.includes(token))
-  )
+  return !isPayOnDelivery(record) && !isManualPayment(record) && ['success', 'confirmed', 'paid', 'captured'].some(token => paymentStatus.includes(token))
 }
 
 function isPending(record: OnlineOrderRecord) {
@@ -363,34 +327,22 @@ function fulfillmentPatch(record: OnlineOrderRecord, action: FulfillmentAction, 
     delivery_status: next.deliveryStatus,
     storeFulfillmentUpdatedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    statusHistory: arrayUnion({
-      status: next.orderStatus,
-      fulfillmentStatus: next.fulfillmentStatus,
-      deliveryStatus: next.deliveryStatus,
-      action,
-      actor: 'store',
-      storeId,
-      createdAt: nowIso,
-      note: FULFILLMENT_ACTIONS.find(item => item.id === action)?.hint || '',
-    }),
+    statusHistory: arrayUnion({ status: next.orderStatus, fulfillmentStatus: next.fulfillmentStatus, deliveryStatus: next.deliveryStatus, action, actor: 'store', storeId, createdAt: nowIso, note: FULFILLMENT_ACTIONS.find(item => item.id === action)?.hint || '' }),
   }
 
-  if (isServiceBooking(record) && next.bookingStatus) {
-    patch.bookingStatus = next.bookingStatus
-  }
-
+  if (isServiceBooking(record) && next.bookingStatus) patch.bookingStatus = next.bookingStatus
   if (action === 'delivered') {
     patch.deliveredAt = serverTimestamp()
     patch.deliveredBy = 'store'
     patch.customerDeliveredEmailSent = false
     patch.customerDeliveredNotificationQueued = false
   }
-
   return patch
 }
 
 function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId: string) {
   const nowIso = new Date().toISOString()
+  const wasConvertedFromOnline = !isCashOrder(record)
   if (action === 'confirm') {
     return {
       paymentStatus: 'paid_cash',
@@ -411,25 +363,13 @@ function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId
       cashConfirmedAt: serverTimestamp(),
       cashConfirmedBy: 'store',
       inventoryDeductionStatus: 'cash_confirmed',
-      cashPayment: {
-        cashConfirmed: true,
-        status: 'paid_cash',
-        confirmedAmount: record.amount,
-        currency: record.currency,
-        confirmedAt: nowIso,
-        confirmedBy: 'store',
-      },
+      convertedToCash: wasConvertedFromOnline,
+      convertedToCashAt: wasConvertedFromOnline ? serverTimestamp() : null,
+      previousPaymentCollectionMode: wasConvertedFromOnline ? record.paymentCollectionMode : null,
+      previousPaymentStatus: wasConvertedFromOnline ? record.paymentStatus : null,
+      cashPayment: { cashConfirmed: true, status: 'paid_cash', confirmedAmount: record.amount, currency: record.currency, confirmedAt: nowIso, confirmedBy: 'store', convertedFromOnlineCheckout: wasConvertedFromOnline },
       updatedAt: serverTimestamp(),
-      statusHistory: arrayUnion({
-        status: 'paid_cash',
-        orderStatus: 'completed',
-        paymentStatus: 'paid_cash',
-        action: 'confirm_cash_received',
-        actor: 'store',
-        storeId,
-        createdAt: nowIso,
-        note: 'Store confirmed physical cash received.',
-      }),
+      statusHistory: arrayUnion({ status: 'paid_cash', orderStatus: 'completed', paymentStatus: 'paid_cash', action: wasConvertedFromOnline ? 'convert_pending_checkout_to_cash' : 'confirm_cash_received', actor: 'store', storeId, createdAt: nowIso, note: wasConvertedFromOnline ? 'Store converted pending online checkout to physical cash received.' : 'Store confirmed physical cash received.' }),
     }
   }
 
@@ -448,25 +388,9 @@ function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId
     cashCancelledAt: serverTimestamp(),
     cashCancelledBy: 'store',
     inventoryDeductionStatus: 'cash_cancelled',
-    cashPayment: {
-      cashConfirmed: false,
-      status: 'cancelled',
-      expectedAmount: record.amount,
-      currency: record.currency,
-      cancelledAt: nowIso,
-      cancelledBy: 'store',
-    },
+    cashPayment: { cashConfirmed: false, status: 'cancelled', expectedAmount: record.amount, currency: record.currency, cancelledAt: nowIso, cancelledBy: 'store' },
     updatedAt: serverTimestamp(),
-    statusHistory: arrayUnion({
-      status: 'cancelled_cash',
-      orderStatus: 'cancelled',
-      paymentStatus: 'cancelled_cash',
-      action: 'cancel_cash_order',
-      actor: 'store',
-      storeId,
-      createdAt: nowIso,
-      note: 'Store cancelled cash order.',
-    }),
+    statusHistory: arrayUnion({ status: 'cancelled_cash', orderStatus: 'cancelled', paymentStatus: 'cancelled_cash', action: 'cancel_cash_order', actor: 'store', storeId, createdAt: nowIso, note: 'Store cancelled cash order.' }),
   }
 }
 
@@ -481,19 +405,7 @@ function actionIsActive(record: OnlineOrderRecord, action: FulfillmentAction) {
 
 function StatCard({ label, value, hint, active, onClick }: { label: string; value: string; hint: string; active?: boolean; onClick?: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        textAlign: 'left',
-        background: active ? '#EEF2FF' : '#F8FAFC',
-        border: active ? '1px solid #4338CA' : '1px solid #E2E8F0',
-        borderRadius: 18,
-        padding: 16,
-        cursor: onClick ? 'pointer' : 'default',
-        boxShadow: active ? '0 18px 42px -30px rgba(67, 56, 202, 0.75)' : 'none',
-      }}
-    >
+    <button type="button" onClick={onClick} style={{ textAlign: 'left', background: active ? '#EEF2FF' : '#F8FAFC', border: active ? '1px solid #4338CA' : '1px solid #E2E8F0', borderRadius: 18, padding: 16, cursor: onClick ? 'pointer' : 'default', boxShadow: active ? '0 18px 42px -30px rgba(67, 56, 202, 0.75)' : 'none' }}>
       <p style={{ margin: 0, fontSize: 12, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 800 }}>{label}</p>
       <p style={{ margin: '7px 0 3px', color: '#0F172A', fontSize: 27, fontWeight: 900 }}>{value}</p>
       <p style={{ margin: 0, color: '#64748B', fontSize: 13 }}>{hint}</p>
@@ -503,23 +415,7 @@ function StatCard({ label, value, hint, active, onClick }: { label: string; valu
 
 function FulfillmentButton({ active, disabled, loading, children, onClick }: { active?: boolean; disabled?: boolean; loading?: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      disabled={disabled || loading}
-      onClick={onClick}
-      style={{
-        border: active ? '1px solid #16A34A' : '1px solid #CBD5E1',
-        background: active ? '#DCFCE7' : '#FFFFFF',
-        color: active ? '#166534' : '#334155',
-        borderRadius: 999,
-        padding: '6px 10px',
-        fontSize: 12,
-        fontWeight: 800,
-        cursor: disabled || loading ? 'not-allowed' : 'pointer',
-        opacity: disabled || loading ? 0.65 : 1,
-        whiteSpace: 'nowrap',
-      }}
-    >
+    <button type="button" disabled={disabled || loading} onClick={onClick} style={{ border: active ? '1px solid #16A34A' : '1px solid #CBD5E1', background: active ? '#DCFCE7' : '#FFFFFF', color: active ? '#166534' : '#334155', borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 800, cursor: disabled || loading ? 'not-allowed' : 'pointer', opacity: disabled || loading ? 0.65 : 1, whiteSpace: 'nowrap' }}>
       {loading ? 'Saving…' : children}
     </button>
   )
@@ -528,23 +424,7 @@ function FulfillmentButton({ active, disabled, loading, children, onClick }: { a
 function CashActionButton({ tone, disabled, loading, children, onClick }: { tone: 'confirm' | 'cancel'; disabled?: boolean; loading?: boolean; children: React.ReactNode; onClick: () => void }) {
   const isConfirm = tone === 'confirm'
   return (
-    <button
-      type="button"
-      disabled={disabled || loading}
-      onClick={onClick}
-      style={{
-        border: isConfirm ? '1px solid #16A34A' : '1px solid #FCA5A5',
-        background: isConfirm ? '#DCFCE7' : '#FEF2F2',
-        color: isConfirm ? '#166534' : '#991B1B',
-        borderRadius: 999,
-        padding: '6px 10px',
-        fontSize: 12,
-        fontWeight: 900,
-        cursor: disabled || loading ? 'not-allowed' : 'pointer',
-        opacity: disabled || loading ? 0.6 : 1,
-        whiteSpace: 'nowrap',
-      }}
-    >
+    <button type="button" disabled={disabled || loading} onClick={onClick} style={{ border: isConfirm ? '1px solid #16A34A' : '1px solid #FCA5A5', background: isConfirm ? '#DCFCE7' : '#FEF2F2', color: isConfirm ? '#166534' : '#991B1B', borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 900, cursor: disabled || loading ? 'not-allowed' : 'pointer', opacity: disabled || loading ? 0.6 : 1, whiteSpace: 'nowrap' }}>
       {loading ? 'Saving…' : children}
     </button>
   )
@@ -568,39 +448,26 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
       setIsLoading(false)
       return () => {}
     }
-
     setIsLoading(true)
     setError(null)
-
     const orderQuery = query(collection(db, 'integrationOrders'), where('storeId', '==', storeId))
     const bookingQuery = query(collection(db, 'integrationBookings'), where('storeId', '==', storeId))
-
-    const unsubscribeOrders = onSnapshot(
-      orderQuery,
-      snapshot => {
-        setOrders(snapshot.docs.map(docSnap => mapOnlineOrderRecord(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)))
-        setIsLoading(false)
-      },
-      err => {
-        console.error('[online-orders] Failed to load product orders', err)
-        setError('Unable to load online orders right now.')
-        setIsLoading(false)
-      },
-    )
-
-    const unsubscribeBookings = onSnapshot(
-      bookingQuery,
-      snapshot => {
-        setBookings(snapshot.docs.map(docSnap => mapOnlineOrderRecord(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)))
-        setIsLoading(false)
-      },
-      err => {
-        console.error('[online-orders] Failed to load service bookings', err)
-        setError('Unable to load online bookings right now.')
-        setIsLoading(false)
-      },
-    )
-
+    const unsubscribeOrders = onSnapshot(orderQuery, snapshot => {
+      setOrders(snapshot.docs.map(docSnap => mapOnlineOrderRecord(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)))
+      setIsLoading(false)
+    }, err => {
+      console.error('[online-orders] Failed to load product orders', err)
+      setError('Unable to load online orders right now.')
+      setIsLoading(false)
+    })
+    const unsubscribeBookings = onSnapshot(bookingQuery, snapshot => {
+      setBookings(snapshot.docs.map(docSnap => mapOnlineOrderRecord(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)))
+      setIsLoading(false)
+    }, err => {
+      console.error('[online-orders] Failed to load service bookings', err)
+      setError('Unable to load online bookings right now.')
+      setIsLoading(false)
+    })
     return () => {
       unsubscribeOrders()
       unsubscribeBookings()
@@ -636,9 +503,10 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
   async function updateCashPayment(record: OnlineOrderRecord, action: CashAction) {
     if (!storeId) return
     const key = `${record.collectionName}-${record.id}-cash-${action}`
-    const label = action === 'confirm' ? 'confirm cash received' : 'cancel this cash order'
+    const label = action === 'confirm'
+      ? isCashOrder(record) ? 'confirm cash received' : 'confirm this pending checkout as cash received'
+      : 'cancel this cash order'
     if (!window.confirm(`Are you sure you want to ${label}?`)) return
-
     const patch = cashPaymentPatch(record, action, storeId)
     setActionError(null)
     setPendingActionKey(key)
@@ -653,10 +521,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
     }
   }
 
-  const allRecords = useMemo(
-    () => [...orders, ...bookings].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)),
-    [bookings, orders],
-  )
+  const allRecords = useMemo(() => [...orders, ...bookings].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)), [bookings, orders])
 
   const stats = useMemo(() => {
     const productOrders = allRecords.filter(record => !isServiceBooking(record))
@@ -702,28 +567,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
     const tabRecords = filterRecords(allRecords, activeTab)
     const search = searchText.trim().toLowerCase()
     if (!search) return tabRecords
-    return tabRecords.filter(record =>
-      [
-        record.reference,
-        record.clientOrderId,
-        record.sedifexOrderId,
-        record.customerName,
-        record.customerEmail,
-        record.customerPhone,
-        record.itemName,
-        record.sourceLabel,
-        record.paymentStatus,
-        record.orderStatus,
-        record.bookingStatus,
-        record.fulfillmentStatus,
-        record.deliveryStatus,
-        record.paymentCollectionMode,
-        record.paymentMethod,
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(search),
-    )
+    return tabRecords.filter(record => [record.reference, record.clientOrderId, record.sedifexOrderId, record.customerName, record.customerEmail, record.customerPhone, record.itemName, record.sourceLabel, record.paymentStatus, record.orderStatus, record.bookingStatus, record.fulfillmentStatus, record.deliveryStatus, record.paymentCollectionMode, record.paymentMethod].join(' ').toLowerCase().includes(search))
   }, [activeTab, allRecords, searchText])
 
   return (
@@ -732,9 +576,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
         <div style={{ marginBottom: 24 }}>
           <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sedifex source of truth</p>
           <h1 style={{ color: '#111827', margin: 0 }}>Sales & Online Orders</h1>
-          <p style={{ color: '#475569', margin: '8px 0 0' }}>
-            View product orders and service bookings from Sedifex Market, client websites, public pages, online checkout, manual payment, pay-on-delivery, and cash channels.
-          </p>
+          <p style={{ color: '#475569', margin: '8px 0 0' }}>View product orders and service bookings from Sedifex Market, client websites, public pages, online checkout, manual payment, pay-on-delivery, and cash channels.</p>
         </div>
       ) : null}
 
@@ -756,35 +598,13 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
           </div>
           <label style={{ display: 'grid', gap: 4, color: '#475569', fontSize: 13, minWidth: 250 }}>
             Search
-            <input
-              type="search"
-              value={searchText}
-              onChange={event => setSearchText(event.target.value)}
-              placeholder="Reference, customer, channel, status…"
-              style={{ border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 11px' }}
-            />
+            <input type="search" value={searchText} onChange={event => setSearchText(event.target.value)} placeholder="Reference, customer, channel, status…" style={{ border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 11px' }} />
           </label>
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {tabs.map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                border: activeTab === tab.id ? '1px solid #4338CA' : '1px solid #CBD5E1',
-                background: activeTab === tab.id ? '#EEF2FF' : '#FFFFFF',
-                color: activeTab === tab.id ? '#3730A3' : '#334155',
-                borderRadius: 999,
-                padding: '8px 12px',
-                fontWeight: 800,
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {tab.label} ({tab.count})
-            </button>
+            <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} style={{ border: activeTab === tab.id ? '1px solid #4338CA' : '1px solid #CBD5E1', background: activeTab === tab.id ? '#EEF2FF' : '#FFFFFF', color: activeTab === tab.id ? '#3730A3' : '#334155', borderRadius: 999, padding: '8px 12px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>{tab.label} ({tab.count})</button>
           ))}
         </div>
 
@@ -819,127 +639,37 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                   const contactHref = buildCustomerContactHref(record)
                   const cashOrder = isCashOrder(record)
                   const cashPending = isCashAwaitingConfirmation(record)
+                  const cashConvertible = isCashConvertible(record)
+                  const showCashAction = cashOrder || cashConvertible
                   const confirmKey = `${record.collectionName}-${record.id}-cash-confirm`
                   const cancelKey = `${record.collectionName}-${record.id}-cash-cancel`
 
                   return (
                     <tr key={`${record.collectionName}-${record.id}`} style={{ borderBottom: '1px solid #E2E8F0', verticalAlign: 'top' }}>
+                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.customerName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{record.customerPhone || record.customerEmail || 'No contact'}</span></td>
+                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.itemName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{isServiceBooking(record) ? 'Service booking' : `Qty: ${record.quantity || 1}`}</span></td>
+                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.sourceLabel}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{record.collectionName}</span></td>
+                      <td style={{ padding: '12px 8px', color: '#0F172A', fontWeight: 700 }}>{formatMoney(record.amount, record.currency)}{record.feePolicyKey === 'sedifex_free_pay_on_delivery_v1' ? <><br /><span style={{ color: '#16A34A', fontSize: 12 }}>Free launch: no Sedifex fee</span></> : null}</td>
+                      <td style={{ padding: '12px 8px' }}><span style={{ color: '#0F172A', fontWeight: 700 }}>{normalizeStatus(record.paymentCollectionMode)}</span><br /><span style={{ color: '#64748B', fontSize: 13 }}>{normalizeStatus(record.paymentStatus)}</span>{cashOrder ? <><br /><span style={{ color: record.cashConfirmed ? '#16A34A' : '#92400E', fontSize: 12, fontWeight: 800 }}>{record.cashConfirmed ? 'Cash confirmed' : 'Awaiting cash'}</span></> : null}</td>
                       <td style={{ padding: '12px 8px' }}>
-                        <strong style={{ color: '#0F172A' }}>{record.customerName}</strong>
-                        <br />
-                        <span style={{ color: '#64748B', fontSize: 13 }}>{record.customerPhone || record.customerEmail || 'No contact'}</span>
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <strong style={{ color: '#0F172A' }}>{record.itemName}</strong>
-                        <br />
-                        <span style={{ color: '#64748B', fontSize: 13 }}>{isServiceBooking(record) ? 'Service booking' : `Qty: ${record.quantity || 1}`}</span>
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <strong style={{ color: '#0F172A' }}>{record.sourceLabel}</strong>
-                        <br />
-                        <span style={{ color: '#64748B', fontSize: 13 }}>{record.collectionName}</span>
-                      </td>
-                      <td style={{ padding: '12px 8px', color: '#0F172A', fontWeight: 700 }}>
-                        {formatMoney(record.amount, record.currency)}
-                        {record.feePolicyKey === 'sedifex_free_pay_on_delivery_v1' ? (
-                          <><br /><span style={{ color: '#16A34A', fontSize: 12 }}>Free launch: no Sedifex fee</span></>
-                        ) : null}
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <span style={{ color: '#0F172A', fontWeight: 700 }}>{normalizeStatus(record.paymentCollectionMode)}</span>
-                        <br />
-                        <span style={{ color: '#64748B', fontSize: 13 }}>{normalizeStatus(record.paymentStatus)}</span>
-                        {cashOrder ? <><br /><span style={{ color: record.cashConfirmed ? '#16A34A' : '#92400E', fontSize: 12, fontWeight: 800 }}>{record.cashConfirmed ? 'Cash confirmed' : 'Awaiting cash'}</span></> : null}
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        {cashOrder ? (
+                        {showCashAction ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 150 }}>
-                            <CashActionButton
-                              tone="confirm"
-                              loading={pendingActionKey === confirmKey}
-                              disabled={!storeId || !cashPending}
-                              onClick={() => updateCashPayment(record, 'confirm')}
-                            >
-                              Confirm Cash Received
+                            <CashActionButton tone="confirm" loading={pendingActionKey === confirmKey} disabled={!storeId || (!cashPending && !cashConvertible)} onClick={() => updateCashPayment(record, 'confirm')}>
+                              {cashOrder ? 'Confirm Cash Received' : 'Confirm as Cash Received'}
                             </CashActionButton>
-                            <CashActionButton
-                              tone="cancel"
-                              loading={pendingActionKey === cancelKey}
-                              disabled={!storeId || !cashPending}
-                              onClick={() => updateCashPayment(record, 'cancel')}
-                            >
-                              Cancel Cash Order
-                            </CashActionButton>
+                            {cashOrder ? (
+                              <CashActionButton tone="cancel" loading={pendingActionKey === cancelKey} disabled={!storeId || !cashPending} onClick={() => updateCashPayment(record, 'cancel')}>
+                                Cancel Cash Order
+                              </CashActionButton>
+                            ) : <span style={{ color: '#64748B', fontSize: 12 }}>Use when customer pays physically.</span>}
                           </div>
-                        ) : <span style={{ color: '#94A3B8', fontSize: 13 }}>Not cash</span>}
+                        ) : <span style={{ color: '#94A3B8', fontSize: 13 }}>No cash action</span>}
                       </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            borderRadius: 999,
-                            padding: '4px 9px',
-                            fontSize: 12,
-                            fontWeight: 800,
-                            background: tone === 'success' ? '#DCFCE7' : tone === 'danger' ? '#FEE2E2' : tone === 'warning' ? '#FEF3C7' : '#E2E8F0',
-                            color: tone === 'success' ? '#166534' : tone === 'danger' ? '#991B1B' : tone === 'warning' ? '#92400E' : '#334155',
-                          }}
-                        >
-                          {normalizeStatus(primaryStatus || record.paymentStatus)}
-                        </span>
-                        {record.deliveredAt ? <><br /><span style={{ color: '#64748B', fontSize: 12 }}>Delivered: {record.deliveredAt.toLocaleString()}</span></> : null}
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 320 }}>
-                          {FULFILLMENT_ACTIONS.map(action => {
-                            const actionKey = `${record.collectionName}-${record.id}-${action.id}`
-                            return (
-                              <FulfillmentButton
-                                key={action.id}
-                                active={actionIsActive(record, action.id)}
-                                loading={pendingActionKey === actionKey}
-                                disabled={!storeId}
-                                onClick={() => updateFulfillment(record, action.id)}
-                              >
-                                {action.label}
-                              </FulfillmentButton>
-                            )
-                          })}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 8px', color: '#475569', fontSize: 13 }}>
-                        <strong>Ref:</strong> {record.reference}
-                        {record.clientOrderId ? <><br /><strong>Client:</strong> {record.clientOrderId}</> : null}
-                        {record.sedifexOrderId ? <><br /><strong>Sedifex:</strong> {record.sedifexOrderId}</> : null}
-                        {record.deliveryLocation ? <><br /><strong>Delivery:</strong> {record.deliveryLocation}</> : null}
-                        {record.bookingDate || record.bookingTime ? <><br /><strong>Booking:</strong> {[record.bookingDate, record.bookingTime, record.preferredBranch].filter(Boolean).join(' · ')}</> : null}
-                        {record.notes ? <><br /><strong>Notes:</strong> {record.notes}</> : null}
-                      </td>
-                      <td style={{ padding: '12px 8px' }}>
-                        {contactHref ? (
-                          <a
-                            href={contactHref}
-                            target={contactHref.startsWith('mailto:') ? undefined : '_blank'}
-                            rel={contactHref.startsWith('mailto:') ? undefined : 'noreferrer'}
-                            style={{
-                              border: '1px solid #BBF7D0',
-                              background: '#F0FDF4',
-                              color: '#166534',
-                              borderRadius: 999,
-                              padding: '6px 10px',
-                              fontSize: 12,
-                              fontWeight: 800,
-                              textDecoration: 'none',
-                              display: 'inline-flex',
-                            }}
-                          >
-                            Contact customer
-                          </a>
-                        ) : <span style={{ color: '#94A3B8', fontSize: 13 }}>No contact</span>}
-                      </td>
-                      <td style={{ padding: '12px 8px', color: '#64748B', fontSize: 13 }}>
-                        {record.createdAt ? record.createdAt.toLocaleString() : 'Unknown'}
-                      </td>
+                      <td style={{ padding: '12px 8px' }}><span style={{ display: 'inline-flex', borderRadius: 999, padding: '4px 9px', fontSize: 12, fontWeight: 800, background: tone === 'success' ? '#DCFCE7' : tone === 'danger' ? '#FEE2E2' : tone === 'warning' ? '#FEF3C7' : '#E2E8F0', color: tone === 'success' ? '#166534' : tone === 'danger' ? '#991B1B' : tone === 'warning' ? '#92400E' : '#334155' }}>{normalizeStatus(primaryStatus || record.paymentStatus)}</span>{record.deliveredAt ? <><br /><span style={{ color: '#64748B', fontSize: 12 }}>Delivered: {record.deliveredAt.toLocaleString()}</span></> : null}</td>
+                      <td style={{ padding: '12px 8px' }}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 320 }}>{FULFILLMENT_ACTIONS.map(action => { const actionKey = `${record.collectionName}-${record.id}-${action.id}`; return <FulfillmentButton key={action.id} active={actionIsActive(record, action.id)} loading={pendingActionKey === actionKey} disabled={!storeId} onClick={() => updateFulfillment(record, action.id)}>{action.label}</FulfillmentButton> })}</div></td>
+                      <td style={{ padding: '12px 8px', color: '#475569', fontSize: 13 }}><strong>Ref:</strong> {record.reference}{record.clientOrderId ? <><br /><strong>Client:</strong> {record.clientOrderId}</> : null}{record.sedifexOrderId ? <><br /><strong>Sedifex:</strong> {record.sedifexOrderId}</> : null}{record.deliveryLocation ? <><br /><strong>Delivery:</strong> {record.deliveryLocation}</> : null}{record.bookingDate || record.bookingTime ? <><br /><strong>Booking:</strong> {[record.bookingDate, record.bookingTime, record.preferredBranch].filter(Boolean).join(' · ')}</> : null}{record.notes ? <><br /><strong>Notes:</strong> {record.notes}</> : null}</td>
+                      <td style={{ padding: '12px 8px' }}>{contactHref ? <a href={contactHref} target={contactHref.startsWith('mailto:') ? undefined : '_blank'} rel={contactHref.startsWith('mailto:') ? undefined : 'noreferrer'} style={{ border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#166534', borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 800, textDecoration: 'none', display: 'inline-flex' }}>Contact customer</a> : <span style={{ color: '#94A3B8', fontSize: 13 }}>No contact</span>}</td>
+                      <td style={{ padding: '12px 8px', color: '#64748B', fontSize: 13 }}>{record.createdAt ? record.createdAt.toLocaleString() : 'Unknown'}</td>
                     </tr>
                   )
                 })}
