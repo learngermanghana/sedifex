@@ -181,8 +181,7 @@ export default function PublicQuickPayCheckout() {
     setError(null)
     if (!selectedItem || !effectiveQuickPayType) return setError('Select what you want to pay for.')
     if (selectedItem.type === 'MANUAL' && !sanitizedManualPaymentName) return setError('Enter the service or item name.')
-    if (paymentMethod === 'ONLINE' && !customer.email.trim()) return setError('Enter your email so the payment can be processed.')
-    if (paymentMethod === 'CASH' && !customer.email.trim() && !customer.phone.trim()) return setError('Enter your phone number or email so the store can confirm the cash payment.')
+    if (!customer.email.trim() && !customer.phone.trim()) return setError('Enter customer phone number. Email is optional.')
     if (!finalAmount || finalAmount <= 0) return setError('Enter a valid amount.')
 
     setIsSubmitting(true)
@@ -444,7 +443,7 @@ export default function PublicQuickPayCheckout() {
             ) : null}
             <div className="qp-form-fields">
               <input type="text" placeholder="Customer name" value={customer.name} onChange={event => setCustomer(previous => ({ ...previous, name: event.target.value }))} className="qp-field" />
-              <input type="email" placeholder={paymentMethod === 'CASH' ? 'Email for receipt (optional if phone is added)' : 'Email for receipt'} value={customer.email} onChange={event => setCustomer(previous => ({ ...previous, email: event.target.value }))} className="qp-field" required={paymentMethod === 'ONLINE'} />
+              <input type="email" placeholder="Email (optional)" value={customer.email} onChange={event => setCustomer(previous => ({ ...previous, email: event.target.value }))} className="qp-field" />
               <input type="tel" placeholder="Phone / WhatsApp" value={customer.phone} onChange={event => setCustomer(previous => ({ ...previous, phone: event.target.value }))} className="qp-field" />
             </div>
             {error ? <p className="qp-error">{error}</p> : null}
