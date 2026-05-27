@@ -44,8 +44,8 @@ import BulkMessaging from './pages/BulkMessaging'
 import BulkEmail from './pages/BulkEmail'
 import StaffManagement from './pages/StaffManagement'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
-import Support from './pages/Support'
 import Expenses from './pages/Expenses'
+import BusinessExpenses from './pages/BusinessExpenses'
 import FundsLedger from './pages/FundsLedger'
 import DocumentsGenerator from './pages/DocumentsGenerator'
 import DocumentsBuilder from './pages/DocumentsBuilder'
@@ -141,7 +141,7 @@ const router = createBrowserRouter([
       { path: 'receipts', element: <DocumentsBuilder mode="receipt" /> },
       { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
       { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
-      { path: 'expenses', element: <Navigate to="/donor-management" replace /> },
+      { path: 'expenses', element: <BusinessExpenses /> },
       { path: 'donor-management', element: <Expenses /> },
       { path: 'funds-ledger', element: <FundsLedger /> },
       { path: 'settlement', element: <PaymentSettlement /> },
