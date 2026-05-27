@@ -27,6 +27,7 @@ import SupportRequests from './pages/SupportRequests'
 import ReportsHome from './pages/reports/ReportsHome'
 import InventoryReport from './pages/reports/InventoryReport'
 import PosSalesReport from './pages/reports/PosSalesReport'
+import SalesCashReport from './pages/reports/SalesCashReport'
 import WebsiteSalesReport from './pages/reports/WebsiteSalesReport'
 import BookingsReport from './pages/reports/BookingsReport'
 import StudentRegistrationsReport from './pages/reports/StudentRegistrationsReport'
@@ -101,6 +102,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardHub />, children: [{ index: true, element: <Dashboard /> }] },
       { path: 'reports', element: <ReportsHome /> },
+      { path: 'reports/sales-cash', element: <SalesCashReport /> },
       { path: 'reports/inventory', element: <InventoryReport /> },
       { path: 'reports/pos-sales', element: <PosSalesReport /> },
       { path: 'reports/website-sales', element: <WebsiteSalesReport /> },
