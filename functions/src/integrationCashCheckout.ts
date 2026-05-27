@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { upsertStoreCustomerFromCheckout } from './customerUpsert'
 
 const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
   default: '2026-04-13',
@@ -198,11 +199,29 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
     const paymentStatus = 'pending_cash'
     const orderStatus = 'awaiting_cash_confirmation'
 
+    const customerUpsert = await upsertStoreCustomerFromCheckout({
+      storeId,
+      customer,
+      reference,
+      sourceChannel,
+      sourceLabel,
+      paymentMethod,
+      paymentStatus,
+      orderStatus,
+      amount: amountMajor,
+      currency,
+      itemName: itemName || serviceName || productName || null,
+    }).catch(error => {
+      functions.logger.warn('Cash checkout customer auto-save failed', { storeId, reference, error })
+      return null
+    })
+
     const record = {
       storeId,
       merchantId: storeId,
       reference,
       clientOrderId,
+      customerId: customerUpsert?.customerId ?? null,
       sourceChannel,
       source_channel: sourceChannel,
       sourceLabel,
@@ -248,6 +267,7 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
         merchantId: storeId,
         clientOrderId,
         sedifexOrderId: reference,
+        customerId: customerUpsert?.customerId ?? null,
         sourceChannel,
         sourceLabel,
         paymentMethod,
@@ -278,6 +298,8 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
       reference,
       payment_reference: reference,
       orderId: reference,
+      customerId: customerUpsert?.customerId ?? null,
+      customerAutoSaved: Boolean(customerUpsert?.customerId),
       paymentStatus,
       payment_status: paymentStatus,
       orderStatus,
