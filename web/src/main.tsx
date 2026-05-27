@@ -13,6 +13,7 @@ import WebsiteBuilder from './pages/WebsiteBuilderWithAiText'
 import WebsiteBuilderPreview from './pages/WebsiteBuilderPreview'
 import QuickPayPrint from './pages/QuickPayPrint'
 import PublicQuickPayCheckout from './pages/PublicQuickPayCheckout'
+import PublicQuickPayReceipt from './pages/PublicQuickPayReceipt'
 import PublicWebsiteEngine from './pages/PublicWebsiteEngine'
 import CloseDay from './pages/CloseDay'
 import Customers from './pages/Customers'
@@ -82,6 +83,7 @@ import './studentRegistrationTabs.css'
 
 const router = createBrowserRouter([
   { path: '/receipt/:saleId', element: <ReceiptView /> },
+  { path: '/quick-pay/receipt/:storeId/:reference', element: <PublicQuickPayReceipt /> },
   { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/login', element: <Navigate to="/" replace /> },
   { path: '/s/:storeId', element: <PublicQuickPayCheckout /> },
