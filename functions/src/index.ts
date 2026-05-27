@@ -13,6 +13,7 @@ export {
 } from './integrationCheckout'
 export { integrationCashCheckoutCreate } from './integrationCashCheckout'
 export { publicQuickPayReceipt } from './publicQuickPayReceipt'
+export { syncIntegrationOrderCustomer } from './integrationOrderCustomerSync'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationBookings } from './integrationBookings'
 export { v1IntegrationProducts } from './integrationProducts'
