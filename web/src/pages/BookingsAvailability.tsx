@@ -44,6 +44,14 @@ function toLocalInputValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function defaultStartValue() {
+  return toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000))
+}
+
+function defaultEndValue() {
+  return toLocalInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
+}
+
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'event'
 }
@@ -57,11 +65,12 @@ export default function BookingsAvailability() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [photoStatus, setPhotoStatus] = useState<'idle' | 'selected' | 'uploading' | 'uploaded' | 'failed'>('idle')
+  const [editingSlotId, setEditingSlotId] = useState('')
   const [serviceMode, setServiceMode] = useState<'catalog' | 'manual'>('catalog')
   const [serviceId, setServiceId] = useState('')
   const [manualServiceName, setManualServiceName] = useState('')
-  const [startAt, setStartAt] = useState(toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)))
-  const [endAt, setEndAt] = useState(toLocalInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000)))
+  const [startAt, setStartAt] = useState(defaultStartValue)
+  const [endAt, setEndAt] = useState(defaultEndValue)
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Accra')
   const [capacity, setCapacity] = useState('20')
   const [eventKind, setEventKind] = useState<EventKind>('intake')
@@ -89,6 +98,7 @@ export default function BookingsAvailability() {
   }, [previewUrl])
 
   useEffect(() => {
+    if (editingSlotId) return
     if (serviceMode !== 'catalog' || !selectedService || photoFile) return
     const selectedImageUrl = selectedService.imageUrl?.trim() || ''
     if (!selectedImageUrl) return
@@ -97,7 +107,31 @@ export default function BookingsAvailability() {
     setImageUrl(selectedImageUrl)
     setImageAlt(selectedService.imageAlt?.trim() || `${selectedService.name} photo`)
     setAutoLoadedImageItemId(selectedService.id)
-  }, [autoLoadedImageItemId, imageUrl, photoFile, selectedService, serviceMode])
+  }, [autoLoadedImageItemId, editingSlotId, imageUrl, photoFile, selectedService, serviceMode])
+
+  const resetForm = useCallback(() => {
+    setEditingSlotId('')
+    setServiceMode('catalog')
+    setServiceId('')
+    setManualServiceName('')
+    setStartAt(defaultStartValue())
+    setEndAt(defaultEndValue())
+    setCapacity('20')
+    setEventKind('intake')
+    setRegistrationMode('paid')
+    setLinkedCourseId('')
+    setPrice('')
+    setDepositAmount('')
+    setLocation('')
+    setDescription('')
+    setMarketplaceEnabled(true)
+    setImageUrl('')
+    setImageAlt('')
+    setAutoLoadedImageItemId('')
+    setPhotoFile(null)
+    setPhotoStatus('idle')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [])
 
   const loadServices = useCallback(async (activeStoreId: string) => {
     const map = new Map<string, ServiceRecord>()
@@ -128,7 +162,7 @@ export default function BookingsAvailability() {
 
     const nextServices = Array.from(map.values()).sort((left, right) => left.name.localeCompare(right.name))
     setServices(nextServices)
-    setServiceId(previous => (previous && map.has(previous) ? previous : nextServices[0]?.id ?? ''))
+    setServiceId(previous => (previous && map.has(previous) ? previous : ''))
     return map
   }, [])
 
@@ -211,7 +245,36 @@ export default function BookingsAvailability() {
     }
   }, [imageUrl, photoFile, storeId])
 
-  const handleCreateSlot = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+  const startEditingSlot = useCallback((slot: SlotRecord) => {
+    const isManual = slot.serviceId.startsWith('manual:') || !serviceMap.has(slot.serviceId)
+    setEditingSlotId(slot.id)
+    setServiceMode(isManual ? 'manual' : 'catalog')
+    setServiceId(isManual ? '' : slot.serviceId)
+    setManualServiceName(isManual ? slot.serviceName : '')
+    setStartAt(toLocalInputValue(slot.startAt))
+    setEndAt(toLocalInputValue(slot.endAt))
+    setTimezone(slot.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Accra')
+    setCapacity(String(slot.capacity || 1))
+    setEventKind(slot.eventKind || 'event')
+    setRegistrationMode(slot.registrationMode || 'paid')
+    setLinkedCourseId(slot.linkedCourseId || '')
+    setPrice(typeof slot.price === 'number' ? String(slot.price) : '')
+    setDepositAmount(typeof slot.depositAmount === 'number' ? String(slot.depositAmount) : '')
+    setLocation(slot.location || '')
+    setDescription(slot.description || '')
+    setMarketplaceEnabled(slot.marketplaceEnabled)
+    setImageUrl(slot.imageUrl || '')
+    setImageAlt(slot.imageAlt || '')
+    setAutoLoadedImageItemId('')
+    setPhotoFile(null)
+    setPhotoStatus('idle')
+    setInfoMessage('Editing event. Save changes when you are done.')
+    setErrorMessage(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [serviceMap])
+
+  const handleSaveSlot = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!storeId || saving) return
     const startDate = new Date(startAt)
@@ -231,12 +294,10 @@ export default function BookingsAvailability() {
     setInfoMessage(null)
     try {
       const uploadedImageUrl = await uploadPhoto(resolvedServiceName)
-      const fallbackImageUrl = !uploadedImageUrl && !imageUrl.trim() ? selectedService?.imageUrl?.trim() || '' : ''
-      const resolvedImageUrl = uploadedImageUrl || imageUrl.trim() || fallbackImageUrl
+      const resolvedImageUrl = uploadedImageUrl || imageUrl.trim()
       const fallbackImageAlt = selectedService?.imageAlt?.trim() || `${resolvedServiceName} photo`
       const resolvedImageAlt = imageAlt.trim() || (resolvedImageUrl ? fallbackImageAlt : '')
-
-      await addDoc(collection(db, 'stores', storeId, 'integrationAvailabilitySlots'), {
+      const payload = {
         storeId,
         serviceId: resolvedServiceId,
         serviceName: resolvedServiceName,
@@ -248,7 +309,6 @@ export default function BookingsAvailability() {
         endAt: Timestamp.fromDate(endDate),
         timezone,
         capacity: nextCapacity,
-        seatsBooked: 0,
         listingType: 'event',
         enrollmentMode: 'scheduled',
         eventKind,
@@ -259,32 +319,36 @@ export default function BookingsAvailability() {
         location: location.trim() || null,
         description: description.trim() || null,
         marketplaceEnabled,
-        status: 'open',
         isPublic: true,
         visibleOnWebsite: true,
         imageUrl: resolvedImageUrl || null,
         imageAlt: resolvedImageAlt || null,
         attributes: { imageUrl: resolvedImageUrl || null, imageAlt: resolvedImageAlt || null },
-        createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
-      })
+      }
 
-      setImageUrl('')
-      setImageAlt('')
-      setAutoLoadedImageItemId('')
-      setPhotoFile(null)
-      setPhotoStatus('idle')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      if (serviceMode === 'manual') setManualServiceName('')
-      setInfoMessage(previous => previous?.includes('failed') || previous?.includes('Upload') || previous?.includes('Network') ? `${previous} Event saved successfully.` : 'Event saved successfully.')
+      if (editingSlotId) {
+        await updateDoc(doc(db, 'stores', storeId, 'integrationAvailabilitySlots', editingSlotId), payload)
+      } else {
+        await addDoc(collection(db, 'stores', storeId, 'integrationAvailabilitySlots'), {
+          ...payload,
+          seatsBooked: 0,
+          status: 'open',
+          createdAt: Timestamp.now(),
+        })
+      }
+
+      const wasEditing = Boolean(editingSlotId)
+      resetForm()
+      setInfoMessage(previous => previous?.includes('failed') || previous?.includes('Upload') || previous?.includes('Network') ? `${previous} Event ${wasEditing ? 'updated' : 'saved'} successfully.` : `Event ${wasEditing ? 'updated' : 'saved'} successfully.`)
       await loadSlots(storeId, serviceMap)
     } catch (error) {
-      console.error('[availability] Failed to create event', error)
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to create event. Please try again.')
+      console.error('[availability] Failed to save event', error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save event. Please try again.')
     } finally {
       setSaving(false)
     }
-  }, [capacity, depositAmount, description, endAt, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, marketplaceEnabled, price, registrationMode, saving, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
+  }, [capacity, depositAmount, description, editingSlotId, endAt, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, marketplaceEnabled, price, registrationMode, resetForm, saving, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -305,20 +369,25 @@ export default function BookingsAvailability() {
     if (!storeId) return
     try {
       await deleteDoc(doc(db, 'stores', storeId, 'integrationAvailabilitySlots', slotId))
+      if (editingSlotId === slotId) resetForm()
       await loadSlots(storeId, serviceMap)
     } catch (error) {
       console.error('[availability] Failed to delete event', error)
       setErrorMessage('Failed to delete event.')
     }
-  }, [loadSlots, serviceMap, storeId])
+  }, [editingSlotId, loadSlots, resetForm, serviceMap, storeId])
 
   return (
     <main className="page availability-page">
       <section className="card stack gap-4">
         <header className="stack gap-1"><h1>Upcoming events</h1><p className="bookings-page__intro">Create public events, classes, service sessions, intakes, or programmes that your connected website can display automatically.</p></header>
-        <form className="availability-form" onSubmit={handleCreateSlot}>
-          <label><span>Event source</span><select value={serviceMode} onChange={event => setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog')}><option value="catalog">Select existing service/product</option><option value="manual">Manual event/class name</option></select></label>
-          {serviceMode === 'catalog' ? <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => { setServiceId(event.target.value); setAutoLoadedImageItemId('') }}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label> : <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>}
+        <form className="availability-form" onSubmit={handleSaveSlot}>
+          <div className="availability-form__banner" style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <strong>{editingSlotId ? 'Editing existing event' : 'Add new event'}</strong>
+            {editingSlotId ? <button type="button" className="btn btn-secondary" onClick={() => { resetForm(); setInfoMessage('New event form is ready.') }} disabled={saving}>Cancel edit / New event</button> : <button type="button" className="btn btn-secondary" onClick={() => { resetForm(); setInfoMessage('New event form cleared.') }} disabled={saving}>Clear form</button>}
+          </div>
+          <label><span>Event source</span><select value={serviceMode} onChange={event => { setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog'); setServiceId(''); setManualServiceName(''); setImageUrl(''); setImageAlt(''); setAutoLoadedImageItemId('') }}><option value="catalog">Select existing service/product</option><option value="manual">Manual event/class name</option></select></label>
+          {serviceMode === 'catalog' ? <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => { setServiceId(event.target.value); setImageUrl(''); setImageAlt(''); setAutoLoadedImageItemId('') }}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label> : <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>}
           <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
@@ -334,10 +403,10 @@ export default function BookingsAvailability() {
           <div className="availability-photo-picker"><span>Photo upload</span><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => { const nextFile = event.target.files?.[0] ?? null; setPhotoFile(nextFile); setPhotoStatus(nextFile ? 'selected' : 'idle'); setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null) }} /><div className="availability-photo-actions"><button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>{photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}</div><p className="availability-photo-name">{photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : imageUrl.trim() ? 'Using image from selected item or image URL.' : 'No file selected yet.'}</p>{previewUrl && <img className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}{!previewUrl && imageUrl.trim() && <img className="availability-photo-preview" src={imageUrl.trim()} alt={imageAlt.trim() || selectedService?.name || 'Event image preview'} />}</div>
           <label><span>Or image URL</span><input value={imageUrl} onChange={event => { setImageUrl(event.target.value); setAutoLoadedImageItemId('') }} placeholder="https://..." /></label>
           <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>
-          <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? photoStatus === 'uploading' ? 'Uploading photo…' : 'Saving…' : 'Add event'}</button>
+          <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? photoStatus === 'uploading' ? 'Uploading photo…' : 'Saving…' : editingSlotId ? 'Save changes' : 'Add event'}</button>
         </form>
         {loading && <p className="form__hint">Loading events…</p>}{infoMessage && <p className="form__hint">{infoMessage}</p>}{errorMessage && <p className="form__error">{errorMessage}</p>}
-        {!loading && <div className="table-wrap"><table className="table"><thead><tr><th>Photo</th><th>Event</th><th>Start</th><th>End</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead><tbody>{slots.map(slot => <tr key={slot.id}><td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td><td>{slot.serviceName}</td><td>{slot.startAt.toLocaleString()}</td><td>{slot.endAt.toLocaleString()}</td><td>{slot.status}</td><td>{slot.capacity}</td><td>{slot.seatsBooked}</td><td><div className="availability-page__row-actions"><button type="button" className="btn btn-secondary" onClick={() => void toggleStatus(slot)}>{slot.status === 'open' ? 'Close' : 'Open'}</button><button type="button" className="btn btn-secondary" onClick={() => void deleteSlot(slot.id)}>Delete</button></div></td></tr>)}</tbody></table></div>}
+        {!loading && <div className="table-wrap"><table className="table"><thead><tr><th>Photo</th><th>Event</th><th>Start</th><th>End</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead><tbody>{slots.map(slot => <tr key={slot.id}><td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td><td>{slot.serviceName}</td><td>{slot.startAt.toLocaleString()}</td><td>{slot.endAt.toLocaleString()}</td><td>{slot.status}</td><td>{slot.capacity}</td><td>{slot.seatsBooked}</td><td><div className="availability-page__row-actions"><button type="button" className="btn btn-secondary" onClick={() => startEditingSlot(slot)}>Edit</button><button type="button" className="btn btn-secondary" onClick={() => void toggleStatus(slot)}>{slot.status === 'open' ? 'Close' : 'Open'}</button><button type="button" className="btn btn-secondary" onClick={() => void deleteSlot(slot.id)}>Delete</button></div></td></tr>)}</tbody></table></div>}
       </section>
     </main>
   )
