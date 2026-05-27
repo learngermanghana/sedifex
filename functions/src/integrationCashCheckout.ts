@@ -207,6 +207,10 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
       source_channel: sourceChannel,
       sourceLabel,
       source_label: sourceLabel,
+      recordType: 'manual_cash_sale',
+      storeOnly: true,
+      excludedFromSedifexSettlement: true,
+      settlementScope: 'store_only_cash',
       customer,
       customerName: customer.name || null,
       customerEmail: customer.email || null,
@@ -220,7 +224,7 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
       data: { itemName: itemName || null, productName: productName || null, serviceName: serviceName || null },
       items: enrichedItems,
       pricingSnapshot: body.pricing_snapshot ?? null,
-      marketplaceFees: body.marketplace_fees ?? null,
+      marketplaceFees: null,
       paymentProvider: 'cash',
       payment_provider: 'cash',
       paymentMethod,
@@ -237,7 +241,7 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
       cashPayment: { cashConfirmed: false, status: orderStatus, expectedAmount: amountMajor, currency },
       cashConfirmed: false,
       inventoryDeductionStatus: 'pending_cash_confirmation',
-      paystackSplit: { enabled: false, reason: 'cash_checkout' },
+      paystackSplit: { enabled: false, reason: 'store_only_cash_checkout' },
       metadata: {
         ...metadata,
         storeId,
@@ -249,27 +253,28 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
         paymentMethod,
         paymentCollectionMode: 'cash',
         cashCheckout: true,
+        storeOnly: true,
+        excludedFromSedifexSettlement: true,
       },
       statusHistory: [{
         status: orderStatus,
         paymentStatus,
         paymentMethod,
         actor: 'customer',
-        note: 'Customer selected cash payment on Sedifex Quick Pay.',
+        note: 'Customer selected store-only cash payment on Sedifex Quick Pay.',
         createdAt: new Date().toISOString(),
       }],
       createdAt: now,
       updatedAt: now,
     }
 
-    await Promise.all([
-      defaultDb.collection('integrationOrders').doc(reference).set(record, { merge: true }),
-      defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference).set(record, { merge: true }),
-    ])
+    await defaultDb.collection('stores').doc(storeId).collection('cashOrders').doc(reference).set(record, { merge: true })
 
     res.status(200).json({
       ok: true,
       cashCheckout: true,
+      storeOnly: true,
+      collection: `stores/${storeId}/cashOrders`,
       reference,
       payment_reference: reference,
       orderId: reference,
@@ -279,7 +284,7 @@ export const integrationCashCheckoutCreate = functions.https.onRequest(async (re
       order_status: orderStatus,
       paymentMethod,
       paymentCollectionMode: 'cash',
-      message: 'Cash order created. Store must confirm cash received in Sedifex.',
+      message: 'Store-only cash order created. Store must confirm cash received in Sedifex.',
     })
   } catch (error) {
     functions.logger.error('integrationCashCheckoutCreate failed', { error })
