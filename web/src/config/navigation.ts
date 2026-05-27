@@ -25,6 +25,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'quick-pay', label: 'Quick Pay', type: 'module', target: '/quick-pay', rolesAllowed: ['owner', 'staff'], sortOrder: 32 },
   { id: 'invoices', label: 'Invoices', type: 'module', target: '/invoices', rolesAllowed: ['owner', 'staff'], sortOrder: 33 },
   { id: 'receipts', label: 'Receipts', type: 'module', target: '/receipts', rolesAllowed: ['owner', 'staff'], sortOrder: 34 },
+  { id: 'expenses', label: 'Expenses', type: 'module', target: '/expenses', rolesAllowed: ['owner', 'staff'], sortOrder: 36 },
   { id: 'customers', label: 'Customers', type: 'module', target: '/customers', rolesAllowed: ['owner', 'staff'], sortOrder: 40 },
   { id: 'students', label: 'Students', type: 'module', target: '/students', rolesAllowed: ['owner', 'staff'], industries: ['school'], sortOrder: 45 },
   { id: 'bookings', label: 'Bookings', type: 'module', target: '/bookings', rolesAllowed: ['owner', 'staff'], sortOrder: 50 },
@@ -49,7 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
   shop: {},
   travel: { '/customers': 'Travelers', '/bookings': 'Trips', '/upcoming-events': 'Upcoming trips', '/marketplace-orders': 'Online Orders', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
-  ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/marketplace-orders': 'Online Orders', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links' },
+  ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/marketplace-orders': 'Online Orders', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
   school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/marketplace-orders': 'Registrations & Orders', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
 }
 
@@ -72,10 +73,10 @@ export type NavigationSettings = {
 }
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'reports', 'products', 'sell', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'donor-management'],
-  travel: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
-  school: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'bookings', 'upcoming-events', 'student-registration', 'students', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'reports', 'products', 'sell', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'donor-management'],
+  travel: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
+  school: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'bookings', 'upcoming-events', 'student-registration', 'students', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'social-links', 'website-builder', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = { role: NavRole; workspaceProfile: NavigationSettings; permissions?: string[] }
