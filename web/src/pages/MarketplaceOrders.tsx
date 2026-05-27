@@ -5,8 +5,19 @@ import { useActiveStore } from '../hooks/useActiveStore'
 
 type OnlineOrderTab = 'all' | 'pending' | 'cash-orders' | 'online-paid' | 'sedifex-market' | 'client-website' | 'service-bookings'
 type OrderCollection = 'integrationOrders' | 'integrationBookings' | 'cashOrders'
-type FulfillmentAction = 'accept' | 'preparing' | 'out_for_delivery' | 'delivered'
+type FulfillmentAction =
+  | 'accept'
+  | 'preparing'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'confirm_service'
+  | 'service_in_progress'
+  | 'service_completed'
+  | 'complete_manual'
+
 type CashAction = 'confirm' | 'cancel'
+
+type ActionConfig = { id: FulfillmentAction; label: string; hint?: string }
 
 type OnlineOrderRecord = {
   id: string
@@ -35,11 +46,21 @@ type OnlineOrderRecord = {
   notes: string
 }
 
-const FULFILLMENT_ACTIONS: Array<{ id: FulfillmentAction; label: string }> = [
-  { id: 'accept', label: 'Accept' },
+const PRODUCT_ACTIONS: ActionConfig[] = [
+  { id: 'accept', label: 'Accept order' },
   { id: 'preparing', label: 'Preparing' },
   { id: 'out_for_delivery', label: 'Out for delivery' },
   { id: 'delivered', label: 'Delivered' },
+]
+
+const SERVICE_ACTIONS: ActionConfig[] = [
+  { id: 'confirm_service', label: 'Confirm booking' },
+  { id: 'service_in_progress', label: 'Service started' },
+  { id: 'service_completed', label: 'Service completed' },
+]
+
+const MANUAL_ACTIONS: ActionConfig[] = [
+  { id: 'complete_manual', label: 'Mark completed', hint: 'Confirm cash first before completing.' },
 ]
 
 function asText(value: unknown, fallback = '') {
@@ -168,6 +189,14 @@ function isServiceBooking(record: OnlineOrderRecord) {
   return record.recordType === 'service_booking' || record.collectionName === 'integrationBookings' || record.recordType === 'service'
 }
 
+function isManualStoreOrder(record: OnlineOrderRecord) {
+  return record.collectionName === 'cashOrders' || record.recordType === 'manual_cash_sale' || Boolean(record.storeOnly)
+}
+
+function isProductOrder(record: OnlineOrderRecord) {
+  return !isServiceBooking(record) && !isManualStoreOrder(record)
+}
+
 function isCashOrder(record: OnlineOrderRecord) {
   const joined = `${record.collectionName} ${record.paymentCollectionMode} ${record.paymentMethod} ${record.paymentProvider} ${record.paymentStatus} ${record.sourceChannel}`.toLowerCase()
   return joined.includes('cash')
@@ -207,12 +236,12 @@ function filterRecords(records: OnlineOrderRecord[], tab: OnlineOrderTab) {
 }
 
 function getPrimaryStatus(record: OnlineOrderRecord) {
-  return record.fulfillmentStatus || (isServiceBooking(record) ? record.orderStatus : record.orderStatus) || record.deliveryStatus || record.paymentStatus
+  return record.fulfillmentStatus || record.orderStatus || record.deliveryStatus || record.paymentStatus
 }
 
 function statusColor(status: string) {
   const normalized = status.toLowerCase()
-  if (['success', 'confirmed', 'paid', 'paid_cash', 'completed', 'delivered'].some(token => normalized.includes(token))) return { background: '#DCFCE7', color: '#166534' }
+  if (['success', 'confirmed', 'paid', 'paid_cash', 'completed', 'delivered', 'service_completed', 'manual_completed'].some(token => normalized.includes(token))) return { background: '#DCFCE7', color: '#166534' }
   if (['failed', 'cancelled', 'canceled'].some(token => normalized.includes(token))) return { background: '#FEE2E2', color: '#991B1B' }
   return { background: '#FEF3C7', color: '#92400E' }
 }
@@ -229,6 +258,29 @@ function getDocumentRef(storeId: string, record: OnlineOrderRecord) {
   return doc(db, record.collectionName, record.id)
 }
 
+function getOrderActionType(record: OnlineOrderRecord) {
+  if (isManualStoreOrder(record)) return 'manual'
+  if (isServiceBooking(record)) return 'service'
+  return 'product'
+}
+
+function getFulfillmentActions(record: OnlineOrderRecord): ActionConfig[] {
+  const type = getOrderActionType(record)
+  if (type === 'manual') return MANUAL_ACTIONS
+  if (type === 'service') return SERVICE_ACTIONS
+  return PRODUCT_ACTIONS
+}
+
+function actionIsBlocked(record: OnlineOrderRecord, action: FulfillmentAction) {
+  if (action === 'complete_manual' && isCashAwaitingConfirmation(record)) return true
+  return false
+}
+
+function actionBlockedMessage(record: OnlineOrderRecord, action: FulfillmentAction) {
+  if (action === 'complete_manual' && isCashAwaitingConfirmation(record)) return 'Confirm cash first.'
+  return ''
+}
+
 function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId: string) {
   const nowIso = new Date().toISOString()
   const wasConvertedFromOnline = !isCashOrder(record)
@@ -238,8 +290,8 @@ function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId
       payment_status: 'paid_cash',
       orderStatus: 'completed',
       order_status: 'completed',
-      fulfillmentStatus: record.fulfillmentStatus || 'confirmed_by_store',
-      fulfillment_status: record.fulfillmentStatus || 'confirmed_by_store',
+      fulfillmentStatus: isManualStoreOrder(record) ? 'manual_paid' : record.fulfillmentStatus || 'confirmed_by_store',
+      fulfillment_status: isManualStoreOrder(record) ? 'manual_paid' : record.fulfillmentStatus || 'confirmed_by_store',
       paymentCollectionMode: 'cash',
       payment_collection_mode: 'cash',
       paymentMethod: 'CASH',
@@ -269,6 +321,8 @@ function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId
     payment_status: 'cancelled_cash',
     orderStatus: 'cancelled',
     order_status: 'cancelled',
+    fulfillmentStatus: 'cancelled',
+    fulfillment_status: 'cancelled',
     cashConfirmed: false,
     cashCancelledAt: serverTimestamp(),
     cashCancelledBy: 'store',
@@ -280,11 +334,15 @@ function cashPaymentPatch(record: OnlineOrderRecord, action: CashAction, storeId
 
 function fulfillmentPatch(record: OnlineOrderRecord, action: FulfillmentAction, storeId: string) {
   const nowIso = new Date().toISOString()
-  const map: Record<FulfillmentAction, { orderStatus: string; fulfillmentStatus: string; deliveryStatus: string }> = {
-    accept: { orderStatus: 'confirmed_by_store', fulfillmentStatus: 'confirmed_by_store', deliveryStatus: 'not_started' },
-    preparing: { orderStatus: 'preparing', fulfillmentStatus: 'preparing', deliveryStatus: 'not_started' },
-    out_for_delivery: { orderStatus: 'out_for_delivery', fulfillmentStatus: 'out_for_delivery', deliveryStatus: 'out_for_delivery' },
-    delivered: { orderStatus: 'delivered', fulfillmentStatus: 'completed', deliveryStatus: 'delivered' },
+  const map: Record<FulfillmentAction, { orderStatus: string; fulfillmentStatus: string; deliveryStatus: string; note: string }> = {
+    accept: { orderStatus: 'confirmed_by_store', fulfillmentStatus: 'confirmed_by_store', deliveryStatus: 'not_started', note: 'Store accepted product order.' },
+    preparing: { orderStatus: 'preparing', fulfillmentStatus: 'preparing', deliveryStatus: 'not_started', note: 'Product order is being prepared.' },
+    out_for_delivery: { orderStatus: 'out_for_delivery', fulfillmentStatus: 'out_for_delivery', deliveryStatus: 'out_for_delivery', note: 'Product order is out for delivery.' },
+    delivered: { orderStatus: 'delivered', fulfillmentStatus: 'completed', deliveryStatus: 'delivered', note: 'Product order delivered.' },
+    confirm_service: { orderStatus: 'booking_confirmed', fulfillmentStatus: 'booking_confirmed', deliveryStatus: 'not_applicable', note: 'Service booking confirmed.' },
+    service_in_progress: { orderStatus: 'service_in_progress', fulfillmentStatus: 'service_in_progress', deliveryStatus: 'not_applicable', note: 'Service has started.' },
+    service_completed: { orderStatus: 'service_completed', fulfillmentStatus: 'completed', deliveryStatus: 'not_applicable', note: 'Service completed.' },
+    complete_manual: { orderStatus: 'manual_completed', fulfillmentStatus: 'completed', deliveryStatus: 'not_applicable', note: 'Manual/store-only sale completed.' },
   }
   const next = map[action]
   return {
@@ -295,8 +353,8 @@ function fulfillmentPatch(record: OnlineOrderRecord, action: FulfillmentAction, 
     deliveryStatus: next.deliveryStatus,
     delivery_status: next.deliveryStatus,
     updatedAt: serverTimestamp(),
-    ...(action === 'delivered' ? { deliveredAt: serverTimestamp(), deliveredBy: 'store' } : {}),
-    statusHistory: arrayUnion({ status: next.orderStatus, fulfillmentStatus: next.fulfillmentStatus, deliveryStatus: next.deliveryStatus, action, actor: 'store', storeId, createdAt: nowIso }),
+    ...(action === 'delivered' || action === 'service_completed' || action === 'complete_manual' ? { completedAt: serverTimestamp(), deliveredAt: action === 'delivered' ? serverTimestamp() : null, completedBy: 'store' } : {}),
+    statusHistory: arrayUnion({ status: next.orderStatus, fulfillmentStatus: next.fulfillmentStatus, deliveryStatus: next.deliveryStatus, action, actor: 'store', storeId, createdAt: nowIso, note: next.note }),
   }
 }
 
@@ -310,9 +368,9 @@ function StatCard({ label, value, hint, active, onClick }: { label: string; valu
   )
 }
 
-function PillButton({ children, onClick, disabled, tone = 'neutral' }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; tone?: 'confirm' | 'danger' | 'neutral' }) {
+function PillButton({ children, onClick, disabled, tone = 'neutral', title }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; tone?: 'confirm' | 'danger' | 'neutral'; title?: string }) {
   const colors = tone === 'confirm' ? { border: '#16A34A', background: '#DCFCE7', color: '#166534' } : tone === 'danger' ? { border: '#FCA5A5', background: '#FEF2F2', color: '#991B1B' } : { border: '#CBD5E1', background: '#FFFFFF', color: '#334155' }
-  return <button type="button" disabled={disabled} onClick={onClick} style={{ border: `1px solid ${colors.border}`, background: colors.background, color: colors.color, borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 900, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1, whiteSpace: 'nowrap' }}>{children}</button>
+  return <button type="button" disabled={disabled} title={title} onClick={onClick} style={{ border: `1px solid ${colors.border}`, background: colors.background, color: colors.color, borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 900, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1, whiteSpace: 'nowrap' }}>{children}</button>
 }
 
 export default function MarketplaceOrders({ compactHeader = false }: { compactHeader?: boolean }) {
@@ -414,7 +472,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
     try {
       await updateRecord(record, fulfillmentPatch(record, action, storeId))
     } catch (err) {
-      console.error('[market-orders] Failed to update fulfillment status', err)
+      console.error('[market-orders] Failed to update order action', err)
       setActionError(err instanceof Error ? err.message : 'Unable to update order status.')
     } finally {
       setPendingActionKey(null)
@@ -465,7 +523,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
         <div style={{ marginBottom: 24 }}>
           <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Store order workspace</p>
           <h1 style={{ color: '#111827', margin: 0 }}>Sales & Market Orders</h1>
-          <p style={{ color: '#475569', margin: '8px 0 0' }}>Online Paystack orders are tracked for Sedifex settlement. Store cash/manual orders are shown here only for this store account.</p>
+          <p style={{ color: '#475569', margin: '8px 0 0' }}>Products, services, and manual cash entries now use different action buttons.</p>
         </div>
       ) : null}
 
@@ -481,7 +539,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={{ margin: 0, color: '#111827' }}>Orders workspace</h2>
-            <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 14 }}>Cash orders are store-only records and are not included in Sedifex payout/commission settlement.</p>
+            <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: 14 }}>Product rows use delivery buttons. Service rows use booking/service buttons. Manual cash rows use completion only after cash is confirmed.</p>
           </div>
           <label style={{ display: 'grid', gap: 4, color: '#475569', fontSize: 13, minWidth: 250 }}>
             Search
@@ -513,7 +571,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Payment</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Cash Action</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Status</th>
-                  <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Fulfilment</th>
+                  <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Order Action</th>
                   <th style={{ padding: '10px 8px', borderBottom: '1px solid #E2E8F0' }}>Contact</th>
                 </tr>
               </thead>
@@ -528,11 +586,13 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                   const showCashAction = cashOrder || cashConvertible
                   const confirmKey = `${record.collectionName}-${record.id}-cash-confirm`
                   const cancelKey = `${record.collectionName}-${record.id}-cash-cancel`
+                  const actionGroup = getOrderActionType(record)
+                  const orderActions = getFulfillmentActions(record)
 
                   return (
                     <tr key={`${record.collectionName}-${record.id}`} style={{ borderBottom: '1px solid #E2E8F0', verticalAlign: 'top' }}>
                       <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.customerName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{record.customerPhone || record.customerEmail || 'No contact'}</span></td>
-                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.itemName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>Qty: {record.quantity || 1}</span></td>
+                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.itemName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{actionGroup === 'product' ? `Qty: ${record.quantity || 1}` : actionGroup === 'service' ? 'Service booking' : 'Manual entry'}</span></td>
                       <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.sourceLabel}</strong><br /><span style={{ color: record.storeOnly ? '#92400E' : '#64748B', fontSize: 12, fontWeight: 800 }}>{record.storeOnly ? 'Store-only data' : record.collectionName}</span></td>
                       <td style={{ padding: '12px 8px', color: '#0F172A', fontWeight: 800 }}>{formatMoney(record.amount, record.currency)}</td>
                       <td style={{ padding: '12px 8px' }}><strong>{normalizeStatus(record.paymentCollectionMode)}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{normalizeStatus(record.paymentStatus)}</span>{cashOrder ? <><br /><span style={{ color: record.cashConfirmed ? '#16A34A' : '#92400E', fontSize: 12, fontWeight: 900 }}>{record.cashConfirmed ? 'Cash confirmed' : 'Awaiting cash'}</span></> : null}</td>
@@ -545,7 +605,20 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                         ) : <span style={{ color: '#94A3B8', fontSize: 13 }}>No cash action</span>}
                       </td>
                       <td style={{ padding: '12px 8px' }}><span style={{ display: 'inline-flex', borderRadius: 999, padding: '4px 9px', fontSize: 12, fontWeight: 900, ...colors }}>{normalizeStatus(primaryStatus || record.paymentStatus)}</span><br /><span style={{ color: '#64748B', fontSize: 12 }}>{record.reference}</span></td>
-                      <td style={{ padding: '12px 8px' }}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 260 }}>{FULFILLMENT_ACTIONS.map(action => { const actionKey = `${record.collectionName}-${record.id}-${action.id}`; return <PillButton key={action.id} disabled={!storeId || pendingActionKey === actionKey} onClick={() => updateFulfillment(record, action.id)}>{pendingActionKey === actionKey ? 'Saving…' : action.label}</PillButton> })}</div></td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 280 }}>
+                          {orderActions.map(action => {
+                            const actionKey = `${record.collectionName}-${record.id}-${action.id}`
+                            const blocked = actionIsBlocked(record, action.id)
+                            return (
+                              <PillButton key={action.id} disabled={!storeId || blocked || pendingActionKey === actionKey} title={actionBlockedMessage(record, action.id) || action.hint} onClick={() => updateFulfillment(record, action.id)}>
+                                {pendingActionKey === actionKey ? 'Saving…' : action.label}
+                              </PillButton>
+                            )
+                          })}
+                          {actionGroup === 'manual' && cashPending ? <span style={{ color: '#92400E', fontSize: 12, fontWeight: 700 }}>Confirm cash first.</span> : null}
+                        </div>
+                      </td>
                       <td style={{ padding: '12px 8px' }}>{href ? <a href={href} target={href.startsWith('mailto:') ? undefined : '_blank'} rel={href.startsWith('mailto:') ? undefined : 'noreferrer'} style={{ border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#166534', borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 900, textDecoration: 'none', display: 'inline-flex' }}>Contact</a> : <span style={{ color: '#94A3B8', fontSize: 13 }}>No contact</span>}</td>
                     </tr>
                   )
