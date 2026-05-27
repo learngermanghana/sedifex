@@ -41,14 +41,23 @@ const mainReports: ReportCard[] = [
   },
 ]
 
-const detailedReports: ReportCard[] = [
+const salesDetailReports: ReportCard[] = [
   { title: 'POS Sales Report', href: '/reports/pos-sales', description: 'Detailed internal sales from the Sell/POS page.', badge: 'POS', tone: '#059669' },
   { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from Sedifex Market, client websites, and public pages.', badge: 'Online', tone: '#2563eb' },
   { title: 'Bookings Report', href: '/reports/bookings', description: 'Service bookings, appointments, booking status, payment status, and exports.', badge: 'Bookings', tone: '#d97706' },
-  { title: 'Student Registrations', href: '/reports/student-registrations', description: 'Admissions data, course interest, start dates, and payment status.', badge: 'School', tone: '#db2777' },
+]
+
+const schoolReports: ReportCard[] = [
+  { title: 'Student Registrations', href: '/reports/student-registrations', description: 'Admissions data, student enquiries, course interest, start dates, and payment status.', badge: 'School', tone: '#db2777' },
+]
+
+const ngoReports: ReportCard[] = [
   { title: 'Donors Report', href: '/reports/donors', description: 'Donor profiles, giving totals, contact details, and status.', badge: 'Donors', tone: '#16a34a' },
-  { title: 'Funds Report', href: '/reports/funds', description: 'Manual fund buckets, inflows, outflows, and balances.', badge: 'Funds', tone: '#15803d' },
+  { title: 'Funds Report', href: '/reports/funds', description: 'Fund ledger view: money buckets, inflows, outflows, and balances.', badge: 'Funds', tone: '#15803d' },
   { title: 'Volunteers Report', href: '/reports/volunteers', description: 'Volunteer applications, skills, availability, and follow-up status.', badge: 'NGO', tone: '#7c3aed' },
+]
+
+const contentReports: ReportCard[] = [
   { title: 'Blog Report', href: '/reports/blog', description: 'Published and draft posts with simple content metrics.', badge: 'Content', tone: '#0891b2' },
 ]
 
@@ -71,6 +80,22 @@ function ReportCardTile({ report }: { report: ReportCard }) {
   )
 }
 
+function ReportSection({ title, subtitle, reports, columns = 'three' }: { title: string; subtitle: string; reports: ReportCard[]; columns?: 'two' | 'three' }) {
+  return (
+    <section className="workspace-card">
+      <div className="workspace-section-header">
+        <div>
+          <h2>{title}</h2>
+          <p className="workspace-muted">{subtitle}</p>
+        </div>
+      </div>
+      <div className={`workspace-grid workspace-grid--${columns}`}>
+        {reports.map(report => <ReportCardTile key={report.href} report={report} />)}
+      </div>
+    </section>
+  )
+}
+
 export default function ReportsHome() {
   return (
     <div className="workspace-page space-y-8">
@@ -78,7 +103,7 @@ export default function ReportsHome() {
         <p className="workspace-eyebrow">Reports</p>
         <h1>Business reports</h1>
         <p className="workspace-muted">
-          Reports are now grouped by what you need. Use Sales & Cash for store activity. Use Settlement only for Paystack/Sedifex commission and payouts.
+          Reports are grouped by purpose. Use Sales & Cash for store activity, Settlement for Paystack/Sedifex payouts, School reports for student data, and NGO reports for donors/funds/volunteers.
         </p>
       </section>
 
@@ -98,23 +123,37 @@ export default function ReportsHome() {
             <p className="workspace-muted" style={{ marginTop: 8 }}>Use Settlement Report only for online payments, commission, splits, and payouts.</p>
           </article>
           <article className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <strong>Daily work view</strong>
-            <p className="workspace-muted" style={{ marginTop: 8 }}>Use Orders & Bookings to confirm cash, start services, deliver products, and contact customers.</p>
+            <strong>School / NGO view</strong>
+            <p className="workspace-muted" style={{ marginTop: 8 }}>Use the separate School & NGO sections for student registration, donor, fund ledger, and volunteer records.</p>
           </article>
         </div>
       </section>
 
-      <section className="workspace-card">
-        <div className="workspace-section-header">
-          <div>
-            <h2>Detailed reports</h2>
-            <p className="workspace-muted">Open these when you need a specific area instead of the main summary.</p>
-          </div>
-        </div>
-        <div className="workspace-grid workspace-grid--three">
-          {detailedReports.map(report => <ReportCardTile key={report.href} report={report} />)}
-        </div>
-      </section>
+      <ReportSection
+        title="Sales detail reports"
+        subtitle="Open these when you need a specific sales, online order, or booking breakdown."
+        reports={salesDetailReports}
+      />
+
+      <ReportSection
+        title="School reports"
+        subtitle="Student and admission data for schools, academies, and training businesses."
+        reports={schoolReports}
+        columns="two"
+      />
+
+      <ReportSection
+        title="NGO reports"
+        subtitle="Donor, fund ledger, and volunteer reports for NGOs and community projects."
+        reports={ngoReports}
+      />
+
+      <ReportSection
+        title="Content reports"
+        subtitle="Website and content performance reports."
+        reports={contentReports}
+        columns="two"
+      />
     </div>
   )
 }
