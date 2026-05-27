@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import App from './App'
@@ -27,7 +27,6 @@ import SupportRequests from './pages/SupportRequests'
 import ReportsHome from './pages/reports/ReportsHome'
 import InventoryReport from './pages/reports/InventoryReport'
 import PosSalesReport from './pages/reports/PosSalesReport'
-import SalesCashReport from './pages/reports/SalesCashReport'
 import WebsiteSalesReport from './pages/reports/WebsiteSalesReport'
 import BookingsReport from './pages/reports/BookingsReport'
 import StudentRegistrationsReport from './pages/reports/StudentRegistrationsReport'
@@ -45,7 +44,6 @@ import BulkEmail from './pages/BulkEmail'
 import StaffManagement from './pages/StaffManagement'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
 import Expenses from './pages/Expenses'
-import BusinessExpenses from './pages/BusinessExpenses'
 import FundsLedger from './pages/FundsLedger'
 import DocumentsGenerator from './pages/DocumentsGenerator'
 import DocumentsBuilder from './pages/DocumentsBuilder'
@@ -82,6 +80,17 @@ import PublicBlogPage from './pages/PublicBlogPage'
 import { ToastProvider } from './components/ToastProvider'
 import './studentRegistrationTabs.css'
 
+const SalesCashReport = React.lazy(() => import('./pages/reports/SalesCashReport'))
+const BusinessExpenses = React.lazy(() => import('./pages/BusinessExpenses'))
+
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<main className="workspace-page"><section className="workspace-card"><p className="workspace-muted">Loading page…</p></section></main>}>
+      {children}
+    </Suspense>
+  )
+}
+
 const router = createBrowserRouter([
   { path: '/receipt/:saleId', element: <ReceiptView /> },
   { path: '/quick-pay/receipt/:storeId/:reference', element: <PublicQuickPayReceipt /> },
@@ -102,7 +111,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardHub />, children: [{ index: true, element: <Dashboard /> }] },
       { path: 'reports', element: <ReportsHome /> },
-      { path: 'reports/sales-cash', element: <SalesCashReport /> },
+      { path: 'reports/sales-cash', element: <LazyPage><SalesCashReport /></LazyPage> },
       { path: 'reports/inventory', element: <InventoryReport /> },
       { path: 'reports/pos-sales', element: <PosSalesReport /> },
       { path: 'reports/website-sales', element: <WebsiteSalesReport /> },
@@ -141,7 +150,7 @@ const router = createBrowserRouter([
       { path: 'receipts', element: <DocumentsBuilder mode="receipt" /> },
       { path: 'finance', element: <Navigate to="/sell/invoice" replace /> },
       { path: 'finance/documents', element: <Navigate to="/sell/invoice" replace /> },
-      { path: 'expenses', element: <BusinessExpenses /> },
+      { path: 'expenses', element: <LazyPage><BusinessExpenses /></LazyPage> },
       { path: 'donor-management', element: <Expenses /> },
       { path: 'funds-ledger', element: <FundsLedger /> },
       { path: 'settlement', element: <PaymentSettlement /> },
