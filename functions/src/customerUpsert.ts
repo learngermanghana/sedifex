@@ -1,0 +1,130 @@
+import { admin, defaultDb } from './firestore'
+
+export type CheckoutCustomerInput = {
+  storeId: string
+  customer: {
+    name?: string | null
+    email?: string | null
+    phone?: string | null
+  }
+  reference?: string | null
+  sourceChannel?: string | null
+  sourceLabel?: string | null
+  paymentMethod?: string | null
+  paymentStatus?: string | null
+  orderStatus?: string | null
+  amount?: number | null
+  currency?: string | null
+  itemName?: string | null
+}
+
+function clean(value: unknown, max = 500) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+function normalizeEmail(value: unknown) {
+  const email = clean(value, 220).toLowerCase()
+  if (!email) return ''
+  if (/^quickpay-[a-z0-9-]+@sedifex\.com$/i.test(email)) return ''
+  return email
+}
+
+function normalizePhone(value: unknown) {
+  const raw = clean(value, 80)
+  if (!raw) return ''
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return ''
+  if (raw.trim().startsWith('+')) return `+${digits}`
+  if (raw.trim().startsWith('00')) return `+${digits.replace(/^00/, '')}`
+  if (raw.trim().startsWith('0')) return `+233${digits.replace(/^0/, '')}`
+  if (digits.startsWith('233')) return `+${digits}`
+  return `+${digits}`
+}
+
+function phoneKey(value: string) {
+  return normalizePhone(value).replace(/\D/g, '')
+}
+
+function slug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80)
+}
+
+async function findExistingCustomer(storeId: string, normalizedPhone: string, normalizedEmail: string) {
+  const collection = defaultDb.collection('customers')
+  const phone = phoneKey(normalizedPhone)
+  const email = normalizedEmail.toLowerCase()
+
+  const queries: Array<() => Promise<FirebaseFirestore.QuerySnapshot>> = []
+  if (phone) queries.push(() => collection.where('storeId', '==', storeId).where('phoneKey', '==', phone).limit(1).get())
+  if (email) queries.push(() => collection.where('storeId', '==', storeId).where('emailKey', '==', email).limit(1).get())
+  if (normalizedPhone) queries.push(() => collection.where('storeId', '==', storeId).where('phone', '==', normalizedPhone).limit(1).get())
+  if (email) queries.push(() => collection.where('storeId', '==', storeId).where('email', '==', email).limit(1).get())
+
+  for (const runQuery of queries) {
+    try {
+      const snapshot = await runQuery()
+      if (!snapshot.empty) return snapshot.docs[0].ref
+    } catch (error) {
+      console.warn('[customer-upsert] Customer lookup query failed; falling back if needed', error)
+    }
+  }
+
+  return null
+}
+
+export async function upsertStoreCustomerFromCheckout(input: CheckoutCustomerInput) {
+  const storeId = clean(input.storeId, 180)
+  if (!storeId) return null
+
+  const name = clean(input.customer.name, 220)
+  const email = normalizeEmail(input.customer.email)
+  const phone = normalizePhone(input.customer.phone)
+  const keyPhone = phoneKey(phone)
+  const keyEmail = email.toLowerCase()
+
+  if (!name && !email && !phone) return null
+
+  const existingRef = await findExistingCustomer(storeId, phone, email)
+  const contactKey = keyPhone ? `phone-${keyPhone}` : keyEmail ? `email-${slug(keyEmail)}` : `name-${slug(name)}`
+  const customerRef = existingRef || defaultDb.collection('customers').doc(`${storeId}_${contactKey}`)
+  const now = admin.firestore.FieldValue.serverTimestamp()
+  const amount = typeof input.amount === 'number' && Number.isFinite(input.amount) ? input.amount : null
+
+  const patch: Record<string, unknown> = {
+    storeId,
+    updatedAt: now,
+    lastActivityAt: now,
+    lastQuickPayAt: now,
+    lastQuickPayReference: clean(input.reference, 220) || null,
+    lastQuickPaySource: clean(input.sourceChannel, 80) || 'quick_pay',
+    lastQuickPayPaymentMethod: clean(input.paymentMethod, 80) || null,
+    lastQuickPayPaymentStatus: clean(input.paymentStatus, 80) || null,
+    lastQuickPayOrderStatus: clean(input.orderStatus, 80) || null,
+    lastQuickPayItemName: clean(input.itemName, 260) || null,
+    lastQuickPayAmount: amount,
+    lastQuickPayCurrency: clean(input.currency, 20) || 'GHS',
+    tags: admin.firestore.FieldValue.arrayUnion('quick-pay', 'auto-captured'),
+    sources: admin.firestore.FieldValue.arrayUnion(clean(input.sourceChannel, 80) || 'quick_pay'),
+    customerSource: 'quick_pay',
+    autoCapturedFromQuickPay: true,
+  }
+
+  if (!existingRef) {
+    patch.createdAt = now
+  }
+  if (name) {
+    patch.name = name
+    patch.displayName = name
+  }
+  if (phone) {
+    patch.phone = phone
+    patch.phoneKey = keyPhone
+  }
+  if (email) {
+    patch.email = email
+    patch.emailKey = keyEmail
+  }
+
+  await customerRef.set(patch, { merge: true })
+  return { customerId: customerRef.id, created: !existingRef }
+}
