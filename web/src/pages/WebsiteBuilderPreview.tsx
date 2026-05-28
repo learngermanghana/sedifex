@@ -429,7 +429,7 @@ export default function WebsiteBuilderPreview() {
                     <div className="mt-4 space-y-2 text-sm">
                       <p className="font-bold">Contact</p>
                       <p className="truncate opacity-70">{settings.phone || settings.whatsapp || 'Phone / WhatsApp'}</p>
-                      <p className="truncate opacity-70">{settings.location || 'Business location'}</p>
+                      {settings.location ? <p className="truncate opacity-70">{settings.location}</p> : null}
                     </div>
                   </div>
                 </div>
