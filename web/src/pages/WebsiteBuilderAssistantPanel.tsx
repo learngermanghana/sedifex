@@ -316,7 +316,18 @@ export default function WebsiteBuilderAssistantPanel({
   );
 
   return (
-    <section className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-4">
+    <section className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-4">
+      <div className="mb-4">
+        <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
+          Website Templates
+        </p>
+        <h3 className="mt-1 text-xl font-bold text-slate-950">
+          Choose a WordPress-style website template
+        </h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Live sample previews stay inside this assistant so the main builder remains short and focused.
+        </p>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm font-semibold text-indigo-800">
           {activeTemplateLabel}
