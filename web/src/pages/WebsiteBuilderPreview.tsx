@@ -217,6 +217,9 @@ export default function WebsiteBuilderPreview() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [showShareTools, setShowShareTools] = useState(false)
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false)
+  const [coverLoadFailed, setCoverLoadFailed] = useState(false)
+  const [shareImageLoadFailed, setShareImageLoadFailed] = useState(false)
   const url = publicUrl(settings)
   const profile = PREVIEW_PROFILES[settings.websiteType]
   const theme = THEME_OPTIONS[settings.theme]
@@ -317,6 +320,21 @@ export default function WebsiteBuilderPreview() {
     window.setTimeout(() => setCopyFeedback(null), 2500)
   }
 
+
+  useEffect(() => {
+    setLogoLoadFailed(false)
+  }, [settings.businessLogoUrl])
+
+  useEffect(() => {
+    setCoverLoadFailed(false)
+  }, [settings.coverImageUrl])
+
+  useEffect(() => {
+    setShareImageLoadFailed(false)
+  }, [shareImage])
+
+  const hasServiceContent = Boolean(settings.contentDrafts.serviceDescriptions.trim())
+
   if (isLoading) {
     return (
       <PageSection title="Website Preview" subtitle="Loading your website preview…">
@@ -383,10 +401,10 @@ export default function WebsiteBuilderPreview() {
                 <span className="ml-2 truncate rounded-full bg-white px-3 py-1 text-[11px] font-medium text-slate-500">{url}</span>
               </div>
 
-              <div className={`bg-gradient-to-br ${theme.previewClassName} p-5 md:p-7 ${theme.textClassName}`} style={settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.25)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}>
+              {settings.coverImageUrl && !coverLoadFailed ? <img src={settings.coverImageUrl} alt="" className="hidden" onError={() => setCoverLoadFailed(true)} /> : null}<div className={`bg-gradient-to-br ${theme.previewClassName} p-5 md:p-7 ${theme.textClassName}`} style={settings.coverImageUrl && !coverLoadFailed ? { backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.25)), url(${settings.coverImageUrl})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    {settings.businessLogoUrl ? <img src={settings.businessLogoUrl} alt="Business logo" className="h-12 w-12 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-xl ring-1 ring-white/30">{profile.icon}</span>}
+                    {settings.businessLogoUrl && !logoLoadFailed ? <img src={settings.businessLogoUrl} alt="Business logo" className="h-12 w-12 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" onError={() => setLogoLoadFailed(true)} /> : <span className="flex h-12 min-w-[3rem] shrink-0 items-center justify-center rounded-2xl bg-white/20 px-2 text-center text-[10px] font-bold ring-1 ring-white/30">{settings.businessName || profile.icon}</span>}
                     <div className="min-w-0">
                       <p className="truncate text-base font-black">{settings.businessName}</p>
                       <p className="truncate text-xs opacity-75">{settings.tagline || profile.eyebrow}</p>
@@ -418,7 +436,7 @@ export default function WebsiteBuilderPreview() {
               </div>
 
               <div className="grid gap-3 bg-white p-5 sm:grid-cols-3">
-                {profile.cards.map(card => <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="h-10 w-10 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} /><p className="mt-4 text-sm font-bold text-slate-900">{card}</p><div className="mt-3 h-2 w-20 rounded-full bg-slate-200" /></div>)}
+                {hasServiceContent ? profile.cards.map(card => <div key={card} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="h-10 w-10 rounded-xl" style={{ backgroundColor: `${settings.brandColor}22` }} /><p className="mt-4 text-sm font-bold text-slate-900">{card}</p><div className="mt-3 h-2 w-20 rounded-full bg-slate-200" /></div>) : <div className="sm:col-span-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Products/services are not added yet. Add them in the builder to populate this section.</div>}
               </div>
 
               <div className="border-t border-slate-200 bg-slate-50 p-4">
@@ -476,7 +494,7 @@ export default function WebsiteBuilderPreview() {
           <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Facebook / WhatsApp preview</p>
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {shareImage ? <img src={shareImage} alt="Social share preview" className="h-40 w-full object-cover" /> : <div className="flex h-40 items-center justify-center bg-slate-100 text-sm font-semibold text-slate-400">Social share image</div>}
+              {shareImage && !shareImageLoadFailed ? <img src={shareImage} alt="Social share preview" className="h-40 w-full object-cover" onError={() => setShareImageLoadFailed(true)} /> : <div className="flex h-40 items-center justify-center bg-slate-100 text-sm font-semibold text-slate-400">Social share image</div>}
               <div className="p-4">
                 <p className="truncate text-xs uppercase tracking-wide text-slate-500">{settings.domainSettings.customDomain || 'sites.sedifex.com'}</p>
                 <h3 className="mt-1 text-base font-bold text-slate-950">{seoTitle}</h3>
