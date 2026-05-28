@@ -14,6 +14,7 @@ import {
   where,
 } from 'firebase/firestore'
 import './Products.css'
+import { requestAiAdvisor } from '../api/aiAdvisor'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -220,6 +221,111 @@ function cleanSavedDescription(text: string): string {
     .trim()
 }
 
+function buildAiDescriptionPrompt(draft: Draft): string {
+  const details = {
+    name: titleCase(draft.name.trim()),
+    itemType: draft.itemType,
+    category: normalizeCategory(draft.category, draft.itemType),
+    price: cleanNumber(draft.price),
+    currency: 'GHS',
+    sku: draft.sku.trim() || null,
+    openingStock: cleanNumber(draft.openingStock),
+    expiryDate: draft.expiryDate || null,
+    serviceKind: draft.itemType === 'service' ? draft.serviceKind : null,
+    durationMinutes: draft.itemType === 'service' ? cleanNumber(draft.durationMinutes) : null,
+    location: draft.location.trim() || draft.branch.trim() || null,
+    courseLevel: draft.itemType === 'course' ? draft.courseLevel.trim() || null : null,
+    courseMode: draft.itemType === 'course' ? draft.courseMode : null,
+    courseDuration: draft.itemType === 'course' ? draft.duration.trim() || null : null,
+    classTimes: draft.itemType === 'course' ? draft.preferredTimes.trim() || draft.classTimes.trim() || null : null,
+    requirements: draft.itemType === 'course' ? draft.requirements.trim() || null : null,
+    starterItems: draft.itemType === 'course' ? draft.starterItems.trim() || null : null,
+  }
+
+  return [
+    'You are writing a real customer-facing catalogue description for a Ghanaian store.',
+    'Do not write a generic placeholder like “available from the store” or only mention category and price.',
+    'Talk about the specific product/service/course name and what a customer can use it for.',
+    'Use warm, natural, simple English. Avoid medical claims, guaranteed results, or invented ingredients/specifications.',
+    'If some facts are missing, infer safe everyday uses from the name and category, but do not pretend to know exact ingredients, materials, sizes, or technical specs.',
+    'Format exactly as plain text with:',
+    '1) One strong opening paragraph of 2-3 sentences.',
+    '2) Three benefit bullets, each starting with "-".',
+    '3) One line starting with "Best for:".',
+    '4) One short call-to-action line.',
+    'Keep it between 120 and 220 words unless the product details require less.',
+    'Item details JSON:',
+    JSON.stringify(details),
+  ].join('\n')
+}
+
+function getProductDescriptionAngle(itemName: string, category: string) {
+  const source = `${itemName} ${category}`.toLowerCase()
+
+  if (/skin|glow|cream|lotion|soap|serum|beauty|cosmetic|face|body/.test(source)) {
+    return {
+      audience: 'customers who care about looking fresh, feeling confident, and keeping their daily beauty routine simple',
+      sensory: 'smooth, clean, and self-care focused',
+      uses: 'daily personal care, beauty shelves, gifting, and salon or boutique recommendations',
+      benefits: [
+        'Supports a polished self-care routine with a product customers can easily remember and ask for again.',
+        'Works well as a beauty-focused item for shoppers comparing glow, skin-care, or personal-care options.',
+        'Presents neatly on your catalogue so customers understand the value before they place an order.',
+      ],
+    }
+  }
+
+  if (/food|drink|beverage|snack|rice|oil|spice|tea|coffee|juice/.test(source)) {
+    return {
+      audience: 'customers who want dependable food and beverage options for home, work, events, or everyday use',
+      sensory: 'fresh, practical, and easy to enjoy',
+      uses: 'daily meals, quick restocking, pantry planning, office use, and small gatherings',
+      benefits: [
+        'Makes shopping easier by clearly presenting what the item is and why it fits everyday needs.',
+        'Helps customers choose a ready-to-order option from your food and beverage selection.',
+        'Works well for repeat purchases when customers want familiar quality and convenient availability.',
+      ],
+    }
+  }
+
+  if (/fashion|cloth|dress|shirt|shoe|bag|watch|jewellery|jewelry|wear/.test(source)) {
+    return {
+      audience: 'customers who want stylish pieces that are easy to match with everyday or occasion looks',
+      sensory: 'stylish, presentable, and confidence-building',
+      uses: 'personal styling, gifting, events, work outfits, casual wear, and wardrobe refreshes',
+      benefits: [
+        'Gives shoppers a clearer idea of how the item can fit their style and daily dressing needs.',
+        'Highlights the product as a practical choice for customers who want a neat, ready-to-buy fashion option.',
+        'Helps your listing feel more complete so customers can decide with confidence.',
+      ],
+    }
+  }
+
+  if (/electronic|phone|charger|speaker|cable|adapter|laptop|device|gadget/.test(source)) {
+    return {
+      audience: 'customers who want useful electronics that make daily work, communication, or entertainment easier',
+      sensory: 'practical, modern, and convenience-focused',
+      uses: 'home use, office work, travel, school, gifting, and everyday digital needs',
+      benefits: [
+        'Explains the product in a way that helps customers connect it to real daily tasks.',
+        'Positions the item as a convenient option for shoppers comparing useful tech accessories or devices.',
+        'Makes the listing stronger by showing why the item deserves attention beyond the price alone.',
+      ],
+    }
+  }
+
+  return {
+    audience: 'customers who want a useful, reliable item they can buy with confidence from your store',
+    sensory: 'practical, neat, and customer-friendly',
+    uses: 'everyday use, gifting, shop restocking, personal needs, and convenient local ordering',
+    benefits: [
+      'Describes the item clearly so customers understand what they are buying and why it may suit them.',
+      'Helps your product stand out with more detail than a short availability note.',
+      'Gives shoppers enough confidence to ask questions, place an order, or save the item for later.',
+    ],
+  }
+}
+
 function generateItemDescription(draft: Draft): string {
   const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'service' ? 'This service' : 'This product')
   const category = normalizeCategory(draft.category, draft.itemType)
@@ -231,25 +337,36 @@ function generateItemDescription(draft: Draft): string {
     const mode = draft.courseMode === 'online' ? 'online' : draft.courseMode === 'hybrid' ? 'in online and in-person formats' : 'in person'
     const classTimes = draft.preferredTimes.trim() || draft.classTimes.trim()
     const fee = cleanNumber(draft.price)
-    const feeText = fee !== null ? `The course fee is GHS ${fee.toFixed(2)}.` : ''
-    const intro = `${itemName} is a ${level} ${category.toLowerCase()} programme for learners who want practical and structured progress.`
+    const feeText = fee !== null ? `Course fee: GHS ${fee.toFixed(2)}.` : ''
+    const intro = `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical guidance, steady progress, and skills they can apply with confidence.`
     const details = `Classes are offered ${mode}${(draft.branch.trim() || locationText) ? ` at ${draft.branch.trim() || locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}${duration ? `, over ${duration}` : ''}.`
-    return cleanSavedDescription([intro, details, feeText].filter(Boolean).join('\n\n'))
+    const benefits = ['- Learn through a structured programme that is easy to understand and follow.', '- Build confidence with lessons focused on practical progress, not only theory.', '- Register through the store and keep payment or enquiry records in one place.']
+    return cleanSavedDescription([intro, details, ...benefits, feeText, 'Best for: learners who want a clear course option with simple registration.'].filter(Boolean).join('\n\n'))
   }
 
   if (draft.itemType === 'service') {
     const duration = cleanNumber(draft.durationMinutes)
-    const intro = `${itemName} helps customers access professional and reliable ${category.toLowerCase()} support.`
-    const booking = `${locationText ? `It is offered at ${locationText}. ` : ''}Customers can request or book a preferred date and time, and Sedifex-powered channels can handle online booking and payment records.`
-    const durationText = duration ? `Typical session time is about ${duration} minutes.` : ''
-    return cleanSavedDescription([intro, booking, durationText].filter(Boolean).join('\n\n'))
+    const intro = `${itemName} is a ${category.toLowerCase()} service for customers who want professional support, clear booking steps, and a dependable experience from enquiry to completion.`
+    const booking = `${locationText ? `It is offered at ${locationText}. ` : ''}Customers can request or book a preferred date and time, share notes about what they need, and keep payment or appointment details organised through the store.`
+    const benefits = ['- Gives customers a simple way to understand the service before booking.', '- Helps reduce back-and-forth by setting clear expectations for enquiries and appointments.', '- Works well for customers who prefer convenient ordering, booking, and follow-up.']
+    const durationText = duration ? `Typical session time: about ${duration} minutes.` : ''
+    return cleanSavedDescription([intro, booking, ...benefits, durationText, 'Best for: customers who want reliable service with an easy booking process.'].filter(Boolean).join('\n\n'))
   }
 
   const fee = cleanNumber(draft.price)
-  const feeText = fee !== null ? `The current listed price is GHS ${fee.toFixed(2)}.` : ''
-  const intro = `${itemName} is available from the store for customers who want a reliable and convenient purchase option.`
-  const details = `It belongs to the ${category.toLowerCase()} category and can be ordered based on availability.`
-  return cleanSavedDescription([intro, details, feeText].filter(Boolean).join('\n\n'))
+  const stockCount = cleanNumber(draft.openingStock)
+  const angle = getProductDescriptionAngle(itemName, category)
+  const categoryPhrase = category === PRODUCT_CATEGORY ? 'product' : `${category.toLowerCase()} item`
+  const priceText = fee !== null ? `Price: GHS ${fee.toFixed(2)}.` : ''
+  const stockText = stockCount !== null ? `Current stock: ${stockCount} available before new sales are recorded.` : ''
+  const skuText = draft.sku.trim() ? `SKU / code: ${draft.sku.trim()}.` : ''
+  const expiryText = draft.expiryDate ? `Expiry date: ${draft.expiryDate}.` : ''
+  const intro = `${itemName} is a ${categoryPhrase} made for ${angle.audience}. It gives shoppers a clearer reason to choose the item by explaining how it fits real customer needs, not just that it is available.`
+  const details = `With a ${angle.sensory} appeal, ${itemName} is suitable for ${angle.uses}. It can be shared in your catalogue, recommended during customer conversations, and ordered based on availability.`
+  const closing = 'Best for: customers who want a clear, convenient product option and enough information to decide before buying.'
+  const cta = 'Order now, ask about availability, or contact the store for guidance before purchase.'
+
+  return cleanSavedDescription([intro, details, ...angle.benefits.map(benefit => `- ${benefit}`), priceText, stockText, skuText, expiryText, closing, cta].filter(Boolean).join('\n\n'))
 }
 
 function improveDescription(text: string): string {
@@ -451,6 +568,7 @@ export default function ProductsServiceFirst() {
   const [saving, setSaving] = useState(false)
   const [imageUploadState, setImageUploadState] = useState<'idle' | 'uploading' | 'success' | 'failed'>('idle')
   const [imageStatusMessage, setImageStatusMessage] = useState('')
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
 
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
@@ -501,6 +619,36 @@ export default function ProductsServiceFirst() {
       if (key === 'certificateIncluded') return { ...current, certificateIncluded: value === 'true' }
       return { ...current, [key]: value }
     })
+  }
+
+  async function handleGenerateDescription() {
+    if (isGeneratingDescription) return
+    if (!draft.name.trim()) {
+      setError('Enter the item name first.')
+      return
+    }
+    if (draft.description.trim() && !window.confirm('Replace the current description with an AI-generated one?')) return
+
+    setError('')
+    setMessage('')
+    setIsGeneratingDescription(true)
+    try {
+      const response = await requestAiAdvisor({
+        question: buildAiDescriptionPrompt(draft),
+        storeId: storeId ?? undefined,
+        jsonContext: { source: 'products-service-first-description', draft },
+      })
+      const generated = cleanSavedDescription(typeof response.advice === 'string' ? response.advice : '')
+      if (!generated) throw new Error('AI returned an empty description.')
+      updateDraft('description', generated)
+      setMessage('AI generated a richer description. Review and edit before saving.')
+    } catch (aiError) {
+      console.error('[products-service-first] AI description generation failed', aiError)
+      updateDraft('description', generateItemDescription(draft))
+      setError('AI could not be reached, so a richer local draft was generated instead. You can edit it before saving.')
+    } finally {
+      setIsGeneratingDescription(false)
+    }
   }
 
   function resetForm() {
@@ -775,17 +923,10 @@ export default function ProductsServiceFirst() {
                   <button
                     type="button"
                     className="button button--ghost products-page__helper-button"
-                    onClick={() => {
-                      if (!draft.name.trim()) {
-                        setError('Enter the item name first.')
-                        return
-                      }
-                      if (draft.description.trim() && !window.confirm('Replace the current description with a generated one?')) return
-                      setError('')
-                      updateDraft('description', generateItemDescription(draft))
-                    }}
+                    onClick={handleGenerateDescription}
+                    disabled={isGeneratingDescription}
                   >
-                    Generate with AI
+                    {isGeneratingDescription ? 'Generating with AI…' : 'Generate with AI'}
                   </button>
                   <button
                     type="button"
