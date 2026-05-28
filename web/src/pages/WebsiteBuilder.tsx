@@ -764,6 +764,23 @@ function createDefaultSettings(): WebsiteBuilderSettings {
   };
 }
 
+function formatTemplateNameFromKey(value: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) =>
+      part.toLowerCase() === "ngo"
+        ? "NGO"
+        : `${part.charAt(0).toUpperCase()}${part.slice(1)}`,
+    )
+    .join(" ");
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -1771,6 +1788,21 @@ export default function WebsiteBuilder() {
     navigate("/website-builder/preview");
   }
 
+  const hasSelectedTemplate = Boolean(
+    settings.selectedTemplateId.trim() ||
+      settings.selectedTemplateName.trim() ||
+      settings.layoutTemplate.trim(),
+  );
+  const currentTemplateName =
+    settings.selectedTemplateName.trim() ||
+    formatTemplateNameFromKey(
+      settings.layoutTemplate || settings.selectedTemplateId,
+    ) ||
+    "Default Sedifex layout";
+  const currentTemplateHelper = hasSelectedTemplate
+    ? "Preview uses this template with your business data."
+    : "Choose a template from AI / Templates when ready.";
+
   function goToStep(offset: number) {
     const nextIndex = Math.min(
       Math.max(safeStepIndex + offset, 0),
@@ -1822,6 +1854,35 @@ export default function WebsiteBuilder() {
         className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)]"
       >
         <div className="space-y-6">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
+                  Current template: {currentTemplateName}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {currentTemplateHelper}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700"
+                  onClick={previewWithMyData}
+                >
+                  Preview with my data
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+                  onClick={() => setShowAssistant(true)}
+                >
+                  Change template
+                </button>
+              </div>
+            </div>
+          </section>
+
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white shadow-sm">
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div>
@@ -1843,12 +1904,6 @@ export default function WebsiteBuilder() {
                 </p>
                 <p className="mt-3 break-all rounded-xl bg-white/10 px-3 py-2 text-cyan-100">
                   {publicWebsiteUrl}
-                </p>
-                <p className="mt-2 rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100">
-                  Current template: {settings.selectedTemplateName || "Generic Sedifex"}
-                </p>
-                <p className="mt-2 text-xs font-semibold text-cyan-100">
-                  Live website will use this template after publishing.
                 </p>
               </div>
             </div>
@@ -1877,9 +1932,6 @@ export default function WebsiteBuilder() {
                 <p className="mt-1 text-sm text-slate-500">
                   Step {safeStepIndex + 1} of {BUILDER_STEPS.length}:{" "}
                   {currentStep.description}
-                </p>
-                <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                  Current template: {settings.selectedTemplateName || "Generic Sedifex"}
                 </p>
               </div>
               <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700">
