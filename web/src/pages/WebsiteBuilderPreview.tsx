@@ -204,12 +204,19 @@ function previewText(value: string, fallback: string) {
   return clean.length > 220 ? `${clean.slice(0, 217)}…` : clean
 }
 
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000
+const previewSettingsCache = new Map<string, { savedAt: number; data: WebsitePreviewSettings }>()
+
 export default function WebsiteBuilderPreview() {
   const { storeId, isLoading } = useActiveStore()
   const [settings, setSettings] = useState<WebsitePreviewSettings>(() => defaultSettings())
   const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop')
-  const [loading, setLoading] = useState(true)
+  const [shouldLoadPreview, setShouldLoadPreview] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
+  const [showShareTools, setShowShareTools] = useState(false)
   const url = publicUrl(settings)
   const profile = PREVIEW_PROFILES[settings.websiteType]
   const theme = THEME_OPTIONS[settings.theme]
@@ -225,6 +232,7 @@ export default function WebsiteBuilderPreview() {
   const shareImage = settings.seoSettings.socialShareImage || settings.coverImageUrl || settings.businessLogoUrl
 
   useEffect(() => {
+    if (!shouldLoadPreview) return
     let mounted = true
 
     async function loadPreview() {
@@ -234,7 +242,15 @@ export default function WebsiteBuilderPreview() {
       }
 
       setLoading(true)
+      setLoadError(null)
       try {
+        const forceRefresh = reloadTick > 0
+        const cached = previewSettingsCache.get(storeId)
+        if (!forceRefresh && cached && Date.now() - cached.savedAt < PREVIEW_CACHE_TTL_MS) {
+          setSettings(cached.data)
+          return
+        }
+
         const [settingsSnap, storeSnap] = await Promise.all([
           getDoc(doc(db, 'storeSettings', storeId)),
           getDoc(doc(db, 'stores', storeId)),
@@ -251,7 +267,7 @@ export default function WebsiteBuilderPreview() {
         const domainSettings = { ...DEFAULT_DOMAIN_SETTINGS, ...record(settingsData.domainSettings) } as DomainSettings
         const businessName = stringValue(settingsData.businessName, stringValue(storeData.businessName, stringValue(storeData.storeName, stringValue(storeData.name, defaults.businessName))))
 
-        setSettings({
+        const nextSettings: WebsitePreviewSettings = {
           ...defaults,
           slug: stringValue(settingsData.slug, businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')),
           websiteType: isWebsiteType(settingsData.websiteType) ? settingsData.websiteType : defaults.websiteType,
@@ -273,7 +289,12 @@ export default function WebsiteBuilderPreview() {
           contentDrafts,
           seoSettings,
           domainSettings,
-        })
+        }
+        setSettings(nextSettings)
+        previewSettingsCache.set(storeId, { savedAt: Date.now(), data: nextSettings })
+      } catch (error) {
+        console.error('[website-preview] Unable to load preview', error)
+        setLoadError('Unable to load website preview right now. Please try again.')
       } finally {
         if (mounted) setLoading(false)
       }
@@ -283,7 +304,7 @@ export default function WebsiteBuilderPreview() {
     return () => {
       mounted = false
     }
-  }, [storeId])
+  }, [storeId, shouldLoadPreview, reloadTick])
 
   async function copyText(text: string, message: string) {
     try {
@@ -296,7 +317,29 @@ export default function WebsiteBuilderPreview() {
     window.setTimeout(() => setCopyFeedback(null), 2500)
   }
 
-  if (isLoading || loading) {
+  if (isLoading) {
+    return (
+      <PageSection title="Website Preview" subtitle="Loading your website preview…">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-600">Preparing preview…</div>
+      </PageSection>
+    )
+  }
+
+  if (!shouldLoadPreview) {
+    return (
+      <PageSection title="Website Preview" subtitle="Load the latest saved Website Builder data when you are ready.">
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Load preview on demand</h2>
+          <p className="mt-2 text-sm text-slate-600">To keep this page fast, preview data is loaded only when requested.</p>
+          <button type="button" className="button button--primary mt-4" onClick={() => setShouldLoadPreview(true)}>
+            Load website preview
+          </button>
+        </section>
+      </PageSection>
+    )
+  }
+
+  if (loading) {
     return (
       <PageSection title="Website Preview" subtitle="Loading your website preview…">
         <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-600">Preparing preview…</div>
@@ -393,11 +436,22 @@ export default function WebsiteBuilderPreview() {
         <aside className="space-y-5">
           <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-indigo-600">Website actions</p>
+            {loadError ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p> : null}
             <div className="mt-4 grid gap-3">
+              <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => setReloadTick(current => current + 1)}>
+                Refresh preview data
+              </button>
               <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => void copyText(url, 'Website link copied.')}>Copy link</button>
-              <a className="rounded-2xl bg-emerald-600 px-4 py-3 text-center text-sm font-bold text-white" href={whatsappShareUrl} target="_blank" rel="noreferrer">Share to WhatsApp</a>
-              <a className="rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-bold text-white" href={facebookShareUrl} target="_blank" rel="noreferrer">Share to Facebook</a>
-              <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => void copyText(instagramCaption, 'Instagram caption copied.')}>Copy Instagram caption</button>
+              <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => setShowShareTools(current => !current)}>
+                {showShareTools ? 'Hide share tools' : 'Show share tools'}
+              </button>
+              {showShareTools ? (
+                <>
+                  <a className="rounded-2xl bg-emerald-600 px-4 py-3 text-center text-sm font-bold text-white" href={whatsappShareUrl} target="_blank" rel="noreferrer">Share to WhatsApp</a>
+                  <a className="rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-bold text-white" href={facebookShareUrl} target="_blank" rel="noreferrer">Share to Facebook</a>
+                  <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => void copyText(instagramCaption, 'Instagram caption copied.')}>Copy Instagram caption</button>
+                </>
+              ) : null}
             </div>
             {copyFeedback ? <p className="mt-3 rounded-2xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">{copyFeedback}</p> : null}
           </section>
