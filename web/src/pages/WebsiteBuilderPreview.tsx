@@ -456,11 +456,13 @@ export default function WebsiteBuilderPreview() {
             {copyFeedback ? <p className="mt-3 rounded-2xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">{copyFeedback}</p> : null}
           </section>
 
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 text-center shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-wide text-indigo-600">QR code</p>
-            <img src={qrCodeUrl(url)} alt="Website QR code" className="mx-auto mt-4 h-56 w-56 rounded-2xl" />
-            <p className="mt-3 break-all text-xs font-semibold text-slate-500">{url}</p>
-          </section>
+          {showShareTools ? (
+            <section className="rounded-[2rem] border border-slate-200 bg-white p-5 text-center shadow-sm">
+              <p className="text-sm font-bold uppercase tracking-wide text-indigo-600">QR code</p>
+              <img src={qrCodeUrl(url)} alt="Website QR code" className="mx-auto mt-4 h-56 w-56 rounded-2xl" />
+              <p className="mt-3 break-all text-xs font-semibold text-slate-500">{url}</p>
+            </section>
+          ) : null}
 
           <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Google preview</p>
