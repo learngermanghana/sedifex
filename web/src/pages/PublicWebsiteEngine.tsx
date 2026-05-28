@@ -28,6 +28,8 @@ type WebsiteSettings = {
   selectedTemplateId: string;
   selectedTemplateName: string;
   layoutKey: string;
+  layoutTemplate: string;
+  templateCategory: string;
   selectedSections: string[];
   pages: string[];
   status: "draft" | "published";
@@ -224,6 +226,86 @@ function uniquePages(labels: string[]): PublicPage[] {
   return pages;
 }
 
+const TEMPLATE_LAYOUTS = new Set([
+  "shop-classic",
+  "travel-visa-consultancy",
+  "beauty-booking",
+  "ngo-impact",
+  "school-academy",
+  "services-booking",
+  "restaurant-menu",
+]);
+
+function resolveTemplateLayout(settings: WebsiteSettings) {
+  return settings.layoutTemplate || settings.selectedTemplateId || settings.layoutKey;
+}
+
+function buildItemCheckoutUrl(storeId: string, item: PublicItem) {
+  const params = new URLSearchParams({
+    mode: "item",
+    itemId: item.id,
+    itemType: item.type,
+    name: item.name,
+    qty: "1",
+  });
+  return `https://pay.sedifex.com/s/${encodeURIComponent(storeId)}?${params.toString()}`;
+}
+
+function templatePublicCopy(layout: string, settings: WebsiteSettings) {
+  const copy: Record<string, { eyebrow: string; primary: string; secondary: string; sections: string[]; itemTitle: string }> = {
+    "shop-classic": { eyebrow: "Classic storefront", primary: "Shop products", secondary: "Pay securely", sections: ["Featured products", "Categories", "Checkout"], itemTitle: "Featured products" },
+    "travel-visa-consultancy": { eyebrow: "Visa & travel consultancy", primary: "Request consultation", secondary: "Check services", sections: ["Visa support", "Travel packages", "Document checks"], itemTitle: "Travel and visa services" },
+    "beauty-booking": { eyebrow: "Beauty booking studio", primary: "Book appointment", secondary: "View services", sections: ["Treatments", "Bookings", "Gallery"], itemTitle: "Beauty services" },
+    "ngo-impact": { eyebrow: "Mission • Impact • Community", primary: "Donate now", secondary: "Volunteer", sections: ["Mission", "Impact", "Programs", "Donate", "Volunteer"], itemTitle: "Programs and support" },
+    "school-academy": { eyebrow: "School academy", primary: "Register now", secondary: "View courses", sections: ["Courses", "Admissions", "Student payments"], itemTitle: "Courses and classes" },
+    "services-booking": { eyebrow: "Service booking", primary: "Book service", secondary: "Request quote", sections: ["Services", "Booking", "Quick Pay"], itemTitle: "Services and bookings" },
+    "restaurant-menu": { eyebrow: "Restaurant menu", primary: "View menu", secondary: "Order and pay", sections: ["Menu", "Specials", "Ordering"], itemTitle: "Menu highlights" },
+  };
+  return copy[layout] || { eyebrow: settings.businessType || "Sedifex website", primary: "Contact us", secondary: "Quick Pay", sections: ["About", "Products", "Services"], itemTitle: "Featured items" };
+}
+
+function TemplateHome({ settings, profile, items, gallery, quickPayUrl, slug }: { settings: WebsiteSettings; profile: StoreProfile; items: PublicItem[]; gallery: GalleryItem[]; quickPayUrl: string; slug: string }) {
+  const layout = resolveTemplateLayout(settings);
+  const copy = templatePublicCopy(layout, settings);
+  const isNgo = layout === "ngo-impact";
+  const isRestaurant = layout === "restaurant-menu";
+  const displayItems = isNgo ? items.filter((item) => item.type !== "PRODUCT") : items;
+  const heroStyle = settings.coverImageUrl
+    ? { backgroundImage: `linear-gradient(135deg, rgba(6, 78, 59, .9), rgba(15, 23, 42, .48)), url(${settings.coverImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : undefined;
+  const whatsapp = profile.whatsapp || profile.phone;
+  return (
+    <>
+      <section className={`${isNgo ? "bg-gradient-to-br from-emerald-950 via-teal-900 to-lime-800" : isRestaurant ? "bg-gradient-to-br from-stone-950 via-orange-950 to-amber-800" : "bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900"} px-4 py-24 text-white sm:px-6 lg:px-8`} style={heroStyle}>
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.05fr_.95fr] lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-100">{copy.eyebrow}</p>
+            <h1 className="mt-5 text-5xl font-black tracking-tight sm:text-7xl">{settings.tagline || (isNgo ? `${profile.name} impact foundation` : profile.name)}</h1>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-white/85">{settings.description || settings.contentDrafts.homepage || (isNgo ? "Explore our mission, active programs, donation needs, volunteer opportunities, and community impact." : "Explore our website, services, products, gallery, contact details, and secure payment actions.")}</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a className="rounded-2xl bg-white px-6 py-3 font-semibold text-slate-950 no-underline" href={isNgo ? quickPayUrl : pagePath(slug, displayItems.some(i => i.type === "PRODUCT") ? "products" : "services")}>{copy.primary}</a>
+              {whatsapp ? <a className="rounded-2xl border border-white/25 px-6 py-3 font-semibold text-white no-underline" href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}`}>WhatsApp</a> : <Link className="rounded-2xl border border-white/25 px-6 py-3 font-semibold text-white no-underline" to={pagePath(slug, "contact")}>{copy.secondary}</Link>}
+            </div>
+          </div>
+          <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur">
+            <h2 className="text-2xl font-black">{isNgo ? "Impact pathways" : "Explore"}</h2>
+            <div className="mt-5 grid gap-3 text-sm text-white/90">{copy.sections.map(section => <div key={section} className="rounded-2xl bg-white/10 p-4 font-semibold">{section}</div>)}</div>
+          </div>
+        </div>
+      </section>
+      {isNgo ? <section className="bg-white px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3"><ImpactCard title="Mission" body={settings.contentDrafts.about || "Share the communities served, the mission, and the change this organization is building."} /><ImpactCard title="Donate" body="Support programs through Sedifex Quick Pay or contact the team for partnership options." /><ImpactCard title="Volunteer" body="Invite supporters to volunteer, partner, donate resources, or join community programs." /></div></section> : null}
+      {displayItems.length ? <ServicesSection title={copy.itemTitle} items={displayItems.slice(0, isNgo ? 6 : 4)} quickPayUrl={quickPayUrl} ctaHref={pagePath(slug, displayItems.some(i => i.type === "PRODUCT") ? "products" : "services")} storeId={settings.storeId} /> : <section className="px-4 py-12 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><EmptyState title={isNgo ? "No programs added yet" : "No items added yet"} /></div></section>}
+      {gallery.length ? <GallerySection gallery={gallery.slice(0, 6)} ctaHref={pagePath(slug, "gallery")} /> : null}
+      <QuickPayBlock quickPayUrl={quickPayUrl} />
+      <ContactSection profile={profile} brandColor={settings.brandColor} quickPayUrl={quickPayUrl} />
+    </>
+  );
+}
+
+function ImpactCard({ title, body }: { title: string; body: string }) {
+  return <article className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-6"><p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-700">{title}</p><p className="mt-3 text-slate-700">{body}</p></article>;
+}
+
 export default function PublicWebsiteEngine() {
   const { slug = "", pageSlug } = useParams();
   const activePage = normalizePage(pageSlug);
@@ -355,7 +437,9 @@ export default function PublicWebsiteEngine() {
           theme: clean(website.theme, 40) || "modern",
           selectedTemplateId: clean(website.selectedTemplateId, 120),
           selectedTemplateName: clean(website.selectedTemplateName, 160),
-          layoutKey: clean(website.layoutKey ?? website.templateKey, 160),
+          layoutKey: clean(website.layoutKey ?? website.layoutTemplate ?? website.templateKey, 160),
+          layoutTemplate: clean(website.layoutTemplate ?? website.selectedTemplateId ?? website.layoutKey, 160),
+          templateCategory: clean(website.templateCategory ?? website.businessType, 160),
           selectedSections: Array.isArray(website.selectedSections)
             ? website.selectedSections.filter(
                 (section): section is string => typeof section === "string",
@@ -525,17 +609,9 @@ export default function PublicWebsiteEngine() {
   const serviceItems = items.filter((item) => item.type !== "PRODUCT");
   const quickPayUrl = `https://pay.sedifex.com/s/${encodeURIComponent(settings.storeId)}?mode=store`;
 
-  function buildItemCheckoutUrl(storeId: string, item: PublicItem) {
-    const params = new URLSearchParams({
-      mode: "item",
-      itemId: item.id,
-      itemType: item.type,
-      name: item.name,
-      qty: "1",
-    });
+  const resolvedLayout = resolveTemplateLayout(settings);
+  const usesTemplateLayout = TEMPLATE_LAYOUTS.has(resolvedLayout);
 
-    return `https://pay.sedifex.com/s/${encodeURIComponent(storeId)}?${params.toString()}`;
-  }
   const heroStyle = settings.coverImageUrl
     ? {
         backgroundImage: `linear-gradient(135deg, rgba(2, 6, 23, .88), rgba(15, 23, 42, .48)), url(${settings.coverImageUrl})`,
@@ -578,7 +654,10 @@ export default function PublicWebsiteEngine() {
           </nav>
         </div>
       </header>
-      {activePage === "home" ? (
+      {activePage === "home" && usesTemplateLayout ? (
+        <TemplateHome settings={settings} profile={profile} items={items} gallery={gallery} quickPayUrl={quickPayUrl} slug={slug} />
+      ) : null}
+      {activePage === "home" && !usesTemplateLayout ? (
         <>
           <section
             className={`bg-gradient-to-br ${themeClasses(settings.theme)} px-4 py-24 text-white sm:px-6 lg:px-8`}
@@ -634,6 +713,7 @@ export default function PublicWebsiteEngine() {
               items={productItems.slice(0, 4)}
               quickPayUrl={quickPayUrl}
               ctaHref={pagePath(slug, "products")}
+              storeId={settings.storeId}
             />
           ) : null}
           {serviceItems.length ? (
@@ -642,6 +722,7 @@ export default function PublicWebsiteEngine() {
               items={serviceItems.slice(0, 3)}
               quickPayUrl={quickPayUrl}
               ctaHref={pagePath(slug, "services")}
+              storeId={settings.storeId}
             />
           ) : null}
           {gallery.length ? (
@@ -658,6 +739,7 @@ export default function PublicWebsiteEngine() {
           title="Products"
           items={productItems}
           quickPayUrl={quickPayUrl}
+          storeId={settings.storeId}
         />
       ) : null}
       {activePage === "services" ? (
@@ -665,6 +747,7 @@ export default function PublicWebsiteEngine() {
           title="Services, courses & bookings"
           items={serviceItems}
           quickPayUrl={quickPayUrl}
+          storeId={settings.storeId}
         />
       ) : null}
       {activePage === "gallery" ? <GallerySection gallery={gallery} /> : null}
@@ -690,11 +773,13 @@ function ProductsSection({
   items,
   quickPayUrl,
   ctaHref,
+  storeId,
 }: {
   title: string;
   items: PublicItem[];
   quickPayUrl: string;
   ctaHref?: string;
+  storeId: string;
 }) {
   return (
     <section className="px-4 py-16 sm:px-6 lg:px-8">
@@ -722,7 +807,7 @@ function ProductsSection({
                 key={item.id}
                 item={item}
                 quickPayUrl={quickPayUrl}
-                itemCheckoutUrl={buildItemCheckoutUrl(settings.storeId, item)}
+                itemCheckoutUrl={buildItemCheckoutUrl(storeId, item)}
               />
             ))}
           </div>
@@ -738,11 +823,13 @@ function ServicesSection({
   items,
   quickPayUrl,
   ctaHref,
+  storeId,
 }: {
   title: string;
   items: PublicItem[];
   quickPayUrl: string;
   ctaHref?: string;
+  storeId: string;
 }) {
   return (
     <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
@@ -770,7 +857,7 @@ function ServicesSection({
                 key={item.id}
                 item={item}
                 quickPayUrl={quickPayUrl}
-                itemCheckoutUrl={buildItemCheckoutUrl(settings.storeId, item)}
+                itemCheckoutUrl={buildItemCheckoutUrl(storeId, item)}
               />
             ))}
           </div>

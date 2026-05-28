@@ -61,6 +61,8 @@ type WebsitePreviewSettings = {
   selectedTemplateId: string;
   selectedTemplateName: string;
   layoutKey: string;
+  layoutTemplate: string;
+  templateCategory: string;
   selectedSections: string[];
   pages: string[];
   status: "draft" | "published";
@@ -237,7 +239,9 @@ function defaultSettings(): WebsitePreviewSettings {
     theme: "modern",
     selectedTemplateId: "",
     selectedTemplateName: "",
-    layoutKey: "modern-storefront-grid",
+    layoutKey: "shop-classic",
+    layoutTemplate: "",
+    templateCategory: "",
     selectedSections: ["hero", "featured-products", "quick-pay", "contact"],
     pages: [
       "Home",
@@ -354,8 +358,13 @@ function normalizePreviewSettings(
     selectedTemplateName: stringValue(source.selectedTemplateName),
     layoutKey: stringValue(
       source.layoutKey,
-      stringValue(source.templateKey, defaults.layoutKey),
+      stringValue(source.layoutTemplate, stringValue(source.templateKey, defaults.layoutKey)),
     ),
+    layoutTemplate: stringValue(
+      source.layoutTemplate,
+      stringValue(source.selectedTemplateId, defaults.layoutTemplate),
+    ),
+    templateCategory: stringValue(source.templateCategory, defaults.templateCategory),
     selectedSections: stringArray(
       source.selectedSections,
       defaults.selectedSections,
@@ -414,6 +423,62 @@ function previewText(value: string, fallback: string) {
   return clean.length > 220 ? `${clean.slice(0, 217)}…` : clean;
 }
 
+const TEMPLATE_LAYOUTS = new Set([
+  "shop-classic",
+  "travel-visa-consultancy",
+  "beauty-booking",
+  "ngo-impact",
+  "school-academy",
+  "services-booking",
+  "restaurant-menu",
+]);
+
+function resolveTemplateLayout(settings: WebsitePreviewSettings) {
+  return settings.layoutTemplate || settings.selectedTemplateId || settings.layoutKey;
+}
+
+function templateCopy(layout: string, profile: PreviewProfile) {
+  const config: Record<string, { eyebrow: string; cta: string; cards: string[]; impact: string[] }> = {
+    "shop-classic": { eyebrow: "Featured storefront", cta: "Shop products", cards: ["Best sellers", "Categories", "Secure checkout"], impact: ["Fast checkout", "Product discovery", "Quick Pay"] },
+    "travel-visa-consultancy": { eyebrow: "Visa & travel desk", cta: "Request consultation", cards: ["Visa support", "Destinations", "Document checks"], impact: ["Consult", "Prepare", "Travel"] },
+    "beauty-booking": { eyebrow: "Beauty booking studio", cta: "Book appointment", cards: ["Treatments", "Gallery", "Deposits"], impact: ["Choose service", "Reserve time", "Pay securely"] },
+    "ngo-impact": { eyebrow: "Mission • Impact • Community", cta: "Donate or volunteer", cards: ["Mission", "Programs", "Volunteer"], impact: ["Programs", "Donations", "Community impact"] },
+    "school-academy": { eyebrow: "Learning academy", cta: "Register interest", cards: ["Courses", "Admissions", "Student payments"], impact: ["Learn", "Register", "Pay fees"] },
+    "services-booking": { eyebrow: "Service booking hub", cta: "Book service", cards: ["Packages", "Availability", "Quotes"], impact: ["Request", "Schedule", "Pay"] },
+    "restaurant-menu": { eyebrow: "Menu & ordering", cta: "View menu", cards: ["Popular meals", "Specials", "Order & pay"], impact: ["Browse menu", "Order", "Pickup / delivery"] },
+  };
+  return config[layout] || { eyebrow: profile.eyebrow, cta: profile.cta, cards: profile.cards, impact: profile.cards };
+}
+
+function TemplatePreview({ settings, profile, previewMode }: { settings: WebsitePreviewSettings; profile: PreviewProfile; previewMode: PreviewMode }) {
+  const layout = resolveTemplateLayout(settings);
+  const copy = templateCopy(layout, profile);
+  const isNgo = layout === "ngo-impact";
+  const title = settings.tagline || (isNgo ? `Support ${settings.businessName}'s mission` : profile.headline);
+  const body = previewText(settings.contentDrafts.homepage || settings.description, isNgo ? "Share mission, impact, programs, donations, volunteer opportunities, stories, and contact actions." : profile.body);
+  return (
+    <div className={isNgo ? "bg-emerald-50" : "bg-white"}>
+      <section className={`${isNgo ? "bg-gradient-to-br from-emerald-900 via-teal-800 to-lime-700" : "bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900"} p-5 text-white md:p-7`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {settings.businessLogoUrl ? <img src={settings.businessLogoUrl} alt="Business logo" className="h-12 w-12 shrink-0 rounded-2xl object-cover ring-1 ring-white/40" /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-xl">{isNgo ? "🤝" : profile.icon}</span>}
+            <div className="min-w-0"><p className="truncate text-base font-black">{settings.businessName}</p><p className="truncate text-xs opacity-75">{settings.selectedTemplateName || copy.eyebrow}</p></div>
+          </div>
+          <span className="rounded-full bg-white px-4 py-2 text-xs font-bold text-slate-950">{isNgo ? "Donate" : "Pay"}</span>
+        </div>
+        <div className={`${previewMode === "mobile" ? "grid gap-5" : "grid gap-7 lg:grid-cols-[1fr_.85fr]"} mt-8 items-center`}>
+          <div><p className="text-xs font-bold uppercase tracking-[0.28em] text-emerald-100">{copy.eyebrow}</p><h1 className={`${previewMode === "mobile" ? "text-3xl" : "text-5xl"} mt-3 font-black leading-tight`}>{title}</h1><p className="mt-4 text-sm leading-7 text-white/90">{body}</p><div className="mt-5 flex flex-wrap gap-2"><span className="rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-950">{copy.cta}</span><span className="rounded-full border border-white/30 px-5 py-3 text-sm font-bold text-white">WhatsApp</span></div></div>
+          <div className="rounded-3xl bg-white/12 p-4 backdrop-blur"><p className="text-sm font-bold">{isNgo ? "Impact snapshot" : "Website sections"}</p><div className="mt-4 grid gap-3">{copy.impact.map(item => <div key={item} className="rounded-2xl bg-white/12 p-3 text-sm font-semibold">{item}</div>)}</div></div>
+        </div>
+      </section>
+      <section className="grid gap-3 p-5 sm:grid-cols-3">
+        {copy.cards.map(card => <article key={card} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-sm font-black text-slate-950">{card}</p><p className="mt-2 text-xs leading-5 text-slate-500">{isNgo && card === "Programs" ? "Programs appear here when added in Sedifex." : "Uses your real Sedifex data when available."}</p></article>)}
+      </section>
+      <section className="border-t border-slate-200 bg-white p-5 text-sm text-slate-600"><div className="flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-3 py-1 font-semibold">{settings.phone || settings.whatsapp || "Phone / WhatsApp"}</span>{settings.email ? <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold">{settings.email}</span> : null}{settings.location ? <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold">{settings.location}</span> : null}</div></section>
+    </div>
+  );
+}
+
 const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
 const previewSettingsCache = new Map<
   string,
@@ -464,6 +529,8 @@ export default function WebsiteBuilderPreview() {
     settings.seoSettings.socialShareImage ||
     settings.coverImageUrl ||
     settings.businessLogoUrl;
+  const resolvedLayout = resolveTemplateLayout(settings);
+  const usesTemplateLayout = TEMPLATE_LAYOUTS.has(resolvedLayout);
 
   useEffect(() => {
     if (!storeId) return;
@@ -791,6 +858,10 @@ export default function WebsiteBuilderPreview() {
                   onError={() => setCoverLoadFailed(true)}
                 />
               ) : null}
+              {usesTemplateLayout ? (
+                <TemplatePreview settings={settings} profile={profile} previewMode={previewMode} />
+              ) : (
+                <>
               <div
                 className={`bg-gradient-to-br ${theme.previewClassName} p-5 md:p-7 ${theme.textClassName}`}
                 style={
@@ -949,6 +1020,8 @@ export default function WebsiteBuilderPreview() {
                   ) : null}
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
         </section>

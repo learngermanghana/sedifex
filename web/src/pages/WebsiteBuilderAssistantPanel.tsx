@@ -49,12 +49,12 @@ type Props = {
 
 const TEMPLATES: TemplatePreset[] = [
   {
-    id: "beauty-premium",
-    name: "Beauty Spa Premium",
+    id: "beauty-booking",
+    name: "Beauty Booking",
     websiteType: "beauty",
     businessType: "Beauty / salon website",
     theme: "luxury",
-    layoutKey: "beauty-premium-hero",
+    layoutKey: "beauty-booking",
     brandColor: "#a855f7",
     pages: [
       "Home",
@@ -94,12 +94,12 @@ const TEMPLATES: TemplatePreset[] = [
     },
   },
   {
-    id: "shop-modern",
-    name: "Modern Storefront",
+    id: "shop-classic",
+    name: "Shop Classic",
     websiteType: "shop",
     businessType: "Shop website",
     theme: "modern",
-    layoutKey: "modern-storefront-grid",
+    layoutKey: "shop-classic",
     brandColor: "#4f46e5",
     pages: [
       "Home",
@@ -137,12 +137,12 @@ const TEMPLATES: TemplatePreset[] = [
     },
   },
   {
-    id: "school-clean",
-    name: "Academy Clean",
+    id: "school-academy",
+    name: "School Academy",
     websiteType: "school",
     businessType: "School website",
     theme: "clean",
-    layoutKey: "academy-clean-sections",
+    layoutKey: "school-academy",
     brandColor: "#2563eb",
     pages: [
       "Home",
@@ -178,6 +178,94 @@ const TEMPLATES: TemplatePreset[] = [
         "Explore courses and classes, register students, contact the school, and manage student payments online.",
       keywords: "courses, registration, classes, school, student payments",
     },
+  },
+  {
+    id: "travel-visa-consultancy",
+    name: "Travel Visa Consultancy",
+    websiteType: "travel",
+    businessType: "Travel / visa consultancy website",
+    theme: "modern",
+    layoutKey: "travel-visa-consultancy",
+    brandColor: "#0891b2",
+    pages: ["Home", "Services", "Bookings", "Gallery", "Blog", "Quick Pay", "Contact"],
+    selectedSections: ["hero", "destinations", "visa-services", "consultation", "gallery", "quick-pay", "contact"],
+    tagline: "Visa, travel, and consultation support made simple",
+    description: "A consultation-led travel layout for visa services, packages, enquiry actions, documents guidance, and Quick Pay.",
+    contentDrafts: {
+      homepage: "Guide travellers from enquiry to consultation with clear visa services, destinations, documents support, and secure Sedifex payment actions.",
+      about: "Share your travel expertise, consultation process, destination knowledge, and customer support standards.",
+      serviceDescriptions: "List visa support, travel packages, ticketing, hotel support, document checks, consultations, and booking requirements.",
+      seoTitle: "Visa Consultancy, Travel Services & Bookings",
+    },
+    seoSettings: {
+      title: "Visa Consultancy, Travel Services & Bookings",
+      metaDescription: "Get visa support, travel consultation, destination guidance, bookings, and secure online payments.",
+      keywords: "visa consultancy, travel agency, bookings, destinations, quick pay",
+    },
+  },
+  {
+    id: "ngo-impact",
+    name: "NGO Impact",
+    websiteType: "ngo",
+    businessType: "NGO / foundation website",
+    theme: "clean",
+    layoutKey: "ngo-impact",
+    brandColor: "#16a34a",
+    pages: ["Home", "Programs", "Donate", "Volunteer", "Blog", "Gallery", "Contact", "Quick Pay"],
+    selectedSections: ["hero", "mission", "impact", "programs", "donation", "volunteer", "gallery", "quick-pay", "contact"],
+    tagline: "Mobilizing people and resources for measurable impact",
+    description: "An impact-first NGO layout for mission, programs, donations, volunteers, stories, gallery, contact, and Quick Pay.",
+    contentDrafts: {
+      homepage: "Show your mission, active programs, community impact, donation options, volunteer calls, and transparent contact actions in one trustworthy website.",
+      about: "Explain the purpose, communities served, program model, accountability, and change your organization is building.",
+      serviceDescriptions: "Present programs, beneficiary support, campaigns, volunteer roles, donation needs, events, and partner opportunities.",
+      seoTitle: "NGO Programs, Donations & Volunteer Support",
+    },
+    seoSettings: {
+      title: "NGO Programs, Donations & Volunteer Support",
+      metaDescription: "Support community programs, donate securely, volunteer, read impact stories, and contact the foundation.",
+      keywords: "NGO, foundation, charity, donations, volunteer, community impact",
+    },
+  },
+  {
+    id: "services-booking",
+    name: "Services Booking",
+    websiteType: "service",
+    businessType: "Services / appointments website",
+    theme: "bold",
+    layoutKey: "services-booking",
+    brandColor: "#7c3aed",
+    pages: ["Home", "Services", "Bookings", "Quick Pay", "Gallery", "Contact"],
+    selectedSections: ["hero", "services", "booking", "process", "quick-pay", "contact"],
+    tagline: "Book trusted services and pay securely",
+    description: "A booking-focused layout for service packages, appointment requests, trust points, Quick Pay, and contact actions.",
+    contentDrafts: {
+      homepage: "Help customers understand your services, choose the right package, request a booking, chat on WhatsApp, and pay securely.",
+      about: "Show your experience, response times, customer care, and service standards.",
+      serviceDescriptions: "Describe service packages, booking requirements, availability, quote requests, deposits, and payment steps.",
+      seoTitle: "Professional Services, Bookings & Quick Pay",
+    },
+    seoSettings: { title: "Professional Services, Bookings & Quick Pay", metaDescription: "Book services, request quotes, contact the business, and pay securely online.", keywords: "services, booking, appointments, quotes, quick pay" },
+  },
+  {
+    id: "restaurant-menu",
+    name: "Restaurant Menu",
+    websiteType: "restaurant",
+    businessType: "Restaurant / menu website",
+    theme: "luxury",
+    layoutKey: "restaurant-menu",
+    brandColor: "#ea580c",
+    pages: ["Home", "Menu", "Ordering", "Gallery", "Quick Pay", "Contact"],
+    selectedSections: ["hero", "menu", "ordering", "specials", "gallery", "quick-pay", "contact"],
+    tagline: "Explore the menu, order, and pay with ease",
+    description: "A food-first layout for menu highlights, ordering actions, specials, photos, opening hours, and Quick Pay.",
+    contentDrafts: {
+      homepage: "Make customers hungry with menu highlights, specials, food gallery, order actions, contact details, and secure payments.",
+      about: "Share your cuisine, kitchen story, dining style, and service promise.",
+      serviceDescriptions: "List menu categories, signature meals, ordering options, delivery or pickup notes, reservations, and payment steps.",
+      seoTitle: "Restaurant Menu, Ordering & Quick Pay",
+    },
+    seoSettings: { title: "Restaurant Menu, Ordering & Quick Pay", metaDescription: "View menu items, order food, see gallery highlights, contact the restaurant, and pay online.", keywords: "restaurant, menu, food ordering, reservations, quick pay" },
   },
 ];
 
@@ -215,11 +303,11 @@ export default function WebsiteBuilderAssistantPanel({
               className={`mt-4 rounded-xl px-3 py-2 text-sm font-bold ${isActive ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"}`}
               onClick={() => {
                 onApplyTemplate(template);
-                setStatusMessage(`Now using ${template.name} template.`);
+                setStatusMessage(`${template.name} template applied. Preview now uses this design.`);
                 window.setTimeout(() => setStatusMessage(null), 2500);
               }}
             >
-              {isActive ? `Now using ${template.name}` : "Select"}
+              {isActive ? `Now using ${template.name}` : "Use template"}
             </button>
           </article>
         );
