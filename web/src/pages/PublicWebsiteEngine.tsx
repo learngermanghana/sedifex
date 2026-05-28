@@ -102,6 +102,18 @@ export default function PublicWebsiteEngine() {
   const productItems = items.filter(item => item.type === 'PRODUCT')
   const serviceItems = items.filter(item => item.type !== 'PRODUCT')
   const quickPayUrl = `https://pay.sedifex.com/s/${encodeURIComponent(settings.storeId)}?mode=store`
+
+  function buildItemCheckoutUrl(storeId: string, item: PublicItem) {
+    const params = new URLSearchParams({
+      mode: 'item',
+      itemId: item.id,
+      itemType: item.type,
+      name: item.name,
+      qty: '1',
+    })
+
+    return `https://pay.sedifex.com/s/${encodeURIComponent(storeId)}?${params.toString()}`
+  }
   const heroStyle = settings.coverImageUrl ? { backgroundImage: `linear-gradient(135deg, rgba(2, 6, 23, .88), rgba(15, 23, 42, .48)), url(${settings.coverImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined
 
   return <main className="min-h-screen bg-slate-50 text-slate-950"><header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/90 text-white backdrop-blur"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8"><Link to={pagePath(slug, 'home')} className="flex items-center gap-3 text-white no-underline">{profile.logoUrl ? <img src={profile.logoUrl} alt={`${profile.name} logo`} className="h-11 w-11 rounded-2xl object-cover" /> : <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 font-black">{profile.name.slice(0, 1)}</div>}<span className="font-black">{profile.name}</span></Link><nav className="flex flex-wrap items-center gap-2 text-sm">{availablePages.map(page => <Link key={page} className={`rounded-full px-4 py-2 font-semibold no-underline ${activePage === page ? 'bg-white text-slate-950' : 'text-white/80 hover:bg-white/10 hover:text-white'}`} to={pagePath(slug, page)}>{pageLabel(page)}</Link>)}</nav></div></header>
@@ -109,10 +121,66 @@ export default function PublicWebsiteEngine() {
     {activePage === 'products' ? <ProductsSection title="Products" items={productItems} quickPayUrl={quickPayUrl} /> : null}{activePage === 'services' ? <ServicesSection title="Services, courses & bookings" items={serviceItems} quickPayUrl={quickPayUrl} /> : null}{activePage === 'gallery' ? <GallerySection gallery={gallery} /> : null}{activePage === 'quick-pay' ? <QuickPayBlock quickPayUrl={quickPayUrl} large /> : null}{activePage === 'contact' ? <ContactSection profile={profile} brandColor={settings.brandColor} quickPayUrl={quickPayUrl} /> : null}<footer className="bg-slate-950 px-4 py-8 text-center text-sm text-slate-400">Powered by Sedifex Website Builder</footer></main>
 }
 
-function ProductsSection({ title, items, quickPayUrl, ctaHref }: { title: string; items: PublicItem[]; quickPayUrl: string; ctaHref?: string }) { return <section className="px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-600">Products</p><h2 className="mt-3 text-4xl font-black">{title}</h2></div>{ctaHref ? <Link className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white no-underline" to={ctaHref}>View all</Link> : null}</div>{items.length ? <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{items.map(item => <ItemCard key={item.id} item={item} quickPayUrl={quickPayUrl} />)}</div> : <EmptyState title="No products yet" />}</div></section> }
-function ServicesSection({ title, items, quickPayUrl, ctaHref }: { title: string; items: PublicItem[]; quickPayUrl: string; ctaHref?: string }) { return <section className="bg-white px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-600">Services</p><h2 className="mt-3 text-4xl font-black">{title}</h2></div>{ctaHref ? <Link className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white no-underline" to={ctaHref}>View all</Link> : null}</div>{items.length ? <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map(item => <ItemCard key={item.id} item={item} quickPayUrl={quickPayUrl} />)}</div> : <EmptyState title="No services yet" />}</div></section> }
+function ProductsSection({ title, items, quickPayUrl, ctaHref }: { title: string; items: PublicItem[]; quickPayUrl: string; ctaHref?: string }) { return <section className="px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-600">Products</p><h2 className="mt-3 text-4xl font-black">{title}</h2></div>{ctaHref ? <Link className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white no-underline" to={ctaHref}>View all</Link> : null}</div>{items.length ? <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{items.map(item => <ItemCard key={item.id} item={item} quickPayUrl={quickPayUrl} itemCheckoutUrl={buildItemCheckoutUrl(settings.storeId, item)} />)}</div> : <EmptyState title="No products yet" />}</div></section> }
+function ServicesSection({ title, items, quickPayUrl, ctaHref }: { title: string; items: PublicItem[]; quickPayUrl: string; ctaHref?: string }) { return <section className="bg-white px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-600">Services</p><h2 className="mt-3 text-4xl font-black">{title}</h2></div>{ctaHref ? <Link className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white no-underline" to={ctaHref}>View all</Link> : null}</div>{items.length ? <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map(item => <ItemCard key={item.id} item={item} quickPayUrl={quickPayUrl} itemCheckoutUrl={buildItemCheckoutUrl(settings.storeId, item)} />)}</div> : <EmptyState title="No services yet" />}</div></section> }
 function GallerySection({ gallery, ctaHref }: { gallery: GalleryItem[]; ctaHref?: string }) { return <section className="px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-600">Gallery</p><h2 className="mt-3 text-4xl font-black">Photos & highlights</h2></div>{ctaHref ? <Link className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white no-underline" to={ctaHref}>Open gallery</Link> : null}</div>{gallery.length ? <div className="mt-8 grid auto-rows-[220px] grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{gallery.map((item, index) => <figure key={item.id} className={`group overflow-hidden rounded-[2rem] bg-slate-200 shadow-sm ${index === 0 ? 'lg:col-span-2 lg:row-span-2' : ''}`}><img src={item.url} alt={item.alt} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />{item.caption ? <figcaption className="-mt-16 bg-gradient-to-t from-slate-950/80 to-transparent p-4 text-sm font-semibold text-white">{item.caption}</figcaption> : null}</figure>)}</div> : <EmptyState title="No gallery images yet" />}</div></section> }
 function QuickPayBlock({ quickPayUrl, large = false }: { quickPayUrl: string; large?: boolean }) { return <section className="px-4 py-16 sm:px-6 lg:px-8"><div className={`mx-auto flex max-w-5xl flex-col items-center rounded-[2rem] bg-slate-950 p-8 text-center text-white shadow-2xl ${large ? 'min-h-[420px] justify-center' : ''}`}><p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">Quick Pay</p><h2 className="mt-3 text-4xl font-black">Search and pay securely</h2><p className="mt-4 max-w-2xl text-slate-300">Use Sedifex Quick Pay for products, services, courses, or custom requests.</p><a className="mt-6 rounded-2xl bg-white px-6 py-3 font-semibold text-slate-950 no-underline" href={quickPayUrl}>Open Quick Pay</a></div></section> }
 function ContactSection({ profile, brandColor, quickPayUrl }: { profile: StoreProfile; brandColor: string; quickPayUrl: string }) { const whatsapp = profile.whatsapp || profile.phone; return <section className="px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto grid max-w-6xl gap-8 rounded-[2rem] bg-white p-8 shadow-sm lg:grid-cols-[1fr_0.8fr]"><div><p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-600">Contact</p><h1 className="mt-3 text-5xl font-black">Reach {profile.name}</h1><p className="mt-4 text-slate-600">Contact us for enquiries, bookings, payments, and business support.</p><div className="mt-8 grid gap-4 text-slate-700 sm:grid-cols-2"><p><strong>Phone</strong><br />{profile.phone || 'Not added yet'}</p><p><strong>Email</strong><br />{profile.email || 'Not added yet'}</p><p><strong>Location</strong><br />{profile.address || 'Not added yet'}</p><p><strong>Opening hours</strong><br />{profile.openingHours || 'Not added yet'}</p></div></div><div className="rounded-[2rem] bg-slate-50 p-6"><h2 className="text-2xl font-black">Quick actions</h2><div className="mt-5 grid gap-3">{whatsapp ? <a className="rounded-2xl px-5 py-3 text-center font-semibold text-white no-underline" style={{ backgroundColor: brandColor }} href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}`}>Chat on WhatsApp</a> : null}<a className="rounded-2xl bg-slate-950 px-5 py-3 text-center font-semibold text-white no-underline" href={quickPayUrl}>Make payment</a>{profile.email ? <a className="rounded-2xl border border-slate-200 px-5 py-3 text-center font-semibold text-slate-950 no-underline" href={`mailto:${profile.email}`}>Send email</a> : null}</div></div></div></section> }
 function EmptyState({ title }: { title: string }) { return <div className="mt-8 rounded-[2rem] border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500"><h3 className="text-xl font-black text-slate-900">{title}</h3><p className="mt-2">The business has not published this content yet.</p></div> }
-function ItemCard({ item, quickPayUrl }: { item: PublicItem; quickPayUrl: string }) { return <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="h-48 w-full object-cover" /> : <div className="flex h-48 items-center justify-center bg-slate-100 text-4xl font-black text-slate-300">{item.name.slice(0, 1)}</div>}<div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{item.type}</p><h3 className="mt-2 text-lg font-black">{item.name}</h3>{item.description ? <p className="mt-2 text-sm text-slate-600">{item.description}</p> : null}<div className="mt-4 flex items-center justify-between gap-3"><strong>{item.price > 0 ? money(item.price) : 'Enquire'}</strong><a className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white no-underline" href={quickPayUrl}>Pay</a></div></div></article> }
+function ItemCard({
+  item,
+  quickPayUrl,
+  itemCheckoutUrl,
+}: {
+  item: PublicItem
+  quickPayUrl: string
+  itemCheckoutUrl: string
+}) {
+  const actionLabel =
+    item.type === 'PRODUCT'
+      ? 'Buy now'
+      : item.type === 'COURSE'
+        ? 'Register'
+        : 'Book now'
+
+  return (
+    <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+      {item.imageUrl ? (
+        <img src={item.imageUrl} alt={item.name} className="h-48 w-full object-cover" />
+      ) : (
+        <div className="flex h-48 w-full items-center justify-center bg-slate-100 text-4xl font-black text-slate-300">
+          {item.name.slice(0, 1)}
+        </div>
+      )}
+
+      <div className="p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{item.type}</p>
+        <h3 className="mt-2 text-lg font-black">{item.name}</h3>
+
+        {item.description ? (
+          <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+        ) : null}
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <strong>{item.price > 0 ? money(item.price) : 'Enquire'}</strong>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <a
+              className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white no-underline"
+              href={itemCheckoutUrl}
+            >
+              {actionLabel}
+            </a>
+
+            <a
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 no-underline"
+              href={quickPayUrl}
+            >
+              Pay custom
+            </a>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
