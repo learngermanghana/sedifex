@@ -1,4 +1,5 @@
 import React, { FormEvent, Suspense, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 
 const WebsiteBuilderAssistantPanel = React.lazy(() => import('./WebsiteBuilderAssistantPanel'))
@@ -250,6 +251,9 @@ export default function WebsiteBuilder() {
   const [isCheckingOfferings, setIsCheckingOfferings] = useState(false)
   const [activeStep, setActiveStep] = useState<BuilderStepId>('identity')
   const [showAssistant, setShowAssistant] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   const freeUrl = useMemo(() => `https://sites.sedifex.com/${settings.slug || 'your-business'}`, [settings.slug])
   const publicWebsiteUrl = settings.domainSettings.connectionStatus === 'connected' && settings.domainSettings.customDomain ? `https://${settings.domainSettings.customDomain}` : freeUrl
@@ -494,6 +498,26 @@ export default function WebsiteBuilder() {
     } finally { setIsSaving(false) }
   }
 
+  
+  function applyTemplate(template: { id: string; name: string; websiteType: WebsiteType; theme: WebsiteTheme; pages: string[]; tagline: string }) {
+    setSettings(previous => ({
+      ...previous,
+      websiteType: template.websiteType,
+      theme: template.theme,
+      pages: filterPagesForType(template.websiteType, template.pages),
+      tagline: previous.tagline.trim() || template.tagline,
+      seoSettings: { ...previous.seoSettings, title: previous.seoSettings.title.trim() || buildSeoTitle({ ...previous, websiteType: template.websiteType }) },
+    }))
+    setSelectedTemplateId(template.id)
+    setSelectedTemplateName(template.name)
+    setFeedback(`Now using ${template.name} template.`)
+  }
+
+  function previewWithMyData() {
+    setShowAssistant(false)
+    navigate('/website-builder/preview')
+  }
+
   function goToStep(offset: number) { const nextIndex = Math.min(Math.max(safeStepIndex + offset, 0), BUILDER_STEPS.length - 1); setActiveStep(BUILDER_STEPS[nextIndex].id) }
   function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); void saveSettings('draft') }
 
@@ -502,6 +526,8 @@ export default function WebsiteBuilder() {
       <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)]">
         <div className="space-y-6">
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white shadow-sm"><div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Business website control center</p><h3 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Publish only when the website is ready</h3><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">Sedifex now checks the essentials before publishing, then gives every business QR and sharing tools for quick marketing.</p></div><div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm shadow-xl backdrop-blur"><p className="text-slate-300">Current website</p><p className="mt-1 font-semibold text-white">{settings.businessName || 'Loading business…'}</p><p className="mt-3 break-all rounded-xl bg-white/10 px-3 py-2 text-cyan-100">{publicWebsiteUrl}</p></div></div></section>
+
+          {showAssistant ? <Suspense fallback={null}><WebsiteBuilderAssistantPanel selectedTemplateId={selectedTemplateId} selectedTemplateName={selectedTemplateName} onSelectTemplate={applyTemplate} onPreviewWithMyData={previewWithMyData} /></Suspense> : null}
 
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">Setup wizard</p><h3 className="mt-1 text-xl font-semibold text-slate-950">{currentStep.label}</h3><p className="mt-1 text-sm text-slate-500">Step {safeStepIndex + 1} of {BUILDER_STEPS.length}: {currentStep.description}</p></div><span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700">{progressPercent}% complete</span></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${progressPercent}%` }} /></div><div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{BUILDER_STEPS.map((step, index) => { const isActive = activeStep === step.id; const isComplete = stepCompletion[step.id]; return <button key={step.id} type="button" className={`rounded-2xl border p-3 text-left transition ${isActive ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50'}`} onClick={() => setActiveStep(step.id)}><span className="flex items-center justify-between gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{index + 1}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{isComplete ? 'Done' : 'Open'}</span></span><span className="mt-2 block text-sm font-bold text-slate-900">{step.label}</span></button> })}</div></section>
 
