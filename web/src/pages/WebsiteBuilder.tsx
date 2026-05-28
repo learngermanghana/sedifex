@@ -87,6 +87,7 @@ type TemplateSelection = {
   businessType: string;
   theme: WebsiteTheme;
   layoutKey: string;
+  templateCategory?: string;
   brandColor: string;
   pages: string[];
   selectedSections: string[];
@@ -117,6 +118,8 @@ type WebsiteBuilderSettings = {
   selectedTemplateId: string;
   selectedTemplateName: string;
   layoutKey: string;
+  layoutTemplate: string;
+  templateCategory: string;
   selectedSections: string[];
   pages: string[];
   status: StoredWebsiteStatus;
@@ -737,7 +740,9 @@ function createDefaultSettings(): WebsiteBuilderSettings {
     theme: "modern",
     selectedTemplateId: "",
     selectedTemplateName: "",
-    layoutKey: "modern-storefront-grid",
+    layoutKey: "shop-classic",
+    layoutTemplate: "",
+    templateCategory: "",
     selectedSections: ["hero", "featured-products", "quick-pay", "contact"],
     pages: [...PAGE_OPTIONS_BY_TYPE.shop],
     status: "draft",
@@ -1264,8 +1269,14 @@ export default function WebsiteBuilder() {
             layoutKey: readString(
               website,
               "layoutKey",
-              readString(website, "templateKey", previous.layoutKey),
+              readString(website, "layoutTemplate", readString(website, "templateKey", previous.layoutKey)),
             ),
+            layoutTemplate: readString(
+              website,
+              "layoutTemplate",
+              readString(website, "selectedTemplateId", previous.layoutTemplate),
+            ),
+            templateCategory: readString(website, "templateCategory", previous.templateCategory),
             selectedSections: Array.isArray(website.selectedSections)
               ? website.selectedSections.filter(
                   (section): section is string =>
@@ -1625,6 +1636,11 @@ export default function WebsiteBuilder() {
         openingHours: settings.openingHours.trim(),
         businessLogoUrl: settings.businessLogoUrl.trim(),
         coverImageUrl: settings.coverImageUrl.trim(),
+        selectedTemplateId: settings.selectedTemplateId.trim(),
+        selectedTemplateName: settings.selectedTemplateName.trim(),
+        layoutTemplate: (settings.layoutTemplate || settings.selectedTemplateId || settings.layoutKey).trim(),
+        templateCategory: settings.templateCategory.trim(),
+        layoutKey: (settings.layoutKey || settings.layoutTemplate || settings.selectedTemplateId).trim(),
         brandColor: normalizeBrandColor(settings.brandColor),
         socialLinks: mergeSocialLinks(settings.socialLinks),
         contentDrafts: mergeContentDrafts(settings.contentDrafts),
@@ -1716,6 +1732,8 @@ export default function WebsiteBuilder() {
         businessType: template.businessType,
         theme: template.theme,
         layoutKey: template.layoutKey,
+        layoutTemplate: template.layoutKey || template.id,
+        templateCategory: template.templateCategory || template.businessType,
         selectedSections: template.selectedSections,
         brandColor: normalizeBrandColor(template.brandColor),
         pages: filterPagesForType(template.websiteType, template.pages),
@@ -1744,7 +1762,7 @@ export default function WebsiteBuilder() {
       saveDraftToLocalPreview(nextSettings);
       return nextSettings;
     });
-    setFeedback(`Now using ${template.name} template.`);
+    setFeedback(`${template.name} template applied. Preview now uses this design.`);
   }
 
   function previewWithMyData() {
@@ -1826,6 +1844,12 @@ export default function WebsiteBuilder() {
                 <p className="mt-3 break-all rounded-xl bg-white/10 px-3 py-2 text-cyan-100">
                   {publicWebsiteUrl}
                 </p>
+                <p className="mt-2 rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100">
+                  Current template: {settings.selectedTemplateName || "Generic Sedifex"}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-cyan-100">
+                  Live website will use this template after publishing.
+                </p>
               </div>
             </div>
           </section>
@@ -1853,6 +1877,9 @@ export default function WebsiteBuilder() {
                 <p className="mt-1 text-sm text-slate-500">
                   Step {safeStepIndex + 1} of {BUILDER_STEPS.length}:{" "}
                   {currentStep.description}
+                </p>
+                <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                  Current template: {settings.selectedTemplateName || "Generic Sedifex"}
                 </p>
               </div>
               <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700">
@@ -2993,7 +3020,7 @@ export default function WebsiteBuilder() {
                   Home page preview
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Live preview updates from type, generated content, smart
+                  Live preview updates from type, selected template, generated content, smart
                   pages, identity, SEO, domain, and brand color.
                 </p>
               </div>
