@@ -770,6 +770,14 @@ function formatTemplateNameFromKey(value: string) {
     return "";
   }
 
+  const displayNames: Record<string, string> = {
+    "shop-classic": "Modern Storefront Grid",
+  };
+
+  if (displayNames[normalized]) {
+    return displayNames[normalized];
+  }
+
   return normalized
     .split(/[\s_-]+/)
     .filter(Boolean)
@@ -1791,14 +1799,17 @@ export default function WebsiteBuilder() {
   const hasSelectedTemplate = Boolean(
     settings.selectedTemplateId.trim() ||
       settings.selectedTemplateName.trim() ||
-      settings.layoutTemplate.trim(),
+      settings.layoutTemplate.trim() ||
+      settings.layoutKey.trim(),
   );
   const currentTemplateName =
     settings.selectedTemplateName.trim() ||
     formatTemplateNameFromKey(
-      settings.layoutTemplate || settings.selectedTemplateId,
+      settings.layoutTemplate ||
+        settings.selectedTemplateId ||
+        settings.layoutKey,
     ) ||
-    "Default Sedifex layout";
+    "Modern Storefront Grid";
   const currentTemplateHelper = hasSelectedTemplate
     ? "Preview uses this template with your business data."
     : "Choose a template from AI / Templates when ready.";
@@ -1819,7 +1830,7 @@ export default function WebsiteBuilder() {
     <PageSection
       title="Website Builder"
       subtitle="Control your business website from Sedifex: setup, pages, theme, preview, SEO, domain, publishing, QR code, and sharing from one place."
-      className="pt-8 md:pt-10"
+      className="pt-16 md:pt-20"
       actions={
         <div className="flex flex-wrap items-center gap-3">
           <span
@@ -1908,17 +1919,6 @@ export default function WebsiteBuilder() {
               </div>
             </div>
           </section>
-
-          {showAssistant ? (
-            <Suspense fallback={null}>
-              <WebsiteBuilderAssistantPanel
-                selectedTemplateId={settings.selectedTemplateId || null}
-                selectedTemplateName={settings.selectedTemplateName || null}
-                onApplyTemplate={applyTemplateToDraft}
-                onPreviewWithMyData={previewWithMyData}
-              />
-            </Suspense>
-          ) : null}
 
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -3306,6 +3306,62 @@ export default function WebsiteBuilder() {
           </section>
         </aside>
       </form>
+
+      {showAssistant ? (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-slate-950/50 p-4 backdrop-blur-sm md:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Website template selector"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close template selector"
+            onClick={() => setShowAssistant(false)}
+          />
+          <div className="relative z-10 flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
+                  AI / Templates
+                </p>
+                <h3 className="text-lg font-bold text-slate-950">
+                  Change website template
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                onClick={() => setShowAssistant(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <Suspense
+                fallback={
+                  <p className="rounded-2xl bg-indigo-50 p-4 text-sm font-semibold text-indigo-700">
+                    Loading website templates…
+                  </p>
+                }
+              >
+                <WebsiteBuilderAssistantPanel
+                  selectedTemplateId={
+                    settings.selectedTemplateId ||
+                    settings.layoutTemplate ||
+                    settings.layoutKey ||
+                    null
+                  }
+                  selectedTemplateName={currentTemplateName || null}
+                  onApplyTemplate={applyTemplateToDraft}
+                  onPreviewWithMyData={previewWithMyData}
+                />
+              </Suspense>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </PageSection>
   );
 }
