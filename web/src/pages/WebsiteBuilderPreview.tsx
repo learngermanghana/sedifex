@@ -212,12 +212,11 @@ export default function WebsiteBuilderPreview() {
   const [settings, setSettings] = useState<WebsitePreviewSettings>(() => defaultSettings())
   const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop')
   const [shouldLoadPreview, setShouldLoadPreview] = useState(false)
-  const [forceReloadToken, setForceReloadToken] = useState(0)
+  const [reloadTick, setReloadTick] = useState(0)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [showShareTools, setShowShareTools] = useState(false)
-  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null)
   const url = publicUrl(settings)
   const profile = PREVIEW_PROFILES[settings.websiteType]
   const theme = THEME_OPTIONS[settings.theme]
@@ -233,15 +232,6 @@ export default function WebsiteBuilderPreview() {
   const shareImage = settings.seoSettings.socialShareImage || settings.coverImageUrl || settings.businessLogoUrl
 
   useEffect(() => {
-    if (!storeId) return
-    const cached = previewSettingsCache.get(storeId)
-    if (!cached || Date.now() - cached.savedAt >= PREVIEW_CACHE_TTL_MS) return
-    setSettings(cached.data)
-    setLastLoadedAt(cached.savedAt)
-    setShouldLoadPreview(true)
-  }, [storeId])
-
-  useEffect(() => {
     if (!shouldLoadPreview) return
     let mounted = true
 
@@ -254,11 +244,10 @@ export default function WebsiteBuilderPreview() {
       setLoading(true)
       setLoadError(null)
       try {
-        const forceRefresh = forceReloadToken > 0
+        const forceRefresh = reloadTick > 0
         const cached = previewSettingsCache.get(storeId)
         if (!forceRefresh && cached && Date.now() - cached.savedAt < PREVIEW_CACHE_TTL_MS) {
           setSettings(cached.data)
-          setLastLoadedAt(cached.savedAt)
           return
         }
 
@@ -302,9 +291,7 @@ export default function WebsiteBuilderPreview() {
           domainSettings,
         }
         setSettings(nextSettings)
-        const savedAt = Date.now()
-        previewSettingsCache.set(storeId, { savedAt, data: nextSettings })
-        setLastLoadedAt(savedAt)
+        previewSettingsCache.set(storeId, { savedAt: Date.now(), data: nextSettings })
       } catch (error) {
         console.error('[website-preview] Unable to load preview', error)
         setLoadError('Unable to load website preview right now. Please try again.')
@@ -317,7 +304,7 @@ export default function WebsiteBuilderPreview() {
     return () => {
       mounted = false
     }
-  }, [storeId, shouldLoadPreview, forceReloadToken])
+  }, [storeId, shouldLoadPreview, reloadTick])
 
   async function copyText(text: string, message: string) {
     try {
@@ -450,9 +437,8 @@ export default function WebsiteBuilderPreview() {
           <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-indigo-600">Website actions</p>
             {loadError ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p> : null}
-            {lastLoadedAt ? <p className="mt-2 text-xs font-semibold text-slate-500">Last updated: {new Date(lastLoadedAt).toLocaleString()}</p> : null}
             <div className="mt-4 grid gap-3">
-              <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => setForceReloadToken(current => current + 1)}>
+              <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => setReloadTick(current => current + 1)}>
                 Refresh preview data
               </button>
               <button type="button" className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700" onClick={() => void copyText(url, 'Website link copied.')}>Copy link</button>
