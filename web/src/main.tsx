@@ -9,7 +9,6 @@ import DashboardHub from './pages/DashboardHub'
 import Products from './pages/ProductsServiceFirst'
 import Sell from './pages/Sell'
 import QuickPay from './pages/QuickPay'
-import WebsiteBuilder from './pages/WebsiteBuilderWithAiText'
 import WebsiteBuilderPreview from './pages/WebsiteBuilderPreview'
 import QuickPayPrint from './pages/QuickPayPrint'
 import PublicQuickPayCheckout from './pages/PublicQuickPayCheckout'
@@ -83,6 +82,7 @@ import './studentRegistrationTabs.css'
 
 const SalesCashReport = React.lazy(() => import('./pages/reports/SalesCashReport'))
 const BusinessExpenses = React.lazy(() => import('./pages/BusinessExpenses'))
+const WebsiteBuilder = React.lazy(() => import('./pages/WebsiteBuilder'))
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return (
@@ -126,7 +126,7 @@ const router = createBrowserRouter([
       { path: 'products', element: <Products /> },
       { path: 'sell', element: <Sell /> },
       { path: 'quick-pay', element: <QuickPay /> },
-      { path: 'website-builder', element: <WebsiteBuilder /> },
+      { path: 'website-builder', element: <LazyPage><WebsiteBuilder /></LazyPage> },
       { path: 'website-builder/preview', element: <WebsiteBuilderPreview /> },
       { path: 'quick-pay/print', element: <QuickPayPrint /> },
       { path: 'customers', element: <Customers /> },
