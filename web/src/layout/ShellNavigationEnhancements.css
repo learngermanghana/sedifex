@@ -2,8 +2,7 @@
    - Desktop: left sidebar includes Hide navigation and remembers collapsed state.
    - Desktop collapsed: a small floating Show nav button remains without taking page space.
    - Mobile/tablet: hamburger controls the drawer only.
-   - Sidebar scrolls independently when many modules are visible.
-   - Website Builder uses full edit width; preview opens via the public-site action. */
+   - Sidebar scrolls independently when many modules are visible. */
 
 .shell__mobile-menu-toggle {
   display: none;
@@ -142,33 +141,6 @@
   }
 }
 
-/* Website Builder: give the page full editing space like Google Sites.
-   The preview remains available through Preview website / Open public site. */
-.page[data-page-title='Website Builder'] > .card > form {
-  display: block !important;
-}
-
-.page[data-page-title='Website Builder'] > .card > form > aside {
-  display: none !important;
-}
-
-.page[data-page-title='Website Builder'] > .card > form > div:first-child {
-  width: 100% !important;
-  max-width: 1120px;
-}
-
-.page[data-page-title='Website Builder'] .card {
-  max-width: 1180px;
-  margin-inline: auto;
-}
-
-.page[data-page-title='Website Builder'] .page__actions {
-  align-items: center;
-}
-
-.page[data-page-title='Website Builder'] .page__actions .button--ghost::after {
-  content: ' ↗';
-}
 
 /* Invoice / receipt editor fixes.
    The editor now has controlled width so the business form never sits under the preview.

@@ -762,7 +762,7 @@ export default function PublicWebsiteEngine() {
         />
       ) : null}
       <footer className="bg-slate-950 px-4 py-8 text-center text-sm text-slate-400">
-        Powered by Sedifex Website Builder
+        Powered by Sedifex
       </footer>
     </main>
   );

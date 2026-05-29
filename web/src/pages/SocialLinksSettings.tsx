@@ -24,7 +24,7 @@ type MediaUploadKey = 'logoUrl' | 'coverImageUrl' | 'socialShareImage'
 const identityFields: ProfileField[] = [
   ['displayName', 'Business / store name', 'Used as the public business name on websites and marketplace pages.'],
   ['tagline', 'Short tagline', 'A short line for website hero sections, social previews, and public profile cards.'],
-  ['businessDescription', 'Business description', 'Used by Website Builder, About sections, public pages, and SEO generators.'],
+  ['businessDescription', 'Business description', 'Used by About sections, public pages, and SEO generators.'],
   ['openingHours', 'Opening hours', 'Example: Mon - Sat, 9:00 AM - 6:00 PM'],
   ['brandColor', 'Brand color', 'Example: #4f46e5'],
 ]
@@ -102,7 +102,7 @@ function normalizeUrlLikeField(key: string, value: string | null) {
   return value
 }
 
-function socialLinksForWebsiteBuilder(profile: PublicProfile) {
+function socialLinksForPublicProfile(profile: PublicProfile) {
   return {
     facebook: text(profile.facebookUrl),
     instagram: text(profile.instagramHandle),
@@ -246,7 +246,7 @@ export default function SocialLinksSettings() {
     if (!storeId || !canEdit) return profileToSave
     const publicProfile = buildPublicProfilePayload(profileToSave)
     const socialLinks = buildSocialLinkAliases(publicProfile)
-    const websiteBuilderSocialLinks = socialLinksForWebsiteBuilder(publicProfile)
+    const publicWebsiteSocialLinks = socialLinksForPublicProfile(publicProfile)
     const displayName = publicProfile.displayName ?? null
     const logoUrl = publicProfile.logoUrl ?? null
     const coverImageUrl = publicProfile.coverImageUrl ?? null
@@ -323,7 +323,7 @@ export default function SocialLinksSettings() {
           businessLogoUrl: logoUrl,
           coverImageUrl,
           brandColor,
-          socialLinks: websiteBuilderSocialLinks,
+          socialLinks: publicWebsiteSocialLinks,
           businessIdentity: {
             businessName: displayName,
             tagline: publicProfile.tagline ?? null,
@@ -336,7 +336,7 @@ export default function SocialLinksSettings() {
             businessLogoUrl: logoUrl,
             coverImageUrl,
             brandColor,
-            socialLinks: websiteBuilderSocialLinks,
+            socialLinks: publicWebsiteSocialLinks,
           },
           seoSettings: {
             socialShareImage: publicProfile.socialShareImage ?? null,
@@ -360,7 +360,7 @@ export default function SocialLinksSettings() {
     setMessage('')
     try {
       await persistPublicProfile(profile)
-      publish({ message: 'Public profile saved and shared with Website Builder, Sedifex Market, and public pages.', tone: 'success' })
+      publish({ message: 'Public profile saved and shared with Sedifex Market and public pages.', tone: 'success' })
       setIsEditing(false)
     } catch (saveError) {
       console.error('[social-links] save failed', saveError)
@@ -464,7 +464,7 @@ export default function SocialLinksSettings() {
         <form className="account-overview__profile-form" onSubmit={saveSocialLinks}>
           <section className="account-overview__card" onClick={beginEditing}>
             <h2>{storeName || 'Business identity'}</h2>
-            <p className="account-overview__subtitle">These fields are shared with Website Builder identity, public website headers, About sections, SEO helpers, and contact blocks.</p>
+            <p className="account-overview__subtitle">These fields are shared with public website headers, About sections, SEO helpers, and contact blocks.</p>
             <div className="account-overview__form-grid">
               {identityFields.map(renderField)}
             </div>
@@ -480,7 +480,7 @@ export default function SocialLinksSettings() {
 
           <section className="account-overview__card" onClick={beginEditing}>
             <h2>Social media links</h2>
-            <p className="account-overview__subtitle">These are the same links Website Builder saves under <code>websiteBuilder.socialLinks</code>.</p>
+            <p className="account-overview__subtitle">These links are shared with your public profile, website contact areas, and marketplace listings.</p>
             <div className="account-overview__form-grid">
               {socialFields.map(renderField)}
             </div>
