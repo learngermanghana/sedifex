@@ -4,7 +4,6 @@ import { admin, defaultDb } from './firestore'
 import {
   calculatePlatformFeeMinor,
   getPaymentProvider,
-  getPlatformFeePercent,
   getStripeConnectedAccount,
   initializeStripeConnectCheckout,
 } from './stripeConnect'
@@ -150,29 +149,55 @@ function getStoreSubaccount(storeData: Record<string, unknown>) {
   )
 }
 
+function clampPlatformFeePercent(value: number) {
+  return Math.min(25, Math.max(0, Math.round(value * 100) / 100))
+}
+
 function getStoreStripeConnectedAccount(storeData: Record<string, unknown>) {
-  const { paymentSettings, paymentRouting } = getStorePaymentSettings(storeData)
-  return clean(
-    paymentSettings.stripeConnectedAccountId
-      ?? paymentRouting.stripeConnectedAccountId
-      ?? paymentRouting.connectedAccountId,
-    120,
-  )
+  const { paymentSettings } = getStorePaymentSettings(storeData)
+  return clean(paymentSettings.stripeConnectedAccountId, 120)
 }
 
 function getResolvedPaymentProvider(body: CheckoutBody, storeData: Record<string, unknown>, currency: string) {
   if (hasExplicitPaymentProvider(body)) return getPaymentProvider(body, currency)
-  const { paymentSettings, paymentRouting } = getStorePaymentSettings(storeData)
-  const storeProvider = normalizePaymentProvider(paymentSettings.provider ?? paymentRouting.provider ?? paymentRouting.paymentProvider)
+
+  const { paymentSettings } = getStorePaymentSettings(storeData)
+  const storeProvider = normalizePaymentProvider(paymentSettings.provider)
   if (storeProvider) return storeProvider
+
   return getPaymentProvider({}, currency)
 }
 
+function getRequestPlatformFeePercent(body: CheckoutBody) {
+  const paymentRouting = getRecord(body.paymentRouting)
+  const marketplaceFees = getRecord(body.marketplaceFees ?? body.marketplace_fees)
+  const splitPayment = getRecord(body.splitPayment)
+  const requested = numberValue(
+    body.platformFeePercent
+      ?? body.platform_fee_percent
+      ?? paymentRouting.platformFeePercent
+      ?? marketplaceFees.platformFeePercent
+      ?? splitPayment.platformFeePercent,
+  )
+  return requested !== null ? clampPlatformFeePercent(requested) : null
+}
+
 function getResolvedPlatformFeePercent(body: CheckoutBody, storeData: Record<string, unknown>) {
+  const requestPercent = getRequestPlatformFeePercent(body)
+  if (requestPercent !== null) return requestPercent
+
   const { paymentSettings } = getStorePaymentSettings(storeData)
   const storePercent = numberValue(paymentSettings.platformFeePercent)
-  if (storePercent !== null) return Math.min(25, Math.max(0, Math.round(storePercent * 100) / 100))
-  return getPlatformFeePercent(body)
+  if (storePercent !== null) return clampPlatformFeePercent(storePercent)
+
+  return 3
+}
+
+function isStripeActive(storeData: Record<string, unknown>, stripeConnectedAccountId: string) {
+  const { paymentSettings } = getStorePaymentSettings(storeData)
+  return paymentSettings.enabled === true
+    && clean(paymentSettings.approvalStatus, 80).toLowerCase() === 'active'
+    && Boolean(stripeConnectedAccountId)
 }
 
 function getReturnUrl(body: CheckoutBody) {
@@ -420,8 +445,11 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     }
 
     if (paymentProvider === 'stripe') {
-      if (!stripeConnectedAccountId) {
-        res.status(400).json({ error: 'stripe-connected-account-required' })
+      if (!isStripeActive(storeData, stripeConnectedAccountId)) {
+        res.status(400).json({
+          error: 'stripe-not-active',
+          message: 'Stripe payments are not active for this store.',
+        })
         return
       }
 
