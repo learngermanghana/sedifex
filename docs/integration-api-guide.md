@@ -318,6 +318,72 @@ GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<fro
 
 Use the same Website Integration API key headers.
 
+### Rendering Upcoming Events with flexible schedules
+
+`GET /v1IntegrationAvailability` supports events where the exact date and/or time is not confirmed yet. Connected websites must **not** hide an event only because `startAt` or `endAt` is `null`.
+
+Each availability slot includes these schedule fields:
+
+- `scheduleStatus: "scheduled"` — date and time are confirmed. `startAt` and `endAt` are ISO strings.
+- `scheduleStatus: "time_tba"` — date is confirmed, but the time is not. `eventDate` is a `YYYY-MM-DD` string, while `startAt` and `endAt` are `null`.
+- `scheduleStatus: "date_tba"` — date and time are not confirmed. `startAt`, `endAt`, and `eventDate` are `null`.
+
+Slots also include `displayDateText`, `displayTimeText`, `isDateConfirmed`, and `isTimeConfirmed` so websites can render labels without guessing.
+
+Example `date_tba` slot:
+
+```json
+{
+  "id": "solar-energy-program",
+  "storeId": "demo-store",
+  "serviceId": "manual:solar-energy-program",
+  "serviceName": "Solar Energy Program",
+  "scheduleStatus": "date_tba",
+  "startAt": null,
+  "endAt": null,
+  "eventDate": null,
+  "displayDateText": "Date to be announced",
+  "displayTimeText": "Time to be announced",
+  "isDateConfirmed": false,
+  "isTimeConfirmed": false,
+  "location": "Online / to be confirmed",
+  "status": "open",
+  "capacity": 20,
+  "seatsBooked": 0,
+  "seatsRemaining": 20,
+  "attributes": {}
+}
+```
+
+Recommended rendering fallback:
+
+```ts
+const dateLabel =
+  slot.displayDateText ??
+  (slot.startAt ? new Date(slot.startAt).toLocaleDateString() : 'Date to be announced')
+
+const timeLabel =
+  slot.displayTimeText ??
+  (slot.startAt && slot.endAt
+    ? `${new Date(slot.startAt).toLocaleTimeString()} - ${new Date(slot.endAt).toLocaleTimeString()}`
+    : 'Time to be announced')
+```
+
+Expected website output for the example above:
+
+```text
+Solar Energy Program
+Date: Date to be announced
+Time: Time to be announced
+Location: Online / to be confirmed
+Button: Register Interest
+```
+
+Booking/registration note:
+
+- If a slot has `scheduleStatus: "date_tba"` or `scheduleStatus: "time_tba"`, show a "Register Interest" or "Enquire" call-to-action instead of hiding it.
+- Keep submitted booking details tied to the `serviceId` and include the selected slot/event context in `attributes` when exact date or time is not confirmed yet.
+
 ---
 
 ## 7. Gallery, promo, hero, and social settings content
