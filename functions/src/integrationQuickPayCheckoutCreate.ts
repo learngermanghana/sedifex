@@ -1,6 +1,13 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import {
+  calculateApplicationFeeAmount,
+  createStripeCheckoutSession,
+  resolveStripeCommissionPercent,
+  resolveStripeConnectedAccount,
+  shouldUseStripeForCheckout,
+} from './stripeConnect'
 
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL', { default: '' })
@@ -113,6 +120,18 @@ function getTransactionChargeMinor(body: CheckoutBody) {
   const split = getRecord(body.splitPayment)
   const value = numberValue(split.transactionChargeMinor ?? split.transaction_charge ?? split.transactionCharge)
   return value !== null && value > 0 ? Math.round(value) : null
+}
+
+function getReturnUrl(body: CheckoutBody) {
+  return clean(body.returnUrl ?? body.return_url ?? body.callbackUrl ?? body.callback_url, 700)
+}
+
+function getCancelUrl(body: CheckoutBody) {
+  return clean(body.cancelUrl ?? body.cancel_url, 700)
+}
+
+function getCheckoutDescription(details: ReturnType<typeof deriveCheckoutDetails>, sourceLabel: string) {
+  return details.itemName || details.productName || details.serviceName || sourceLabel || 'Sedifex checkout'
 }
 
 function normalizeItemType(value: unknown): NormalizedItemType | '' {
@@ -285,7 +304,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const amountMajor = getAmountMajor(body)
     const reference = clean(body.payment_reference ?? body.reference, 220) || clean(body.client_order_id ?? body.clientOrderId, 220) || `${storeId}_${Date.now()}`
     const currency = clean(body.currency, 20) || 'GHS'
-    const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
+    const callbackUrl = getReturnUrl(body) || APP_BASE_URL.value() || undefined
+    const cancelUrl = getCancelUrl(body) || callbackUrl
     const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
     const subaccount = getSubaccount(body)
@@ -327,9 +347,155 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       splitEnabled: Boolean(subaccount),
     }
 
+    const amountMinor = Math.round(amountMajor * 100)
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    const nowIso = new Date().toISOString()
+    const clientOrderId = clean(body.client_order_id ?? body.clientOrderId, 220) || reference
+
+    if (shouldUseStripeForCheckout(body, currency)) {
+      const connectedAccountId = await resolveStripeConnectedAccount({ storeId, body })
+      if (!connectedAccountId) {
+        res.status(400).json({ error: 'stripe-connected-account-required' })
+        return
+      }
+
+      const commissionPercent = resolveStripeCommissionPercent(body)
+      const applicationFeeAmount = calculateApplicationFeeAmount(amountMinor, commissionPercent)
+      const stripeMetadata = {
+        ...storedMetadata,
+        currency: currency.toUpperCase(),
+        stripeConnectedAccountId: connectedAccountId,
+        applicationFeeAmount,
+        applicationFeePercent: commissionPercent,
+        paystackSubaccountCode: null,
+        splitEnabled: true,
+      }
+      const stripe = await createStripeCheckoutSession({
+        connectedAccountId,
+        email: customer.email,
+        amountMinor,
+        currency: currency.toUpperCase(),
+        reference,
+        callbackUrl,
+        cancelUrl,
+        description: getCheckoutDescription(details, sourceLabel),
+        applicationFeeAmount,
+        metadata: stripeMetadata,
+      })
+      const authorizationUrl = stripe.url ?? null
+      const record = {
+        storeId,
+        merchantId: storeId,
+        reference,
+        clientOrderId,
+        client_order_id: clientOrderId,
+        sourceChannel,
+        source_channel: sourceChannel,
+        sourceLabel,
+        source_label: sourceLabel,
+        customer: {
+          name: customer.name || null,
+          email: customer.email,
+          phone: customer.phone || null,
+        },
+        customerName: customer.name || null,
+        customer_name: customer.name || null,
+        customerEmail: customer.email,
+        customer_email: customer.email,
+        customerPhone: customer.phone || null,
+        customer_phone: customer.phone || null,
+        amount: amountMajor,
+        amountMinor,
+        amount_minor: amountMinor,
+        currency: currency.toUpperCase(),
+        itemName: details.itemName || details.productName || details.serviceName || null,
+        productName: details.productName || null,
+        serviceName: details.serviceName || null,
+        itemType: details.itemType,
+        item_type: details.itemType,
+        accountingType: details.accountingType,
+        accounting_type: details.accountingType,
+        recordType: details.recordType,
+        orderType: details.recordType,
+        order_type: details.recordType,
+        data: {
+          itemName: details.itemName || null,
+          productName: details.productName || null,
+          serviceName: details.serviceName || null,
+          itemType: details.itemType,
+          accountingType: details.accountingType,
+          recordType: details.recordType,
+        },
+        items: details.enrichedItems,
+        pricingSnapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
+        pricing_snapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
+        marketplaceFees: body.marketplace_fees ?? body.marketplaceFees ?? null,
+        marketplace_fees: body.marketplace_fees ?? body.marketplaceFees ?? null,
+        metadata: stripeMetadata,
+        paymentProvider: 'stripe',
+        payment_provider: 'stripe',
+        paymentMethod: 'ONLINE',
+        payment_method: 'ONLINE',
+        paymentReference: reference,
+        payment_reference: reference,
+        stripeCheckoutSessionId: stripe.id ?? null,
+        stripePaymentIntentId: stripe.payment_intent ?? null,
+        stripeConnectedAccountId: connectedAccountId,
+        paymentStatus: 'pending',
+        payment_status: 'pending',
+        orderStatus: 'pending_payment',
+        order_status: 'pending_payment',
+        status: 'pending_payment',
+        paymentCollectionMode: 'online_checkout',
+        payment_collection_mode: 'online_checkout',
+        stripeConnect: {
+          enabled: true,
+          connectedAccountId,
+          applicationFeeAmount,
+          commissionPercent,
+          chargeType: 'direct',
+          commissionControlledBy: 'sedifex',
+        },
+        paystackSplit: { enabled: false },
+        authorizationUrl,
+        checkoutUrl: authorizationUrl,
+        orderDate: nowIso,
+        order_date: nowIso,
+        createdAt: now,
+        createdAtIso: nowIso,
+        created_at: now,
+        updatedAt: now,
+        updatedAtIso: nowIso,
+      }
+
+      await Promise.all([
+        defaultDb.collection('integrationOrders').doc(reference).set(record, { merge: true }),
+        defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference).set(record, { merge: true }),
+      ])
+
+      res.status(200).json({
+        ok: true,
+        reference,
+        payment_reference: reference,
+        authorizationUrl,
+        checkoutUrl: authorizationUrl,
+        stripeCheckoutSessionId: stripe.id ?? null,
+        stripePaymentIntentId: stripe.payment_intent ?? null,
+        stripeConnect: { enabled: true, connectedAccountId, applicationFeeAmount, commissionPercent, chargeType: 'direct' },
+        orderId: reference,
+        payment_status: 'pending',
+        order_status: 'pending_payment',
+        recordType: details.recordType,
+        orderType: details.recordType,
+        paymentProvider: 'stripe',
+        payment_provider: 'stripe',
+      })
+      return
+    }
+
     const paystackPayload: Record<string, unknown> = {
       email: customer.email,
-      amount: Math.round(amountMajor * 100),
+      amount: amountMinor,
       reference,
       currency,
       callback_url: callbackUrl,
@@ -344,9 +510,6 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
 
     const paystack = await initializePaystack(paystackPayload)
     const authorizationUrl = paystack.data?.authorization_url ?? null
-    const now = admin.firestore.FieldValue.serverTimestamp()
-    const nowIso = new Date().toISOString()
-    const clientOrderId = clean(body.client_order_id ?? body.clientOrderId, 220) || reference
 
     const record = {
       storeId,
@@ -370,8 +533,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       customerPhone: customer.phone || null,
       customer_phone: customer.phone || null,
       amount: amountMajor,
-      amountMinor: Math.round(amountMajor * 100),
-      amount_minor: Math.round(amountMajor * 100),
+      amountMinor,
+      amount_minor: amountMinor,
       currency,
       itemName: details.itemName || details.productName || details.serviceName || null,
       productName: details.productName || null,
