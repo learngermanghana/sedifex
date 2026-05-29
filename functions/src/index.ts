@@ -1,6 +1,7 @@
 // functions/src/index.ts
 export { checkSignupUnlock, createCheckout, paystackWebhook } from './paystack'
 export { handlePaystackWebhook } from './marketplacePaystackWebhook'
+export { stripeConnectWebhook } from './stripeConnect'
 export {
   createPaystackMerchantSubaccount,
   fetchPaystackMerchantSubaccount,
