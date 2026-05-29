@@ -20,25 +20,25 @@ const BUILDER_SECTIONS: BuilderSection[] = [
   {
     id: 'promo',
     label: 'Promo',
-    description: 'Update the public promo title, dates, summary, image, and Sedifex public link content.',
+    description: 'Update the public promo title, dates, summary, image, and Sedifex public link content. Website can pull this through the promo integration.',
     Component: PromoSettings,
   },
   {
     id: 'gallery',
     label: 'Gallery',
-    description: 'Manage albums and images your public website can show in gallery sections.',
+    description: 'Manage albums and images your public website can show in gallery sections. Website can pull this through gallery integration.',
     Component: GallerySettings,
   },
   {
     id: 'hero',
     label: 'Hero page',
-    description: 'Create homepage hero slides and banners for connected website templates.',
+    description: 'Create homepage hero slides and banners for connected website templates. Website can pull this through /v1IntegrationHeroSlides.',
     Component: WebsiteHeroSlides,
   },
   {
     id: 'social',
     label: 'Social settings',
-    description: 'Maintain public profile, contact, social links, logos, and share images.',
+    description: 'Maintain public profile, contact, social links, logos, and share images. Website can pull this through /v1IntegrationSocialSettings.',
     Component: SocialLinksSettings,
   },
 ]
@@ -90,9 +90,18 @@ export default function WebsiteBuilder() {
         <p className="account-overview__hint">{selectedSection.description}</p>
       </section>
 
-      <div className="website-builder-page__section" aria-live="polite">
-        <SelectedComponent />
-      </div>
+      <section className="website-builder-page__section-shell" aria-live="polite">
+        <div className="website-builder-page__section-break">
+          <span className="website-builder-page__section-kicker">Current website section</span>
+          <h2>{selectedSection.label}</h2>
+          <p>{selectedSection.description}</p>
+          <p className="website-builder-page__section-helper">Connected websites should fetch this from Sedifex instead of hardcoding it.</p>
+        </div>
+
+        <div className="website-builder-page__section-body">
+          <SelectedComponent />
+        </div>
+      </section>
     </div>
   )
 }

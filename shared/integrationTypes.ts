@@ -93,6 +93,48 @@ export interface IntegrationHeroSlidesResponse {
   slides: IntegrationHeroSlide[]
 }
 
+
+export interface IntegrationSocialSettings {
+  displayName: string | null
+  tagline: string | null
+  businessDescription: string | null
+  openingHours: string | null
+  brandColor: string | null
+  logoUrl: string | null
+  coverImageUrl: string | null
+  socialShareImage: string | null
+  publicPhone: string | null
+  whatsappNumber: string | null
+  telegramNumber: string | null
+  publicEmail: string | null
+  addressLine1: string | null
+  city: string | null
+  country: string | null
+  websiteUrl: string | null
+  instagramHandle: string | null
+  facebookUrl: string | null
+  tiktokHandle: string | null
+  youtubeUrl: string | null
+  xHandle: string | null
+  linkedinUrl: string | null
+  updatedAt: string | null
+}
+
+export interface IntegrationSocialSettingsResponse {
+  ok: boolean
+  storeId: string
+  profile: IntegrationSocialSettings
+  socialLinks: {
+    website: string | null
+    instagram: string | null
+    facebook: string | null
+    tiktok: string | null
+    youtube: string | null
+    x: string | null
+    linkedin: string | null
+  }
+}
+
 export interface IntegrationProductsResponse {
   storeId: string
   products: IntegrationProduct[]
