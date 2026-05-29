@@ -44,6 +44,7 @@ type OnlineOrderRecord = {
   sourceLabel: string
   createdAt: Date | null
   notes: string
+  itemType: 'product' | 'service' | 'course' | 'manual'
 }
 
 const PRODUCT_ACTIONS: ActionConfig[] = [
@@ -96,6 +97,49 @@ function toDate(value: unknown): Date | null {
   }
   if (typeof (value as any)?.toDate === 'function') return (value as any).toDate()
   return null
+}
+
+
+function normalizeItemType(value: unknown): 'product' | 'service' | 'course' | '' {
+  const normalized = asText(value).toLowerCase().replace(/[\s_-]+/g, '_')
+  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking') return 'service'
+  if (normalized === 'course' || normalized === 'class' || normalized === 'training') return 'course'
+  if (normalized === 'product' || normalized === 'product_order' || normalized === 'physical_product') return 'product'
+  return ''
+}
+
+function readItemType(source: Record<string, unknown>, collectionName: OrderCollection, recordType: string): 'product' | 'service' | 'course' | 'manual' {
+  if (collectionName === 'cashOrders' || recordType === 'manual_cash_sale') return 'manual'
+
+  const item = firstItem(source)
+  const metadata = getNestedObject(source, 'metadata')
+  const data = getNestedObject(source, 'data')
+  const pricingSnapshot = getNestedObject(source, 'pricingSnapshot')
+  const pricingSnapshotSnake = getNestedObject(source, 'pricing_snapshot')
+  const snapshotItems = Array.isArray(pricingSnapshot.items) ? pricingSnapshot.items : Array.isArray(pricingSnapshotSnake.items) ? pricingSnapshotSnake.items : []
+  const snapshotFirst = snapshotItems[0] && typeof snapshotItems[0] === 'object' ? snapshotItems[0] as Record<string, unknown> : {}
+
+  const explicitType = normalizeItemType(
+    source.itemType ?? source.item_type ?? source.listingType ?? source.listing_type ?? source.type
+    ?? item.itemType ?? item.item_type ?? item.listingType ?? item.listing_type ?? item.type
+    ?? snapshotFirst.itemType ?? snapshotFirst.item_type ?? snapshotFirst.listingType ?? snapshotFirst.listing_type ?? snapshotFirst.type
+    ?? metadata.itemType ?? metadata.item_type ?? metadata.listingType ?? metadata.listing_type ?? metadata.type
+    ?? data.itemType ?? data.item_type ?? data.listingType ?? data.listing_type ?? data.type
+    ?? recordType,
+  )
+  if (explicitType) return explicitType
+  if (collectionName === 'integrationBookings') return 'service'
+
+  const hasServiceSignal = Boolean(
+    source.serviceName || source.serviceId || source.service_id
+    || item.serviceName || item.serviceId || item.service_id
+    || snapshotFirst.serviceName || snapshotFirst.serviceId || snapshotFirst.service_id
+    || metadata.serviceName || metadata.serviceId || metadata.service_id
+    || data.serviceName || data.serviceId || data.service_id,
+  )
+  if (hasServiceSignal) return 'service'
+
+  return 'product'
 }
 
 function normalizeStatus(value: string) {
@@ -155,7 +199,8 @@ function mapOrderRecord(id: string, collectionName: OrderCollection, data: Recor
   const item = firstItem(data)
   const metadata = getNestedObject(data, 'metadata')
   const channel = collectionName === 'cashOrders' ? 'quick_pay_cash' : readSourceChannel(data)
-  const recordType = asText(data.recordType ?? data.orderType, collectionName === 'integrationBookings' ? 'service_booking' : collectionName === 'cashOrders' ? 'manual_cash_sale' : 'product_order')
+  const recordType = asText(data.recordType ?? data.orderType ?? data.itemType ?? data.item_type, collectionName === 'integrationBookings' ? 'service_booking' : collectionName === 'cashOrders' ? 'manual_cash_sale' : 'product_order')
+  const itemType = readItemType(data, collectionName, recordType)
 
   return {
     id,
@@ -166,7 +211,7 @@ function mapOrderRecord(id: string, collectionName: OrderCollection, data: Recor
     customerName: asText(customer.name ?? data.customerName, 'Customer'),
     customerEmail: asText(customer.email ?? data.customerEmail, ''),
     customerPhone: asText(customer.phone ?? data.customerPhone, ''),
-    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? item.name ?? item.itemName ?? item.productName, recordType === 'service_booking' ? 'Service booking' : 'Manual sale'),
+    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? item.name ?? item.itemName ?? item.productName ?? item.serviceName, itemType === 'service' || itemType === 'course' ? 'Service booking' : itemType === 'manual' ? 'Manual sale' : 'Product order'),
     quantity: asNumber(item.quantity ?? item.qty, 1),
     amount: readAmount(data),
     currency: readCurrency(data),
@@ -182,15 +227,16 @@ function mapOrderRecord(id: string, collectionName: OrderCollection, data: Recor
     sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceLabel(channel)),
     createdAt: toDate(data.createdAtServer ?? data.createdAt),
     notes: asText(data.notes, ''),
+    itemType,
   }
 }
 
 function isServiceBooking(record: OnlineOrderRecord) {
-  return record.recordType === 'service_booking' || record.collectionName === 'integrationBookings' || record.recordType === 'service'
+  return record.itemType === 'service' || record.itemType === 'course' || record.recordType === 'service_booking' || record.collectionName === 'integrationBookings' || record.recordType === 'service'
 }
 
 function isManualStoreOrder(record: OnlineOrderRecord) {
-  return record.collectionName === 'cashOrders' || record.recordType === 'manual_cash_sale' || Boolean(record.storeOnly)
+  return record.itemType === 'manual' || record.collectionName === 'cashOrders' || record.recordType === 'manual_cash_sale' || Boolean(record.storeOnly)
 }
 
 function isProductOrder(record: OnlineOrderRecord) {
@@ -592,7 +638,7 @@ export default function MarketplaceOrders({ compactHeader = false }: { compactHe
                   return (
                     <tr key={`${record.collectionName}-${record.id}`} style={{ borderBottom: '1px solid #E2E8F0', verticalAlign: 'top' }}>
                       <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.customerName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{record.customerPhone || record.customerEmail || 'No contact'}</span></td>
-                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.itemName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{actionGroup === 'product' ? `Qty: ${record.quantity || 1}` : actionGroup === 'service' ? 'Service booking' : 'Manual entry'}</span></td>
+                      <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.itemName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{actionGroup === 'product' ? `Product · Qty: ${record.quantity || 1}` : actionGroup === 'service' ? `${normalizeStatus(record.itemType)} booking` : 'Manual entry'}</span></td>
                       <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.sourceLabel}</strong><br /><span style={{ color: record.storeOnly ? '#92400E' : '#64748B', fontSize: 12, fontWeight: 800 }}>{record.storeOnly ? 'Store-only data' : record.collectionName}</span></td>
                       <td style={{ padding: '12px 8px', color: '#0F172A', fontWeight: 800 }}>{formatMoney(record.amount, record.currency)}</td>
                       <td style={{ padding: '12px 8px' }}><strong>{normalizeStatus(record.paymentCollectionMode)}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{normalizeStatus(record.paymentStatus)}</span>{cashOrder ? <><br /><span style={{ color: record.cashConfirmed ? '#16A34A' : '#92400E', fontSize: 12, fontWeight: 900 }}>{record.cashConfirmed ? 'Cash confirmed' : 'Awaiting cash'}</span></> : null}</td>
