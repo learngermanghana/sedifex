@@ -11,11 +11,15 @@ type SettlementRow = {
   sourceChannel: string
   sourceLabel: string
   customerName: string
+  storeName: string
+  storeId: string
   grossAmount: number
   baseAmount: number
   customerProcessingFee: number
   gatewayProvider: string
   gatewayFee: number
+  gatewayFeeKnown: boolean
+  gatewayFeeLabel: string
   sedifexCommission: number
   merchantNet: number
   currency: string
@@ -158,6 +162,20 @@ function readGatewayFee(data: Record<string, unknown>) {
   )
 }
 
+function formatProvider(provider: string) {
+  const normalized = provider.toLowerCase()
+  if (normalized === 'paystack') return 'Paystack'
+  if (normalized === 'stripe') return 'Stripe'
+  if (normalized === 'manual') return 'Manual'
+  return provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Unknown'
+}
+
+function gatewayFeeStatus(provider: string, gatewayFee: number) {
+  if (gatewayFee > 0) return { known: true, label: '' }
+  if (provider.toLowerCase() === 'stripe') return { known: false, label: 'Stripe fee deducted by Stripe' }
+  return { known: false, label: 'Gateway fee pending' }
+}
+
 function readSedifexCommission(data: Record<string, unknown>) {
   const payment = getNestedObject(data, 'payment')
   const feePolicy = getNestedObject(data, 'feePolicy')
@@ -207,6 +225,11 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
   const split = readPaystackSplit(data)
   const provider = readPaymentProvider(data)
   const stripeConnectedAccountId = readStripeConnectedAccountId(data)
+  const gatewayFee = readGatewayFee(data)
+  const gatewayFeeMeta = gatewayFeeStatus(provider, gatewayFee)
+  const store = getNestedObject(data, 'store')
+  const storeName = asText(data.storeName ?? data.store_name ?? store.name ?? store.businessName ?? store.business_name, '')
+  const storeId = asText(data.storeId ?? data.store_id ?? data.merchantId ?? data.merchant_id, '')
   return {
     id,
     collectionName,
@@ -214,11 +237,15 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
     sourceChannel,
     sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Sedifex Market' : 'Sedifex Public Page'),
     customerName: asText(customer.name ?? customer.email, 'Customer'),
+    storeName,
+    storeId,
     grossAmount: readAmount(data),
     baseAmount: readBaseAmount(data),
     customerProcessingFee: readCustomerProcessingFee(data),
     gatewayProvider: provider,
-    gatewayFee: readGatewayFee(data),
+    gatewayFee,
+    gatewayFeeKnown: gatewayFeeMeta.known,
+    gatewayFeeLabel: gatewayFeeMeta.label,
     sedifexCommission: readSedifexCommission(data),
     merchantNet: readMerchantNet(data),
     currency: readCurrency(data),
@@ -307,7 +334,7 @@ export default function SettlementReport() {
       baseAmount: row.baseAmount,
       customerProcessingFee: row.customerProcessingFee,
       gatewayProvider: row.gatewayProvider,
-      gatewayFee: row.gatewayFee,
+      gatewayFee: row.gatewayFeeKnown ? row.gatewayFee : row.gatewayFeeLabel,
       sedifexCommission: row.sedifexCommission,
       merchantNet: row.merchantNet,
       currency: row.currency,
@@ -318,6 +345,8 @@ export default function SettlementReport() {
       routingEnabled: row.splitEnabled ? 'yes' : 'no',
       subaccountCode: row.subaccountCode,
       stripeConnectedAccountId: row.stripeConnectedAccountId,
+      storeName: row.storeName,
+      storeId: row.storeId,
       date: formatDate(row.createdAt),
     })))
   }
@@ -424,12 +453,12 @@ export default function SettlementReport() {
               {rows.map(row => (
                 <tr key={`${row.collectionName}-${row.id}`}>
                   <td><strong>{row.reference}</strong><br /><small>{row.collectionName === 'integrationBookings' ? 'Service booking' : 'Product order'}</small></td>
-                  <td>{row.sourceLabel}<br /><small>{row.customerName}</small></td>
-                  <td>{formatMoney(row.grossAmount, row.currency)}<br /><small>Base: {formatMoney(row.baseAmount, row.currency)}</small></td>
-                  <td><strong>{row.gatewayProvider}</strong><br /><small>Gateway fee: {formatMoney(row.gatewayFee || row.customerProcessingFee, row.currency)}</small><br /><small>Sedifex fee: {formatMoney(row.sedifexCommission, row.currency)}</small></td>
-                  <td>{formatMoney(row.merchantNet, row.currency)}</td>
+                  <td>{row.storeName || row.storeId || row.sourceLabel}<br /><small>{row.storeId ? `Store ID: ${row.storeId}` : row.sourceLabel}</small><br /><small>{row.customerName}</small></td>
+                  <td>{formatMoney(row.grossAmount, row.currency)}<br /><small>Currency: {row.currency}</small><br /><small>Base: {formatMoney(row.baseAmount, row.currency)}</small></td>
+                  <td><strong>Provider: {formatProvider(row.gatewayProvider)}</strong><br /><small>Gateway fee: {row.gatewayFeeKnown ? formatMoney(row.gatewayFee, row.currency) : row.gatewayFeeLabel}</small><br /><small>Sedifex platform fee: {formatMoney(row.sedifexCommission, row.currency)}</small></td>
+                  <td>{formatMoney(row.merchantNet, row.currency)}<br />{row.gatewayProvider === 'stripe' && !row.gatewayFeeKnown ? <small>Estimate before final Stripe fee.</small> : null}</td>
                   <td>{row.splitEnabled ? 'Connected' : 'Missing'}<br /><small>{row.gatewayProvider === 'stripe' ? row.stripeConnectedAccountId || 'No Stripe account' : row.subaccountCode || 'No subaccount'}</small></td>
-                  <td>{row.paymentStatus}<br /><small>{row.settlementStatus}</small><br /><small>{row.orderStatus}</small></td>
+                  <td><strong>Payment: {row.paymentStatus}</strong><br /><small>Settlement: {row.settlementStatus}</small><br /><small>Order: {row.orderStatus}</small></td>
                   <td>{formatDate(row.createdAt)}</td>
                 </tr>
               ))}
