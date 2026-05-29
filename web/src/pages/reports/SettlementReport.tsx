@@ -14,13 +14,17 @@ type SettlementRow = {
   grossAmount: number
   baseAmount: number
   customerProcessingFee: number
+  gatewayProvider: string
+  gatewayFee: number
   sedifexCommission: number
   merchantNet: number
   currency: string
   paymentStatus: string
+  settlementStatus: string
   orderStatus: string
   paymentCollectionMode: string
   subaccountCode: string
+  stripeConnectedAccountId: string
   splitEnabled: boolean
   transactionCharge: number
   createdAt: Date | null
@@ -121,12 +125,48 @@ function readPaystackSplit(data: Record<string, unknown>) {
   }
 }
 
+
+function readPaymentProvider(data: Record<string, unknown>) {
+  const payment = getNestedObject(data, 'payment')
+  const fees = readMarketplaceFees(data)
+  const stripeConnect = getNestedObject(data, 'stripeConnect')
+  const paystackSplit = getNestedObject(data, 'paystackSplit')
+  const provider = asText(data.paymentProvider ?? data.payment_provider ?? data.provider ?? payment.provider ?? fees.provider, '').toLowerCase()
+  if (provider) return provider
+  if (asText(data.stripeConnectedAccountId ?? stripeConnect.connectedAccountId, '')) return 'stripe'
+  if (paystackSplit.enabled === true || asText(data.paystackReference, '')) return 'paystack'
+  return 'unknown'
+}
+
+function readStripeConnectedAccountId(data: Record<string, unknown>) {
+  const stripeConnect = getNestedObject(data, 'stripeConnect')
+  return asText(data.stripeConnectedAccountId ?? stripeConnect.connectedAccountId, '')
+}
+
+function readGatewayFee(data: Record<string, unknown>) {
+  const payment = getNestedObject(data, 'payment')
+  const fees = readMarketplaceFees(data)
+  const gatewayFees = getNestedObject(data, 'gatewayFees')
+  return firstNonZero(
+    readMinorAsMajor(data.gatewayFeeMinor),
+    readMinorAsMajor(data.stripeFeeMinor),
+    readMinorAsMajor(data.paystackFeeMinor),
+    readMinorAsMajor(fees.gatewayFeeMinor),
+    readMinorAsMajor(fees.paymentGatewayFeeMinor),
+    readMinorAsMajor(gatewayFees.gatewayFeeMinor),
+    asNumber(data.gatewayFee ?? payment.gatewayFee, 0),
+  )
+}
+
 function readSedifexCommission(data: Record<string, unknown>) {
   const payment = getNestedObject(data, 'payment')
   const feePolicy = getNestedObject(data, 'feePolicy')
   const fees = readMarketplaceFees(data)
   const split = readPaystackSplit(data)
   return firstNonZero(
+    readMinorAsMajor(data.sedifexPlatformFeeMinor),
+    readMinorAsMajor(fees.platformFeeMinor),
+    readMinorAsMajor(fees.sedifexPlatformFeeMinor),
     split.transactionCharge,
     readMinorAsMajor(fees.sedifexCommissionMinor),
     asNumber(payment.sedifexCommission ?? payment.sedifexCommissionMajor, 0),
@@ -145,7 +185,7 @@ function readMerchantNet(data: Record<string, unknown>) {
     readMinorAsMajor(fees.estimatedMerchantNetMinor),
   )
   if (explicit > 0) return explicit
-  return Math.max(0, readBaseAmount(data) - readSedifexCommission(data))
+  return Math.max(0, readAmount(data) - readGatewayFee(data) - readSedifexCommission(data))
 }
 
 function isOnlineCheckout(data: Record<string, unknown>) {
@@ -165,6 +205,8 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
   const sourceChannel = normalizeSourceChannel(data.sourceChannel ?? data.source_channel ?? data.source)
   const paymentStatus = asText(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending')
   const split = readPaystackSplit(data)
+  const provider = readPaymentProvider(data)
+  const stripeConnectedAccountId = readStripeConnectedAccountId(data)
   return {
     id,
     collectionName,
@@ -175,14 +217,18 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
     grossAmount: readAmount(data),
     baseAmount: readBaseAmount(data),
     customerProcessingFee: readCustomerProcessingFee(data),
+    gatewayProvider: provider,
+    gatewayFee: readGatewayFee(data),
     sedifexCommission: readSedifexCommission(data),
     merchantNet: readMerchantNet(data),
     currency: readCurrency(data),
     paymentStatus,
+    settlementStatus: asText(data.settlementStatus ?? data.settlement_status, 'pending'),
     orderStatus: asText(data.orderStatus ?? data.order_status ?? data.bookingStatus, 'pending'),
     paymentCollectionMode: asText(data.paymentCollectionMode ?? payment.mode, 'online_checkout'),
     subaccountCode: split.subaccount,
-    splitEnabled: split.enabled,
+    stripeConnectedAccountId,
+    splitEnabled: provider === 'stripe' ? Boolean(stripeConnectedAccountId) : split.enabled,
     transactionCharge: split.transactionCharge,
     createdAt: toDate(data.createdAtServer ?? data.createdAt),
   }
@@ -260,14 +306,18 @@ export default function SettlementReport() {
       grossAmount: row.grossAmount,
       baseAmount: row.baseAmount,
       customerProcessingFee: row.customerProcessingFee,
+      gatewayProvider: row.gatewayProvider,
+      gatewayFee: row.gatewayFee,
       sedifexCommission: row.sedifexCommission,
       merchantNet: row.merchantNet,
       currency: row.currency,
       paymentStatus: row.paymentStatus,
+      settlementStatus: row.settlementStatus,
       orderStatus: row.orderStatus,
       paymentCollectionMode: row.paymentCollectionMode,
-      splitEnabled: row.splitEnabled ? 'yes' : 'no',
+      routingEnabled: row.splitEnabled ? 'yes' : 'no',
       subaccountCode: row.subaccountCode,
+      stripeConnectedAccountId: row.stripeConnectedAccountId,
       date: formatDate(row.createdAt),
     })))
   }
@@ -300,14 +350,14 @@ export default function SettlementReport() {
       <section className="workspace-card">
         <p className="workspace-eyebrow">Reports / Settlement</p>
         <h1>Settlement report</h1>
-        <p className="workspace-muted">Track gross online payments, customer processing fees, Sedifex commission, Paystack split status, and expected merchant settlement.</p>
+        <p className="workspace-muted">Track gross online payments, provider fees, Sedifex platform fees, Stripe/Paystack routing status, and expected merchant settlement.</p>
       </section>
 
       <section className="workspace-grid workspace-grid--four">
         <article className="workspace-card"><strong>{formatMoney(totals.gross, totals.currency)}</strong><span>Gross paid/selected</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.commission, totals.currency)}</strong><span>Sedifex commission</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.merchantNet, totals.currency)}</strong><span>Expected merchant net</span></article>
-        <article className="workspace-card"><strong>{totals.missingSplit}</strong><span>Online records missing split</span></article>
+        <article className="workspace-card"><strong>{totals.missingSplit}</strong><span>Online records missing routing</span></article>
       </section>
 
       <section className="workspace-card">
@@ -353,7 +403,7 @@ export default function SettlementReport() {
           <article className="workspace-card"><strong>{totals.records}</strong><span>Selected records</span></article>
           <article className="workspace-card"><strong>{totals.paidRecords}</strong><span>Paid/confirmed records</span></article>
           <article className="workspace-card"><strong>{totals.splitEnabled}</strong><span>Split enabled</span></article>
-          <article className="workspace-card"><strong>{formatMoney(totals.customerFees, totals.currency)}</strong><span>Customer processing fees</span></article>
+          <article className="workspace-card"><strong>{formatMoney(totals.customerFees, totals.currency)}</strong><span>Gateway/customer fees</span></article>
         </div>
 
         <div className="workspace-table-wrap">
@@ -361,12 +411,12 @@ export default function SettlementReport() {
             <thead>
               <tr>
                 <th>Reference</th>
-                <th>Source</th>
-                <th>Gross</th>
-                <th>Fees / commission</th>
-                <th>Merchant net</th>
-                <th>Split</th>
-                <th>Status</th>
+                <th>Store / source</th>
+                <th>Gross amount</th>
+                <th>Gateway / fees</th>
+                <th>Net seller payout estimate</th>
+                <th>Routing</th>
+                <th>Payment / settlement</th>
                 <th>Date</th>
               </tr>
             </thead>
@@ -376,10 +426,10 @@ export default function SettlementReport() {
                   <td><strong>{row.reference}</strong><br /><small>{row.collectionName === 'integrationBookings' ? 'Service booking' : 'Product order'}</small></td>
                   <td>{row.sourceLabel}<br /><small>{row.customerName}</small></td>
                   <td>{formatMoney(row.grossAmount, row.currency)}<br /><small>Base: {formatMoney(row.baseAmount, row.currency)}</small></td>
-                  <td>{formatMoney(row.sedifexCommission, row.currency)}<br /><small>Customer fee: {formatMoney(row.customerProcessingFee, row.currency)}</small></td>
+                  <td><strong>{row.gatewayProvider}</strong><br /><small>Gateway fee: {formatMoney(row.gatewayFee || row.customerProcessingFee, row.currency)}</small><br /><small>Sedifex fee: {formatMoney(row.sedifexCommission, row.currency)}</small></td>
                   <td>{formatMoney(row.merchantNet, row.currency)}</td>
-                  <td>{row.splitEnabled ? 'Enabled' : 'Missing'}<br /><small>{row.subaccountCode || 'No subaccount'}</small></td>
-                  <td>{row.paymentStatus}<br /><small>{row.orderStatus}</small></td>
+                  <td>{row.splitEnabled ? 'Connected' : 'Missing'}<br /><small>{row.gatewayProvider === 'stripe' ? row.stripeConnectedAccountId || 'No Stripe account' : row.subaccountCode || 'No subaccount'}</small></td>
+                  <td>{row.paymentStatus}<br /><small>{row.settlementStatus}</small><br /><small>{row.orderStatus}</small></td>
                   <td>{formatDate(row.createdAt)}</td>
                 </tr>
               ))}

@@ -296,6 +296,8 @@ async function updateStripeIntegrationOrder(event: StripeEvent) {
     Object.assign(orderUpdate, paidFulfillmentUpdateFields(reference, storeId, fulfillmentType))
     orderUpdate.paymentStatus = 'paid'
     orderUpdate.payment_status = 'paid'
+    orderUpdate.settlementStatus = 'pending_settlement'
+    orderUpdate.settlement_status = 'pending_settlement'
     orderUpdate.orderStatus = 'confirmed'
     orderUpdate.order_status = 'confirmed'
     orderUpdate.status = 'confirmed'
@@ -305,6 +307,8 @@ async function updateStripeIntegrationOrder(event: StripeEvent) {
     Object.assign(orderUpdate, paymentFailedFulfillmentUpdateFields(reference, storeId, fulfillmentType))
     orderUpdate.paymentStatus = 'failed'
     orderUpdate.payment_status = 'failed'
+    orderUpdate.settlementStatus = 'payment_failed'
+    orderUpdate.settlement_status = 'payment_failed'
     orderUpdate.orderStatus = 'payment_failed'
     orderUpdate.order_status = 'payment_failed'
     orderUpdate.status = 'payment_failed'
