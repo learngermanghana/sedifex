@@ -182,6 +182,7 @@ Base URL:
 - `GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<ISO>&to=<ISO>` (includes optional `linkedCourseId`, `eventKind`, `registrationMode`, `price`, `depositAmount`, `location`, `description`, `marketplaceEnabled`)
 - `GET /v1IntegrationBookings?storeId=<storeId>`
 - `POST /v1IntegrationBookings?storeId=<storeId>`
+- `GET /v1IntegrationSocialSettings?storeId=<storeId>`
 
 ### Rendering Upcoming Events with flexible schedules
 
@@ -272,6 +273,8 @@ Import shared interfaces from `shared/integrationTypes.ts` in both Sedifex and B
 - `IntegrationPromo`
 - `IntegrationProductsResponse`
 - `IntegrationPromoResponse`
+- `IntegrationSocialSettings`
+- `IntegrationSocialSettingsResponse`
 
 If you publish these to npm, keep the package version aligned with the contract header date (`X-Sedifex-Contract-Version`).
 
@@ -604,6 +607,92 @@ If you need this in another format (REST proxy endpoint, WordPress plugin, or se
 - `imageUrls` can contain 1..n URLs when a merchant wants 2-3 product photos on downstream websites.
 - Consumers should prefer `imageUrls[0]` when present, then fall back to `imageUrl`.
 > For all-store admin pulls, call `v1IntegrationProducts` with the admin master key and omit `storeId`.
+
+## Social settings / public profile
+
+Connected websites can fetch store-managed contact details, public profile copy, logos, SEO images, and social profile links from Sedifex instead of hardcoding them in templates.
+
+Endpoint:
+
+```txt
+GET /v1IntegrationSocialSettings?storeId=<storeId>
+```
+
+Example Next.js server fetch:
+
+```ts
+async function fetchSedifexSocialSettings() {
+  const response = await fetch(
+    `${process.env.SEDIFEX_API_BASE_URL}/v1IntegrationSocialSettings?storeId=${encodeURIComponent(process.env.SEDIFEX_STORE_ID ?? "")}`,
+    {
+      headers: {
+        "x-api-key": process.env.SEDIFEX_INTEGRATION_API_KEY ?? "",
+        "X-Sedifex-Contract-Version": process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13",
+        Accept: "application/json",
+      },
+      next: { revalidate: 60 },
+    }
+  )
+
+  if (!response.ok) return null
+  return response.json()
+}
+```
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "storeId": "store_123",
+  "profile": {
+    "displayName": "Store name",
+    "tagline": "Short public tagline",
+    "businessDescription": "About text for the website",
+    "openingHours": "Mon - Sat, 9:00 AM - 6:00 PM",
+    "brandColor": "#4f46e5",
+    "logoUrl": "https://...",
+    "coverImageUrl": "https://...",
+    "socialShareImage": "https://...",
+    "publicPhone": "+233...",
+    "whatsappNumber": "+233...",
+    "telegramNumber": "@store",
+    "publicEmail": "hello@example.com",
+    "addressLine1": "Address / location",
+    "city": "Accra",
+    "country": "Ghana",
+    "websiteUrl": "https://example.com",
+    "instagramHandle": "https://instagram.com/example",
+    "facebookUrl": "https://facebook.com/example",
+    "tiktokHandle": "@example",
+    "youtubeUrl": "https://youtube.com/@example",
+    "xHandle": "@example",
+    "linkedinUrl": "https://linkedin.com/company/example",
+    "updatedAt": "2026-05-29T00:00:00.000Z"
+  },
+  "socialLinks": {
+    "website": "https://example.com",
+    "instagram": "https://instagram.com/example",
+    "facebook": "https://facebook.com/example",
+    "tiktok": "@example",
+    "youtube": "https://youtube.com/@example",
+    "x": "@example",
+    "linkedin": "https://linkedin.com/company/example"
+  }
+}
+```
+
+Website usage ideas:
+
+- Footer contact block
+- WhatsApp button
+- Social media icons
+- SEO metadata image
+- Logo/header
+- About section
+- Hero fallback content
+
+
 ## Homepage hero slides
 
 Connected websites can fetch store-managed homepage banners from Sedifex and render them as a carousel or a static hero section.
