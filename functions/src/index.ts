@@ -6,8 +6,8 @@ export {
   fetchPaystackMerchantSubaccount,
   fetchPaystackSettlementBanks,
 } from './paystackSubaccounts'
+export { integrationCheckoutCreate } from './integrationQuickPayCheckoutCreate'
 export {
-  integrationCheckoutCreate,
   integrationCheckoutPreview,
   integrationOrderStatus,
 } from './integrationCheckout'
