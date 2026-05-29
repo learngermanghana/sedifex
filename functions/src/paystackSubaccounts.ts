@@ -276,6 +276,11 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
     await defaultDb.collection('paystackSubaccounts').doc(storeId).set(docPayload, { merge: true })
     await defaultDb.collection('stores').doc(storeId).set(
       {
+        paymentSettings: {
+          paystackSubaccountCode: response.data.subaccount_code,
+          managedBy: 'sedifex',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
         paymentRouting: {
           provider: 'paystack',
           settlementMode: 'subaccount',

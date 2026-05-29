@@ -122,6 +122,59 @@ function getTransactionChargeMinor(body: CheckoutBody) {
   return value !== null && value > 0 ? Math.round(value) : null
 }
 
+
+function normalizePaymentProvider(value: unknown) {
+  const normalized = clean(value, 80).toLowerCase()
+  return normalized === 'paystack' || normalized === 'stripe' || normalized === 'manual' ? normalized : ''
+}
+
+function hasExplicitPaymentProvider(body: CheckoutBody) {
+  const routing = getRecord(body.paymentRouting)
+  return Boolean(normalizePaymentProvider(body.paymentProvider ?? body.payment_provider ?? body.provider ?? routing.paymentProvider))
+}
+
+function getStorePaymentSettings(storeData: Record<string, unknown>) {
+  const paymentSettings = getRecord(storeData.paymentSettings)
+  const paymentRouting = getRecord(storeData.paymentRouting)
+  return { paymentSettings, paymentRouting }
+}
+
+function getStoreSubaccount(storeData: Record<string, unknown>) {
+  const { paymentSettings, paymentRouting } = getStorePaymentSettings(storeData)
+  return clean(
+    paymentSettings.paystackSubaccountCode
+      ?? paymentRouting.paystackSubaccountCode
+      ?? paymentRouting.subaccountCode
+      ?? storeData.paystackSubaccountCode,
+    140,
+  )
+}
+
+function getStoreStripeConnectedAccount(storeData: Record<string, unknown>) {
+  const { paymentSettings, paymentRouting } = getStorePaymentSettings(storeData)
+  return clean(
+    paymentSettings.stripeConnectedAccountId
+      ?? paymentRouting.stripeConnectedAccountId
+      ?? paymentRouting.connectedAccountId,
+    120,
+  )
+}
+
+function getResolvedPaymentProvider(body: CheckoutBody, storeData: Record<string, unknown>, currency: string) {
+  if (hasExplicitPaymentProvider(body)) return getPaymentProvider(body, currency)
+  const { paymentSettings, paymentRouting } = getStorePaymentSettings(storeData)
+  const storeProvider = normalizePaymentProvider(paymentSettings.provider ?? paymentRouting.provider ?? paymentRouting.paymentProvider)
+  if (storeProvider) return storeProvider
+  return getPaymentProvider({}, currency)
+}
+
+function getResolvedPlatformFeePercent(body: CheckoutBody, storeData: Record<string, unknown>) {
+  const { paymentSettings } = getStorePaymentSettings(storeData)
+  const storePercent = numberValue(paymentSettings.platformFeePercent)
+  if (storePercent !== null) return Math.min(25, Math.max(0, Math.round(storePercent * 100) / 100))
+  return getPlatformFeePercent(body)
+}
+
 function getReturnUrl(body: CheckoutBody) {
   return clean(body.returnUrl ?? body.return_url ?? body.callbackUrl ?? body.callback_url, 700)
 }
@@ -308,7 +361,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const cancelUrl = getCancelUrl(body) || callbackUrl
     const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
-    const subaccount = getSubaccount(body)
+    const requestSubaccount = getSubaccount(body)
     const transactionChargeMinor = getTransactionChargeMinor(body)
     const details = deriveCheckoutDetails(body)
 
@@ -324,6 +377,13 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       res.status(400).json({ error: 'amount-required' })
       return
     }
+
+    const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
+    const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
+    const subaccount = requestSubaccount || getStoreSubaccount(storeData)
+    const paymentProvider = getResolvedPaymentProvider(body, storeData, currency)
+    const stripeConnectedAccountId = getStripeConnectedAccount(body) || getStoreStripeConnectedAccount(storeData)
+    const platformFeePercent = getResolvedPlatformFeePercent(body, storeData)
 
     const storedMetadata = {
       ...details.metadata,
@@ -348,14 +408,16 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     }
 
     const amountMinor = Math.round(amountMajor * 100)
-    const paymentProvider = getPaymentProvider(body, currency)
-    const stripeConnectedAccountId = getStripeConnectedAccount(body)
-    const platformFeePercent = getPlatformFeePercent(body)
     const platformFeeMinor = calculatePlatformFeeMinor(amountMinor, platformFeePercent)
     const platformFeeMajor = platformFeeMinor / 100
     const now = admin.firestore.FieldValue.serverTimestamp()
     const nowIso = new Date().toISOString()
     const clientOrderId = clean(body.client_order_id ?? body.clientOrderId, 220) || reference
+
+    if (paymentProvider === 'manual') {
+      res.status(400).json({ error: 'manual-provider-not-supported-for-online-checkout' })
+      return
+    }
 
     if (paymentProvider === 'stripe') {
       if (!stripeConnectedAccountId) {
@@ -464,6 +526,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
         sedifexPlatformFeeMajor: platformFeeMajor,
         paymentStatus: 'pending',
         payment_status: 'pending',
+        settlementStatus: 'pending_payment',
+        settlement_status: 'pending_payment',
         orderStatus: 'pending_payment',
         order_status: 'pending_payment',
         status: 'pending_payment',
@@ -595,6 +659,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       paystackReference: reference,
       paymentStatus: 'pending',
       payment_status: 'pending',
+      settlementStatus: 'pending_payment',
+      settlement_status: 'pending_payment',
       orderStatus: 'pending_payment',
       order_status: 'pending_payment',
       status: 'pending_payment',
