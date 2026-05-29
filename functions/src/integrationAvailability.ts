@@ -7,6 +7,8 @@ const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION'
 })
 const SEDIFEX_INTEGRATION_API_KEY = defineString('SEDIFEX_INTEGRATION_API_KEY', { default: '' })
 
+type IntegrationEventScheduleStatus = 'scheduled' | 'time_tba' | 'date_tba'
+
 type SlotResponse = {
   id: string
   storeId: string
@@ -24,8 +26,14 @@ type SlotResponse = {
   marketplaceEnabled?: boolean | null
   category?: string | null
   tags?: string[]
-  startAt: string
-  endAt: string
+  scheduleStatus: IntegrationEventScheduleStatus
+  startAt: string | null
+  endAt: string | null
+  eventDate: string | null
+  displayDateText: string | null
+  displayTimeText: string | null
+  isDateConfirmed: boolean
+  isTimeConfirmed: boolean
   timezone: string
   capacity: number
   seatsBooked: number
@@ -55,6 +63,30 @@ function parseDate(value: unknown): Date | null {
 
 function toIso(value: unknown) {
   return parseDate(value)?.toISOString() ?? null
+}
+
+function cleanDateString(value: unknown) {
+  const cleaned = clean(value, 40)
+  return /^\d{4}-\d{2}-\d{2}$/.test(cleaned) ? cleaned : null
+}
+
+function normalizeScheduleStatus(data: Record<string, unknown>, startAt: string | null, endAt: string | null, eventDate: string | null): IntegrationEventScheduleStatus {
+  if (data.scheduleStatus === 'scheduled' || data.scheduleStatus === 'time_tba' || data.scheduleStatus === 'date_tba') return data.scheduleStatus
+  if (startAt && endAt) return 'scheduled'
+  if (eventDate) return 'time_tba'
+  return 'date_tba'
+}
+
+function formatEventDateLabel(eventDate: string | null) {
+  if (!eventDate) return null
+  const parsed = parseDate(`${eventDate}T00:00:00.000Z`)
+  return parsed?.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) ?? eventDate
+}
+
+function getFilterDate(slot: SlotResponse) {
+  const start = parseDate(slot.startAt)
+  if (start) return start
+  return slot.eventDate ? parseDate(`${slot.eventDate}T00:00:00.000Z`) : null
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -154,11 +186,11 @@ function normalizeServiceId(rawValue: unknown) {
 }
 
 function slotMatchesFilters(slot: SlotResponse, fromDate: Date | null, toDateFilter: Date | null, serviceId: string) {
-  const start = parseDate(slot.startAt)
-  if (!start) return false
   if (serviceId && slot.serviceId !== serviceId) return false
-  if (fromDate && start < fromDate) return false
-  if (toDateFilter && start > toDateFilter) return false
+  const filterDate = getFilterDate(slot)
+  if (!filterDate) return !fromDate && !toDateFilter
+  if (fromDate && filterDate < fromDate) return false
+  if (toDateFilter && filterDate > toDateFilter) return false
   return true
 }
 
@@ -194,14 +226,15 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
       .collection('stores')
       .doc(storeId)
       .collection('integrationAvailabilitySlots')
-      .orderBy('startAt', 'asc')
       .get()
 
     const slots: SlotResponse[] = snapshot.docs.flatMap(slotDoc => {
       const data = slotDoc.data() as Record<string, unknown>
       const startAt = toIso(data.startAt)
       const endAt = toIso(data.endAt)
-      if (!startAt || !endAt) return []
+      const eventDate = cleanDateString(data.eventDate) || (startAt ? startAt.slice(0, 10) : null)
+      const scheduleStatus = normalizeScheduleStatus(data, startAt, endAt, eventDate)
+      if (scheduleStatus === 'scheduled' && (!startAt || !endAt)) return []
 
       const capacity = Math.max(0, Math.floor(toNumber(data.capacity, 0)))
       const seatsBooked = Math.max(0, Math.floor(toNumber(data.seatsBooked, 0)))
@@ -239,8 +272,14 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
         marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : null,
         category: clean(data.category, 120) || null,
         tags: Array.isArray(data.tags) ? data.tags.map(tag => clean(tag, 80)).filter(Boolean) : [],
+        scheduleStatus,
         startAt,
         endAt,
+        eventDate,
+        displayDateText: clean(data.displayDateText, 160) || (scheduleStatus === 'date_tba' ? 'Date to be announced' : scheduleStatus === 'time_tba' ? formatEventDateLabel(eventDate) : null),
+        displayTimeText: clean(data.displayTimeText, 160) || (scheduleStatus === 'scheduled' ? null : 'Time to be announced'),
+        isDateConfirmed: Boolean(startAt || eventDate),
+        isTimeConfirmed: Boolean(startAt && endAt),
         timezone: clean(data.timezone, 80) || 'Africa/Accra',
         capacity,
         seatsBooked,
@@ -250,6 +289,10 @@ export const v1IntegrationAvailability = functions.https.onRequest(async (req, r
         updatedAt: toIso(data.updatedAt),
       }
       return slotMatchesFilters(slot, fromDate, toDateFilter, serviceId) ? [slot] : []
+    }).sort((left, right) => {
+      const leftDate = getFilterDate(left)?.getTime() ?? Number.MAX_SAFE_INTEGER
+      const rightDate = getFilterDate(right)?.getTime() ?? Number.MAX_SAFE_INTEGER
+      return leftDate - rightDate || (left.serviceName || '').localeCompare(right.serviceName || '')
     })
 
     res.status(200).json({
