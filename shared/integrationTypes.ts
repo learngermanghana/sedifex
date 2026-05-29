@@ -65,6 +65,34 @@ export interface IntegrationPromo {
   updatedAt: string | null
 }
 
+
+export interface IntegrationHeroSlide {
+  id: string
+  storeId: string
+  title: string
+  eyebrow: string | null
+  subtitle: string | null
+  ctaLabel: string | null
+  ctaHref: string | null
+  secondaryCtaLabel: string | null
+  secondaryCtaHref: string | null
+  imageUrl: string | null
+  mobileImageUrl: string | null
+  accent: string | null
+  textColor: 'light' | 'dark' | null
+  overlayStyle: 'none' | 'dark' | 'light' | 'gradient' | null
+  layout: 'left_text' | 'center_text' | 'right_text' | null
+  priority: number | null
+  updatedAt: string | null
+}
+
+export interface IntegrationHeroSlidesResponse {
+  ok: boolean
+  storeId: string
+  placement: string
+  slides: IntegrationHeroSlide[]
+}
+
 export interface IntegrationProductsResponse {
   storeId: string
   products: IntegrationProduct[]

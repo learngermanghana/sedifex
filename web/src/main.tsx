@@ -55,6 +55,7 @@ import DataTransfer from './pages/DataTransfer'
 import PromoLandingPage from './pages/PromoLandingPage'
 import PromoSettings from './pages/PromoSettings'
 import GallerySettings from './pages/GallerySettings'
+import WebsiteHeroSlides from './pages/WebsiteHeroSlides'
 import SocialLinksSettings from './pages/SocialLinksSettings'
 import BookingMappingSettings from './pages/BookingMappingSettings'
 import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
@@ -160,6 +161,7 @@ const router = createBrowserRouter([
       { path: 'public-page', element: <Navigate to="/account" replace /> },
       { path: 'promo', element: <PromoSettings /> },
       { path: 'gallery', element: <GallerySettings /> },
+      { path: 'website-hero-slides', element: <WebsiteHeroSlides /> },
       { path: 'social-links', element: <SocialLinksSettings /> },
       { path: 'merchant-feed', element: <Navigate to="/sell" replace /> },
       { path: 'support', element: <Support /> },
