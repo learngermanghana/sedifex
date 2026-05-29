@@ -3,6 +3,13 @@ export { checkSignupUnlock, createCheckout, paystackWebhook } from './paystack'
 export { handlePaystackWebhook } from './marketplacePaystackWebhook'
 export { stripeWebhook, stripeConnectWebhook } from './stripeConnect'
 export {
+  startStripeConnectOnboarding,
+  stripeConnectCallback,
+  disconnectStripeAccount,
+  approveStripePaymentSettings,
+  rejectStripePaymentSettings,
+} from './stripeConnectOnboarding'
+export {
   createPaystackMerchantSubaccount,
   fetchPaystackMerchantSubaccount,
   fetchPaystackSettlementBanks,
