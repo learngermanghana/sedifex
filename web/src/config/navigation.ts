@@ -11,6 +11,7 @@ export type NavItem = {
   sortOrder: number
   end?: boolean
   parentTarget?: string
+  hideFromPrimaryNav?: boolean
   rolesAllowed: NavRole[]
   industries?: Industry[]
   requiredPermissions?: string[]
@@ -36,10 +37,11 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'settlement', label: 'Payments / Settlement', type: 'module', target: '/settlement', rolesAllowed: ['owner'], sortOrder: 58 },
   { id: 'integrations', label: 'Integrations', type: 'module', target: '/settings/integrations/website', rolesAllowed: ['owner'], sortOrder: 59 },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
-  { id: 'promo', label: 'Promo', type: 'module', target: '/promo', rolesAllowed: ['owner', 'staff'], sortOrder: 61 },
-  { id: 'gallery', label: 'Gallery', type: 'module', target: '/gallery', rolesAllowed: ['owner', 'staff'], sortOrder: 62 },
-  { id: 'website-hero-slides', label: 'Website Hero Slides', type: 'module', target: '/website-hero-slides', rolesAllowed: ['owner', 'staff'], sortOrder: 62.5 },
-  { id: 'social-links', label: 'Social links', type: 'module', target: '/social-links', rolesAllowed: ['owner', 'staff'], sortOrder: 63 },
+  { id: 'website-builder', label: 'Website Builder', type: 'module', target: '/website-builder', rolesAllowed: ['owner', 'staff'], sortOrder: 61 },
+  { id: 'promo', label: 'Promo', type: 'module', target: '/promo', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.1 },
+  { id: 'gallery', label: 'Gallery', type: 'module', target: '/gallery', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.2 },
+  { id: 'website-hero-slides', label: 'Website Hero Slides', type: 'module', target: '/website-hero-slides', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.3 },
+  { id: 'social-links', label: 'Social links', type: 'module', target: '/social-links', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.4 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   { id: 'donor-management', label: 'Donor management', type: 'module', target: '/donor-management', rolesAllowed: ['owner', 'staff'], sortOrder: 90 },
@@ -49,9 +51,9 @@ export const NAV_ITEMS: NavItem[] = [
 
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
   shop: {},
-  travel: { '/customers': 'Travelers', '/bookings': 'Trips', '/upcoming-events': 'Upcoming trips', '/marketplace-orders': 'Online Orders', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
-  ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/marketplace-orders': 'Online Orders', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
-  school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/marketplace-orders': 'Registrations & Orders', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
+  travel: { '/customers': 'Travelers', '/bookings': 'Trips', '/upcoming-events': 'Upcoming trips', '/marketplace-orders': 'Online Orders', '/website-builder': 'Website Builder', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
+  ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/marketplace-orders': 'Online Orders', '/website-builder': 'Website Builder', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
+  school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/marketplace-orders': 'Registrations & Orders', '/website-builder': 'Website Builder', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
 }
 
 export type CustomNavItem = {
@@ -72,11 +74,13 @@ export type NavigationSettings = {
   customNavItems?: CustomNavItem[]
 }
 
+export const WEBSITE_BUILDER_SECTION_IDS = ['promo', 'gallery', 'website-hero-slides', 'social-links'] as const
+
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'reports', 'products', 'sell', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'website-hero-slides', 'social-links', 'donor-management'],
-  travel: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'website-hero-slides', 'social-links', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
-  ngo: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'website-hero-slides', 'social-links', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
-  school: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'bookings', 'upcoming-events', 'student-registration', 'students', 'settlement', 'integrations', 'blog', 'promo', 'gallery', 'website-hero-slides', 'social-links', 'customers', 'bulk-messaging', 'bulk-email'],
+  shop: ['dashboard', 'reports', 'products', 'sell', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'customers', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'website-builder', 'donor-management'],
+  travel: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'bookings', 'upcoming-events', 'settlement', 'integrations', 'blog', 'website-builder', 'customers', 'bulk-messaging', 'bulk-email', 'donor-management'],
+  ngo: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'customers', 'volunteers', 'support-requests', 'upcoming-events', 'settlement', 'integrations', 'blog', 'website-builder', 'bulk-messaging', 'bulk-email', 'donor-management', 'funds-ledger'],
+  school: ['dashboard', 'reports', 'products', 'marketplace-orders', 'quick-pay', 'invoices', 'receipts', 'expenses', 'bookings', 'upcoming-events', 'student-registration', 'students', 'settlement', 'integrations', 'blog', 'website-builder', 'customers', 'bulk-messaging', 'bulk-email'],
 }
 
 export type NavigationResolverInput = { role: NavRole; workspaceProfile: NavigationSettings; permissions?: string[] }
@@ -92,10 +96,14 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
   const { role, workspaceProfile } = input
   const aliasLabels = workspaceProfile.labelPolicy === 'industry_aliases' ? INDUSTRY_LABELS[workspaceProfile.industry] : {}
   const enabledModules = workspaceProfile.enabledModules && workspaceProfile.enabledModules.length > 0 ? new Set(workspaceProfile.enabledModules) : null
+  if (enabledModules && WEBSITE_BUILDER_SECTION_IDS.some(id => enabledModules.has(id))) {
+    enabledModules.add('website-builder')
+  }
   const grantedPermissions = input.permissions && input.permissions.length > 0 ? new Set(input.permissions) : null
   const baseItems = NAV_ITEMS.filter(item => {
     if (!item.rolesAllowed.includes(role)) return false
     if (item.industries && !item.industries.includes(workspaceProfile.industry)) return false
+    if (item.hideFromPrimaryNav) return false
     if (item.id !== 'account' && enabledModules && !enabledModules.has(item.id)) return false
     return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {

@@ -28,9 +28,11 @@ const PAGE_GROUPS: PageGroup[] = [
   { title: 'Daily work', ids: ['dashboard', 'reports', 'products', 'sell', 'marketplace-orders', 'customers', 'bookings'] },
   { title: 'Documents, payments & expenses', ids: ['quick-pay', 'invoices', 'receipts', 'expenses', 'settlement', 'donor-management', 'funds-ledger'] },
   { title: 'Bookings, registration & cases', ids: ['upcoming-events', 'student-registration', 'volunteers', 'support-requests'] },
-  { title: 'Website & marketing', ids: ['integrations', 'blog', 'promo', 'gallery', 'social-links', 'bulk-messaging', 'bulk-email'] },
+  { title: 'Website & marketing', ids: ['integrations', 'website-builder', 'blog', 'bulk-messaging', 'bulk-email'] },
   { title: 'Account', ids: ['account'] },
 ]
+
+const CONFIGURABLE_NAV_ITEMS = NAV_ITEMS.filter(item => !item.hideFromPrimaryNav)
 
 function uniqueList(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)))
@@ -41,13 +43,13 @@ function moduleIsEnabled(enabledModules: string[], id: string) {
 }
 
 function moduleSummary(enabledModules: string[]) {
-  if (enabledModules.length === 0) return `${NAV_ITEMS.length} pages active`
-  const count = NAV_ITEMS.filter(item => enabledModules.includes(item.id)).length
+  if (enabledModules.length === 0) return `${CONFIGURABLE_NAV_ITEMS.length} pages active`
+  const count = CONFIGURABLE_NAV_ITEMS.filter(item => enabledModules.includes(item.id)).length
   return `${count} ${count === 1 ? 'page' : 'pages'} active`
 }
 
 function findNavItem(id: string) {
-  return NAV_ITEMS.find(item => item.id === id)
+  return CONFIGURABLE_NAV_ITEMS.find(item => item.id === id)
 }
 
 export default function NavigationSettingsSection({ preferences, onSave, canEdit }: Props) {
@@ -70,7 +72,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
   const selectedIndustry = INDUSTRY_OPTIONS.find(option => option.value === draft.industry) ?? INDUSTRY_OPTIONS[0]
 
   const enabledModuleIds = useMemo(() => {
-    if (draft.enabledModules.length === 0) return NAV_ITEMS.map(item => item.id)
+    if (draft.enabledModules.length === 0) return CONFIGURABLE_NAV_ITEMS.map(item => item.id)
     return uniqueList(draft.enabledModules)
   }, [draft.enabledModules])
 
@@ -78,7 +80,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
   const ungroupedItems = useMemo(() => {
     const groupedIds = new Set(PAGE_GROUPS.flatMap(group => group.ids))
-    return NAV_ITEMS.filter(item => !groupedIds.has(item.id))
+    return CONFIGURABLE_NAV_ITEMS.filter(item => !groupedIds.has(item.id))
   }, [])
 
   const save = async () => {
@@ -107,7 +109,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
   const toggleModule = (id: string) => {
     setDraft(current => {
-      const currentEnabled = current.enabledModules.length === 0 ? NAV_ITEMS.map(item => item.id) : current.enabledModules
+      const currentEnabled = current.enabledModules.length === 0 ? CONFIGURABLE_NAV_ITEMS.map(item => item.id) : current.enabledModules
       const enabled = currentEnabled.includes(id) ? currentEnabled.filter(item => item !== id) : [...currentEnabled, id]
       return { ...current, enabledModules: uniqueList(enabled), customNavItems: [] }
     })
@@ -119,7 +121,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
   }
 
   const showAllPages = () => {
-    setDraft(current => ({ ...current, enabledModules: NAV_ITEMS.map(item => item.id), customNavItems: [] }))
+    setDraft(current => ({ ...current, enabledModules: CONFIGURABLE_NAV_ITEMS.map(item => item.id), customNavItems: [] }))
     setError(null)
   }
 
