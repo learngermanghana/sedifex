@@ -1,5 +1,5 @@
 .website-builder-page {
-  gap: 18px;
+  gap: 28px;
 }
 
 .website-builder-page__header {
@@ -8,30 +8,131 @@
 
 .website-builder-page__switcher {
   display: grid;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 0;
+  border: 1px solid #dbeafe;
+  background:
+    linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(14, 165, 233, 0.04)),
+    #ffffff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
 .website-builder-page__switcher label {
   display: grid;
   gap: 8px;
-  max-width: 520px;
+  max-width: 560px;
 }
 
 .website-builder-page__switcher label > span {
   color: #334155;
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .website-builder-page__switcher select {
-  width: min(100%, 420px);
+  width: min(100%, 440px);
 }
 
-.website-builder-page__section > .account-overview {
+.website-builder-page__section-shell {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  margin-top: 12px;
+  padding-top: 28px;
+}
+
+.website-builder-page__section-shell::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(100%, 760px);
+  height: 1px;
+  background: linear-gradient(90deg, rgba(79, 70, 229, 0.55), rgba(14, 165, 233, 0.2), transparent);
+}
+
+.website-builder-page__section-break {
+  border: 1px solid #e2e8f0;
+  border-left: 5px solid #4f46e5;
+  border-radius: 24px;
+  background: #ffffff;
+  padding: 20px 22px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+}
+
+.website-builder-page__section-kicker {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #a16207;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.website-builder-page__section-break h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  font-weight: 850;
+}
+
+.website-builder-page__section-break p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #475569;
+  line-height: 1.65;
+}
+
+.website-builder-page__section-break .website-builder-page__section-helper {
+  display: inline-flex;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: #eef2ff;
+  padding: 7px 12px;
+  color: #3730a3;
+  font-size: 0.86rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.website-builder-page__section-body {
+  display: grid;
+  gap: 18px;
+  border-radius: 28px;
+  background: #f8fafc;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+}
+
+.website-builder-page__section-body > .account-overview {
   padding: 0;
 }
 
-.website-builder-page__section > .account-overview > .account-overview__section-header:first-child {
+.website-builder-page__section-body > .account-overview > .account-overview__section-header:first-child {
   margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .website-builder-page {
+    gap: 20px;
+  }
+
+  .website-builder-page__section-shell {
+    padding-top: 22px;
+  }
+
+  .website-builder-page__section-break,
+  .website-builder-page__section-body {
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .website-builder-page__section-break .website-builder-page__section-helper {
+    border-radius: 14px;
+  }
+
+  .website-builder-page__switcher select {
+    width: 100%;
+  }
 }
