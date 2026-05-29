@@ -53,9 +53,24 @@ describe('resolveNavigation', () => {
     expect(items.find(item => item.target === '/bookings')?.label).toBe('Classes')
   })
 
+  it('groups website content behind the website builder nav item', () => {
+    const items = resolveNavigation({
+      role: 'staff',
+      workspaceProfile: {
+        industry: 'shop',
+        labelPolicy: 'shared',
+        enabledModules: ['promo', 'gallery', 'website-hero-slides', 'social-links'],
+      },
+    })
+
+    expect(items.map(item => item.id)).toEqual(['website-builder'])
+    expect(items[0].target).toBe('/website-builder')
+  })
+
   it('includes document modules in enabled module presets by industry', () => {
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toContain('invoices')
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toContain('receipts')
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.shop).toContain('website-builder')
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toContain('invoices')
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toContain('receipts')
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.ngo).toContain('invoices')
