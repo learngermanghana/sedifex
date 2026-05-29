@@ -164,6 +164,23 @@ function getFirstText(record: Record<string, unknown>, keys: string[], max = 220
   return ''
 }
 
+
+function normalizeStoredItemType(value: unknown): 'product' | 'service' | 'course' | null {
+  const normalized = clean(value, 50).toLowerCase().replace(/[\s_-]+/g, '_')
+  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking') return 'service'
+  if (normalized === 'course' || normalized === 'class' || normalized === 'training') return 'course'
+  if (normalized === 'product' || normalized === 'product_order' || normalized === 'physical_product') return 'product'
+  return null
+}
+
+function getCheckoutItemType(base: Record<string, unknown>, snapshotMatch: Record<string, unknown> | undefined, metadata: Record<string, unknown>) {
+  return normalizeStoredItemType(
+    base.itemType ?? base.item_type ?? base.listingType ?? base.listing_type ?? base.type
+    ?? snapshotMatch?.itemType ?? snapshotMatch?.item_type ?? snapshotMatch?.listingType ?? snapshotMatch?.listing_type ?? snapshotMatch?.type
+    ?? metadata.itemType ?? metadata.item_type ?? metadata.listingType ?? metadata.listing_type ?? metadata.type,
+  )
+}
+
 function getSnapshotItems(body: CheckoutBody) {
   const snapshot = getRecord(body.pricing_snapshot)
   return Array.isArray(snapshot.items) ? snapshot.items : []
@@ -183,12 +200,14 @@ function enrichCheckoutItems(body: CheckoutBody) {
     const itemName = getFirstText(base, ['itemName']) || getFirstText(snapshotMatch ?? {}, ['itemName'])
     const productName = getFirstText(base, ['productName']) || getFirstText(snapshotMatch ?? {}, ['productName'])
     const serviceName = getFirstText(base, ['serviceName']) || getFirstText(snapshotMatch ?? {}, ['serviceName'])
+    const itemType = getCheckoutItemType(base, snapshotMatch, metadata)
     return {
       ...base,
       ...(name ? { name } : {}),
       ...(itemName ? { itemName } : {}),
       ...(productName ? { productName } : {}),
       ...(serviceName ? { serviceName } : {}),
+      ...(itemType ? { itemType, item_type: itemType } : {}),
     }
   })
 
@@ -203,8 +222,10 @@ function enrichCheckoutItems(body: CheckoutBody) {
   const serviceName = getFirstText(firstItem, ['serviceName'])
     || getFirstText(firstSnapshotItem, ['serviceName'])
     || getFirstText(metadata, ['serviceName'])
+  const itemType = getCheckoutItemType(firstItem, firstSnapshotItem, metadata)
+    ?? (serviceName ? 'service' : productName ? 'product' : null)
 
-  return { enrichedItems, itemName, productName, serviceName }
+  return { enrichedItems, itemName, productName, serviceName, itemType }
 }
 function getTransactionChargeMinor(body: CheckoutBody) {
   const split = body.splitPayment && typeof body.splitPayment === 'object' ? body.splitPayment as Record<string, unknown> : {}
@@ -813,7 +834,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
 
     const paystack = await initializePaystack(paystackPayload)
     const authorizationUrl = paystack.data?.authorization_url ?? null
-    const { enrichedItems, itemName, productName, serviceName } = enrichCheckoutItems(body)
+    const { enrichedItems, itemName, productName, serviceName, itemType } = enrichCheckoutItems(body)
     const now = admin.firestore.FieldValue.serverTimestamp()
     const record = {
       storeId,
@@ -831,7 +852,10 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       itemName: itemName || null,
       productName: productName || null,
       serviceName: serviceName || null,
-      data: { itemName: itemName || null, productName: productName || null, serviceName: serviceName || null },
+      itemType: itemType || 'product',
+      item_type: itemType || 'product',
+      recordType: itemType === 'service' || itemType === 'course' ? 'service_booking' : 'product_order',
+      data: { itemName: itemName || null, productName: productName || null, serviceName: serviceName || null, itemType: itemType || 'product' },
       items: enrichedItems,
       pricingSnapshot: body.pricing_snapshot ?? null,
       marketplaceFees: body.marketplace_fees ?? null,

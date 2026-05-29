@@ -17,7 +17,58 @@ type OrderRow = {
   paymentStatus: string
   orderStatus: string
   paymentCollectionMode: string
+  itemName: string
+  itemType: 'product' | 'service' | 'course' | 'manual'
   createdAt: Date | null
+}
+
+
+function firstItem(source: Record<string, unknown>): Record<string, unknown> {
+  const items = Array.isArray(source.items) ? source.items : Array.isArray(source.cart) ? source.cart : []
+  const first = items[0]
+  return first && typeof first === 'object' ? first as Record<string, unknown> : {}
+}
+
+function normalizeItemType(value: unknown): 'product' | 'service' | 'course' | '' {
+  const normalized = asText(value).toLowerCase().replace(/[\s_-]+/g, '_')
+  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking') return 'service'
+  if (normalized === 'course' || normalized === 'class' || normalized === 'training') return 'course'
+  if (normalized === 'product' || normalized === 'product_order' || normalized === 'physical_product') return 'product'
+  return ''
+}
+
+function readItemType(data: Record<string, unknown>): 'product' | 'service' | 'course' | 'manual' {
+  const item = firstItem(data)
+  const metadata = getNestedObject(data, 'metadata')
+  const nestedData = getNestedObject(data, 'data')
+  const pricingSnapshot = getNestedObject(data, 'pricingSnapshot')
+  const pricingSnapshotSnake = getNestedObject(data, 'pricing_snapshot')
+  const snapshotItems = Array.isArray(pricingSnapshot.items) ? pricingSnapshot.items : Array.isArray(pricingSnapshotSnake.items) ? pricingSnapshotSnake.items : []
+  const snapshotFirst = snapshotItems[0] && typeof snapshotItems[0] === 'object' ? snapshotItems[0] as Record<string, unknown> : {}
+  const explicitType = normalizeItemType(
+    data.itemType ?? data.item_type ?? data.listingType ?? data.listing_type ?? data.type ?? data.recordType ?? data.orderType
+    ?? item.itemType ?? item.item_type ?? item.listingType ?? item.listing_type ?? item.type
+    ?? snapshotFirst.itemType ?? snapshotFirst.item_type ?? snapshotFirst.listingType ?? snapshotFirst.listing_type ?? snapshotFirst.type
+    ?? metadata.itemType ?? metadata.item_type ?? metadata.listingType ?? metadata.listing_type ?? metadata.type
+    ?? nestedData.itemType ?? nestedData.item_type ?? nestedData.listingType ?? nestedData.listing_type ?? nestedData.type,
+  )
+  if (explicitType) return explicitType
+  if (data.paymentCollectionMode === 'cash' || data.payment_collection_mode === 'cash') return 'manual'
+  if (
+    data.serviceName || data.serviceId || data.service_id
+    || item.serviceName || item.serviceId || item.service_id
+    || snapshotFirst.serviceName || snapshotFirst.serviceId || snapshotFirst.service_id
+    || metadata.serviceName || metadata.serviceId || metadata.service_id
+    || nestedData.serviceName || nestedData.serviceId || nestedData.service_id
+  ) return 'service'
+  return 'product'
+}
+
+function itemTypeLabel(type: OrderRow['itemType']) {
+  if (type === 'service') return 'Service'
+  if (type === 'course') return 'Course'
+  if (type === 'manual') return 'Manual'
+  return 'Product'
 }
 
 function readAmount(data: Record<string, unknown>) {
@@ -40,6 +91,8 @@ function mapOrder(id: string, data: Record<string, unknown>): OrderRow {
   const customer = getNestedObject(data, 'customer')
   const payment = getNestedObject(data, 'payment')
   const sourceChannel = normalizeSourceChannel(data.sourceChannel ?? data.source_channel ?? data.source)
+  const item = firstItem(data)
+  const itemType = readItemType(data)
   return {
     id,
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
@@ -52,6 +105,8 @@ function mapOrder(id: string, data: Record<string, unknown>): OrderRow {
     paymentStatus: asText(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending'),
     orderStatus: asText(data.orderStatus ?? data.order_status ?? data.status, 'pending'),
     paymentCollectionMode: asText(data.paymentCollectionMode ?? data.payment_collection_mode ?? payment.mode, 'online_checkout'),
+    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? item.name ?? item.itemName ?? item.productName ?? item.serviceName, itemType === 'service' || itemType === 'course' ? 'Service booking' : 'Product order'),
+    itemType,
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
   }
 }
@@ -106,6 +161,7 @@ export default function WebsiteSalesReport() {
   const [paymentMode, setPaymentMode] = useState('all')
   const [range, setRange] = useState('30d')
   const [paymentStatus, setPaymentStatus] = useState('all')
+  const [itemType, setItemType] = useState('all')
 
   useEffect(() => {
     if (!storeId) {
@@ -123,8 +179,9 @@ export default function WebsiteSalesReport() {
     const modeOk = paymentMode === 'all' || order.paymentCollectionMode === paymentMode
     const dateOk = inDateRange(order.createdAt, range)
     const statusOk = paymentStatus === 'all' || (paymentStatus === 'paid' ? isPaidLike(order.paymentStatus) : order.paymentStatus.toLowerCase().includes(paymentStatus))
-    return channelOk && modeOk && dateOk && statusOk
-  }), [channel, orders, paymentMode, paymentStatus, range])
+    const typeOk = itemType === 'all' || order.itemType === itemType
+    return channelOk && modeOk && dateOk && statusOk && typeOk
+  }), [channel, itemType, orders, paymentMode, paymentStatus, range])
 
   const totals = useMemo(() => ({
     count: filtered.length,
@@ -136,6 +193,8 @@ export default function WebsiteSalesReport() {
     pending: filtered.filter(order => order.paymentStatus.toLowerCase().includes('pending')).length,
     cancelled: filtered.filter(order => order.orderStatus.toLowerCase().includes('cancel')).length,
     payOnDelivery: filtered.filter(order => order.paymentCollectionMode === 'pay_on_delivery').length,
+    products: filtered.filter(order => order.itemType === 'product').length,
+    services: filtered.filter(order => order.itemType === 'service' || order.itemType === 'course').length,
     websiteValue: filtered.filter(order => order.sourceChannel === 'client_website').reduce((sum, order) => sum + order.amount, 0),
     marketValue: filtered.filter(order => order.sourceChannel === 'sedifex_market').reduce((sum, order) => sum + order.amount, 0),
     publicValue: filtered.filter(order => order.sourceChannel === 'sedifex_custom_page').reduce((sum, order) => sum + order.amount, 0),
@@ -146,6 +205,7 @@ export default function WebsiteSalesReport() {
     { key: 'reference', label: 'Reference', sortable: true, value: row => row.reference },
     { key: 'source', label: 'Source', sortable: true, value: row => row.sourceLabel },
     { key: 'customer', label: 'Customer', sortable: true, value: row => row.customerName, render: row => <><strong>{row.customerName}</strong><br /><small>{row.customerPhone || 'No contact'}</small></> },
+    { key: 'item', label: 'Item', sortable: true, value: row => row.itemName, render: row => <><strong>{row.itemName}</strong><br /><small>{itemTypeLabel(row.itemType)}</small></> },
     { key: 'amount', label: 'Amount', sortable: true, align: 'right', value: row => row.amount, render: row => formatMoney(row.amount, row.currency) },
     { key: 'payment', label: 'Payment', sortable: true, value: row => row.paymentStatus, render: row => <>{row.paymentStatus}<br /><small>{row.paymentCollectionMode}</small></> },
     { key: 'order', label: 'Order', sortable: true, value: row => row.orderStatus },
@@ -160,6 +220,8 @@ export default function WebsiteSalesReport() {
       contact: order.customerPhone,
       amount: order.amount,
       currency: order.currency,
+      itemName: order.itemName,
+      itemType: itemTypeLabel(order.itemType),
       paymentStatus: order.paymentStatus,
       orderStatus: order.orderStatus,
       paymentCollectionMode: order.paymentCollectionMode,
@@ -175,6 +237,7 @@ export default function WebsiteSalesReport() {
         { label: 'Orders', value: totals.count },
         { label: 'Order value', value: formatMoney(totals.revenue, totals.currency) },
         { label: 'Paid orders', value: totals.paid },
+        { label: 'Services/courses', value: totals.services },
         { label: 'Pay on delivery', value: totals.payOnDelivery },
       ],
       rows: filtered.map(order => ({
@@ -184,6 +247,8 @@ export default function WebsiteSalesReport() {
         contact: order.customerPhone,
         amount: order.amount,
         currency: order.currency,
+        itemName: order.itemName,
+        itemType: itemTypeLabel(order.itemType),
         paymentStatus: order.paymentStatus,
         orderStatus: order.orderStatus,
         paymentCollectionMode: order.paymentCollectionMode,
@@ -204,6 +269,7 @@ export default function WebsiteSalesReport() {
         <article className="workspace-card"><strong>{formatMoney(totals.revenue, totals.currency)}</strong><span>Order value</span></article>
         <article className="workspace-card"><strong>{totals.paid}</strong><span>Paid orders</span></article>
         <article className="workspace-card"><strong>{totals.pending}</strong><span>Pending payment</span></article>
+        <article className="workspace-card"><strong>{totals.services}</strong><span>Services / courses</span></article>
       </section>
       <section className="workspace-grid workspace-grid--three">
         <article className="workspace-card"><strong>{formatMoney(totals.marketValue, totals.currency)}</strong><span>Sedifex Market · {totals.market} orders</span></article>
@@ -233,6 +299,12 @@ export default function WebsiteSalesReport() {
             <option value="client_website">Client website</option>
             <option value="sedifex_market">Sedifex Market</option>
             <option value="sedifex_custom_page">Sedifex public page</option>
+          </select>
+          <select value={itemType} onChange={event => setItemType(event.target.value)}>
+            <option value="all">All item types</option>
+            <option value="product">Products only</option>
+            <option value="service">Services only</option>
+            <option value="course">Courses only</option>
           </select>
           <select value={paymentMode} onChange={event => setPaymentMode(event.target.value)}>
             <option value="all">All payment modes</option>
