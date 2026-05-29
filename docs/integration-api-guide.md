@@ -588,6 +588,14 @@ Use `profile` for full website content and `socialLinks` for compact icon/link r
 
 Product purchases should use checkout/order endpoints, not booking endpoints.
 
+### Checkout create endpoint
+
+```http
+POST /integrationCheckoutCreate
+```
+
+Use this endpoint for online payment checkout creation from a website backend. Send the same integration authentication headers described above.
+
 Recommended flow:
 
 1. Customer selects product/service on the website.
@@ -599,6 +607,78 @@ Recommended flow:
 7. Website shows the final order status from Sedifex.
 
 Do not trust totals calculated only in the browser. Always confirm totals server-side with Sedifex before payment.
+
+### Europe/global Stripe Connect checkout
+
+Sedifex supports both the existing Paystack checkout route and the newer Stripe Connect route from the same integration checkout create flow. Use this payment-provider routing when a website creates an online checkout:
+
+- **Africa/GHS:** Ghana cedi (`GHS`) checkouts use Paystack.
+- **Europe/global currencies:** `EUR`, `GBP`, and `USD` checkouts can use Stripe Connect when the seller has a Stripe connected account.
+- **Default Sedifex commission:** Stripe Connect checkouts default to a **3%** Sedifex platform commission unless an allowed override is intentionally supplied.
+
+The Stripe Connect checkout requires the seller's Stripe connected account ID. Sedifex uses that account ID when creating the Stripe Checkout Session and applies the Sedifex platform fee as the application fee.
+
+#### Fee example: EUR 100
+
+For a customer checkout of **EUR 100**:
+
+1. The customer pays **EUR 100**.
+2. Sedifex applies its default **3%** platform fee, so the Sedifex platform fee is **EUR 3**.
+3. Stripe deducts its own processing fee.
+4. The seller receives **EUR 100 minus the Stripe fee minus the Sedifex 3% platform fee**.
+
+```txt
+Seller payout = EUR 100 - Stripe processing fee - EUR 3 Sedifex platform fee
+```
+
+#### Required Firebase params for Stripe
+
+These params must be configured in Firebase Functions before Stripe Connect checkout and webhooks are enabled:
+
+```txt
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+```
+
+`STRIPE_SECRET_KEY` is used to create Stripe Checkout Sessions. `STRIPE_WEBHOOK_SECRET` is used to verify Stripe webhook signatures before Sedifex trusts any event payload.
+
+#### Stripe checkout payload example
+
+A website backend can request Stripe explicitly by sending `paymentProvider: "stripe"` with a supported Stripe currency and seller connected account ID:
+
+```json
+{
+  "paymentProvider": "stripe",
+  "currency": "EUR",
+  "amount": 100,
+  "stripeConnectedAccountId": "acct_xxxxxxxxx",
+  "platformFeePercent": 3,
+  "customer": {
+    "email": "client@example.com",
+    "name": "Test Client",
+    "phone": "+49123456789"
+  }
+}
+```
+
+Production checkout-create requests should also include the standard Sedifex integration fields needed by the calling surface, such as `storeId`/`merchantId`, a reference or client order ID, item details, source metadata, and return/cancel URLs when applicable.
+
+#### Provider fallback routing
+
+If `paymentProvider` is not provided, Sedifex should route by currency:
+
+- `EUR`, `GBP`, or `USD` routes to **Stripe Connect**.
+- `GHS` routes to **Paystack**.
+
+If Stripe is selected by explicit provider or fallback routing, the request must provide a valid `stripeConnectedAccountId`; otherwise Sedifex should reject the checkout instead of silently falling back to another provider.
+
+#### Stripe webhook
+
+The Stripe webhook URL should point to the exported `stripeWebhook` Firebase function. Configure Stripe to send checkout/payment events to that deployed function URL. Sedifex must verify the `Stripe-Signature` header with `STRIPE_WEBHOOK_SECRET` and the raw request body before updating order or payment state.
+
+The exported `stripeConnectWebhook` alias may use the same implementation, but integrations should use the Sedifex-deployed `stripeWebhook` endpoint unless a separate alias URL is intentionally configured.
+
+For the standalone payment-operations reference, see `docs/europe-stripe-connect-payments.md`.
 
 ---
 
