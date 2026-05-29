@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy, query, updateDoc, where } from 'firebase/firestore'
+import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, limit, query, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
@@ -16,6 +16,7 @@ type ServiceRecord = {
 
 type EventKind = 'intake' | 'class' | 'workshop' | 'event' | 'trip'
 type RegistrationMode = 'free' | 'paid' | 'deposit' | 'enquiry'
+type ScheduleStatus = 'scheduled' | 'time_tba' | 'date_tba'
 
 type SlotRecord = {
   id: string
@@ -29,8 +30,12 @@ type SlotRecord = {
   location?: string
   description?: string
   marketplaceEnabled: boolean
-  startAt: Date
-  endAt: Date
+  scheduleStatus: ScheduleStatus
+  startAt: Date | null
+  endAt: Date | null
+  eventDate: string | null
+  displayDateText: string | null
+  displayTimeText: string | null
   timezone: string
   capacity: number
   seatsBooked: number
@@ -44,12 +49,46 @@ function toLocalInputValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function toDateInputValue(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 function defaultStartValue() {
   return toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000))
 }
 
 function defaultEndValue() {
   return toLocalInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
+}
+
+function defaultEventDateValue() {
+  return toDateInputValue(new Date(Date.now() + 60 * 60 * 1000))
+}
+
+function isScheduleStatus(value: unknown): value is ScheduleStatus {
+  return value === 'scheduled' || value === 'time_tba' || value === 'date_tba'
+}
+
+function inferScheduleStatus(data: Record<string, unknown>, start: Date | null, end: Date | null): ScheduleStatus {
+  if (isScheduleStatus(data.scheduleStatus)) return data.scheduleStatus
+  if (start && end) return 'scheduled'
+  if (typeof data.eventDate === 'string' && data.eventDate.trim()) return 'time_tba'
+  return 'date_tba'
+}
+
+function formatDateLabel(value: string | null) {
+  if (!value) return 'Date to be announced'
+  const parsed = new Date(`${value}T00:00:00`)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function formatSlotDate(slot: SlotRecord) {
+  return slot.displayDateText || (slot.startAt ? slot.startAt.toLocaleDateString() : formatDateLabel(slot.eventDate))
+}
+
+function formatSlotTime(slot: SlotRecord) {
+  return slot.displayTimeText || (slot.startAt && slot.endAt ? `${slot.startAt.toLocaleTimeString()} - ${slot.endAt.toLocaleTimeString()}` : 'Time to be announced')
 }
 
 function slugify(value: string) {
@@ -69,8 +108,10 @@ export default function BookingsAvailability() {
   const [serviceMode, setServiceMode] = useState<'catalog' | 'manual'>('catalog')
   const [serviceId, setServiceId] = useState('')
   const [manualServiceName, setManualServiceName] = useState('')
+  const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>('scheduled')
   const [startAt, setStartAt] = useState(defaultStartValue)
   const [endAt, setEndAt] = useState(defaultEndValue)
+  const [eventDate, setEventDate] = useState(defaultEventDateValue)
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Accra')
   const [capacity, setCapacity] = useState('20')
   const [eventKind, setEventKind] = useState<EventKind>('intake')
@@ -114,8 +155,10 @@ export default function BookingsAvailability() {
     setServiceMode('catalog')
     setServiceId('')
     setManualServiceName('')
+    setScheduleStatus('scheduled')
     setStartAt(defaultStartValue())
     setEndAt(defaultEndValue())
+    setEventDate(defaultEventDateValue())
     setCapacity('20')
     setEventKind('intake')
     setRegistrationMode('paid')
@@ -167,21 +210,24 @@ export default function BookingsAvailability() {
   }, [])
 
   const loadSlots = useCallback(async (activeStoreId: string, serviceLookup: Map<string, ServiceRecord>) => {
-    const slotQuery = query(collection(db, 'stores', activeStoreId, 'integrationAvailabilitySlots'), orderBy('startAt', 'asc'))
-    const snapshot = await getDocs(slotQuery)
+    const snapshot = await getDocs(collection(db, 'stores', activeStoreId, 'integrationAvailabilitySlots'))
     const nextSlots: SlotRecord[] = snapshot.docs.map(slotDoc => {
       const data = slotDoc.data() as Record<string, unknown>
       const start = data.startAt && typeof (data.startAt as Timestamp).toDate === 'function' ? (data.startAt as Timestamp).toDate() : null
       const end = data.endAt && typeof (data.endAt as Timestamp).toDate === 'function' ? (data.endAt as Timestamp).toDate() : null
-      if (!start || !end) return null
+      const normalizedScheduleStatus = inferScheduleStatus(data, start, end)
       const normalizedServiceId = typeof data.serviceId === 'string' && data.serviceId.trim() ? data.serviceId.trim() : 'unknown'
       const attributes = data.attributes && typeof data.attributes === 'object' ? data.attributes as Record<string, unknown> : {}
       return {
         id: slotDoc.id,
         serviceId: normalizedServiceId,
         serviceName: (typeof data.serviceName === 'string' && data.serviceName.trim()) || serviceLookup.get(normalizedServiceId)?.name || normalizedServiceId,
+        scheduleStatus: normalizedScheduleStatus,
         startAt: start,
         endAt: end,
+        eventDate: typeof data.eventDate === 'string' && data.eventDate.trim() ? data.eventDate.trim() : start ? toDateInputValue(start) : null,
+        displayDateText: typeof data.displayDateText === 'string' && data.displayDateText.trim() ? data.displayDateText.trim() : null,
+        displayTimeText: typeof data.displayTimeText === 'string' && data.displayTimeText.trim() ? data.displayTimeText.trim() : null,
         timezone: typeof data.timezone === 'string' && data.timezone.trim() ? data.timezone.trim() : 'Africa/Accra',
         capacity: typeof data.capacity === 'number' && Number.isFinite(data.capacity) ? Math.max(1, Math.floor(data.capacity)) : 1,
         seatsBooked: typeof data.seatsBooked === 'number' && Number.isFinite(data.seatsBooked) ? Math.max(0, Math.floor(data.seatsBooked)) : 0,
@@ -197,7 +243,11 @@ export default function BookingsAvailability() {
         imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof attributes.imageUrl === 'string' ? attributes.imageUrl : undefined,
         imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : typeof attributes.imageAlt === 'string' ? attributes.imageAlt : undefined,
       } as SlotRecord
-    }).filter((slot): slot is SlotRecord => slot !== null)
+    }).sort((left, right) => {
+      const leftDate = left.startAt?.getTime() ?? (left.eventDate ? new Date(`${left.eventDate}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER)
+      const rightDate = right.startAt?.getTime() ?? (right.eventDate ? new Date(`${right.eventDate}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER)
+      return leftDate - rightDate || left.serviceName.localeCompare(right.serviceName)
+    })
     setSlots(nextSlots)
   }, [])
 
@@ -251,8 +301,10 @@ export default function BookingsAvailability() {
     setServiceMode(isManual ? 'manual' : 'catalog')
     setServiceId(isManual ? '' : slot.serviceId)
     setManualServiceName(isManual ? slot.serviceName : '')
-    setStartAt(toLocalInputValue(slot.startAt))
-    setEndAt(toLocalInputValue(slot.endAt))
+    setScheduleStatus(slot.scheduleStatus)
+    setStartAt(slot.startAt ? toLocalInputValue(slot.startAt) : defaultStartValue())
+    setEndAt(slot.endAt ? toLocalInputValue(slot.endAt) : defaultEndValue())
+    setEventDate(slot.eventDate || (slot.startAt ? toDateInputValue(slot.startAt) : defaultEventDateValue()))
     setTimezone(slot.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Accra')
     setCapacity(String(slot.capacity || 1))
     setEventKind(slot.eventKind || 'event')
@@ -277,11 +329,13 @@ export default function BookingsAvailability() {
   const handleSaveSlot = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!storeId || saving) return
-    const startDate = new Date(startAt)
-    const endDate = new Date(endAt)
+    const startDate = scheduleStatus === 'scheduled' ? new Date(startAt) : null
+    const endDate = scheduleStatus === 'scheduled' ? new Date(endAt) : null
+    const normalizedEventDate = scheduleStatus === 'scheduled' && startDate ? toDateInputValue(startDate) : scheduleStatus === 'time_tba' ? eventDate.trim() : null
     const nextCapacity = Math.max(1, Math.floor(Number(capacity) || 1))
-    if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) return setErrorMessage('Enter a valid start date/time.')
-    if (!(endDate instanceof Date) || Number.isNaN(endDate.getTime()) || endDate <= startDate) return setErrorMessage('End date/time must be after start date/time.')
+    if (scheduleStatus === 'scheduled' && (!startDate || Number.isNaN(startDate.getTime()))) return setErrorMessage('Enter a valid start date/time.')
+    if (scheduleStatus === 'scheduled' && (!endDate || !startDate || Number.isNaN(endDate.getTime()) || endDate <= startDate)) return setErrorMessage('End date/time must be after start date/time.')
+    if (scheduleStatus === 'time_tba' && !/^\d{4}-\d{2}-\d{2}$/.test(normalizedEventDate || '')) return setErrorMessage('Enter a valid event date.')
     const manualName = manualServiceName.trim()
     const resolvedServiceName = serviceMode === 'manual' ? manualName : selectedService?.name?.trim() ?? ''
     const resolvedServiceId = serviceMode === 'manual' ? `manual:${slugify(manualName)}` : serviceId
@@ -305,8 +359,12 @@ export default function BookingsAvailability() {
         sourceItemType: selectedService?.itemType || null,
         sourceItemCollection: selectedService?.source || null,
         source: selectedService?.source || null,
-        startAt: Timestamp.fromDate(startDate),
-        endAt: Timestamp.fromDate(endDate),
+        scheduleStatus,
+        startAt: startDate ? Timestamp.fromDate(startDate) : null,
+        endAt: endDate ? Timestamp.fromDate(endDate) : null,
+        eventDate: normalizedEventDate,
+        displayDateText: scheduleStatus === 'date_tba' ? 'Date to be announced' : scheduleStatus === 'time_tba' ? formatDateLabel(normalizedEventDate) : null,
+        displayTimeText: scheduleStatus === 'scheduled' ? null : 'Time to be announced',
         timezone,
         capacity: nextCapacity,
         listingType: 'event',
@@ -348,7 +406,7 @@ export default function BookingsAvailability() {
     } finally {
       setSaving(false)
     }
-  }, [capacity, depositAmount, description, editingSlotId, endAt, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, marketplaceEnabled, price, registrationMode, resetForm, saving, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
+  }, [capacity, depositAmount, description, editingSlotId, endAt, eventDate, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, marketplaceEnabled, price, registrationMode, resetForm, saving, scheduleStatus, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -388,8 +446,9 @@ export default function BookingsAvailability() {
           </div>
           <label><span>Event source</span><select value={serviceMode} onChange={event => { setServiceMode(event.target.value === 'manual' ? 'manual' : 'catalog'); setServiceId(''); setManualServiceName(''); setImageUrl(''); setImageAlt(''); setAutoLoadedImageItemId('') }}><option value="catalog">Select existing service/product</option><option value="manual">Manual event/class name</option></select></label>
           {serviceMode === 'catalog' ? <label><span>Service, product, or programme</span><select value={serviceId} onChange={event => { setServiceId(event.target.value); setImageUrl(''); setImageAlt(''); setAutoLoadedImageItemId('') }}><option value="">Select item</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label> : <label><span>Event, class, or programme name</span><input value={manualServiceName} onChange={event => setManualServiceName(event.target.value)} placeholder="e.g. Hair Braiding" required={serviceMode === 'manual'} /></label>}
-          <label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
-          <label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label>
+          <label><span>Event schedule</span><select value={scheduleStatus} onChange={event => setScheduleStatus(event.target.value as ScheduleStatus)}><option value="scheduled">Date and time confirmed</option><option value="time_tba">Date confirmed, time not confirmed</option><option value="date_tba">Date not confirmed yet</option></select></label>
+          {scheduleStatus === 'scheduled' && <><label><span>Start</span><input type="datetime-local" value={startAt} onChange={event => setStartAt(event.target.value)} required /></label><label><span>End</span><input type="datetime-local" value={endAt} onChange={event => setEndAt(event.target.value)} required /></label></>}
+          {scheduleStatus === 'time_tba' && <label><span>Event date</span><input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} required /></label>}
           <label><span>Timezone</span><input value={timezone} onChange={event => setTimezone(event.target.value)} required /></label>
           <label><span>Event kind</span><select value={eventKind} onChange={event => setEventKind(event.target.value as EventKind)}><option value="intake">Intake</option><option value="class">Class</option><option value="workshop">Workshop</option><option value="event">Event</option><option value="trip">Trip</option></select></label>
           <label><span>Registration mode</span><select value={registrationMode} onChange={event => setRegistrationMode(event.target.value as RegistrationMode)}><option value="paid">Paid</option><option value="free">Free</option><option value="deposit">Deposit</option><option value="enquiry">Enquiry</option></select></label>
@@ -406,7 +465,7 @@ export default function BookingsAvailability() {
           <button className="btn btn-secondary" type="submit" disabled={saving}>{saving ? photoStatus === 'uploading' ? 'Uploading photo…' : 'Saving…' : editingSlotId ? 'Save changes' : 'Add event'}</button>
         </form>
         {loading && <p className="form__hint">Loading events…</p>}{infoMessage && <p className="form__hint">{infoMessage}</p>}{errorMessage && <p className="form__error">{errorMessage}</p>}
-        {!loading && <div className="table-wrap"><table className="table"><thead><tr><th>Photo</th><th>Event</th><th>Start</th><th>End</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead><tbody>{slots.map(slot => <tr key={slot.id}><td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td><td>{slot.serviceName}</td><td>{slot.startAt.toLocaleString()}</td><td>{slot.endAt.toLocaleString()}</td><td>{slot.status}</td><td>{slot.capacity}</td><td>{slot.seatsBooked}</td><td><div className="availability-page__row-actions"><button type="button" className="btn btn-secondary" onClick={() => startEditingSlot(slot)}>Edit</button><button type="button" className="btn btn-secondary" onClick={() => void toggleStatus(slot)}>{slot.status === 'open' ? 'Close' : 'Open'}</button><button type="button" className="btn btn-secondary" onClick={() => void deleteSlot(slot.id)}>Delete</button></div></td></tr>)}</tbody></table></div>}
+        {!loading && <div className="table-wrap"><table className="table"><thead><tr><th>Photo</th><th>Event</th><th>Date</th><th>Time</th><th>Status</th><th>Limit</th><th>Booked</th><th>Actions</th></tr></thead><tbody>{slots.map(slot => <tr key={slot.id}><td>{slot.imageUrl ? <img src={slot.imageUrl} alt={slot.imageAlt || slot.serviceName} style={{ width: 58, height: 46, objectFit: 'cover', borderRadius: 10 }} /> : '—'}</td><td>{slot.serviceName}</td><td>{formatSlotDate(slot)}</td><td>{formatSlotTime(slot)}</td><td>{slot.status}</td><td>{slot.capacity}</td><td>{slot.seatsBooked}</td><td><div className="availability-page__row-actions"><button type="button" className="btn btn-secondary" onClick={() => startEditingSlot(slot)}>Edit</button><button type="button" className="btn btn-secondary" onClick={() => void toggleStatus(slot)}>{slot.status === 'open' ? 'Close' : 'Open'}</button><button type="button" className="btn btn-secondary" onClick={() => void deleteSlot(slot.id)}>Delete</button></div></td></tr>)}</tbody></table></div>}
       </section>
     </main>
   )

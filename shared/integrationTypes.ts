@@ -77,6 +77,8 @@ export interface IntegrationPromoResponse {
   promo: IntegrationPromo
 }
 
+export type IntegrationEventScheduleStatus = 'scheduled' | 'time_tba' | 'date_tba'
+
 export interface IntegrationAvailabilitySlot {
   id: string
   storeId: string
@@ -93,8 +95,14 @@ export interface IntegrationAvailabilitySlot {
   marketplaceEnabled?: boolean | null
   category?: string | null
   tags?: string[]
-  startAt: string
-  endAt: string
+  scheduleStatus: IntegrationEventScheduleStatus
+  startAt: string | null
+  endAt: string | null
+  eventDate: string | null
+  displayDateText: string | null
+  displayTimeText: string | null
+  isDateConfirmed: boolean
+  isTimeConfirmed: boolean
   timezone: string | null
   capacity: number | null
   seatsBooked: number
