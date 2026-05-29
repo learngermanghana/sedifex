@@ -604,3 +604,61 @@ If you need this in another format (REST proxy endpoint, WordPress plugin, or se
 - `imageUrls` can contain 1..n URLs when a merchant wants 2-3 product photos on downstream websites.
 - Consumers should prefer `imageUrls[0]` when present, then fall back to `imageUrl`.
 > For all-store admin pulls, call `v1IntegrationProducts` with the admin master key and omit `storeId`.
+## Homepage hero slides
+
+Connected websites can fetch store-managed homepage banners from Sedifex and render them as a carousel or a static hero section.
+
+Endpoint:
+
+```txt
+GET /v1IntegrationHeroSlides?storeId=<storeId>&placement=home_hero
+```
+
+Example Next.js server fetch:
+
+```ts
+async function fetchHeroSlides() {
+  const response = await fetch(
+    `${process.env.SEDIFEX_API_BASE_URL}/v1IntegrationHeroSlides?storeId=${encodeURIComponent(process.env.SEDIFEX_STORE_ID ?? "")}&placement=home_hero`,
+    {
+      headers: {
+        "x-api-key": process.env.SEDIFEX_INTEGRATION_API_KEY ?? "",
+        "X-Sedifex-Contract-Version": process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13",
+        Accept: "application/json",
+      },
+      next: { revalidate: 60 },
+    }
+  )
+
+  if (!response.ok) return []
+  const payload = await response.json()
+  return Array.isArray(payload.slides) ? payload.slides : []
+}
+```
+
+Rendering notes:
+
+- If `slides.length > 1`, render as a carousel.
+- If `slides.length === 1`, render as a static hero.
+- If no slides are returned, fall back to local website hero content.
+
+Simple component example:
+
+```tsx
+function HeroSlider({ slides }) {
+  if (!slides.length) return null
+  return (
+    <section>
+      {slides.map((slide) => (
+        <article key={slide.id}>
+          {slide.imageUrl ? <img src={slide.imageUrl} alt={slide.title} /> : null}
+          {slide.eyebrow ? <p>{slide.eyebrow}</p> : null}
+          <h1>{slide.title}</h1>
+          {slide.subtitle ? <p>{slide.subtitle}</p> : null}
+          {slide.ctaHref && slide.ctaLabel ? <a href={slide.ctaHref}>{slide.ctaLabel}</a> : null}
+        </article>
+      ))}
+    </section>
+  )
+}
+```
