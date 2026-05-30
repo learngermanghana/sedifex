@@ -63,9 +63,10 @@ type PublicItem = {
   id: string;
   name: string;
   price: number;
-  type: "PRODUCT" | "SERVICE" | "COURSE";
+  type: "PRODUCT" | "SERVICE" | "COURSE" | "BOOKING";
   description: string;
   imageUrl: string;
+  slotId?: string;
 };
 type GalleryItem = { id: string; url: string; alt: string; caption: string };
 
@@ -80,6 +81,43 @@ function record(value: unknown): Record<string, unknown> {
 function numberValue(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    const parsed = (value as { toDate: () => Date }).toDate();
+    return parsed instanceof Date && !Number.isNaN(parsed.getTime())
+      ? parsed
+      : null;
+  }
+  return null;
+}
+function formatEventDate(value: unknown) {
+  const parsed = parseDate(value);
+  return parsed
+    ? parsed.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "Date to be announced";
+}
+function formatEventTime(startAt: unknown, endAt: unknown, fallback: unknown) {
+  const fallbackText = clean(fallback, 160);
+  const start = parseDate(startAt);
+  const end = parseDate(endAt);
+  if (start && end)
+    return `${start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} - ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  return fallbackText || "Time to be announced";
 }
 function money(value: number) {
   return new Intl.NumberFormat("en-GH", {
@@ -135,6 +173,48 @@ function mapItem(
         source.coverImageUrl,
       900,
     ),
+  };
+}
+function mapAvailabilitySlot(
+  id: string,
+  source: Record<string, unknown>,
+): PublicItem | null {
+  if (
+    source.status === "closed" ||
+    source.isPublic === false ||
+    source.visibleOnWebsite === false
+  )
+    return null;
+  const name = clean(source.serviceName ?? source.name ?? source.title, 220);
+  if (!name) return null;
+  const startAt = source.startAt;
+  const eventDate = clean(source.eventDate, 40);
+  const dateLabel =
+    clean(source.displayDateText, 160) ||
+    (eventDate
+      ? formatEventDate(`${eventDate}T00:00:00`)
+      : formatEventDate(startAt));
+  const timeLabel = formatEventTime(
+    startAt,
+    source.endAt,
+    source.displayTimeText,
+  );
+  const location = clean(source.location, 180);
+  const descriptionParts = [
+    clean(source.description, 260),
+    `${dateLabel} • ${timeLabel}`,
+    location ? `Location: ${location}` : "",
+  ].filter(Boolean);
+  const attributes = record(source.attributes);
+
+  return {
+    id,
+    slotId: id,
+    name,
+    type: "BOOKING",
+    price: getPrice(source),
+    description: descriptionParts.join("\n"),
+    imageUrl: clean(source.imageUrl ?? attributes.imageUrl, 900),
   };
 }
 function mapGallery(
@@ -237,73 +317,265 @@ const TEMPLATE_LAYOUTS = new Set([
 ]);
 
 function resolveTemplateLayout(settings: WebsiteSettings) {
-  return settings.layoutTemplate || settings.selectedTemplateId || settings.layoutKey;
+  return (
+    settings.layoutTemplate || settings.selectedTemplateId || settings.layoutKey
+  );
 }
 
 function buildItemCheckoutUrl(storeId: string, item: PublicItem) {
   const params = new URLSearchParams({
-    mode: "item",
+    mode: item.type === "BOOKING" ? "booking" : "item",
     itemId: item.id,
     itemType: item.type,
     name: item.name,
     qty: "1",
   });
+  if (item.slotId) params.set("slotId", item.slotId);
   return `https://pay.sedifex.com/s/${encodeURIComponent(storeId)}?${params.toString()}`;
 }
 
 function templatePublicCopy(layout: string, settings: WebsiteSettings) {
-  const copy: Record<string, { eyebrow: string; primary: string; secondary: string; sections: string[]; itemTitle: string }> = {
-    "shop-classic": { eyebrow: "Classic storefront", primary: "Shop products", secondary: "Pay securely", sections: ["Featured products", "Categories", "Checkout"], itemTitle: "Featured products" },
-    "travel-visa-consultancy": { eyebrow: "Visa & travel consultancy", primary: "Request consultation", secondary: "Check services", sections: ["Visa support", "Travel packages", "Document checks"], itemTitle: "Travel and visa services" },
-    "beauty-booking": { eyebrow: "Beauty booking studio", primary: "Book appointment", secondary: "View services", sections: ["Treatments", "Bookings", "Gallery"], itemTitle: "Beauty services" },
-    "ngo-impact": { eyebrow: "Mission • Impact • Community", primary: "Donate now", secondary: "Volunteer", sections: ["Mission", "Impact", "Programs", "Donate", "Volunteer"], itemTitle: "Programs and support" },
-    "school-academy": { eyebrow: "School academy", primary: "Register now", secondary: "View courses", sections: ["Courses", "Admissions", "Student payments"], itemTitle: "Courses and classes" },
-    "services-booking": { eyebrow: "Service booking", primary: "Book service", secondary: "Request quote", sections: ["Services", "Booking", "Quick Pay"], itemTitle: "Services and bookings" },
-    "restaurant-menu": { eyebrow: "Restaurant menu", primary: "View menu", secondary: "Order and pay", sections: ["Menu", "Specials", "Ordering"], itemTitle: "Menu highlights" },
+  const copy: Record<
+    string,
+    {
+      eyebrow: string;
+      primary: string;
+      secondary: string;
+      sections: string[];
+      itemTitle: string;
+    }
+  > = {
+    "shop-classic": {
+      eyebrow: "Classic storefront",
+      primary: "Shop products",
+      secondary: "Pay securely",
+      sections: ["Featured products", "Categories", "Checkout"],
+      itemTitle: "Featured products",
+    },
+    "travel-visa-consultancy": {
+      eyebrow: "Visa & travel consultancy",
+      primary: "Request consultation",
+      secondary: "Check services",
+      sections: ["Visa support", "Travel packages", "Document checks"],
+      itemTitle: "Travel and visa services",
+    },
+    "beauty-booking": {
+      eyebrow: "Beauty booking studio",
+      primary: "Book appointment",
+      secondary: "View services",
+      sections: ["Treatments", "Bookings", "Gallery"],
+      itemTitle: "Beauty services",
+    },
+    "ngo-impact": {
+      eyebrow: "Mission • Impact • Community",
+      primary: "Donate now",
+      secondary: "Volunteer",
+      sections: ["Mission", "Impact", "Programs", "Donate", "Volunteer"],
+      itemTitle: "Programs and support",
+    },
+    "school-academy": {
+      eyebrow: "School academy",
+      primary: "Register now",
+      secondary: "View courses",
+      sections: ["Courses", "Admissions", "Student payments"],
+      itemTitle: "Courses and classes",
+    },
+    "services-booking": {
+      eyebrow: "Service booking",
+      primary: "Book service",
+      secondary: "Request quote",
+      sections: ["Services", "Booking", "Quick Pay"],
+      itemTitle: "Services and bookings",
+    },
+    "restaurant-menu": {
+      eyebrow: "Restaurant menu",
+      primary: "View menu",
+      secondary: "Order and pay",
+      sections: ["Menu", "Specials", "Ordering"],
+      itemTitle: "Menu highlights",
+    },
   };
-  return copy[layout] || { eyebrow: settings.businessType || "Sedifex website", primary: "Contact us", secondary: "Quick Pay", sections: ["About", "Products", "Services"], itemTitle: "Featured items" };
+  return (
+    copy[layout] || {
+      eyebrow: settings.businessType || "Sedifex website",
+      primary: "Contact us",
+      secondary: "Quick Pay",
+      sections: ["About", "Products", "Services"],
+      itemTitle: "Featured items",
+    }
+  );
 }
 
-function TemplateHome({ settings, profile, items, gallery, quickPayUrl, slug }: { settings: WebsiteSettings; profile: StoreProfile; items: PublicItem[]; gallery: GalleryItem[]; quickPayUrl: string; slug: string }) {
+function TemplateHome({
+  settings,
+  profile,
+  items,
+  gallery,
+  quickPayUrl,
+  slug,
+}: {
+  settings: WebsiteSettings;
+  profile: StoreProfile;
+  items: PublicItem[];
+  gallery: GalleryItem[];
+  quickPayUrl: string;
+  slug: string;
+}) {
   const layout = resolveTemplateLayout(settings);
   const copy = templatePublicCopy(layout, settings);
   const isNgo = layout === "ngo-impact";
   const isRestaurant = layout === "restaurant-menu";
-  const displayItems = isNgo ? items.filter((item) => item.type !== "PRODUCT") : items;
+  const displayItems = isNgo
+    ? items.filter((item) => item.type !== "PRODUCT")
+    : items;
   const heroStyle = settings.coverImageUrl
-    ? { backgroundImage: `linear-gradient(135deg, rgba(6, 78, 59, .9), rgba(15, 23, 42, .48)), url(${settings.coverImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+    ? {
+        backgroundImage: `linear-gradient(135deg, rgba(6, 78, 59, .9), rgba(15, 23, 42, .48)), url(${settings.coverImageUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }
     : undefined;
   const whatsapp = profile.whatsapp || profile.phone;
   return (
     <>
-      <section className={`${isNgo ? "bg-gradient-to-br from-emerald-950 via-teal-900 to-lime-800" : isRestaurant ? "bg-gradient-to-br from-stone-950 via-orange-950 to-amber-800" : "bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900"} px-4 py-24 text-white sm:px-6 lg:px-8`} style={heroStyle}>
+      <section
+        className={`${isNgo ? "bg-gradient-to-br from-emerald-950 via-teal-900 to-lime-800" : isRestaurant ? "bg-gradient-to-br from-stone-950 via-orange-950 to-amber-800" : "bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900"} px-4 py-24 text-white sm:px-6 lg:px-8`}
+        style={heroStyle}
+      >
         <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.05fr_.95fr] lg:items-center">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-100">{copy.eyebrow}</p>
-            <h1 className="mt-5 text-5xl font-black tracking-tight sm:text-7xl">{settings.tagline || (isNgo ? `${profile.name} impact foundation` : profile.name)}</h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-white/85">{settings.description || settings.contentDrafts.homepage || (isNgo ? "Explore our mission, active programs, donation needs, volunteer opportunities, and community impact." : "Explore our website, services, products, gallery, contact details, and secure payment actions.")}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-100">
+              {copy.eyebrow}
+            </p>
+            <h1 className="mt-5 text-5xl font-black tracking-tight sm:text-7xl">
+              {settings.tagline ||
+                (isNgo ? `${profile.name} impact foundation` : profile.name)}
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-white/85">
+              {settings.description ||
+                settings.contentDrafts.homepage ||
+                (isNgo
+                  ? "Explore our mission, active programs, donation needs, volunteer opportunities, and community impact."
+                  : "Explore our website, services, products, gallery, contact details, and secure payment actions.")}
+            </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a className="rounded-2xl bg-white px-6 py-3 font-semibold text-slate-950 no-underline" href={isNgo ? quickPayUrl : pagePath(slug, displayItems.some(i => i.type === "PRODUCT") ? "products" : "services")}>{copy.primary}</a>
-              {whatsapp ? <a className="rounded-2xl border border-white/25 px-6 py-3 font-semibold text-white no-underline" href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}`}>WhatsApp</a> : <Link className="rounded-2xl border border-white/25 px-6 py-3 font-semibold text-white no-underline" to={pagePath(slug, "contact")}>{copy.secondary}</Link>}
+              <a
+                className="rounded-2xl bg-white px-6 py-3 font-semibold text-slate-950 no-underline"
+                href={
+                  isNgo
+                    ? quickPayUrl
+                    : pagePath(
+                        slug,
+                        displayItems.some((i) => i.type === "PRODUCT")
+                          ? "products"
+                          : "services",
+                      )
+                }
+              >
+                {copy.primary}
+              </a>
+              {whatsapp ? (
+                <a
+                  className="rounded-2xl border border-white/25 px-6 py-3 font-semibold text-white no-underline"
+                  href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}`}
+                >
+                  WhatsApp
+                </a>
+              ) : (
+                <Link
+                  className="rounded-2xl border border-white/25 px-6 py-3 font-semibold text-white no-underline"
+                  to={pagePath(slug, "contact")}
+                >
+                  {copy.secondary}
+                </Link>
+              )}
             </div>
           </div>
           <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur">
-            <h2 className="text-2xl font-black">{isNgo ? "Impact pathways" : "Explore"}</h2>
-            <div className="mt-5 grid gap-3 text-sm text-white/90">{copy.sections.map(section => <div key={section} className="rounded-2xl bg-white/10 p-4 font-semibold">{section}</div>)}</div>
+            <h2 className="text-2xl font-black">
+              {isNgo ? "Impact pathways" : "Explore"}
+            </h2>
+            <div className="mt-5 grid gap-3 text-sm text-white/90">
+              {copy.sections.map((section) => (
+                <div
+                  key={section}
+                  className="rounded-2xl bg-white/10 p-4 font-semibold"
+                >
+                  {section}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
-      {isNgo ? <section className="bg-white px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3"><ImpactCard title="Mission" body={settings.contentDrafts.about || "Share the communities served, the mission, and the change this organization is building."} /><ImpactCard title="Donate" body="Support programs through Sedifex Quick Pay or contact the team for partnership options." /><ImpactCard title="Volunteer" body="Invite supporters to volunteer, partner, donate resources, or join community programs." /></div></section> : null}
-      {displayItems.length ? <ServicesSection title={copy.itemTitle} items={displayItems.slice(0, isNgo ? 6 : 4)} quickPayUrl={quickPayUrl} ctaHref={pagePath(slug, displayItems.some(i => i.type === "PRODUCT") ? "products" : "services")} storeId={settings.storeId} /> : <section className="px-4 py-12 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><EmptyState title={isNgo ? "No programs added yet" : "No items added yet"} /></div></section>}
-      {gallery.length ? <GallerySection gallery={gallery.slice(0, 6)} ctaHref={pagePath(slug, "gallery")} /> : null}
+      {isNgo ? (
+        <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3">
+            <ImpactCard
+              title="Mission"
+              body={
+                settings.contentDrafts.about ||
+                "Share the communities served, the mission, and the change this organization is building."
+              }
+            />
+            <ImpactCard
+              title="Donate"
+              body="Support programs through Sedifex Quick Pay or contact the team for partnership options."
+            />
+            <ImpactCard
+              title="Volunteer"
+              body="Invite supporters to volunteer, partner, donate resources, or join community programs."
+            />
+          </div>
+        </section>
+      ) : null}
+      {displayItems.length ? (
+        <ServicesSection
+          title={copy.itemTitle}
+          items={displayItems.slice(0, isNgo ? 6 : 4)}
+          quickPayUrl={quickPayUrl}
+          ctaHref={pagePath(
+            slug,
+            displayItems.some((i) => i.type === "PRODUCT")
+              ? "products"
+              : "services",
+          )}
+          storeId={settings.storeId}
+        />
+      ) : (
+        <section className="px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <EmptyState
+              title={isNgo ? "No programs added yet" : "No items added yet"}
+            />
+          </div>
+        </section>
+      )}
+      {gallery.length ? (
+        <GallerySection
+          gallery={gallery.slice(0, 6)}
+          ctaHref={pagePath(slug, "gallery")}
+        />
+      ) : null}
       <QuickPayBlock quickPayUrl={quickPayUrl} />
-      <ContactSection profile={profile} brandColor={settings.brandColor} quickPayUrl={quickPayUrl} />
+      <ContactSection
+        profile={profile}
+        brandColor={settings.brandColor}
+        quickPayUrl={quickPayUrl}
+      />
     </>
   );
 }
 
 function ImpactCard({ title, body }: { title: string; body: string }) {
-  return <article className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-6"><p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-700">{title}</p><p className="mt-3 text-slate-700">{body}</p></article>;
+  return (
+    <article className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-6">
+      <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-700">
+        {title}
+      </p>
+      <p className="mt-3 text-slate-700">{body}</p>
+    </article>
+  );
 }
 
 export default function PublicWebsiteEngine() {
@@ -417,6 +689,20 @@ export default function PublicWebsiteEngine() {
               .filter((item): item is PublicItem => Boolean(item));
           }),
         );
+        const availabilitySnap = await getDocs(
+          query(
+            collection(db, "stores", storeId, "integrationAvailabilitySlots"),
+            limit(80),
+          ),
+        );
+        const availabilityItems = availabilitySnap.docs
+          .map((slotDoc) =>
+            mapAvailabilitySlot(
+              slotDoc.id,
+              slotDoc.data() as Record<string, unknown>,
+            ),
+          )
+          .filter((item): item is PublicItem => Boolean(item));
         const gallerySnap = await getDocs(
           query(collection(db, "stores", storeId, "promoGallery"), limit(40)),
         );
@@ -437,9 +723,20 @@ export default function PublicWebsiteEngine() {
           theme: clean(website.theme, 40) || "modern",
           selectedTemplateId: clean(website.selectedTemplateId, 120),
           selectedTemplateName: clean(website.selectedTemplateName, 160),
-          layoutKey: clean(website.layoutKey ?? website.layoutTemplate ?? website.templateKey, 160),
-          layoutTemplate: clean(website.layoutTemplate ?? website.selectedTemplateId ?? website.layoutKey, 160),
-          templateCategory: clean(website.templateCategory ?? website.businessType, 160),
+          layoutKey: clean(
+            website.layoutKey ?? website.layoutTemplate ?? website.templateKey,
+            160,
+          ),
+          layoutTemplate: clean(
+            website.layoutTemplate ??
+              website.selectedTemplateId ??
+              website.layoutKey,
+            160,
+          ),
+          templateCategory: clean(
+            website.templateCategory ?? website.businessType,
+            160,
+          ),
           selectedSections: Array.isArray(website.selectedSections)
             ? website.selectedSections.filter(
                 (section): section is string => typeof section === "string",
@@ -504,7 +801,7 @@ export default function PublicWebsiteEngine() {
           },
         });
         setProfile(profileData);
-        setItems(itemGroups.flat());
+        setItems([...itemGroups.flat(), ...availabilityItems]);
         setGallery(galleryItems);
       } catch (loadError) {
         console.error("[public-website] Unable to load website", loadError);
@@ -655,7 +952,14 @@ export default function PublicWebsiteEngine() {
         </div>
       </header>
       {activePage === "home" && usesTemplateLayout ? (
-        <TemplateHome settings={settings} profile={profile} items={items} gallery={gallery} quickPayUrl={quickPayUrl} slug={slug} />
+        <TemplateHome
+          settings={settings}
+          profile={profile}
+          items={items}
+          gallery={gallery}
+          quickPayUrl={quickPayUrl}
+          slug={slug}
+        />
       ) : null}
       {activePage === "home" && !usesTemplateLayout ? (
         <>
@@ -1049,7 +1353,9 @@ function ItemCard({
       ? "Buy now"
       : item.type === "COURSE"
         ? "Register"
-        : "Book now";
+        : item.type === "BOOKING"
+          ? "Book event"
+          : "Book now";
 
   return (
     <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
