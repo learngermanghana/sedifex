@@ -39,3 +39,6 @@ params:
   - name: REPORTS_SHEET_ID
     type: string
     default: ""
+  - name: SEDIFEX_ADMIN_REPAIR_TOKEN
+    type: string
+    default: ""
