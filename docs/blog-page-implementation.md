@@ -72,6 +72,21 @@ Indexes:
 - Link add/remove
 - Paste sanitization
 
+
+### Slug generation
+- new URL("/api/public-blog", baseUrl)
+- baseUrl is:
+
+https://www.sedifex.com
+
+-the effective feed URL is:
+
+-https://www.sedifex.com/api/public-blog?storeId=<SEDIFEX_STORE_ID>
+
+-For an individual blog detail page, the same endpoint is used with an additional slug query parameter:
+
+https://www.sedifex.com/api/public-blog?storeId=<SEDIFEX_STORE_ID>&slug=<slug>
+
 ### Slug generation
 - Auto-generate from title (`my-first-post`), allow manual override, unique per store.
 
