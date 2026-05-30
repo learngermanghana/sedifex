@@ -22,7 +22,7 @@ Use this mapping when building client websites:
 | Read booking status | `integrationBookings` | Bookings |
 | Create product checkout/order | `integrationOrders` | Online Orders |
 | Pay-on-delivery product order | `integrationOrders` | Online Orders / Pay on Delivery |
-| Read gallery images | Gallery integration endpoint | Website / Gallery |
+| Read gallery albums and images | `stores/{storeId}/galleryAlbums`, `stores/{storeId}/galleryImages` via `/integrationGallery` | Website / Gallery |
 | Read promo/banner content | Promo integration endpoint | Website / Promo |
 | Read homepage hero slides | `stores/{storeId}/websiteHeroSlides` via `/v1IntegrationHeroSlides` | Website / Hero page |
 | Read public profile/contact/social content | `stores/{storeId}.publicProfile`, `stores/{storeId}.socialLinks`, `storeSettings/{storeId}.websiteBuilder` via `/v1IntegrationSocialSettings` | Website / Social settings |
@@ -466,6 +466,223 @@ GET /v1IntegrationSocialSettings?storeId=<storeId>
 
 Use the same Website Integration API key unless the endpoint is specifically public.
 
+### Gallery albums and images
+
+Use `/integrationGallery` when a connected website needs the store-managed gallery from **Website Builder → Gallery**. The current gallery model is album-based: albums live separately from images, and each image points back to its album with `albumId`. This lets websites render a full gallery page grouped by album, while still supporting a flat image grid on a homepage.
+
+#### Endpoint
+
+```http
+GET /integrationGallery?storeId=<storeId>
+```
+
+Full URL example:
+
+```txt
+https://us-central1-sedifex-web.cloudfunctions.net/integrationGallery?storeId=<storeId>
+```
+
+#### Query parameters
+
+| Parameter | Required | Notes |
+|---|---:|---|
+| `storeId` | Yes, unless `slug` is used | Store whose gallery should be loaded. Use this for authenticated website integrations. |
+| `slug` | No | Public promo/landing-page links may use a store slug instead of `storeId` when the public endpoint supports slug lookup. |
+| `albumId` | No | Optional filter when a website only wants one album. If omitted, return all published albums and their published images. |
+| `limit` | No | Optional image limit for homepage previews. Full gallery pages usually omit this or use a higher server-side limit. |
+
+#### Data source and new gallery structure
+
+The gallery page in Sedifex writes to two store subcollections:
+
+1. `stores/{storeId}/galleryAlbums/{albumId}`
+2. `stores/{storeId}/galleryImages/{imageId}`
+
+Album documents contain:
+
+| Field | Notes |
+|---|---|
+| `title` | Album heading, such as `Graduation 2026`, `Products`, `Projects`, or `Events`. |
+| `description` | Optional album note/copy. |
+| `coverImageUrl` | Optional cover image. Sedifex sets this from the first saved image when the album has no cover yet. |
+| `isPublished` | Only published albums should be rendered publicly. Missing values should be treated as published for backwards compatibility. |
+| `sortOrder` | Lower numbers render first. |
+| `createdAt`, `updatedAt` | Timestamps for auditing and cache invalidation. |
+
+Image documents contain:
+
+| Field | Notes |
+|---|---|
+| `albumId` | Required link to `galleryAlbums/{albumId}`. |
+| `url` | Image URL to render. Uploaded files are stored under a path like `stores/{storeId}/gallery/<album-slug>-<timestamp>.jpg`. |
+| `alt` | Optional accessibility alt text. |
+| `caption` | Optional caption/figcaption text. |
+| `isPublished` | Only published images should be rendered publicly. Missing values should be treated as published for backwards compatibility. |
+| `sortOrder` | Lower numbers render first inside the album. |
+| `createdAt`, `updatedAt` | Timestamps for auditing and cache invalidation. |
+
+The integration endpoint should return only public-ready records:
+
+- Album `isPublished` must not be `false`.
+- Image `isPublished` must not be `false`.
+- Image `url` must be present.
+- Image `albumId` should match a published album. Images with missing or unpublished albums should be ignored in grouped rendering.
+- Albums are sorted by `sortOrder`, then title. Images are sorted by album order, then image `sortOrder`.
+
+#### PowerShell test
+
+```powershell
+$baseUrl = "https://us-central1-sedifex-web.cloudfunctions.net"
+$storeId = "YOUR_STORE_ID"
+$apiKey = "YOUR_WEBSITE_INTEGRATION_KEY"
+
+$headers = @{
+  "x-api-key" = $apiKey
+  "Authorization" = "Bearer $apiKey"
+  "X-Sedifex-Contract-Version" = "2026-04-13"
+  "Accept" = "application/json"
+}
+
+$url = "$baseUrl/integrationGallery?storeId=$storeId"
+Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Depth 20
+```
+
+#### Response shape
+
+The recommended response includes both grouped `albums` and a flat `gallery` array. Use `albums` for a full gallery page. Use `gallery` for compact homepage previews and older templates that expect a flat list.
+
+```json
+{
+  "ok": true,
+  "storeId": "store_123",
+  "albums": [
+    {
+      "id": "album_123",
+      "title": "Graduation 2026",
+      "description": "Photos from the graduation ceremony.",
+      "coverImageUrl": "https://.../graduation-cover.jpg",
+      "isPublished": true,
+      "sortOrder": 0,
+      "updatedAt": "2026-05-29T00:00:00.000Z",
+      "images": [
+        {
+          "id": "image_123",
+          "albumId": "album_123",
+          "albumTitle": "Graduation 2026",
+          "url": "https://.../graduation-1.jpg",
+          "alt": "Students at graduation",
+          "caption": "Graduation ceremony highlights",
+          "isPublished": true,
+          "sortOrder": 0,
+          "updatedAt": "2026-05-29T00:00:00.000Z"
+        }
+      ]
+    }
+  ],
+  "gallery": [
+    {
+      "id": "image_123",
+      "albumId": "album_123",
+      "albumTitle": "Graduation 2026",
+      "url": "https://.../graduation-1.jpg",
+      "alt": "Students at graduation",
+      "caption": "Graduation ceremony highlights",
+      "isPublished": true,
+      "sortOrder": 0,
+      "updatedAt": "2026-05-29T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### Website usage
+
+For a full gallery page, render `albums` first and then render each album's `images`. If the response does not include `albums` yet, build groups from the flat `gallery` array by `albumId` / `albumTitle`. For a homepage preview, read the flat `gallery` array, take the first few published images, and link to the full gallery page.
+
+Recommended fallback logic:
+
+```ts
+type GalleryImage = {
+  id: string
+  albumId?: string | null
+  albumTitle?: string | null
+  url: string
+  alt?: string | null
+  caption?: string | null
+  isPublished?: boolean
+  sortOrder?: number
+}
+
+type GalleryAlbum = {
+  id: string
+  title: string
+  description?: string | null
+  coverImageUrl?: string | null
+  isPublished?: boolean
+  sortOrder?: number
+  images?: GalleryImage[]
+}
+
+function groupGalleryByAlbum(items: GalleryImage[]): GalleryAlbum[] {
+  const groups = new Map<string, GalleryAlbum>()
+
+  for (const item of items) {
+    const albumId = item.albumId || 'default'
+    const existing = groups.get(albumId)
+    if (existing) {
+      existing.images = [...(existing.images || []), item]
+    } else {
+      groups.set(albumId, {
+        id: albumId,
+        title: item.albumTitle || 'Gallery',
+        images: [item],
+      })
+    }
+  }
+
+  return Array.from(groups.values()).filter(album => (album.images?.length ?? 0) > 0)
+}
+
+async function getSedifexGallery() {
+  const url = new URL('/integrationGallery', SEDIFEX_BASE_URL)
+  url.searchParams.set('storeId', SEDIFEX_STORE_ID)
+
+  const response = await fetch(url, {
+    headers: sedifexHeaders(),
+    next: { revalidate: 120 },
+  })
+
+  if (!response.ok) return { albums: [], gallery: [] }
+
+  const payload = await response.json()
+  const flatGallery = Array.isArray(payload.gallery)
+    ? payload.gallery
+        .filter((item: GalleryImage) => item?.isPublished !== false && Boolean(item?.url))
+        .sort((a: GalleryImage, b: GalleryImage) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    : []
+
+  const albums = Array.isArray(payload.albums) && payload.albums.length
+    ? payload.albums
+        .filter((album: GalleryAlbum) => album?.isPublished !== false)
+        .map((album: GalleryAlbum) => ({
+          ...album,
+          images: Array.isArray(album.images)
+            ? album.images.filter(image => image?.isPublished !== false && Boolean(image?.url))
+            : [],
+        }))
+    : groupGalleryByAlbum(flatGallery)
+
+  return { albums, gallery: flatGallery }
+}
+```
+
+Render guidance:
+
+- Use `image.alt || image.caption || album.title || 'Gallery image'` for image alt text.
+- Use `album.coverImageUrl || album.images[0]?.url` for album cards.
+- Hide empty albums from public pages.
+- Do not read `stores/{storeId}/promoGallery` for the new Website Builder gallery. `promoGallery` is legacy promo/landing-page media; the new gallery uses `galleryAlbums` and `galleryImages`.
+
 ### Hero slides / homepage banners
 
 Use `/v1IntegrationHeroSlides` when a connected website needs store-managed homepage hero slides, banners, CTAs, and hero imagery. This endpoint lets website templates render the same slides store owners maintain in **Website Builder → Hero page**.
@@ -685,6 +902,24 @@ function sedifexHeaders() {
     Authorization: `Bearer ${SEDIFEX_API_KEY}`,
     'X-Sedifex-Contract-Version': SEDIFEX_CONTRACT_VERSION,
     Accept: 'application/json',
+  }
+}
+
+export async function getSedifexGallery() {
+  const url = new URL('/integrationGallery', SEDIFEX_BASE_URL)
+  url.searchParams.set('storeId', SEDIFEX_STORE_ID)
+
+  const response = await fetch(url, {
+    headers: sedifexHeaders(),
+    next: { revalidate: 120 },
+  })
+
+  if (!response.ok) return { albums: [], gallery: [] }
+
+  const payload = await response.json()
+  return {
+    albums: Array.isArray(payload.albums) ? payload.albums : [],
+    gallery: Array.isArray(payload.gallery) ? payload.gallery : [],
   }
 }
 
