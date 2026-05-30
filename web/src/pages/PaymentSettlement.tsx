@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
-import { getIdTokenResult } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
-import { db, functions } from '../firebase'
+import { functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import { useToast } from '../components/ToastProvider'
-import { useAuthUser } from '../hooks/useAuthUser'
 import './AccountOverview.css'
 
 type SetupStatus = {
@@ -18,71 +15,6 @@ type SetupStatus = {
   percentageCharge?: number | null
   active?: boolean | number | null
   isVerified?: boolean | null
-}
-
-
-type PaymentSettings = {
-  enabled?: boolean
-  approvalStatus?: 'pending' | 'pending_review' | 'active' | 'disabled' | 'rejected' | string
-  region?: 'africa' | 'europe' | 'global' | string
-  provider?: 'paystack' | 'stripe' | 'manual' | string
-  platformFeePercent?: number | null
-  feePaidBy?: 'seller' | string
-  paystackSubaccountCode?: string | null
-  stripeConnectedAccountId?: string | null
-  managedBy?: string | null
-  adminNote?: string | null
-  rejectionReason?: string | null
-}
-
-type StoreDocument = {
-  paymentSettings?: PaymentSettings
-  paymentRouting?: Record<string, unknown>
-  paystackSubaccountCode?: string | null
-}
-
-const defaultPaymentSettings: Required<Pick<PaymentSettings, 'enabled' | 'approvalStatus' | 'region' | 'provider' | 'platformFeePercent' | 'feePaidBy'>> = {
-  enabled: true,
-  approvalStatus: 'pending_review',
-  region: 'africa',
-  provider: 'paystack',
-  platformFeePercent: 3,
-  feePaidBy: 'seller',
-}
-
-function asText(value: unknown, fallback = '') {
-  return typeof value === 'string' && value.trim() ? value.trim() : fallback
-}
-
-function maskConnectedAccountId(accountId?: string | null) {
-  const clean = asText(accountId, '')
-  if (!clean) return '—'
-  const suffix = clean.slice(-4)
-  const prefix = clean.startsWith('acct_') ? 'acct_' : `${clean.slice(0, Math.min(4, clean.length))}_`
-  return `${prefix}****${suffix}`
-}
-
-function stripeStatusLabel(settings: PaymentSettings) {
-  if (!settings.stripeConnectedAccountId) return 'Not connected'
-  if (settings.approvalStatus === 'active' && settings.enabled !== false) return 'Active'
-  if (settings.approvalStatus === 'disabled' || settings.enabled === false && settings.approvalStatus !== 'pending_review' && settings.approvalStatus !== 'rejected') return 'Disabled'
-  if (settings.approvalStatus === 'rejected') return 'Rejected'
-  return 'Connected, pending Sedifex approval'
-}
-
-function isStripePendingReview(settings: PaymentSettings) {
-  return Boolean(settings.stripeConnectedAccountId) && (settings.approvalStatus === 'pending_review' || settings.approvalStatus === 'pending')
-}
-
-function readPaymentSettings(store: StoreDocument | null, status: SetupStatus | null): PaymentSettings {
-  const settings = store?.paymentSettings ?? {}
-  const routing = store?.paymentRouting ?? {}
-  return {
-    ...defaultPaymentSettings,
-    ...settings,
-    paystackSubaccountCode: asText(settings.paystackSubaccountCode ?? routing.paystackSubaccountCode ?? store?.paystackSubaccountCode ?? status?.subaccountCode, '') || null,
-    stripeConnectedAccountId: asText(settings.stripeConnectedAccountId ?? routing.stripeConnectedAccountId, '') || null,
-  }
 }
 
 type SettlementBankOption = {
@@ -118,7 +50,6 @@ const digitsOnly = (value: string, max: number) => value.replace(/\D/g, '').slic
 
 export default function PaymentSettlement() {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
-  const user = useAuthUser()
   const { memberships } = useMemberships()
   const { publish } = useToast()
   const [businessName, setBusinessName] = useState('')
@@ -130,12 +61,6 @@ export default function PaymentSettlement() {
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [status, setStatus] = useState<SetupStatus | null>(null)
-  const [storeDocument, setStoreDocument] = useState<StoreDocument | null>(null)
-  const [adminForm, setAdminForm] = useState<PaymentSettings>(defaultPaymentSettings)
-  const [isSedifexAdmin, setIsSedifexAdmin] = useState(false)
-  const [isSavingAdminSettings, setIsSavingAdminSettings] = useState(false)
-  const [isStartingStripeConnect, setIsStartingStripeConnect] = useState(false)
-  const [adminAction, setAdminAction] = useState<'approve' | 'reject' | 'disable' | null>(null)
   const [bankOptions, setBankOptions] = useState<SettlementBankOption[]>([])
   const [isLoadingBanks, setIsLoadingBanks] = useState(false)
   const [isLoadingStatus, setIsLoadingStatus] = useState(false)
@@ -147,10 +72,7 @@ export default function PaymentSettlement() {
     return memberships.find(member => member.storeId === storeId) ?? null
   }, [memberships, storeId])
   const isOwner = activeMembership?.role === 'owner'
-  const canManageSettlement = isOwner || isSedifexAdmin
   const template = paymentTemplates[paymentType]
-  const currentPaymentSettings = useMemo(() => readPaymentSettings(storeDocument, status), [status, storeDocument])
-  const stripeStatus = useMemo(() => stripeStatusLabel(currentPaymentSettings), [currentPaymentSettings])
 
   const filteredOptions = useMemo(() => {
     const selectedType = paymentType === 'mobile_money' ? 'mobile_money' : 'bank'
@@ -161,41 +83,6 @@ export default function PaymentSettlement() {
   const selectedOption = useMemo(() => {
     return bankOptions.find(option => option.code === selectedBankCode) ?? null
   }, [bankOptions, selectedBankCode])
-
-
-  useEffect(() => {
-    let cancelled = false
-    async function loadClaims() {
-      if (!user) {
-        setIsSedifexAdmin(false)
-        return
-      }
-      try {
-        const token = await getIdTokenResult(user)
-        const email = user.email?.toLowerCase() ?? ''
-        const adminClaim = token.claims.admin === true || token.claims.sedifexAdmin === true
-        if (!cancelled) setIsSedifexAdmin(adminClaim || email.endsWith('@sedifex.com'))
-      } catch {
-        if (!cancelled) setIsSedifexAdmin((user.email?.toLowerCase() ?? '').endsWith('@sedifex.com'))
-      }
-    }
-    void loadClaims()
-    return () => { cancelled = true }
-  }, [user])
-
-  useEffect(() => {
-    if (!storeId) {
-      setStoreDocument(null)
-      return undefined
-    }
-    return onSnapshot(doc(db, 'stores', storeId), snapshot => {
-      setStoreDocument((snapshot.data() ?? {}) as StoreDocument)
-    })
-  }, [storeId])
-
-  useEffect(() => {
-    setAdminForm(currentPaymentSettings)
-  }, [currentPaymentSettings])
 
   async function refreshSubaccount() {
     if (!storeId || !isOwner) {
@@ -289,104 +176,6 @@ export default function PaymentSettlement() {
     }
   }
 
-
-  async function handleStartStripeConnect() {
-    if (!storeId || !isOwner) return
-    try {
-      setIsStartingStripeConnect(true)
-      setErrorMessage('')
-      const callable = httpsCallable(functions, 'startStripeConnectOnboarding')
-      const response = await callable({ storeId, returnPath: '/settlement' })
-      const url = asText((response.data as { url?: unknown } | undefined)?.url, '')
-      if (!url) throw new Error('stripe-connect-url-missing')
-      window.location.assign(url)
-    } catch (error) {
-      console.error('[payment-settlement] Stripe Connect start failed', error)
-      setErrorMessage('Unable to start Stripe Connect onboarding.')
-      setIsStartingStripeConnect(false)
-    }
-  }
-
-  async function handleStripeAdminAction(action: 'approve' | 'reject' | 'disable') {
-    if (!storeId || !isSedifexAdmin) return
-    try {
-      setAdminAction(action)
-      setErrorMessage('')
-      if (action === 'approve') {
-        const callable = httpsCallable(functions, 'approveStripePaymentSettings')
-        await callable({ storeId, platformFeePercent: Number(adminForm.platformFeePercent ?? 3) })
-        publish({ message: 'Stripe payment settings approved.', tone: 'success' })
-        return
-      }
-      if (action === 'reject') {
-        const callable = httpsCallable(functions, 'rejectStripePaymentSettings')
-        await callable({ storeId, reason: asText(adminForm.rejectionReason ?? adminForm.adminNote, '') })
-        publish({ message: 'Stripe payment settings rejected.', tone: 'success' })
-        return
-      }
-      const callable = httpsCallable(functions, 'disconnectStripeAccount')
-      await callable({ storeId })
-      publish({ message: 'Stripe payment settings disabled.', tone: 'success' })
-    } catch (error) {
-      console.error('[payment-settlement] Stripe admin action failed', error)
-      setErrorMessage('Unable to update Stripe payment settings.')
-    } finally {
-      setAdminAction(null)
-    }
-  }
-
-
-  async function handleSaveAdminSettings(event: React.FormEvent) {
-    event.preventDefault()
-    if (!storeId || !isSedifexAdmin) return
-    const platformFeePercent = Number(adminForm.platformFeePercent ?? 3)
-    if (!Number.isFinite(platformFeePercent) || platformFeePercent < 0 || platformFeePercent > 25) {
-      setErrorMessage('Platform fee percent must be between 0 and 25.')
-      return
-    }
-    try {
-      setIsSavingAdminSettings(true)
-      setErrorMessage('')
-      const paystackSubaccountCode = asText(adminForm.paystackSubaccountCode, '') || null
-      const stripeConnectedAccountId = asText(adminForm.stripeConnectedAccountId, '') || null
-      await setDoc(doc(db, 'stores', storeId), {
-        paymentSettings: {
-          enabled: adminForm.enabled === true,
-          approvalStatus: adminForm.approvalStatus || 'pending_review',
-          region: adminForm.region || 'africa',
-          provider: adminForm.provider || 'paystack',
-          platformFeePercent,
-          feePaidBy: 'seller',
-          paystackSubaccountCode,
-          stripeConnectedAccountId,
-          managedBy: 'sedifex',
-          updatedBy: 'sedifex_admin',
-          adminNote: asText(adminForm.adminNote, '') || null,
-          rejectionReason: asText(adminForm.rejectionReason, '') || null,
-          updatedAt: serverTimestamp(),
-        },
-        paymentRouting: {
-          provider: adminForm.provider || 'paystack',
-          paymentProvider: adminForm.provider || 'paystack',
-          paystackSubaccountCode,
-          stripeConnectedAccountId,
-          percentageCharge: platformFeePercent,
-          commissionControlledBy: 'sedifex',
-          status: adminForm.approvalStatus || 'pending_review',
-          updatedAt: serverTimestamp(),
-        },
-        paystackSubaccountCode,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-      publish({ message: 'Europe and platform payment routing saved.', tone: 'success' })
-    } catch (error) {
-      console.error('[payment-settlement] admin payment routing save failed', error)
-      setErrorMessage('Unable to save admin payment routing settings.')
-    } finally {
-      setIsSavingAdminSettings(false)
-    }
-  }
-
   if (storeError) return <div role="alert">{storeError}</div>
 
   return (
@@ -395,8 +184,8 @@ export default function PaymentSettlement() {
       <p className="account-overview__subtitle">Add where store payouts should settle after Sedifex online checkout.</p>
       {storeLoading ? <p>Loading workspace…</p> : null}
       {!storeId && !storeLoading ? <p>Select a workspace to configure settlement.</p> : null}
-      {storeId && !canManageSettlement ? <div className="account-overview__error" role="alert">Only the workspace owner or Sedifex admin can set up settlement.</div> : null}
-      {storeId && canManageSettlement ? (
+      {storeId && !isOwner ? <div className="account-overview__error" role="alert">Only the workspace owner can set up settlement.</div> : null}
+      {storeId && isOwner ? (
         <>
           <section aria-labelledby="settlement-status">
             <div className="account-overview__section-header">
@@ -414,78 +203,6 @@ export default function PaymentSettlement() {
               <div><dt>Verified</dt><dd>{status?.isVerified === true ? 'Yes' : status?.isVerified === false ? 'No' : '—'}</dd></div>
             </dl>
           </section>
-
-          <section aria-labelledby="store-payment-routing">
-            <div className="account-overview__section-header">
-              <h2 id="store-payment-routing">Payment routing status</h2>
-              <p className="account-overview__hint">Sedifex controls provider, payout account, approval, and platform fee settings.</p>
-            </div>
-            <dl className="account-overview__grid">
-              <div><dt>Provider</dt><dd>{currentPaymentSettings.provider ?? 'paystack'}</dd></div>
-              <div><dt>Payment status</dt><dd>{currentPaymentSettings.enabled ? currentPaymentSettings.approvalStatus ?? 'pending' : 'disabled'}</dd></div>
-              <div><dt>Sedifex fee percent</dt><dd>{typeof currentPaymentSettings.platformFeePercent === 'number' ? `${currentPaymentSettings.platformFeePercent}%` : '3%'}</dd></div>
-              <div><dt>Connected payout status</dt><dd>{currentPaymentSettings.provider === 'stripe' ? (currentPaymentSettings.stripeConnectedAccountId ? 'Stripe connected' : 'Stripe account missing') : currentPaymentSettings.paystackSubaccountCode ? 'Paystack subaccount connected' : 'Paystack setup pending'}</dd></div>
-            </dl>
-            <p className="account-overview__hint">Estimated deduction: Customer payment - gateway fee - Sedifex platform fee = seller payout.</p>
-          </section>
-
-          <section aria-labelledby="europe-stripe-connect">
-            <div className="account-overview__section-header">
-              <h2 id="europe-stripe-connect">Europe Payments - Stripe Connect</h2>
-              <p className="account-overview__hint">To receive online payments in Europe, connect Stripe. You can use an existing Stripe account or create one during onboarding. Sedifex does not store your Stripe password, secret key, or bank details.</p>
-            </div>
-            <dl className="account-overview__grid">
-              <div><dt>Stripe status</dt><dd>{stripeStatus}</dd></div>
-              <div><dt>Provider</dt><dd>Stripe</dd></div>
-              <div><dt>Region</dt><dd>Europe</dd></div>
-              <div><dt>Sedifex platform fee</dt><dd>{typeof currentPaymentSettings.platformFeePercent === 'number' ? `${currentPaymentSettings.platformFeePercent}%` : '3%'}</dd></div>
-              <div><dt>Fee paid by</dt><dd>Seller</dd></div>
-              <div><dt>Connected account ID</dt><dd>{maskConnectedAccountId(currentPaymentSettings.stripeConnectedAccountId)}</dd></div>
-            </dl>
-            {currentPaymentSettings.approvalStatus === 'rejected' && currentPaymentSettings.rejectionReason ? <p className="account-overview__error" role="alert">{currentPaymentSettings.rejectionReason}</p> : null}
-            <div className="account-overview__actions">
-              <p className="account-overview__hint">Stripe Connect is used only for Europe online payment payouts; Paystack settlement setup below remains available.</p>
-              {!currentPaymentSettings.stripeConnectedAccountId || currentPaymentSettings.approvalStatus === 'rejected' ? (
-                <button type="button" className="button button--primary" onClick={() => void handleStartStripeConnect()} disabled={!isOwner || isStartingStripeConnect}>{isStartingStripeConnect ? 'Opening Stripe…' : currentPaymentSettings.approvalStatus === 'rejected' ? 'Reconnect Stripe' : 'Connect Stripe'}</button>
-              ) : isStripePendingReview(currentPaymentSettings) ? (
-                <button type="button" className="button button--secondary" disabled>Waiting for Sedifex approval</button>
-              ) : currentPaymentSettings.approvalStatus === 'active' && currentPaymentSettings.enabled !== false ? (
-                <button type="button" className="button button--secondary" disabled>Stripe Active</button>
-              ) : (
-                <button type="button" className="button button--secondary" disabled>Contact Sedifex support</button>
-              )}
-            </div>
-          </section>
-
-          {isSedifexAdmin ? (
-            <section aria-labelledby="platform-routing">
-              <div className="account-overview__section-header">
-                <h2 id="platform-routing">Europe &amp; Platform Payment Routing</h2>
-                <p className="account-overview__hint">Sedifex-team controls for Paystack, Stripe Connect, manual routing, splits, approval, and the default 3% platform fee.</p>
-              </div>
-              <form className="account-overview__profile-form" onSubmit={handleSaveAdminSettings}>
-                <div className="account-overview__form-grid">
-                  <label><span>Payment enabled</span><select value={adminForm.enabled ? 'true' : 'false'} onChange={event => setAdminForm(prev => ({ ...prev, enabled: event.target.value === 'true' }))}><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
-                  <label><span>Approval status</span><select value={adminForm.approvalStatus ?? 'pending_review'} onChange={event => setAdminForm(prev => ({ ...prev, approvalStatus: event.target.value }))}><option value="pending_review">Pending review</option><option value="active">Active</option><option value="disabled">Disabled</option><option value="rejected">Rejected</option></select></label>
-                  <label><span>Region</span><select value={adminForm.region ?? 'africa'} onChange={event => setAdminForm(prev => ({ ...prev, region: event.target.value }))}><option value="africa">Africa</option><option value="europe">Europe</option><option value="global">Global</option></select></label>
-                  <label><span>Provider</span><select value={adminForm.provider ?? 'paystack'} onChange={event => setAdminForm(prev => ({ ...prev, provider: event.target.value }))}><option value="paystack">Paystack</option><option value="stripe">Stripe</option><option value="manual">Manual</option></select></label>
-                  <label><span>Platform fee percent</span><input type="number" min="0" max="25" step="0.01" value={adminForm.platformFeePercent ?? 3} onChange={event => setAdminForm(prev => ({ ...prev, platformFeePercent: Number(event.target.value) }))} /></label>
-                  <label><span>Fee paid by</span><input value="Seller" readOnly /></label>
-                  <label><span>Paystack subaccount code</span><input value={adminForm.paystackSubaccountCode ?? ''} onChange={event => setAdminForm(prev => ({ ...prev, paystackSubaccountCode: event.target.value }))} placeholder="ACCT_xxxxx" /></label>
-                  <label><span>Stripe connected account ID</span><input value={adminForm.stripeConnectedAccountId ?? ''} readOnly placeholder="acct_xxxxx" /></label>
-                  <label style={{ gridColumn: '1 / -1' }}><span>Internal admin note</span><textarea value={adminForm.adminNote ?? ''} onChange={event => setAdminForm(prev => ({ ...prev, adminNote: event.target.value }))} rows={3} /></label>
-                  <label style={{ gridColumn: '1 / -1' }}><span>Stripe rejection reason</span><textarea value={adminForm.rejectionReason ?? ''} onChange={event => setAdminForm(prev => ({ ...prev, rejectionReason: event.target.value }))} rows={2} /></label>
-                </div>
-                <div className="account-overview__actions"><p className="account-overview__hint">Store owners can view these settings, but cannot edit provider, split, approval, or Sedifex fee controls.</p><button type="submit" className="button button--primary" disabled={isSavingAdminSettings}>{isSavingAdminSettings ? 'Saving…' : 'Save routing settings'}</button></div>
-                <div className="account-overview__actions">
-                  <button type="button" className="button button--primary" onClick={() => void handleStripeAdminAction('approve')} disabled={adminAction !== null}>{adminAction === 'approve' ? 'Approving…' : 'Approve Stripe'}</button>
-                  <button type="button" className="button button--secondary" onClick={() => void handleStripeAdminAction('reject')} disabled={adminAction !== null}>{adminAction === 'reject' ? 'Rejecting…' : 'Reject Stripe'}</button>
-                  <button type="button" className="button button--secondary" onClick={() => void handleStripeAdminAction('disable')} disabled={adminAction !== null}>{adminAction === 'disable' ? 'Disabling…' : 'Disable Stripe'}</button>
-                </div>
-              </form>
-            </section>
-          ) : null}
-
           <section aria-labelledby="settlement-form">
             <div className="account-overview__section-header"><h2 id="settlement-form">Create or update setup</h2><p className="account-overview__hint">Choose bank or mobile money to auto-fill the Paystack routing code. Manual code entry remains available if a provider is missing.</p></div>
             <form className="account-overview__profile-form" onSubmit={handleSubmit}>
