@@ -84,8 +84,7 @@ function setCors(res: functions.Response) {
 }
 
 function isAllowed(req: functions.https.Request) {
-  const legacyConfig = typeof (functions as any).config === 'function' ? (functions as any).config() : {}
-  const expected = legacyConfig.sedifex?.admin_repair_token || process.env.SEDIFEX_ADMIN_REPAIR_TOKEN || ''
+  const expected = functions.config().sedifex?.admin_repair_token || process.env.SEDIFEX_ADMIN_REPAIR_TOKEN || ''
   if (!expected) return false
   const received = clean(req.get('x-sedifex-admin-repair-token') || req.get('authorization')?.replace(/^Bearer\s+/i, ''), 300)
   return received === expected
