@@ -1,6 +1,9 @@
 import * as functions from 'firebase-functions/v1'
+import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { upsertStoreCustomerFromCheckout } from './customerUpsert'
+
+const SEDIFEX_ADMIN_REPAIR_TOKEN = defineString('SEDIFEX_ADMIN_REPAIR_TOKEN', { default: '' })
 
 function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
@@ -84,7 +87,7 @@ function setCors(res: functions.Response) {
 }
 
 function isAllowed(req: functions.https.Request) {
-  const expected = functions.config().sedifex?.admin_repair_token || process.env.SEDIFEX_ADMIN_REPAIR_TOKEN || ''
+  const expected = SEDIFEX_ADMIN_REPAIR_TOKEN.value()?.trim() || process.env.SEDIFEX_ADMIN_REPAIR_TOKEN?.trim() || ''
   if (!expected) return false
   const received = clean(req.get('x-sedifex-admin-repair-token') || req.get('authorization')?.replace(/^Bearer\s+/i, ''), 300)
   return received === expected
