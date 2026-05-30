@@ -133,8 +133,8 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
     {
       "id": "service-schengen-travel-assistance-a65e6f",
       "storeId": "store_123",
-      "name": "Schengen Travel Assistance",
-      "category": "Professional Services",
+      "name": "Place Holder",
+      "category": "General Services",
       "description": "Service description",
       "price": 600,
       "priceMinor": 60000,
@@ -143,7 +143,7 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
       "type": "SERVICE",
       "imageUrl": "https://...",
       "imageUrls": ["https://..."],
-      "imageAlt": "Schengen Travel Assistance",
+      "imageAlt": "Place Holder",
       "updatedAt": "2026-05-23T12:00:00.000Z"
     }
   ],
