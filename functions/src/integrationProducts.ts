@@ -61,6 +61,44 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function booleanValue(value: unknown) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (['true', 'yes', '1', 'published', 'active', 'visible', 'public'].includes(normalized)) return true
+    if (['false', 'no', '0', 'draft', 'hidden', 'archived', 'deleted', 'removed'].includes(normalized)) return false
+  }
+  return null
+}
+
+function isVisibleCatalogRecord(record: Record<string, unknown>) {
+  const status = cleanIntegrationText(record.status ?? record.publishStatus ?? record.visibility, 80).toLowerCase()
+  const isPublished = booleanValue(record.isPublished)
+  const isWebsiteVisible = booleanValue(record.isWebsiteVisible)
+  const isMarketplaceVisible = booleanValue(record.isMarketplaceVisible)
+  const hasVisibilitySignal =
+    Boolean(status)
+    || isPublished !== null
+    || isWebsiteVisible !== null
+    || isMarketplaceVisible !== null
+
+  if (['deleted', 'archived', 'removed'].includes(status)) return false
+
+  if (
+    isPublished === true
+    || isWebsiteVisible === true
+    || isMarketplaceVisible === true
+    || ['published', 'active', 'public', 'visible'].includes(status)
+  ) {
+    return true
+  }
+
+  if (isPublished === false) return false
+  if (['draft', 'hidden', 'private', 'inactive'].includes(status)) return false
+
+  return !hasVisibilitySignal
+}
+
 function toDateIso(value: unknown) {
   if (!value) return null
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString()
@@ -145,6 +183,8 @@ function getImageUrls(record: Record<string, unknown>) {
 }
 
 function normalizeDoc(id: string, storeId: string, record: Record<string, unknown>, fallbackType: CatalogType): IntegrationProductItem | null {
+  if (!isVisibleCatalogRecord(record)) return null
+
   const name = getName(record)
   if (!name) return null
 
@@ -216,15 +256,38 @@ function sortItems(items: IntegrationProductItem[]) {
 }
 
 async function getStoreItems(storeId: string) {
-  const [products, services, courses, publicListings, v1IntegrationProducts] = await Promise.all([
+  const [
+    products,
+    services,
+    courses,
+    publicListings,
+    v1IntegrationProducts,
+    rootProducts,
+    rootServices,
+    rootCourses,
+  ] = await Promise.all([
     fetchCollectionItems(`stores/${storeId}/products`, storeId, 'PRODUCT'),
     fetchCollectionItems(`stores/${storeId}/services`, storeId, 'SERVICE'),
     fetchCollectionItems(`stores/${storeId}/courses`, storeId, 'COURSE'),
     fetchQueryItems('publicListings', storeId, 'PRODUCT'),
     fetchQueryItems('v1IntegrationProducts', storeId, 'PRODUCT'),
+    fetchQueryItems('products', storeId, 'PRODUCT'),
+    fetchQueryItems('services', storeId, 'SERVICE'),
+    fetchQueryItems('courses', storeId, 'COURSE'),
   ])
 
-  return sortItems(dedupeItems([...products, ...services, ...courses, ...publicListings, ...v1IntegrationProducts])).slice(0, MAX_RETURN_ITEMS)
+  return sortItems(
+    dedupeItems([
+      ...products,
+      ...services,
+      ...courses,
+      ...publicListings,
+      ...v1IntegrationProducts,
+      ...rootProducts,
+      ...rootServices,
+      ...rootCourses,
+    ]),
+  ).slice(0, MAX_RETURN_ITEMS)
 }
 
 export const v1IntegrationProducts = functions.https.onRequest(async (req, res): Promise<void> => {
