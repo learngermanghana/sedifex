@@ -261,13 +261,26 @@ export default function WebsiteHeroSlides() {
     setUploading(true)
     setMessage('')
     try {
+      const isEditingExistingSlide = Boolean(editingId && draft.id)
       const slideId = draft.id || `slide-${Date.now()}`
       const filename = `${safePathSegment(draft.title || slideId)}-${Date.now()}${fileExtension(imageFile)}`
       const imagePath = `stores/${storeId}/hero-slides/${slideId}/${filename}`
       const url = await uploadProductImage(imageFile, { storagePath: imagePath })
+      const imageUpdate = { imageUrl: url, imagePath, updatedAt: new Date().toISOString() }
+
+      if (isEditingExistingSlide) {
+        await setDoc(doc(db, 'stores', storeId, COLLECTION_NAME, slideId), imageUpdate, { merge: true })
+        setSlides(current => sortSlides(current.map(slide => slide.id === slideId ? { ...slide, ...imageUpdate } : slide)))
+      }
+
       setDraft(current => ({ ...current, imageUrl: url, imagePath }))
       setImageFile(null)
-      publish({ message: 'Hero slide image uploaded. Fill the text fields, then save the slide.', tone: 'success' })
+      publish({
+        message: isEditingExistingSlide
+          ? 'Hero slide image uploaded and saved. It will remain after refresh.'
+          : 'Hero slide image uploaded. Fill the text fields, then save the slide.',
+        tone: 'success',
+      })
     } catch (uploadError) {
       console.error('[website-hero-slides] upload failed', uploadError)
       setMessage('Unable to upload hero slide image. Try a smaller image.')
@@ -420,7 +433,7 @@ export default function WebsiteHeroSlides() {
           ) : (
             <section className="account-overview__card">
               <h2>{editingId ? 'Edit slide' : 'Add slide'}</h2>
-              <p className="account-overview__hint">Step 1: upload the image. Step 2: fill the text fields. Step 3: save the slide.</p>
+              <p className="account-overview__hint">{editingId ? 'Uploading a replacement image saves it to this slide immediately. Change any text fields, then save the slide.' : 'Step 1: upload the image. Step 2: fill the text fields. Step 3: save the slide.'}</p>
               <form className="account-overview__profile-form" onSubmit={saveSlide}>
                 <div style={{ border: '1px dashed #cbd5e1', borderRadius: 18, background: '#f8fafc', padding: 16 }}>
                   <Field label="Upload hero image first">
@@ -452,7 +465,7 @@ export default function WebsiteHeroSlides() {
                 </div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   {editingId ? <button type="button" className="button button--ghost" onClick={() => { setDraft(emptyDraft(slides.length + 1)); setEditingId(null) }}>Cancel edit</button> : null}
-                  <button className="button button--primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save slide'}</button>
+                  <button className="button button--primary" type="submit" disabled={busy || uploading}>{busy ? 'Saving…' : 'Save slide'}</button>
                 </div>
               </form>
             </section>
