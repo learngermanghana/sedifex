@@ -17,6 +17,7 @@ Use this mapping when building client websites:
 | Website action | Sedifex record | Dashboard page |
 |---|---|---|
 | Show products/services on a website | `products`, `services`, `publicListings`, `v1IntegrationProducts` | Products / Services |
+| Show upcoming events/classes/intakes | `stores/{storeId}/integrationAvailabilitySlots` via `/v1IntegrationAvailability` | Bookings → Manage availability / Upcoming events |
 | Create a service booking | `integrationBookings` | Bookings |
 | Read booking status | `integrationBookings` | Bookings |
 | Create product checkout/order | `integrationOrders` | Online Orders |
@@ -238,7 +239,8 @@ Recommended fields:
 
 | Field | Why it matters |
 |---|---|
-| `serviceId` | Links the booking to a Sedifex service |
+| `serviceId` | Links the booking to a Sedifex service. For manual upcoming events this may be a generated `manual:<slug>` value. |
+| `slotId` | Links the booking to a selected availability slot/event. Use this when the booking came from `/v1IntegrationAvailability`. |
 | `serviceName` | Keeps the record readable even if the service changes later |
 | `bookingDate` | Customer requested date |
 | `bookingTime` | Customer requested time |
@@ -306,17 +308,80 @@ Successful booking response:
 }
 ```
 
+### Create booking from an availability slot or manual upcoming event
+
+When a customer selects a slot returned by `/v1IntegrationAvailability`, include `slotId` in the booking request. This is especially important for events added manually from **Bookings → Manage availability → Upcoming events**, because those events may not exist as saved services in `/v1IntegrationProducts`.
+
+For manual events, `serviceId` can look like `manual:solar-energy-program`. Do not reject it just because it is not in the saved service catalog. If `slotId` is present, Sedifex resolves the slot, copies the slot `serviceId`/`serviceName` when needed, and increments `seatsBooked`.
+
+```json
+{
+  "slotId": "solar-energy-program-slot",
+  "serviceName": "Solar Energy Program",
+  "bookingDate": "2026-05-25",
+  "bookingTime": "Time to be announced",
+  "quantity": 1,
+  "customer": {
+    "name": "Customer Name",
+    "email": "customer@example.com",
+    "phone": "+233200000000"
+  },
+  "paymentMethod": "manual",
+  "paymentAmount": 100,
+  "sourceChannel": "client_website",
+  "attributes": {
+    "source": "manual_upcoming_event",
+    "pageUrl": "https://clientsite.com/events/solar-energy-program",
+    "scheduleStatus": "time_tba"
+  }
+}
+```
+
 ---
 
 ## 6. Availability API
 
-Use this when a website needs to show appointment times before creating a booking.
+Use this when a website needs to show appointment times, upcoming events, classes, intakes, or manually-created event slots before creating a booking.
 
 ```http
 GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<serviceId>&from=<fromIso>&to=<toIso>
 ```
 
-Use the same Website Integration API key headers.
+Use the same Website Integration API key headers. `serviceId` is optional. Omit it when you want to pull every public/open upcoming event for the store, including manual events that are not attached to a saved service.
+
+### Pulling upcoming-event images through availability
+
+When a store adds an upcoming event in Sedifex, they can attach a photo on **Bookings → Manage availability → Upcoming events** using either the photo upload control or an image URL. Sedifex saves that image on the availability slot. The availability API exposes the event image through the slot `attributes` object:
+
+```json
+{
+  "id": "solar-energy-program",
+  "serviceId": "manual:solar-energy-program",
+  "serviceName": "Solar Energy Program",
+  "attributes": {
+    "imageUrl": "https://storage.googleapis.com/.../solar-energy-program.jpg",
+    "imageAlt": "Solar Energy Program flyer"
+  }
+}
+```
+
+Website rendering pattern:
+
+```ts
+const imageUrl =
+  typeof slot.attributes?.imageUrl === 'string' ? slot.attributes.imageUrl : ''
+
+const imageAlt =
+  typeof slot.attributes?.imageAlt === 'string' && slot.attributes.imageAlt.trim()
+    ? slot.attributes.imageAlt
+    : slot.serviceName || 'Upcoming event'
+
+return imageUrl
+  ? <img src={imageUrl} alt={imageAlt} />
+  : <div className="event-card-placeholder">{slot.serviceName?.slice(0, 1) ?? 'E'}</div>
+```
+
+Do not try to pull the image from `/v1IntegrationProducts` for manual events. Manual upcoming events are availability slots, so the website should pull their title, schedule, seats, location, and image from `/v1IntegrationAvailability`.
 
 ### Rendering Upcoming Events with flexible schedules
 
@@ -351,7 +416,10 @@ Example `date_tba` slot:
   "capacity": 20,
   "seatsBooked": 0,
   "seatsRemaining": 20,
-  "attributes": {}
+  "attributes": {
+    "imageUrl": "https://storage.googleapis.com/.../solar-energy-program.jpg",
+    "imageAlt": "Solar Energy Program flyer"
+  }
 }
 ```
 
@@ -382,7 +450,8 @@ Button: Register Interest
 Booking/registration note:
 
 - If a slot has `scheduleStatus: "date_tba"` or `scheduleStatus: "time_tba"`, show a "Register Interest" or "Enquire" call-to-action instead of hiding it.
-- Keep submitted booking details tied to the `serviceId` and include the selected slot/event context in `attributes` when exact date or time is not confirmed yet.
+- Keep submitted booking details tied to the selected slot by sending `slotId`. Include the slot/event context in `attributes` when exact date or time is not confirmed yet.
+- For manual upcoming events, do not require the event to exist in `/v1IntegrationProducts`; use `/v1IntegrationAvailability` as the source of truth for the event title, image, schedule, location, and capacity.
 
 ---
 

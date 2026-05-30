@@ -24,7 +24,6 @@ After setup, Website A can fetch and render:
 - `imageAlt`
 - `updatedAt`
 
-
 Customer data fields (for import/export template)
 
 Required
@@ -114,7 +113,6 @@ This quickstart is for store/partner integrations only.
 SedifexMarket and public-product catalog guidance has been moved to a dedicated document:
 
 - `docs/sedifexmarket-public-product-guide.md`
-
 
 ## Canonical integration contract (required)
 
@@ -226,13 +224,15 @@ Recommended rendering fallback:
 ```ts
 const dateLabel =
   slot.displayDateText ??
-  (slot.startAt ? new Date(slot.startAt).toLocaleDateString() : 'Date to be announced')
+  (slot.startAt
+    ? new Date(slot.startAt).toLocaleDateString()
+    : "Date to be announced");
 
 const timeLabel =
   slot.displayTimeText ??
   (slot.startAt && slot.endAt
     ? `${new Date(slot.startAt).toLocaleTimeString()} - ${new Date(slot.endAt).toLocaleTimeString()}`
-    : 'Time to be announced')
+    : "Time to be announced");
 ```
 
 Expected website output for the example above:
@@ -251,6 +251,65 @@ Booking/registration note:
 - Put vertical-specific data (e.g., school/travel extras) inside `attributes` in the booking payload.
 - Keep API keys server-side; submit booking requests from your website backend only.
 - For a developer-ready canonical booking field dictionary (including `branchLocationId`, `eventLocation`, `customerStayLocation`, and `paymentAmount`) plus a full request example, see `docs/integration-api-guide.md` under **POST /v1IntegrationBookings**.
+
+### Manual upcoming events from Sedifex admin
+
+Stores can add an upcoming event in Sedifex without first saving it as a service/product/course. In the admin UI this is **Bookings → Manage availability → Upcoming events → Event source: Manual event/class name**. Sedifex saves that event as an availability slot under:
+
+```txt
+stores/{storeId}/integrationAvailabilitySlots/{slotId}
+```
+
+For a manual event, the slot is still bookable even though it is not in the saved service catalog. The important fields for websites are:
+
+| Field                                                                                   | How the website should use it                                                                               |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `id`                                                                                    | Treat as the `slotId`. Use this for booking/registration.                                                   |
+| `serviceId`                                                                             | May be a generated value such as `manual:solar-energy-program`. Do not require it to match a saved service. |
+| `serviceName`                                                                           | Display title for the event card/form.                                                                      |
+| `scheduleStatus`, `startAt`, `endAt`, `eventDate`, `displayDateText`, `displayTimeText` | Render confirmed or TBA schedule labels.                                                                    |
+| `price`, `depositAmount`, `registrationMode`                                            | Decide whether to show free registration, enquiry, deposit, or full payment.                                |
+| `capacity`, `seatsBooked`, `seatsRemaining`, `status`                                   | Hide closed/full events or show remaining seats.                                                            |
+| `isPublic`, `visibleOnWebsite`, `marketplaceEnabled`                                    | Only render public/visible slots.                                                                           |
+| `imageUrl` or `attributes.imageUrl`                                                     | Event photo.                                                                                                |
+
+Minimum custom-site flow:
+
+1. Fetch availability server-side with `GET /v1IntegrationAvailability?storeId=<storeId>&from=<ISO>&to=<ISO>`.
+2. Render every slot where `status === "open"`, `isPublic !== false`, `visibleOnWebsite !== false`, and `seatsRemaining > 0` (or capacity is unlimited/zero by your business rule).
+3. When the visitor registers, send `slotId: slot.id` to `POST /v1IntegrationBookings`. You may include `serviceId` and `serviceName`, but `slotId` is enough for Sedifex to resolve the manual event and increment `seatsBooked`.
+4. If payment is required, either create the booking first and then checkout, or send the visitor to the public Quick Pay URL described below.
+
+Example booking request for a manual event:
+
+```json
+{
+  "slotId": "solar-energy-program-slot",
+  "serviceName": "Solar Energy Program",
+  "customer": {
+    "name": "Ama Boateng",
+    "phone": "+233201234567",
+    "email": "ama@example.com"
+  },
+  "quantity": 1,
+  "bookingDate": "2026-08-01",
+  "bookingTime": "Time to be announced",
+  "paymentAmount": 100,
+  "sourceChannel": "client_website",
+  "attributes": {
+    "source": "manual_upcoming_event",
+    "scheduleStatus": "time_tba"
+  }
+}
+```
+
+Generated Sedifex public websites and Quick Pay:
+
+- Sedifex-generated public websites automatically pull open/public `integrationAvailabilitySlots` into the Services/Bookings area as `BOOKING` cards.
+- The card button opens Quick Pay with `mode=booking`, `itemId=<slotId>`, and `slotId=<slotId>`.
+- Custom sites can use the same pattern when they want Sedifex-hosted payment instead of building checkout: `https://pay.sedifex.com/s/<storeId>?mode=booking&itemId=<slotId>&slotId=<slotId>`.
+- The public Quick Pay catalog also returns these slots as `type: "BOOKING"`, so a custom site can search/fetch `/publicQuickPayCatalog?storeId=<storeId>` and use the returned `slotId`, `bookingDate`, and `bookingTime`.
+- Booking-like Quick Pay orders are shown in the store **Bookings** board as payment orders, so staff can follow up even when checkout was used instead of a custom `POST /v1IntegrationBookings` form.
 
 ### Common 404 fix (important)
 
@@ -411,68 +470,80 @@ Use a **server-only helper** so your integration key never reaches the browser b
 
 ```ts
 // lib/sedifexPromo.ts
-import 'server-only'
+import "server-only";
 
-const BASE_URL = process.env.SEDIFEX_API_BASE_URL ?? 'https://us-central1-sedifex-web.cloudfunctions.net'
-const STORE_ID = process.env.SEDIFEX_STORE_ID ?? ''
-const API_KEY = process.env.SEDIFEX_INTEGRATION_API_KEY ?? process.env.SEDIFEX_INTEGRATION_KEY ?? ''
-const CONTRACT = process.env.SEDIFEX_CONTRACT_VERSION ?? '2026-04-13'
+const BASE_URL =
+  process.env.SEDIFEX_API_BASE_URL ??
+  "https://us-central1-sedifex-web.cloudfunctions.net";
+const STORE_ID = process.env.SEDIFEX_STORE_ID ?? "";
+const API_KEY =
+  process.env.SEDIFEX_INTEGRATION_API_KEY ??
+  process.env.SEDIFEX_INTEGRATION_KEY ??
+  "";
+const CONTRACT = process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13";
 
 type PromoPayload = {
-  storeId: string
+  storeId: string;
   promo: {
-    enabled: boolean
-    title?: string | null
-    summary?: string | null
-    startDate?: string | null
-    endDate?: string | null
-    websiteUrl?: string | null
-    imageUrl?: string | null
-    imageAlt?: string | null
-  }
-}
+    enabled: boolean;
+    title?: string | null;
+    summary?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    websiteUrl?: string | null;
+    imageUrl?: string | null;
+    imageAlt?: string | null;
+  };
+};
 
 type GalleryPayload = {
-  storeId: string
+  storeId: string;
   gallery: Array<{
-    id: string
-    url: string
-    alt?: string | null
-    caption?: string | null
-    sortOrder?: number
-    isPublished?: boolean
-  }>
-}
+    id: string;
+    url: string;
+    alt?: string | null;
+    caption?: string | null;
+    sortOrder?: number;
+    isPublished?: boolean;
+  }>;
+};
 
 export async function fetchPromoAndGallery() {
   const headers = {
-    'x-api-key': API_KEY,
-    'X-Sedifex-Contract-Version': CONTRACT,
-    Accept: 'application/json',
-  }
+    "x-api-key": API_KEY,
+    "X-Sedifex-Contract-Version": CONTRACT,
+    Accept: "application/json",
+  };
 
   const [promoRes, galleryRes] = await Promise.all([
-    fetch(`${BASE_URL}/v1IntegrationPromo?storeId=${encodeURIComponent(STORE_ID)}`, {
-      headers,
-      next: { revalidate: 60 },
-    }),
-    fetch(`${BASE_URL}/integrationGallery?storeId=${encodeURIComponent(STORE_ID)}`, {
-      headers,
-      next: { revalidate: 60 },
-    }),
-  ])
+    fetch(
+      `${BASE_URL}/v1IntegrationPromo?storeId=${encodeURIComponent(STORE_ID)}`,
+      {
+        headers,
+        next: { revalidate: 60 },
+      },
+    ),
+    fetch(
+      `${BASE_URL}/integrationGallery?storeId=${encodeURIComponent(STORE_ID)}`,
+      {
+        headers,
+        next: { revalidate: 60 },
+      },
+    ),
+  ]);
 
-  if (!promoRes.ok) throw new Error(`Promo request failed: ${promoRes.status}`)
-  if (!galleryRes.ok) throw new Error(`Gallery request failed: ${galleryRes.status}`)
+  if (!promoRes.ok) throw new Error(`Promo request failed: ${promoRes.status}`);
+  if (!galleryRes.ok)
+    throw new Error(`Gallery request failed: ${galleryRes.status}`);
 
-  const promoJson = (await promoRes.json()) as PromoPayload
-  const galleryJson = (await galleryRes.json()) as GalleryPayload
+  const promoJson = (await promoRes.json()) as PromoPayload;
+  const galleryJson = (await galleryRes.json()) as GalleryPayload;
 
   const publishedGallery = (galleryJson.gallery ?? [])
-    .filter(item => item?.isPublished !== false && item?.url)
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .filter((item) => item?.isPublished !== false && item?.url)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
-  return { promo: promoJson.promo, gallery: publishedGallery }
+  return { promo: promoJson.promo, gallery: publishedGallery };
 }
 ```
 
@@ -480,25 +551,27 @@ Then render it in a Server Component page:
 
 ```tsx
 // app/promo/page.tsx
-import { fetchPromoAndGallery } from '@/lib/sedifexPromo'
+import { fetchPromoAndGallery } from "@/lib/sedifexPromo";
 
 export default async function PromoPage() {
-  const { promo, gallery } = await fetchPromoAndGallery()
+  const { promo, gallery } = await fetchPromoAndGallery();
 
   return (
     <main>
-      <h1>{promo?.title ?? 'Latest promo'}</h1>
+      <h1>{promo?.title ?? "Latest promo"}</h1>
       {promo?.summary ? <p>{promo.summary}</p> : null}
 
-      {promo?.imageUrl ? <img src={promo.imageUrl} alt={promo.imageAlt ?? 'Promo image'} /> : null}
+      {promo?.imageUrl ? (
+        <img src={promo.imageUrl} alt={promo.imageAlt ?? "Promo image"} />
+      ) : null}
 
       <section>
         <h2>Gallery</h2>
         {gallery.length ? (
           <ul>
-            {gallery.map(item => (
+            {gallery.map((item) => (
               <li key={item.id}>
-                <img src={item.url} alt={item.alt ?? 'Gallery image'} />
+                <img src={item.url} alt={item.alt ?? "Gallery image"} />
                 {item.caption ? <p>{item.caption}</p> : null}
               </li>
             ))}
@@ -508,7 +581,7 @@ export default async function PromoPage() {
         )}
       </section>
     </main>
-  )
+  );
 }
 ```
 
@@ -601,12 +674,12 @@ It removes repeated rows when multiple sources return the same product represent
 
 If you need this in another format (REST proxy endpoint, WordPress plugin, or server-side Node worker), keep the same product contract and tenant-scoped authorization model.
 
-
 ### Product photos: one vs multiple images
+
 - `imageUrl` remains the primary/legacy photo field.
 - `imageUrls` can contain 1..n URLs when a merchant wants 2-3 product photos on downstream websites.
 - Consumers should prefer `imageUrls[0]` when present, then fall back to `imageUrl`.
-> For all-store admin pulls, call `v1IntegrationProducts` with the admin master key and omit `storeId`.
+  > For all-store admin pulls, call `v1IntegrationProducts` with the admin master key and omit `storeId`.
 
 ## Social settings / public profile
 
@@ -627,15 +700,16 @@ async function fetchSedifexSocialSettings() {
     {
       headers: {
         "x-api-key": process.env.SEDIFEX_INTEGRATION_API_KEY ?? "",
-        "X-Sedifex-Contract-Version": process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13",
+        "X-Sedifex-Contract-Version":
+          process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13",
         Accept: "application/json",
       },
       next: { revalidate: 60 },
-    }
-  )
+    },
+  );
 
-  if (!response.ok) return null
-  return response.json()
+  if (!response.ok) return null;
+  return response.json();
 }
 ```
 
@@ -692,7 +766,6 @@ Website usage ideas:
 - About section
 - Hero fallback content
 
-
 ## Homepage hero slides
 
 Connected websites can fetch store-managed homepage banners from Sedifex and render them as a carousel or a static hero section.
@@ -712,16 +785,17 @@ async function fetchHeroSlides() {
     {
       headers: {
         "x-api-key": process.env.SEDIFEX_INTEGRATION_API_KEY ?? "",
-        "X-Sedifex-Contract-Version": process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13",
+        "X-Sedifex-Contract-Version":
+          process.env.SEDIFEX_CONTRACT_VERSION ?? "2026-04-13",
         Accept: "application/json",
       },
       next: { revalidate: 60 },
-    }
-  )
+    },
+  );
 
-  if (!response.ok) return []
-  const payload = await response.json()
-  return Array.isArray(payload.slides) ? payload.slides : []
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return Array.isArray(payload.slides) ? payload.slides : [];
 }
 ```
 
@@ -735,19 +809,23 @@ Simple component example:
 
 ```tsx
 function HeroSlider({ slides }) {
-  if (!slides.length) return null
+  if (!slides.length) return null;
   return (
     <section>
       {slides.map((slide) => (
         <article key={slide.id}>
-          {slide.imageUrl ? <img src={slide.imageUrl} alt={slide.title} /> : null}
+          {slide.imageUrl ? (
+            <img src={slide.imageUrl} alt={slide.title} />
+          ) : null}
           {slide.eyebrow ? <p>{slide.eyebrow}</p> : null}
           <h1>{slide.title}</h1>
           {slide.subtitle ? <p>{slide.subtitle}</p> : null}
-          {slide.ctaHref && slide.ctaLabel ? <a href={slide.ctaHref}>{slide.ctaLabel}</a> : null}
+          {slide.ctaHref && slide.ctaLabel ? (
+            <a href={slide.ctaHref}>{slide.ctaLabel}</a>
+          ) : null}
         </article>
       ))}
     </section>
-  )
+  );
 }
 ```

@@ -1,317 +1,447 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import './PublicQuickPayCheckout.css'
+import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import "./PublicQuickPayCheckout.css";
 
-type QuickPayItemType = 'PRODUCT' | 'SERVICE' | 'COURSE' | 'DONATION' | 'STUDENT_REGISTRATION' | 'BOOKING' | 'MANUAL'
-type ManualPaymentType = Exclude<QuickPayItemType, 'MANUAL'>
-type QuickPayPaymentMethod = 'ONLINE' | 'CASH'
+type QuickPayItemType =
+  | "PRODUCT"
+  | "SERVICE"
+  | "COURSE"
+  | "DONATION"
+  | "STUDENT_REGISTRATION"
+  | "BOOKING"
+  | "MANUAL";
+type ManualPaymentType = Exclude<QuickPayItemType, "MANUAL">;
+type QuickPayPaymentMethod = "ONLINE" | "CASH";
 
 type QuickPayItem = {
-  id: string
-  name: string
-  type: QuickPayItemType
-  price: number
-  priceMinor?: number
-  description?: string | null
-  imageUrl?: string | null
-  category?: string | null
-}
+  id: string;
+  name: string;
+  type: QuickPayItemType;
+  price: number;
+  priceMinor?: number;
+  description?: string | null;
+  imageUrl?: string | null;
+  category?: string | null;
+  slotId?: string | null;
+};
 
 type CustomerDetails = {
-  name: string
-  email: string
-  phone: string
-}
+  name: string;
+  email: string;
+  phone: string;
+};
 
 const FUNCTION_BASE_URL =
   import.meta.env.VITE_FIREBASE_FUNCTIONS_BASE_URL ||
   import.meta.env.VITE_SEDIFEX_FUNCTIONS_BASE_URL ||
-  'https://us-central1-sedifex-web.cloudfunctions.net'
+  "https://us-central1-sedifex-web.cloudfunctions.net";
 
-const CONTRACT_VERSION = import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || '2026-04-13'
-const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = ['SERVICE', 'PRODUCT', 'COURSE', 'BOOKING', 'STUDENT_REGISTRATION', 'DONATION']
+const CONTRACT_VERSION =
+  import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || "2026-04-13";
+const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = [
+  "SERVICE",
+  "PRODUCT",
+  "COURSE",
+  "BOOKING",
+  "STUDENT_REGISTRATION",
+  "DONATION",
+];
 
 const DEMO_ITEMS: QuickPayItem[] = [
   {
-    id: 'manual-service',
-    name: 'Manual payment request',
-    type: 'MANUAL',
+    id: "manual-service",
+    name: "Manual payment request",
+    type: "MANUAL",
     price: 0,
-    description: 'Enter the exact service, item, registration, booking, donation, or course manually.',
+    description:
+      "Enter the exact service, item, registration, booking, donation, or course manually.",
   },
-]
+];
 
 function money(value: number) {
-  return new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS' }).format(value)
+  return new Intl.NumberFormat("en-GH", {
+    style: "currency",
+    currency: "GHS",
+  }).format(value);
 }
 
 function normalizeCheckoutItemType(type: QuickPayItemType) {
-  if (type === 'PRODUCT') return 'PRODUCT'
-  return 'SERVICE'
+  if (type === "PRODUCT") return "PRODUCT";
+  return "SERVICE";
 }
 
 function getAccountingType(type: QuickPayItemType) {
-  if (type === 'DONATION') return 'donation'
-  if (type === 'STUDENT_REGISTRATION') return 'student_registration'
-  if (type === 'BOOKING') return 'booking'
-  if (type === 'COURSE') return 'course'
-  if (type === 'SERVICE') return 'service'
-  if (type === 'PRODUCT') return 'product'
-  return 'manual_quick_sale'
+  if (type === "DONATION") return "donation";
+  if (type === "STUDENT_REGISTRATION") return "student_registration";
+  if (type === "BOOKING") return "booking";
+  if (type === "COURSE") return "course";
+  if (type === "SERVICE") return "service";
+  if (type === "PRODUCT") return "product";
+  return "manual_quick_sale";
 }
 
 function getItemIcon(type: QuickPayItemType) {
-  if (type === 'SERVICE') return 'S'
-  if (type === 'COURSE') return 'C'
-  if (type === 'DONATION') return 'D'
-  if (type === 'STUDENT_REGISTRATION') return 'R'
-  if (type === 'BOOKING') return 'B'
-  if (type === 'MANUAL') return 'M'
-  return 'P'
+  if (type === "SERVICE") return "S";
+  if (type === "COURSE") return "C";
+  if (type === "DONATION") return "D";
+  if (type === "STUDENT_REGISTRATION") return "R";
+  if (type === "BOOKING") return "B";
+  if (type === "MANUAL") return "M";
+  return "P";
 }
 
 function getTypeLabel(type: QuickPayItemType) {
-  if (type === 'STUDENT_REGISTRATION') return 'Student registration'
-  if (type === 'MANUAL') return 'Manual payment'
-  return type.toLowerCase()
+  if (type === "STUDENT_REGISTRATION") return "Student registration";
+  if (type === "MANUAL") return "Manual payment";
+  return type.toLowerCase();
 }
 
 function getManualPaymentName(type: ManualPaymentType) {
-  return `Manual ${getTypeLabel(type)} payment`
+  return `Manual ${getTypeLabel(type)} payment`;
 }
 
 function makeFallbackEmail(reference: string) {
-  const safeReference = reference.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `quickpay-${Date.now()}`
-  return `quickpay-${safeReference}@sedifex.com`
+  const safeReference =
+    reference
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || `quickpay-${Date.now()}`;
+  return `quickpay-${safeReference}@sedifex.com`;
 }
 
 export default function PublicQuickPayCheckout() {
-  const { storeId = '' } = useParams()
-  const [searchParams] = useSearchParams()
-  const initialMode = searchParams.get('mode') || 'store'
-  const paymentReturnStatus = searchParams.get('status')
-  const paymentReference = searchParams.get('reference') || searchParams.get('trxref') || ''
-  const returnedPaymentMethod = searchParams.get('paymentMethod') || searchParams.get('payment_method') || ''
-  const isCashReturn = returnedPaymentMethod.toLowerCase() === 'cash' || paymentReturnStatus === 'cash_pending'
-  const shouldShowSuccess = paymentReturnStatus === 'success' || paymentReturnStatus === 'returning' || paymentReturnStatus === 'cash_pending' || Boolean(paymentReference)
-  const [query, setQuery] = useState('')
-  const [items, setItems] = useState<QuickPayItem[]>([])
-  const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(DEMO_ITEMS[0])
-  const [manualPaymentType, setManualPaymentType] = useState<ManualPaymentType>('SERVICE')
-  const [manualPaymentName, setManualPaymentName] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<QuickPayPaymentMethod>('CASH')
-  const [quantity, setQuantity] = useState(1)
-  const [customAmount, setCustomAmount] = useState('')
-  const [customer, setCustomer] = useState<CustomerDetails>({ name: '', email: '', phone: '' })
-  const [status, setStatus] = useState<string | null>('Loading available items…')
-  const [error, setError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { storeId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const initialMode = searchParams.get("mode") || "store";
+  const requestedItemId =
+    searchParams.get("itemId") || searchParams.get("slotId") || "";
+  const requestedSlotId = searchParams.get("slotId") || "";
+  const paymentReturnStatus = searchParams.get("status");
+  const paymentReference =
+    searchParams.get("reference") || searchParams.get("trxref") || "";
+  const returnedPaymentMethod =
+    searchParams.get("paymentMethod") ||
+    searchParams.get("payment_method") ||
+    "";
+  const isCashReturn =
+    returnedPaymentMethod.toLowerCase() === "cash" ||
+    paymentReturnStatus === "cash_pending";
+  const shouldShowSuccess =
+    paymentReturnStatus === "success" ||
+    paymentReturnStatus === "returning" ||
+    paymentReturnStatus === "cash_pending" ||
+    Boolean(paymentReference);
+  const [query, setQuery] = useState("");
+  const [items, setItems] = useState<QuickPayItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(
+    DEMO_ITEMS[0],
+  );
+  const [manualPaymentType, setManualPaymentType] =
+    useState<ManualPaymentType>("SERVICE");
+  const [manualPaymentName, setManualPaymentName] = useState("");
+  const [paymentMethod, setPaymentMethod] =
+    useState<QuickPayPaymentMethod>("CASH");
+  const [quantity, setQuantity] = useState(1);
+  const [customAmount, setCustomAmount] = useState("");
+  const [customer, setCustomer] = useState<CustomerDetails>({
+    name: "",
+    email: "",
+    phone: "",
+  });
+  const [status, setStatus] = useState<string | null>(
+    "Loading available items…",
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const catalogWithManual = useMemo(() => {
-    return items.some(item => item.id === 'manual-service') ? items : [...items, ...DEMO_ITEMS]
-  }, [items])
+    return items.some((item) => item.id === "manual-service")
+      ? items
+      : [...items, ...DEMO_ITEMS];
+  }, [items]);
 
   const filteredItems = useMemo(() => {
-    const normalized = query.trim().toLowerCase()
-    if (!normalized) return []
-    return catalogWithManual.filter(item => {
-      if (item.type === 'MANUAL') return false
-      const haystack = `${item.name} ${item.description ?? ''} ${item.category ?? ''} ${item.type}`.toLowerCase()
-      return haystack.includes(normalized)
-    })
-  }, [catalogWithManual, query])
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return [];
+    return catalogWithManual.filter((item) => {
+      if (item.type === "MANUAL") return false;
+      const haystack =
+        `${item.name} ${item.description ?? ""} ${item.category ?? ""} ${item.type}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [catalogWithManual, query]);
 
-  const hasSearch = query.trim().length > 0
-  const visibleItems = filteredItems
+  const hasSearch = query.trim().length > 0;
+  const visibleItems = filteredItems;
 
-  const unitAmount = selectedItem?.price ?? 0
-  const sanitizedManualPaymentName = manualPaymentName.trim()
+  const unitAmount = selectedItem?.price ?? 0;
+  const sanitizedManualPaymentName = manualPaymentName.trim();
   const effectiveQuickPayType: QuickPayItemType | null = selectedItem
-    ? selectedItem.type === 'MANUAL'
+    ? selectedItem.type === "MANUAL"
       ? manualPaymentType
       : selectedItem.type
-    : null
-  const effectiveAccountingType = effectiveQuickPayType ? getAccountingType(effectiveQuickPayType) : 'manual_quick_sale'
-  const effectiveItemName = selectedItem?.type === 'MANUAL' ? sanitizedManualPaymentName || getManualPaymentName(manualPaymentType) : selectedItem?.name ?? ''
-  const effectiveQuantity = selectedItem?.type === 'MANUAL' ? 1 : quantity
+    : null;
+  const effectiveAccountingType = effectiveQuickPayType
+    ? getAccountingType(effectiveQuickPayType)
+    : "manual_quick_sale";
+  const effectiveItemName =
+    selectedItem?.type === "MANUAL"
+      ? sanitizedManualPaymentName || getManualPaymentName(manualPaymentType)
+      : (selectedItem?.name ?? "");
+  const effectiveQuantity = selectedItem?.type === "MANUAL" ? 1 : quantity;
 
   useEffect(() => {
-    const existingViewport = document.querySelector('meta[name="viewport"]')
+    const existingViewport = document.querySelector('meta[name="viewport"]');
     if (existingViewport) {
-      existingViewport.setAttribute('content', 'width=device-width, initial-scale=1.0')
-      return
+      existingViewport.setAttribute(
+        "content",
+        "width=device-width, initial-scale=1.0",
+      );
+      return;
     }
 
-    const meta = document.createElement('meta')
-    meta.name = 'viewport'
-    meta.content = 'width=device-width, initial-scale=1.0'
-    document.head.appendChild(meta)
+    const meta = document.createElement("meta");
+    meta.name = "viewport";
+    meta.content = "width=device-width, initial-scale=1.0";
+    document.head.appendChild(meta);
 
     return () => {
-      meta.remove()
-    }
-  }, [])
+      meta.remove();
+    };
+  }, []);
 
-  const finalAmount = selectedItem?.type === 'MANUAL' ? Number(customAmount || 0) : unitAmount * quantity
+  const finalAmount =
+    selectedItem?.type === "MANUAL"
+      ? Number(customAmount || 0)
+      : unitAmount * quantity;
 
   useEffect(() => {
-    let isMounted = true
+    let isMounted = true;
     async function loadCatalog() {
       if (!storeId) {
-        setError('Missing store ID.')
-        setStatus(null)
-        return
+        setError("Missing store ID.");
+        setStatus(null);
+        return;
       }
       try {
-        const response = await fetch(`${FUNCTION_BASE_URL}/publicQuickPayCatalog?storeId=${encodeURIComponent(storeId)}`)
-        if (!response.ok) throw new Error(`Catalog request failed (${response.status})`)
-        const payload = await response.json() as { items?: QuickPayItem[] }
-        if (!isMounted) return
-        const loadedItems = Array.isArray(payload.items) ? payload.items : []
-        setItems(loadedItems)
-        setStatus(null)
+        const response = await fetch(
+          `${FUNCTION_BASE_URL}/publicQuickPayCatalog?storeId=${encodeURIComponent(storeId)}`,
+        );
+        if (!response.ok)
+          throw new Error(`Catalog request failed (${response.status})`);
+        const payload = (await response.json()) as { items?: QuickPayItem[] };
+        if (!isMounted) return;
+        const loadedItems = Array.isArray(payload.items) ? payload.items : [];
+        setItems(loadedItems);
+        const requestedItem = requestedItemId
+          ? loadedItems.find(
+              (item) =>
+                item.id === requestedItemId || item.slotId === requestedItemId,
+            )
+          : null;
+        if (requestedItem) setSelectedItem(requestedItem);
+        setStatus(null);
       } catch (catalogError) {
-        if (!isMounted) return
-        console.warn('[quick-pay] Catalog load failed', catalogError)
-        setItems([])
-        setStatus(null)
+        if (!isMounted) return;
+        console.warn("[quick-pay] Catalog load failed", catalogError);
+        setItems([]);
+        setStatus(null);
       }
     }
-    if (!shouldShowSuccess) void loadCatalog()
-    return () => { isMounted = false }
-  }, [storeId, shouldShowSuccess])
+    if (!shouldShowSuccess) void loadCatalog();
+    return () => {
+      isMounted = false;
+    };
+  }, [requestedItemId, storeId, shouldShowSuccess]);
 
   async function createCheckout(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
     const cleanCustomer: CustomerDetails = {
       name: customer.name.trim(),
       email: customer.email.trim().toLowerCase(),
       phone: customer.phone.trim(),
-    }
-    if (!selectedItem || !effectiveQuickPayType) return setError('Select what you want to pay for.')
-    if (selectedItem.type === 'MANUAL' && !sanitizedManualPaymentName) return setError('Enter the service or item name.')
-    if (!cleanCustomer.email && !cleanCustomer.phone) return setError('Enter customer phone number. Email is optional.')
-    if (!finalAmount || finalAmount <= 0) return setError('Enter a valid amount.')
+    };
+    if (!selectedItem || !effectiveQuickPayType)
+      return setError("Select what you want to pay for.");
+    if (selectedItem.type === "MANUAL" && !sanitizedManualPaymentName)
+      return setError("Enter the service or item name.");
+    if (!cleanCustomer.email && !cleanCustomer.phone)
+      return setError("Enter customer phone number. Email is optional.");
+    if (!finalAmount || finalAmount <= 0)
+      return setError("Enter a valid amount.");
 
-    setIsSubmitting(true)
-    setStatus(paymentMethod === 'CASH' ? 'Saving cash order…' : 'Preparing secure payment…')
+    setIsSubmitting(true);
+    setStatus(
+      paymentMethod === "CASH"
+        ? "Saving cash order…"
+        : "Preparing secure payment…",
+    );
     try {
-      const reference = `qp_${storeId}_${Date.now()}`
-      const checkoutEmail = cleanCustomer.email || (paymentMethod === 'ONLINE' ? makeFallbackEmail(reference) : '')
-      const checkoutCustomer = { ...cleanCustomer, email: checkoutEmail }
-      const returnStatus = paymentMethod === 'CASH' ? 'cash_pending' : 'success'
-      const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=${encodeURIComponent(returnStatus)}&reference=${encodeURIComponent(reference)}&paymentMethod=${encodeURIComponent(paymentMethod.toLowerCase())}`
-      const accountingType = effectiveAccountingType
-      const manualPaymentCategory = selectedItem.type === 'MANUAL' ? getTypeLabel(manualPaymentType) : null
+      const reference = `qp_${storeId}_${Date.now()}`;
+      const checkoutEmail =
+        cleanCustomer.email ||
+        (paymentMethod === "ONLINE" ? makeFallbackEmail(reference) : "");
+      const checkoutCustomer = { ...cleanCustomer, email: checkoutEmail };
+      const returnStatus =
+        paymentMethod === "CASH" ? "cash_pending" : "success";
+      const returnUrl = `${window.location.origin}/s/${encodeURIComponent(storeId)}?mode=${encodeURIComponent(initialMode)}&status=${encodeURIComponent(returnStatus)}&reference=${encodeURIComponent(reference)}&paymentMethod=${encodeURIComponent(paymentMethod.toLowerCase())}`;
+      const accountingType = effectiveAccountingType;
+      const manualPaymentCategory =
+        selectedItem.type === "MANUAL" ? getTypeLabel(manualPaymentType) : null;
       const body = {
         storeId,
         merchantId: storeId,
         reference,
         clientOrderId: reference,
         amount: finalAmount,
-        currency: 'GHS',
+        currency: "GHS",
         customer: checkoutCustomer,
         customerEmail: checkoutEmail,
         customerName: cleanCustomer.name,
         customerPhone: cleanCustomer.phone,
         returnUrl,
-        sourceChannel: paymentMethod === 'CASH' ? 'quick_pay_cash' : 'quick_pay_qr',
-        sourceLabel: paymentMethod === 'CASH' ? 'Sedifex Quick Pay Cash' : 'Sedifex Quick Pay',
+        sourceChannel:
+          paymentMethod === "CASH" ? "quick_pay_cash" : "quick_pay_qr",
+        sourceLabel:
+          paymentMethod === "CASH"
+            ? "Sedifex Quick Pay Cash"
+            : "Sedifex Quick Pay",
         paymentMethod,
         payment_method: paymentMethod,
-        paymentProvider: paymentMethod === 'CASH' ? 'cash' : 'paystack',
-        payment_provider: paymentMethod === 'CASH' ? 'cash' : 'paystack',
-        paymentCollectionMode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
-        payment_collection_mode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
+        paymentProvider: paymentMethod === "CASH" ? "cash" : "paystack",
+        payment_provider: paymentMethod === "CASH" ? "cash" : "paystack",
+        paymentCollectionMode:
+          paymentMethod === "CASH" ? "cash" : "online_checkout",
+        payment_collection_mode:
+          paymentMethod === "CASH" ? "cash" : "online_checkout",
         quickPayType: effectiveQuickPayType,
         accountingType,
         orderType: accountingType,
-        items: [{
-          item_id: selectedItem.id,
-          itemId: selectedItem.id,
-          name: effectiveItemName,
-          category: manualPaymentCategory || selectedItem.category || null,
-          type: normalizeCheckoutItemType(effectiveQuickPayType),
-          item_type: normalizeCheckoutItemType(effectiveQuickPayType),
-          quickPayType: effectiveQuickPayType,
-          originalQuickPayType: selectedItem.type,
-          accountingType,
-          qty: effectiveQuantity,
-          quantity: effectiveQuantity,
-        }],
-        pricing_snapshot: {
-          pricing_version: 'quick-pay-public-page-v2',
-          currency: 'GHS',
-          subtotal: Math.round(finalAmount * 100),
-          tax_total: 0,
-          final_total: Math.round(finalAmount * 100),
-          items: [{
+        items: [
+          {
             item_id: selectedItem.id,
+            itemId: selectedItem.id,
+            slotId: selectedItem.slotId || requestedSlotId || null,
+            bookingDate: selectedItem.bookingDate || null,
+            bookingTime: selectedItem.bookingTime || null,
             name: effectiveItemName,
             category: manualPaymentCategory || selectedItem.category || null,
-            qty: effectiveQuantity,
-            unit_price: selectedItem.type === 'MANUAL' ? Math.round(finalAmount * 100) : Math.round(unitAmount * 100),
-            line_total: Math.round(finalAmount * 100),
             type: normalizeCheckoutItemType(effectiveQuickPayType),
+            item_type: normalizeCheckoutItemType(effectiveQuickPayType),
             quickPayType: effectiveQuickPayType,
             originalQuickPayType: selectedItem.type,
             accountingType,
-          }],
+            qty: effectiveQuantity,
+            quantity: effectiveQuantity,
+          },
+        ],
+        pricing_snapshot: {
+          pricing_version: "quick-pay-public-page-v2",
+          currency: "GHS",
+          subtotal: Math.round(finalAmount * 100),
+          tax_total: 0,
+          final_total: Math.round(finalAmount * 100),
+          items: [
+            {
+              item_id: selectedItem.id,
+              slotId: selectedItem.slotId || requestedSlotId || null,
+              name: effectiveItemName,
+              category: manualPaymentCategory || selectedItem.category || null,
+              qty: effectiveQuantity,
+              unit_price:
+                selectedItem.type === "MANUAL"
+                  ? Math.round(finalAmount * 100)
+                  : Math.round(unitAmount * 100),
+              line_total: Math.round(finalAmount * 100),
+              type: normalizeCheckoutItemType(effectiveQuickPayType),
+              quickPayType: effectiveQuickPayType,
+              originalQuickPayType: selectedItem.type,
+              accountingType,
+            },
+          ],
         },
         metadata: {
           quickPay: true,
           storeId,
           itemId: selectedItem.id,
+          slotId: selectedItem.slotId || requestedSlotId || null,
+          bookingDate: selectedItem.bookingDate || null,
+          bookingTime: selectedItem.bookingTime || null,
           itemName: effectiveItemName,
           originalItemName: selectedItem.name,
           itemType: effectiveQuickPayType,
           originalItemType: selectedItem.type,
           quickPayType: effectiveQuickPayType,
           originalQuickPayType: selectedItem.type,
-          manualPayment: selectedItem.type === 'MANUAL',
-          manualPaymentName: selectedItem.type === 'MANUAL' ? sanitizedManualPaymentName : undefined,
+          manualPayment: selectedItem.type === "MANUAL",
+          manualPaymentName:
+            selectedItem.type === "MANUAL"
+              ? sanitizedManualPaymentName
+              : undefined,
           manualPaymentCategory,
           paymentMethod,
-          paymentCollectionMode: paymentMethod === 'CASH' ? 'cash' : 'online_checkout',
-          cashCheckout: paymentMethod === 'CASH',
+          paymentCollectionMode:
+            paymentMethod === "CASH" ? "cash" : "online_checkout",
+          cashCheckout: paymentMethod === "CASH",
           customerEmailProvided: Boolean(cleanCustomer.email),
-          generatedCustomerEmail: !cleanCustomer.email && checkoutEmail ? checkoutEmail : undefined,
+          generatedCustomerEmail:
+            !cleanCustomer.email && checkoutEmail ? checkoutEmail : undefined,
           accountingType,
           quantity: effectiveQuantity,
         },
-      }
-      const endpoint = paymentMethod === 'CASH' ? 'integrationCashCheckoutCreate' : 'integrationCheckoutCreate'
+      };
+      const endpoint =
+        paymentMethod === "CASH"
+          ? "integrationCashCheckoutCreate"
+          : "integrationCheckoutCreate";
       const response = await fetch(`${FUNCTION_BASE_URL}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Sedifex-Contract-Version': CONTRACT_VERSION },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sedifex-Contract-Version": CONTRACT_VERSION,
+        },
         body: JSON.stringify(body),
-      })
-      const payload = await response.json().catch(() => null) as { authorizationUrl?: string; checkoutUrl?: string; error?: string; cashCheckout?: boolean } | null
-      if (!response.ok || !payload) throw new Error(payload?.error || `Checkout failed (${response.status})`)
-      if (paymentMethod === 'CASH' || payload.cashCheckout) {
-        window.location.href = returnUrl
-        return
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        authorizationUrl?: string;
+        checkoutUrl?: string;
+        error?: string;
+        cashCheckout?: boolean;
+      } | null;
+      if (!response.ok || !payload)
+        throw new Error(
+          payload?.error || `Checkout failed (${response.status})`,
+        );
+      if (paymentMethod === "CASH" || payload.cashCheckout) {
+        window.location.href = returnUrl;
+        return;
       }
-      const checkoutUrl = payload.authorizationUrl || payload.checkoutUrl
-      if (!checkoutUrl) throw new Error('Checkout URL was not returned.')
-      window.location.href = checkoutUrl
+      const checkoutUrl = payload.authorizationUrl || payload.checkoutUrl;
+      if (!checkoutUrl) throw new Error("Checkout URL was not returned.");
+      window.location.href = checkoutUrl;
     } catch (checkoutError) {
-      console.error('[quick-pay] Checkout failed', checkoutError)
-      setError(checkoutError instanceof Error ? checkoutError.message : 'Unable to create checkout.')
-      setStatus(null)
-      setIsSubmitting(false)
+      console.error("[quick-pay] Checkout failed", checkoutError);
+      setError(
+        checkoutError instanceof Error
+          ? checkoutError.message
+          : "Unable to create checkout.",
+      );
+      setStatus(null);
+      setIsSubmitting(false);
     }
   }
 
   function scrollToCheckout() {
-    document.getElementById('quick-pay-checkout-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document
+      .getElementById("quick-pay-checkout-panel")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function useManualInput() {
-    setSelectedItem(DEMO_ITEMS[0])
-    setQuery('')
-    window.setTimeout(scrollToCheckout, 100)
+    setSelectedItem(DEMO_ITEMS[0]);
+    setQuery("");
+    window.setTimeout(scrollToCheckout, 100);
   }
 
   if (shouldShowSuccess) {
@@ -321,26 +451,39 @@ export default function PublicQuickPayCheckout() {
           <section className="qp-success-card">
             <div className="qp-success-icon">✓</div>
             <p className="qp-eyebrow qp-success-eyebrow">Sedifex Quick Pay</p>
-            <h1 className="qp-success-title">{isCashReturn ? 'Cash order sent to the store' : 'Thank you for your payment'}</h1>
+            <h1 className="qp-success-title">
+              {isCashReturn
+                ? "Cash order sent to the store"
+                : "Thank you for your payment"}
+            </h1>
             <p className="qp-success-copy">
               {isCashReturn
-                ? 'Your cash payment request has been recorded. Please pay the store directly. The store will confirm cash received in Sedifex.'
-                : 'Your payment has been received or is being confirmed. The business will receive your order in Sedifex.'}
+                ? "Your cash payment request has been recorded. Please pay the store directly. The store will confirm cash received in Sedifex."
+                : "Your payment has been received or is being confirmed. The business will receive your order in Sedifex."}
             </p>
             {paymentReference ? (
               <div className="qp-success-reference">
-                <span>{isCashReturn ? 'Cash order reference' : 'Payment reference'}</span>
+                <span>
+                  {isCashReturn ? "Cash order reference" : "Payment reference"}
+                </span>
                 <strong>{paymentReference}</strong>
               </div>
             ) : null}
             <div className="qp-success-actions">
-              <Link className="qp-success-primary" to={`/s/${encodeURIComponent(storeId)}?mode=store`}>Pay for another item</Link>
-              <Link className="qp-success-secondary" to="/">Find another business</Link>
+              <Link
+                className="qp-success-primary"
+                to={`/s/${encodeURIComponent(storeId)}?mode=store`}
+              >
+                Pay for another item
+              </Link>
+              <Link className="qp-success-secondary" to="/">
+                Find another business
+              </Link>
             </div>
           </section>
         </div>
       </main>
-    )
+    );
   }
 
   return (
@@ -349,14 +492,24 @@ export default function PublicQuickPayCheckout() {
         <section className="qp-checkout-hero">
           <p className="qp-eyebrow">Sedifex Quick Pay</p>
           <h1 className="qp-title">Quick payment</h1>
-          <p className="qp-copy">Search an item or use manual input to record a product, service, booking, registration, donation, or course payment.</p>
+          <p className="qp-copy">
+            Search an item or use manual input to record a product, service,
+            booking, registration, donation, or course payment.
+          </p>
 
-          <button type="button" className="qp-pay-button" onClick={useManualInput} style={{ width: '100%', margin: '18px 0 10px' }}>
+          <button
+            type="button"
+            className="qp-pay-button"
+            onClick={useManualInput}
+            style={{ width: "100%", margin: "18px 0 10px" }}
+          >
             Input manually
           </button>
 
           <div className="qp-hero-search">
-            <label className="qp-hero-label" htmlFor="quick-pay-search">Search existing item</label>
+            <label className="qp-hero-label" htmlFor="quick-pay-search">
+              Search existing item
+            </label>
             <div className="qp-hero-input-shell">
               <span className="qp-hero-search-icon">⌕</span>
               <input
@@ -364,12 +517,22 @@ export default function PublicQuickPayCheckout() {
                 type="search"
                 placeholder="Search product, service, booking, course..."
                 value={query}
-                onChange={event => setQuery(event.target.value)}
+                onChange={(event) => setQuery(event.target.value)}
                 className="qp-hero-input"
               />
-              {query ? <button type="button" className="qp-clear-search" onClick={() => setQuery('')}>Clear</button> : null}
+              {query ? (
+                <button
+                  type="button"
+                  className="qp-clear-search"
+                  onClick={() => setQuery("")}
+                >
+                  Clear
+                </button>
+              ) : null}
             </div>
-            <p className="qp-hero-help">Manual input is selected by default for faster staff entry.</p>
+            <p className="qp-hero-help">
+              Manual input is selected by default for faster staff entry.
+            </p>
           </div>
 
           <div className="qp-trust-row">
@@ -381,107 +544,267 @@ export default function PublicQuickPayCheckout() {
 
         <div className="qp-grid">
           <section className="qp-panel qp-search-panel">
-            <button type="button" className="qp-manual-link" onClick={useManualInput} style={{ fontSize: 16, padding: '14px 18px' }}>
+            <button
+              type="button"
+              className="qp-manual-link"
+              onClick={useManualInput}
+              style={{ fontSize: 16, padding: "14px 18px" }}
+            >
               + Input manually
             </button>
             {status ? <p className="qp-status">{status}</p> : null}
-            {!hasSearch ? <p className="qp-status">Use manual input, or search above to select an existing item from the store.</p> : null}
+            {!hasSearch ? (
+              <p className="qp-status">
+                Use manual input, or search above to select an existing item
+                from the store.
+              </p>
+            ) : null}
             {hasSearch ? (
               <div className="qp-items-grid">
-                {visibleItems.map(item => {
-                  const isSelected = selectedItem?.id === item.id
+                {visibleItems.map((item) => {
+                  const isSelected = selectedItem?.id === item.id;
                   return (
-                    <button key={item.id} type="button" className={`qp-item-card ${isSelected ? 'qp-item-card-selected' : ''}`} onClick={() => { setSelectedItem(item); window.setTimeout(scrollToCheckout, 100) }}>
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`qp-item-card ${isSelected ? "qp-item-card-selected" : ""}`}
+                      onClick={() => {
+                        setSelectedItem(item);
+                        window.setTimeout(scrollToCheckout, 100);
+                      }}
+                    >
                       <div className="qp-item-top">
-                        <div className="qp-item-icon">{getItemIcon(item.type)}</div>
+                        <div className="qp-item-icon">
+                          {getItemIcon(item.type)}
+                        </div>
                         <div className="qp-item-main">
                           <h2 className="qp-item-name">{item.name}</h2>
                           <div className="qp-item-meta">
-                            <span className="qp-badge">{getTypeLabel(item.type)}</span>
-                            {item.category ? <span className="qp-badge">{item.category}</span> : null}
+                            <span className="qp-badge">
+                              {getTypeLabel(item.type)}
+                            </span>
+                            {item.category ? (
+                              <span className="qp-badge">{item.category}</span>
+                            ) : null}
                           </div>
                         </div>
-                        <strong className="qp-price">{item.price > 0 ? money(item.price) : 'Custom'}</strong>
+                        <strong className="qp-price">
+                          {item.price > 0 ? money(item.price) : "Custom"}
+                        </strong>
                       </div>
-                      {item.description ? <p className="qp-description">{item.description}</p> : null}
+                      {item.description ? (
+                        <p className="qp-description">{item.description}</p>
+                      ) : null}
                     </button>
-                  )
+                  );
                 })}
-                {visibleItems.length === 0 ? <div className="qp-empty">No item matched your search. Use manual input instead.</div> : null}
+                {visibleItems.length === 0 ? (
+                  <div className="qp-empty">
+                    No item matched your search. Use manual input instead.
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
 
-          <form id="quick-pay-checkout-panel" onSubmit={createCheckout} className="qp-panel qp-payment-panel">
+          <form
+            id="quick-pay-checkout-panel"
+            onSubmit={createCheckout}
+            className="qp-panel qp-payment-panel"
+          >
             <h2 className="qp-payment-title">Payment details</h2>
-            <p className="qp-selected-name">{selectedItem ? effectiveItemName : 'Manual payment request'}</p>
-            {selectedItem?.type === 'MANUAL' ? <p className="qp-manual-note">Type exactly what the customer is paying for.</p> : null}
+            <p className="qp-selected-name">
+              {selectedItem ? effectiveItemName : "Manual payment request"}
+            </p>
+            {selectedItem?.type === "MANUAL" ? (
+              <p className="qp-manual-note">
+                Type exactly what the customer is paying for.
+              </p>
+            ) : null}
             {selectedItem ? (
               <div className="qp-summary">
-                {selectedItem.type === 'MANUAL' ? (
+                {selectedItem.type === "MANUAL" ? (
                   <>
                     <label className="qp-field-label">
                       Category
-                      <select value={manualPaymentType} onChange={event => setManualPaymentType(event.target.value as ManualPaymentType)} className="qp-field">
-                        {MANUAL_PAYMENT_TYPES.map(type => (
-                          <option key={type} value={type}>{getTypeLabel(type)}</option>
+                      <select
+                        value={manualPaymentType}
+                        onChange={(event) =>
+                          setManualPaymentType(
+                            event.target.value as ManualPaymentType,
+                          )
+                        }
+                        className="qp-field"
+                      >
+                        {MANUAL_PAYMENT_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {getTypeLabel(type)}
+                          </option>
                         ))}
                       </select>
                     </label>
                     <label className="qp-field-label">
                       Service / item name
-                      <input type="text" value={manualPaymentName} onChange={event => setManualPaymentName(event.target.value)} className="qp-field" placeholder="E.g. Facial treatment, delivery fee, consultation" required />
+                      <input
+                        type="text"
+                        value={manualPaymentName}
+                        onChange={(event) =>
+                          setManualPaymentName(event.target.value)
+                        }
+                        className="qp-field"
+                        placeholder="E.g. Facial treatment, delivery fee, consultation"
+                        required
+                      />
                     </label>
                     <label className="qp-field-label">
                       Amount to pay
-                      <input type="number" min="1" step="0.01" value={customAmount} onChange={event => setCustomAmount(event.target.value)} className="qp-field" placeholder="Enter amount" />
+                      <input
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        value={customAmount}
+                        onChange={(event) =>
+                          setCustomAmount(event.target.value)
+                        }
+                        className="qp-field"
+                        placeholder="Enter amount"
+                      />
                     </label>
                   </>
                 ) : (
-                  <label className="qp-field-label">Quantity<input type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="qp-field" /></label>
+                  <label className="qp-field-label">
+                    Quantity
+                    <input
+                      type="number"
+                      min="1"
+                      value={quantity}
+                      onChange={(event) =>
+                        setQuantity(
+                          Math.max(1, Number(event.target.value) || 1),
+                        )
+                      }
+                      className="qp-field"
+                    />
+                  </label>
                 )}
-                <div className="qp-total-row"><span className="qp-total-label">Total</span><strong className="qp-total-value">{money(finalAmount || 0)}</strong></div>
+                <div className="qp-total-row">
+                  <span className="qp-total-label">Total</span>
+                  <strong className="qp-total-value">
+                    {money(finalAmount || 0)}
+                  </strong>
+                </div>
               </div>
             ) : null}
             {selectedItem ? (
               <div className="qp-form-fields">
                 <label className="qp-field-label">
                   Payment method
-                  <select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as QuickPayPaymentMethod)} className="qp-field">
+                  <select
+                    value={paymentMethod}
+                    onChange={(event) =>
+                      setPaymentMethod(
+                        event.target.value as QuickPayPaymentMethod,
+                      )
+                    }
+                    className="qp-field"
+                  >
                     <option value="CASH">Pay cash to store</option>
-                    <option value="ONLINE">Pay online with Mobile Money / Card</option>
+                    <option value="ONLINE">
+                      Pay online with Mobile Money / Card
+                    </option>
                   </select>
                 </label>
-                {paymentMethod === 'CASH' ? <p className="qp-manual-note">No Paystack checkout. Sedifex will save this as pending cash until the store confirms cash received.</p> : null}
+                {paymentMethod === "CASH" ? (
+                  <p className="qp-manual-note">
+                    No Paystack checkout. Sedifex will save this as pending cash
+                    until the store confirms cash received.
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <div className="qp-form-fields">
-              <input type="text" placeholder="Customer name" value={customer.name} onChange={event => setCustomer(previous => ({ ...previous, name: event.target.value }))} className="qp-field" />
-              <input type="email" placeholder="Email (optional)" value={customer.email} onChange={event => setCustomer(previous => ({ ...previous, email: event.target.value }))} className="qp-field" />
-              <input type="tel" placeholder="Phone / WhatsApp" value={customer.phone} onChange={event => setCustomer(previous => ({ ...previous, phone: event.target.value }))} className="qp-field" />
+              <input
+                type="text"
+                placeholder="Customer name"
+                value={customer.name}
+                onChange={(event) =>
+                  setCustomer((previous) => ({
+                    ...previous,
+                    name: event.target.value,
+                  }))
+                }
+                className="qp-field"
+              />
+              <input
+                type="email"
+                placeholder="Email (optional)"
+                value={customer.email}
+                onChange={(event) =>
+                  setCustomer((previous) => ({
+                    ...previous,
+                    email: event.target.value,
+                  }))
+                }
+                className="qp-field"
+              />
+              <input
+                type="tel"
+                placeholder="Phone / WhatsApp"
+                value={customer.phone}
+                onChange={(event) =>
+                  setCustomer((previous) => ({
+                    ...previous,
+                    phone: event.target.value,
+                  }))
+                }
+                className="qp-field"
+              />
             </div>
             {error ? <p className="qp-error">{error}</p> : null}
-            <button type="submit" disabled={isSubmitting || !selectedItem} className="qp-pay-button">
+            <button
+              type="submit"
+              disabled={isSubmitting || !selectedItem}
+              className="qp-pay-button"
+            >
               {isSubmitting
-                ? paymentMethod === 'CASH' ? 'Saving cash order…' : 'Opening payment…'
+                ? paymentMethod === "CASH"
+                  ? "Saving cash order…"
+                  : "Opening payment…"
                 : selectedItem
-                  ? paymentMethod === 'CASH' ? `Save cash order ${money(finalAmount || 0)}` : `Pay ${money(finalAmount || 0)}`
-                  : 'Enter payment details'}
+                  ? paymentMethod === "CASH"
+                    ? `Save cash order ${money(finalAmount || 0)}`
+                    : `Pay ${money(finalAmount || 0)}`
+                  : "Enter payment details"}
             </button>
-            <p className="qp-powered">Powered by Sedifex. Cash orders are recorded for store confirmation.</p>
+            <p className="qp-powered">
+              Powered by Sedifex. Cash orders are recorded for store
+              confirmation.
+            </p>
           </form>
         </div>
       </div>
 
       {selectedItem ? (
-        <button type="button" className="qp-mobile-checkout-bar" onClick={scrollToCheckout}>
+        <button
+          type="button"
+          className="qp-mobile-checkout-bar"
+          onClick={scrollToCheckout}
+        >
           <span>
             <strong>{effectiveItemName}</strong>
-            <small>{selectedItem.type === 'MANUAL' ? getTypeLabel(manualPaymentType) : `${quantity} × ${money(unitAmount || finalAmount || 0)}`}</small>
+            <small>
+              {selectedItem.type === "MANUAL"
+                ? getTypeLabel(manualPaymentType)
+                : `${quantity} × ${money(unitAmount || finalAmount || 0)}`}
+            </small>
           </span>
-          <b>{finalAmount > 0 ? `${paymentMethod === 'CASH' ? 'Cash order' : 'Checkout'} ${money(finalAmount)}` : 'Enter amount'}</b>
+          <b>
+            {finalAmount > 0
+              ? `${paymentMethod === "CASH" ? "Cash order" : "Checkout"} ${money(finalAmount)}`
+              : "Enter amount"}
+          </b>
         </button>
       ) : null}
     </main>
-  )
+  );
 }

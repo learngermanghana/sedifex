@@ -35,7 +35,7 @@ const apiKey =
   process.env.SEDIFEX_CHECKOUT_API_KEY ||
   process.env.SEDIFEX_INTEGRATION_API_KEY ||
   process.env.SEDIFEX_INTEGRATION_KEY ||
-  ''
+  "";
 ```
 
 Recommended store id reading order:
@@ -44,7 +44,7 @@ Recommended store id reading order:
 const storeId =
   process.env.SEDIFEX_BOOKING_TARGET_STORE_ID ||
   process.env.SEDIFEX_STORE_ID ||
-  ''
+  "";
 ```
 
 Keep all keys server-side. Never expose these variables with `NEXT_PUBLIC_`.
@@ -129,27 +129,60 @@ Every server-to-server booking and checkout request should include:
 
 ```ts
 const headers = {
-  'Content-Type': 'application/json',
-  Accept: 'application/json',
-  'X-Sedifex-Contract-Version': process.env.SEDIFEX_CONTRACT_VERSION || '2026-04-13',
-  'x-api-key': apiKey,
+  "Content-Type": "application/json",
+  Accept: "application/json",
+  "X-Sedifex-Contract-Version":
+    process.env.SEDIFEX_CONTRACT_VERSION || "2026-04-13",
+  "x-api-key": apiKey,
   Authorization: `Bearer ${apiKey}`,
-}
+};
 ```
 
 Using both `x-api-key` and `Authorization: Bearer` is recommended for compatibility across existing Sedifex integration functions.
 
 ## Correct service booking flow
 
-### Step 1: Load services for the store or branch
+### Step 1: Load services, courses, or upcoming event slots
 
-Server-side request:
+For saved services/products/courses, load the catalog server-side:
 
 ```http
 GET /v1IntegrationProducts?storeId=store_123
 ```
 
 Use the `publicServices` array for services. The selected service id should be the raw Sedifex id, not a display id with a store prefix.
+
+For upcoming events/classes/intakes created from **Bookings → Manage availability**, load availability slots:
+
+```http
+GET /v1IntegrationAvailability?storeId=store_123&from=2026-08-01T00:00:00.000Z&to=2026-12-31T23:59:59.999Z
+```
+
+Important: a store can add a manual event that is **not** backed by a saved service. In that case `serviceId` may look like `manual:<slug>`, and the website must use the slot `id` as `slotId`. Do not hide the event only because the service is not in `publicServices`.
+
+Render only open/public slots, and use the schedule fallback labels:
+
+```ts
+const visibleSlots = slots.filter(
+  (slot) =>
+    slot.status === "open" &&
+    slot.isPublic !== false &&
+    slot.visibleOnWebsite !== false &&
+    slot.seatsRemaining > 0,
+);
+
+const dateLabel =
+  slot.displayDateText ||
+  (slot.startAt
+    ? new Date(slot.startAt).toLocaleDateString()
+    : "Date to be announced");
+
+const timeLabel =
+  slot.displayTimeText ||
+  (slot.startAt && slot.endAt
+    ? `${new Date(slot.startAt).toLocaleTimeString()} - ${new Date(slot.endAt).toLocaleTimeString()}`
+    : "Time to be announced");
+```
 
 ### Step 2: Create the booking first
 
@@ -159,7 +192,7 @@ Endpoint:
 POST /v1IntegrationBookings?storeId=store_123
 ```
 
-Example request:
+Example request for a saved service:
 
 ```json
 {
@@ -191,6 +224,32 @@ Example request:
 ```
 
 Store the returned `bookingId`. Before checkout returns an order id, treat the local identifier as `bookingId`, not `sedifexOrderId`.
+
+Example request for a manual upcoming event slot:
+
+```json
+{
+  "slotId": "slot_solar_energy_program",
+  "serviceName": "Solar Energy Program",
+  "customer": {
+    "name": "Ama Boateng",
+    "phone": "+233201234567",
+    "email": "ama@example.com"
+  },
+  "quantity": 1,
+  "bookingDate": "2026-08-01",
+  "bookingTime": "Time to be announced",
+  "paymentMethod": "paystack_checkout",
+  "paymentAmount": 100,
+  "sourceChannel": "client_website",
+  "attributes": {
+    "source": "manual_upcoming_event",
+    "scheduleStatus": "time_tba"
+  }
+}
+```
+
+When `slotId` is provided, Sedifex resolves the slot's `serviceId`/`serviceName` internally and increments `seatsBooked`, including for manual slots that do not exist in the saved service catalog.
 
 ### Step 3: Create hosted checkout
 
@@ -370,10 +429,10 @@ GET /v1IntegrationProducts?storeId=store_123
 3. Convert and validate once in backend code:
 
 ```ts
-const service = publicServices.find((item) => item.id === selectedServiceId)
-const servicePrice = Number(service?.price ?? service?.unitPrice ?? 0)
+const service = publicServices.find((item) => item.id === selectedServiceId);
+const servicePrice = Number(service?.price ?? service?.unitPrice ?? 0);
 if (!Number.isFinite(servicePrice) || servicePrice <= 0) {
-  throw new Error('Service price is missing from Sedifex service data.')
+  throw new Error("Service price is missing from Sedifex service data.");
 }
 ```
 
@@ -388,8 +447,8 @@ Quick backend check before opening checkout:
 if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
   return res.status(400).json({
     ok: false,
-    message: 'Service price is required before Paystack checkout can open.',
-  })
+    message: "Service price is required before Paystack checkout can open.",
+  });
 }
 ```
 
@@ -400,41 +459,58 @@ Add a route like `/payment/return` that safely reads `reference` and `trxref`, t
 ## Minimal Next.js backend example
 
 ```ts
-const baseUrl = process.env.SEDIFEX_API_BASE_URL || 'https://us-central1-sedifex-web.cloudfunctions.net'
-const storeId = process.env.SEDIFEX_BOOKING_TARGET_STORE_ID || process.env.SEDIFEX_STORE_ID || ''
-const apiKey = process.env.SEDIFEX_BOOKING_API_KEY || process.env.SEDIFEX_CHECKOUT_API_KEY || process.env.SEDIFEX_INTEGRATION_API_KEY || ''
+const baseUrl =
+  process.env.SEDIFEX_API_BASE_URL ||
+  "https://us-central1-sedifex-web.cloudfunctions.net";
+const storeId =
+  process.env.SEDIFEX_BOOKING_TARGET_STORE_ID ||
+  process.env.SEDIFEX_STORE_ID ||
+  "";
+const apiKey =
+  process.env.SEDIFEX_BOOKING_API_KEY ||
+  process.env.SEDIFEX_CHECKOUT_API_KEY ||
+  process.env.SEDIFEX_INTEGRATION_API_KEY ||
+  "";
 
 const headers = {
-  'Content-Type': 'application/json',
-  Accept: 'application/json',
-  'X-Sedifex-Contract-Version': '2026-04-13',
-  'x-api-key': apiKey,
+  "Content-Type": "application/json",
+  Accept: "application/json",
+  "X-Sedifex-Contract-Version": "2026-04-13",
+  "x-api-key": apiKey,
   Authorization: `Bearer ${apiKey}`,
-}
+};
 
-const bookingRes = await fetch(`${baseUrl}/v1IntegrationBookings?storeId=${encodeURIComponent(storeId)}`, {
-  method: 'POST',
-  headers,
-  body: JSON.stringify(bookingPayload),
-})
+const bookingRes = await fetch(
+  `${baseUrl}/v1IntegrationBookings?storeId=${encodeURIComponent(storeId)}`,
+  {
+    method: "POST",
+    headers,
+    body: JSON.stringify(bookingPayload),
+  },
+);
 
-const bookingData = await bookingRes.json()
-const bookingId = bookingData.bookingId || bookingData.id || bookingData.data?.bookingId
+const bookingData = await bookingRes.json();
+const bookingId =
+  bookingData.bookingId || bookingData.id || bookingData.data?.bookingId;
 
-const checkoutRes = await fetch(process.env.SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL || `${baseUrl}/integrationCheckoutCreate`, {
-  method: 'POST',
-  headers,
-  body: JSON.stringify({
-    ...checkoutPayload,
-    storeId,
-    merchantId: storeId,
-    clientOrderId: `BOOKING-${bookingId}`,
-    metadata: { bookingId },
-  }),
-})
+const checkoutRes = await fetch(
+  process.env.SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL ||
+    `${baseUrl}/integrationCheckoutCreate`,
+  {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...checkoutPayload,
+      storeId,
+      merchantId: storeId,
+      clientOrderId: `BOOKING-${bookingId}`,
+      metadata: { bookingId },
+    }),
+  },
+);
 
-const checkoutData = await checkoutRes.json()
-const redirectUrl = checkoutData.authorizationUrl || checkoutData.checkoutUrl
+const checkoutData = await checkoutRes.json();
+const redirectUrl = checkoutData.authorizationUrl || checkoutData.checkoutUrl;
 ```
 
 ## Deployment checklist for a new store
