@@ -310,9 +310,9 @@ function doPost(e) {
       } else if (oldStatus !== 'completed' && newStatus === 'completed') {
         sendOnce_(sheet, row, p, 'completion', 'completion_sent_at');
       } else if (apptChanged) {
-        sendImmediateEmail_(sheet, row, p, 'reschedule');
+        sendEmailAndRecordError_(sheet, row, p, 'reschedule');
       } else if (detailsChanged) {
-        sendImmediateEmail_(sheet, row, p, 'update');
+        sendEmailAndRecordError_(sheet, row, p, 'update');
       }
 
       return json_(200, { ok: true, action: 'updated', row: row, bookingId: p.booking_id });
@@ -343,11 +343,20 @@ function processScheduledMessages() {
     const row = objFromRow_(r);
     const rowNum = idx + 2;
     const bookingStatus = canonicalBookingStatus_(row);
+    const paymentStatus = canonicalPaymentStatus_(row);
 
     if (bookingStatus === 'cancelled') return;
+
+    if (paymentStatus === 'partial') {
+      if (row.customer_email && !row.partial_payment_sent_at) {
+        sendOnce_(sheet, rowNum, row, 'partial_payment_received', 'partial_payment_sent_at');
+      }
+      return;
+    }
+
     if (bookingStatus !== 'confirmed' && bookingStatus !== 'completed') return;
-    if (canonicalPaymentStatus_(row) !== 'confirmed') return;
-    if (!row.customer_email || !row.customer_name || !row.appointment_iso) return;
+    if (paymentStatus !== 'confirmed') return;
+    if (!row.customer_email || !row.appointment_iso) return;
 
     const appt = new Date(row.appointment_iso);
     if (isNaN(appt)) return;
@@ -444,9 +453,7 @@ function handleStateEmails_(sheet, rowNum, row, oldRow) {
   }
 
   if (paymentStatus === 'partial') {
-    if (CONFIG.sendInitialBookingReceivedEmail) {
-      sendOnce_(sheet, rowNum, row, 'partial_payment_received', 'partial_payment_sent_at');
-    }
+    sendOnce_(sheet, rowNum, row, 'partial_payment_received', 'partial_payment_sent_at');
     return;
   }
 
@@ -522,13 +529,21 @@ function sendOnce_(sheet, rowNum, row, stage) {
   const stampCols = Array.prototype.slice.call(arguments, 4).filter(Boolean);
   if (stampCols.length && row[stampCols[0]]) return;
 
-  sendImmediateEmail_(sheet, rowNum, row, stage);
+  const sent = sendEmailAndRecordError_(sheet, rowNum, row, stage);
+  if (sent && stampCols.length) stamp_(sheet, rowNum, stampCols);
+}
 
-  if (stampCols.length) stamp_(sheet, rowNum, stampCols);
+function sendEmailAndRecordError_(sheet, rowNum, row, stage) {
+  try {
+    return sendImmediateEmail_(sheet, rowNum, row, stage);
+  } catch (err) {
+    recordLastError_(sheet, rowNum, err);
+    return false;
+  }
 }
 
 function sendImmediateEmail_(sheet, rowNum, row, stage) {
-  if (!row.customer_email || !row.customer_name) return;
+  if (!row.customer_email) return false;
 
   const msg = messageForStage_(row, stage);
   const branding = getBranding_();
@@ -547,6 +562,13 @@ function sendImmediateEmail_(sheet, rowNum, row, stage) {
 
   GmailApp.sendEmail(row.customer_email, msg.subject, msg.text, mailOptions);
 
+  sheet.getRange(rowNum, COLS.indexOf('updated_at') + 1).setValue(new Date().toISOString());
+  sheet.getRange(rowNum, COLS.indexOf('last_error') + 1).setValue('');
+  return true;
+}
+
+function recordLastError_(sheet, rowNum, err) {
+  sheet.getRange(rowNum, COLS.indexOf('last_error') + 1).setValue(String(err && err.message ? err.message : err));
   sheet.getRange(rowNum, COLS.indexOf('updated_at') + 1).setValue(new Date().toISOString());
 }
 
@@ -698,7 +720,7 @@ function emailCopyForStage_(row, stage) {
       badge: 'Partial payment',
       badgeBg: '#ecfccb',
       badgeColor: '#3f6212',
-      body: 'Hi ' + name + ', we have received a partial payment for ' + service + '. Your booking date is ' + when + '.',
+      body: 'Hi ' + name + ', we have received your deposit for ' + service + '. Your booking date is ' + when + '. Please review the payment details below for the full amount, deposit paid, and outstanding balance.',
     },
 
     payment_confirmed: {
@@ -780,11 +802,14 @@ function renderAppointmentSummaryText_(row) {
 
 function renderPaymentSummaryText_(row) {
   const parts = [];
-  parts.push('Payment status: ' + titleCase_(canonicalPaymentStatus_(row)));
+  const status = canonicalPaymentStatus_(row);
+  const amountLabel = status === 'partial' ? 'Full amount' : 'Amount paid';
+
+  parts.push('Payment status: ' + titleCase_(status));
   if (row.payment_method) parts.push('Method: ' + row.payment_method);
-  if (asCurrency_(row.payment_amount)) parts.push('Amount paid: ' + asCurrency_(row.payment_amount));
-  if (asCurrency_(row.deposit_amount)) parts.push('Deposit: ' + asCurrency_(row.deposit_amount));
-  if (asCurrency_(row.amount_outstanding)) parts.push('Outstanding: ' + asCurrency_(row.amount_outstanding));
+  if (asCurrency_(row.payment_amount)) parts.push(amountLabel + ': ' + asCurrency_(row.payment_amount));
+  if (asCurrency_(row.deposit_amount)) parts.push('Deposit paid: ' + asCurrency_(row.deposit_amount));
+  if (asCurrency_(row.amount_outstanding)) parts.push('Amount outstanding: ' + asCurrency_(row.amount_outstanding));
   if (row.payment_reference) parts.push('Reference: ' + row.payment_reference);
   return parts.join('\n');
 }
@@ -804,12 +829,14 @@ function renderAppointmentSummaryHtml_(row) {
 
 function renderPaymentSummaryHtml_(row) {
   const rows = [];
+  const status = canonicalPaymentStatus_(row);
+  const amountLabel = status === 'partial' ? 'Full amount' : 'Amount paid';
 
-  rows.push(summaryRowHtml_('Payment status', titleCase_(canonicalPaymentStatus_(row))));
+  rows.push(summaryRowHtml_('Payment status', titleCase_(status)));
   if (row.payment_method) rows.push(summaryRowHtml_('Method', row.payment_method));
-  if (asCurrency_(row.payment_amount)) rows.push(summaryRowHtml_('Amount paid', asCurrency_(row.payment_amount)));
-  if (asCurrency_(row.deposit_amount)) rows.push(summaryRowHtml_('Deposit', asCurrency_(row.deposit_amount)));
-  if (asCurrency_(row.amount_outstanding)) rows.push(summaryRowHtml_('Outstanding', asCurrency_(row.amount_outstanding)));
+  if (asCurrency_(row.payment_amount)) rows.push(summaryRowHtml_(amountLabel, asCurrency_(row.payment_amount)));
+  if (asCurrency_(row.deposit_amount)) rows.push(summaryRowHtml_('Deposit paid', asCurrency_(row.deposit_amount)));
+  if (asCurrency_(row.amount_outstanding)) rows.push(summaryRowHtml_('Amount outstanding', asCurrency_(row.amount_outstanding)));
   if (row.payment_reference) rows.push(summaryRowHtml_('Reference', row.payment_reference));
 
   if (!rows.length) return '';
