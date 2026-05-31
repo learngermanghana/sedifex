@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
-import { deriveOnlineOrderStatusFromBooking, normalizeBookingStatusFromRecord, normalizePaymentStatusFromRecord, orderStatusLabel, paymentStatusLabel } from '../lib/bookingStatus'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveCanonicalOrderStatus, deriveOnlineOrderStatusFromBooking, normalizeBookingStatusFromRecord, normalizePaymentStatusFromRecord, orderStatusLabel, paymentStatusLabel } from '../lib/bookingStatus'
 
 type OrderTab = 'all' | 'pending' | 'cash' | 'online-paid' | 'services' | 'products'
 type OrderCollection = 'integrationOrders' | 'integrationBookings' | 'cashOrders'
@@ -28,6 +28,7 @@ type OrderRecord = {
   cashConfirmed: boolean
   sourceLabel: string
   createdAt: Date | null
+  updatedAt: Date | null
   recordType: string
   itemType: 'product' | 'service' | 'course' | 'manual'
   storeOnly: boolean
@@ -173,16 +174,11 @@ function mapOrder(id: string, collectionName: OrderCollection, source: Record<st
   const itemType = readItemType(source, collectionName, recordType)
 
   const createdAt = toDate(source.createdAtServer ?? source.createdAt ?? source.created_at ?? source.orderDate ?? source.order_date ?? source.createdAtIso)
+  const updatedAt = toDate(source.updatedAt ?? source.updated_at ?? source.paymentUpdatedAt ?? source.payment_updated_at)
   const bookingId = asText(source.booking_id ?? source.bookingId ?? source.booking_id_ref, collectionName === 'integrationBookings' ? id : '')
   const bookingStatus = normalizeBookingStatusFromRecord(source)
   const paymentStatus = normalizePaymentStatusFromRecord(source)
-  const rawOrderStatus = asText(source.orderStatus ?? source.order_status, '')
-  const rawOrderStatusKey = rawOrderStatus.toLowerCase().replace(/[\s-]+/g, '_')
-  const orderStatus = collectionName === 'integrationBookings'
-    ? deriveOnlineOrderStatusFromBooking(bookingStatus)
-    : bookingId && ['paid', 'success', 'captured', 'confirmed'].includes(rawOrderStatusKey)
-      ? deriveOnlineOrderStatusFromBooking(bookingStatus)
-      : rawOrderStatus || (bookingId ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending')
+  const orderStatus = String(deriveCanonicalOrderStatus(source, bookingId ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending'))
 
   return {
     id,
@@ -205,6 +201,7 @@ function mapOrder(id: string, collectionName: OrderCollection, source: Record<st
     cashConfirmed: asBoolean(source.cashConfirmed ?? cashPayment.cashConfirmed, false),
     sourceLabel: readSourceLabel(source, collectionName),
     createdAt,
+    updatedAt,
     recordType,
     itemType,
     storeOnly: collectionName === 'cashOrders' || asBoolean(source.storeOnly, false),
@@ -261,7 +258,7 @@ function mergeBookingStatusIntoOrder(order: OrderRecord, booking: OrderRecord): 
     ...order,
     bookingId: order.bookingId || booking.bookingId || booking.id,
     paymentStatus: booking.paymentStatus || order.paymentStatus,
-    orderStatus: booking.orderStatus || order.orderStatus,
+    orderStatus: String(deriveCanonicalOrderStatus({ bookingStatus: booking.orderStatus, paymentStatus: booking.paymentStatus, orderStatus: order.orderStatus }, order.orderStatus)),
     fulfillmentStatus: booking.fulfillmentStatus || order.fulfillmentStatus,
     amount: booking.amount || order.amount,
     itemName: booking.itemName || order.itemName,
@@ -422,13 +419,21 @@ export default function MarketplaceOrdersV2({ compactHeader = false }: { compact
   const allRecords = useMemo(() => {
     const bookingById = new Map<string, OrderRecord>()
     bookings.forEach(booking => bookingById.set(booking.bookingId || booking.id, booking))
-    const mergedOrders = orders.map(order => {
+    const deduped = new Map<string, OrderRecord>()
+    const addRecord = (record: OrderRecord) => {
+      const key = record.collectionName === 'cashOrders'
+        ? `cash-${record.id}`
+        : canonicalBookingOrderKey({ booking_id: record.bookingId, payment_reference: record.reference }, record.id)
+      const existing = deduped.get(key)
+      deduped.set(key, existing ? chooseMoreCompleteRecord(existing, record) : record)
+    }
+    orders.forEach(order => {
       const matchingBooking = order.bookingId ? bookingById.get(order.bookingId) : undefined
-      return matchingBooking ? mergeBookingStatusIntoOrder(order, matchingBooking) : order
+      addRecord(matchingBooking ? mergeBookingStatusIntoOrder(order, matchingBooking) : order)
     })
-    const orderBookingIds = new Set(mergedOrders.map(order => order.bookingId).filter(Boolean))
-    const standaloneBookings = bookings.filter(booking => !orderBookingIds.has(booking.bookingId || booking.id))
-    return [...mergedOrders, ...standaloneBookings, ...cashOrders].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    bookings.forEach(booking => addRecord(booking))
+    cashOrders.forEach(addRecord)
+    return Array.from(deduped.values()).sort((a, b) => ((b.updatedAt ?? b.createdAt)?.getTime() ?? 0) - ((a.updatedAt ?? a.createdAt)?.getTime() ?? 0))
   }, [bookings, cashOrders, orders])
 
   const stats = useMemo(() => ({

@@ -4,7 +4,7 @@ import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
-import { deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveCanonicalOrderStatus, deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type BusinessSaleRow = {
   id: string
@@ -22,6 +22,7 @@ type BusinessSaleRow = {
   orderStatus: string
   settlementScope: 'store_only' | 'sedifex_settlement' | 'pos'
   createdAt: Date | null
+  updatedAt: Date | null
 }
 
 function firstItem(data: Record<string, unknown>) {
@@ -101,6 +102,7 @@ function mapPosSale(id: string, data: Record<string, unknown>): BusinessSaleRow 
     orderStatus: asText(data.orderStatus ?? data.status, 'completed'),
     settlementScope: 'pos',
     createdAt: toDate(data.createdAt ?? data.saleDate ?? data.updatedAt),
+    updatedAt: toDate(data.updatedAt ?? data.updated_at),
   }
 }
 
@@ -111,7 +113,7 @@ function mapIntegrationOrder(id: string, data: Record<string, unknown>, type: 'o
   const storeOnly = data.storeOnly === true || data.excludedFromSedifexSettlement === true
   const reportFields = deriveReportPaymentFields(data)
   const bookingStatus = normalizeBookingStatusFromRecord(data)
-  const orderStatus = type === 'booking' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : asText(data.orderStatus ?? data.order_status ?? data.bookingStatus ?? data.status, 'pending')
+  const orderStatus = String(deriveCanonicalOrderStatus(data, type === 'booking' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending'))
   return {
     id: `${type}-${id}`,
     type,
@@ -128,6 +130,7 @@ function mapIntegrationOrder(id: string, data: Record<string, unknown>, type: 'o
     orderStatus,
     settlementScope: storeOnly ? 'store_only' : 'sedifex_settlement',
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
+    updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
   }
 }
 
@@ -150,6 +153,7 @@ function mapCashOrder(id: string, data: Record<string, unknown>): BusinessSaleRo
     orderStatus: asText(data.orderStatus ?? data.order_status, 'awaiting_cash_confirmation'),
     settlementScope: 'store_only',
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
+    updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
   }
 }
 
@@ -194,19 +198,13 @@ export default function SalesCashReport() {
   }, [storeId])
 
   const rows = useMemo(() => {
-    const rowsByBookingId = new Map<string, BusinessSaleRow>()
-    onlineRows.forEach(row => {
-      if (row.bookingId) rowsByBookingId.set(row.bookingId, row)
+    const rowsByKey = new Map<string, BusinessSaleRow>()
+    ;[...onlineRows, ...bookingRows].forEach(row => {
+      const key = canonicalBookingOrderKey({ booking_id: row.bookingId, payment_reference: row.reference }, row.id)
+      const existing = rowsByKey.get(key)
+      rowsByKey.set(key, existing ? chooseMoreCompleteRecord(existing, { ...existing, ...row, id: row.bookingId ? `booking-${row.bookingId}` : row.id }) : row)
     })
-    const mergedOnlineRows = onlineRows.filter(row => !row.bookingId)
-    bookingRows.forEach(row => {
-      if (!row.bookingId) {
-        mergedOnlineRows.push(row)
-        return
-      }
-      rowsByBookingId.set(row.bookingId, { ...rowsByBookingId.get(row.bookingId), ...row, id: `booking-${row.bookingId}` })
-    })
-    return [...posRows, ...mergedOnlineRows, ...Array.from(rowsByBookingId.values()), ...cashRows]
+    return [...posRows, ...Array.from(rowsByKey.values()), ...cashRows]
       .filter(row => inRange(row.createdAt, range))
     .filter(row => typeFilter === 'all' || row.type === typeFilter)
     .filter(row => {

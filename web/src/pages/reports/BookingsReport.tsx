@@ -4,11 +4,12 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
-import { deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type BookingRow = {
   id: string
   reference: string
+  bookingId: string
   serviceName: string
   recordType: string
   customerName: string
@@ -33,6 +34,7 @@ type BookingRow = {
   amountReceived: number
   amountOutstanding: number
   createdAt: Date | null
+  updatedAt: Date | null
 }
 
 type SummaryCard = {
@@ -76,6 +78,7 @@ function mapBooking(id: string, data: Record<string, unknown>, sourcePath: 'root
   return {
     id,
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
+    bookingId: asText(data.booking_id ?? data.bookingId, id),
     serviceName: asText(data.serviceName ?? data.internalServiceName ?? booking.serviceName ?? data.itemName ?? data.productName, 'Service booking'),
     recordType: asText(data.recordType ?? data.listingType, 'booking'),
     customerName: asText(customer.name ?? data.customerName ?? data.name ?? data.fullName, 'Customer'),
@@ -100,6 +103,7 @@ function mapBooking(id: string, data: Record<string, unknown>, sourcePath: 'root
     amountReceived: reportFields.amountReceived,
     amountOutstanding: reportFields.amountOutstanding,
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
+    updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
   }
 }
 
@@ -270,9 +274,12 @@ export default function BookingsReport() {
 
   const bookings = useMemo(() => {
     const merged = new Map<string, BookingRow>()
-    rootBookings.forEach(row => merged.set(row.id, row))
-    storeBookings.forEach(row => merged.set(row.id, { ...merged.get(row.id), ...row, sourcePath: merged.has(row.id) ? 'store' : row.sourcePath }))
-    return Array.from(merged.values()).sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    ;[...rootBookings, ...storeBookings].forEach(row => {
+      const key = canonicalBookingOrderKey({ booking_id: row.bookingId, payment_reference: row.reference }, row.id)
+      const existing = merged.get(key)
+      merged.set(key, existing ? chooseMoreCompleteRecord(existing, { ...existing, ...row, sourcePath: row.sourcePath }) : row)
+    })
+    return Array.from(merged.values()).sort((a, b) => ((b.updatedAt ?? b.createdAt)?.getTime() ?? 0) - ((a.updatedAt ?? a.createdAt)?.getTime() ?? 0))
   }, [rootBookings, storeBookings])
 
   const filtered = useMemo(() => bookings.filter(booking => {

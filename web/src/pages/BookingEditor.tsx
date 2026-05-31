@@ -431,20 +431,26 @@ export default function BookingEditor() {
         deposit_amount: reportFields.depositAmount,
         updatedAt: serverTimestamp(),
       }
-      const rootOrderBySnakeQuery = query(collection(db, 'integrationOrders'), where('booking_id', '==', targetId))
-      const rootOrderByCamelQuery = query(collection(db, 'integrationOrders'), where('bookingId', '==', targetId))
-      const storeOrderBySnakeQuery = query(collection(db, 'stores', storeId, 'integrationOrders'), where('booking_id', '==', targetId))
-      const storeOrderByCamelQuery = query(collection(db, 'stores', storeId, 'integrationOrders'), where('bookingId', '==', targetId))
-      const [rootSnakeSnap, rootCamelSnap, storeSnakeSnap, storeCamelSnap, rootIdSnap, storeIdSnap] = await Promise.all([
-        getDocs(rootOrderBySnakeQuery),
-        getDocs(rootOrderByCamelQuery),
-        getDocs(storeOrderBySnakeQuery),
-        getDocs(storeOrderByCamelQuery),
+      const paymentReference = form.paymentReference.trim()
+      const orderQueries = [
+        query(collection(db, 'integrationOrders'), where('booking_id', '==', targetId)),
+        query(collection(db, 'integrationOrders'), where('bookingId', '==', targetId)),
+        query(collection(db, 'stores', storeId, 'integrationOrders'), where('booking_id', '==', targetId)),
+        query(collection(db, 'stores', storeId, 'integrationOrders'), where('bookingId', '==', targetId)),
+        ...(paymentReference ? [
+          query(collection(db, 'integrationOrders'), where('payment_reference', '==', paymentReference)),
+          query(collection(db, 'integrationOrders'), where('paymentReference', '==', paymentReference)),
+          query(collection(db, 'stores', storeId, 'integrationOrders'), where('payment_reference', '==', paymentReference)),
+          query(collection(db, 'stores', storeId, 'integrationOrders'), where('paymentReference', '==', paymentReference)),
+        ] : []),
+      ]
+      const [orderSnapshots, rootIdSnap, storeIdSnap] = await Promise.all([
+        Promise.all(orderQueries.map(orderQuery => getDocs(orderQuery))),
         getDoc(doc(db, 'integrationOrders', targetId)),
         getDoc(doc(db, 'stores', storeId, 'integrationOrders', targetId)),
       ])
       const orderRefs = new Map<string, DocumentReference<DocumentData>>()
-      ;[rootSnakeSnap, rootCamelSnap, storeSnakeSnap, storeCamelSnap].forEach(snapshot => {
+      orderSnapshots.forEach(snapshot => {
         snapshot.docs.forEach(orderDoc => orderRefs.set(orderDoc.ref.path, orderDoc.ref))
       })
       if (rootIdSnap.exists()) orderRefs.set(rootIdSnap.ref.path, rootIdSnap.ref)

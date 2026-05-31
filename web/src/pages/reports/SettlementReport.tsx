@@ -3,7 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
-import { deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveCanonicalOrderStatus, deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type SettlementRow = {
   id: string
@@ -21,6 +21,7 @@ type SettlementRow = {
   currency: string
   paymentStatus: string
   orderStatus: string
+  updatedAt: Date | null
   paymentCollectionMode: string
   subaccountCode: string
   splitEnabled: boolean
@@ -168,7 +169,7 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
   const reportFields = deriveReportPaymentFields(data)
   const paymentStatus = reportFields.paymentStatus
   const bookingStatus = normalizeBookingStatusFromRecord(data)
-  const orderStatus = collectionName === 'integrationBookings' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : asText(data.orderStatus ?? data.order_status ?? data.bookingStatus, 'pending')
+  const orderStatus = String(deriveCanonicalOrderStatus(data, collectionName === 'integrationBookings' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending'))
   const split = readPaystackSplit(data)
   return {
     id,
@@ -191,6 +192,7 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
     splitEnabled: split.enabled,
     transactionCharge: split.transactionCharge,
     createdAt: toDate(data.createdAtServer ?? data.createdAt),
+    updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
   }
 }
 
@@ -231,19 +233,13 @@ export default function SettlementReport() {
   }, [storeId])
 
   const rows = useMemo(() => {
-    const rowsByBookingId = new Map<string, SettlementRow>()
-    orders.forEach(row => {
-      if (row.bookingId) rowsByBookingId.set(row.bookingId, row)
+    const rowsByKey = new Map<string, SettlementRow>()
+    ;[...orders, ...bookings].forEach(row => {
+      const key = canonicalBookingOrderKey({ booking_id: row.bookingId, payment_reference: row.reference }, row.id)
+      const existing = rowsByKey.get(key)
+      rowsByKey.set(key, existing ? chooseMoreCompleteRecord(existing, { ...existing, ...row, id: row.bookingId || existing.bookingId || row.id }) : row)
     })
-    const mergedRows = orders.filter(row => !row.bookingId)
-    bookings.forEach(row => {
-      if (!row.bookingId) {
-        mergedRows.push(row)
-        return
-      }
-      rowsByBookingId.set(row.bookingId, { ...rowsByBookingId.get(row.bookingId), ...row, id: row.bookingId })
-    })
-    return [...mergedRows, ...Array.from(rowsByBookingId.values())]
+    return Array.from(rowsByKey.values())
       .filter(row => inRange(row, range))
       .filter(row => source === 'all' || row.sourceChannel === source)
       .filter(row => paymentView === 'all' || (paymentView === 'online' ? row.paymentCollectionMode === 'online_checkout' : row.paymentCollectionMode === paymentView))
