@@ -34,7 +34,11 @@
 
 .public-customer-intake h1 {
   margin: 0;
-  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-size: clamp(1.7rem, 4vw, 2.35rem);
+  line-height: 1.12;
+  color: #0f172a;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 .public-customer-intake--qr .public-customer-intake__headline {
@@ -71,6 +75,12 @@
   border-radius: 0.65rem;
   padding: 0.7rem 0.8rem;
   font: inherit;
+}
+
+.public-customer-intake__form input::placeholder,
+.public-customer-intake__form textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
 }
 
 .public-customer-intake__status {
