@@ -4,6 +4,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type BookingRow = {
   id: string
@@ -29,6 +30,8 @@ type BookingRow = {
   slotStartAt: string
   slotEndAt: string
   amount: number
+  amountReceived: number
+  amountOutstanding: number
   createdAt: Date | null
 }
 
@@ -68,7 +71,8 @@ function mapBooking(id: string, data: Record<string, unknown>, sourcePath: 'root
   const booking = getNestedObject(data, 'booking')
   const payment = getNestedObject(data, 'payment')
   const sourceChannel = normalizeSourceChannel(data.sourceChannel ?? data.source_channel ?? data.source)
-  const paymentStatus = payment.confirmed === true ? 'paid' : normalizeStatus(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending')
+  const reportFields = deriveReportPaymentFields(data)
+  const paymentStatus = reportFields.paymentStatus
   return {
     id,
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
@@ -82,7 +86,7 @@ function mapBooking(id: string, data: Record<string, unknown>, sourcePath: 'root
     bookingDate: asText(data.bookingDate ?? data.date ?? booking.preferredDate ?? booking.date, '—'),
     bookingTime: asText(data.bookingTime ?? data.time ?? booking.preferredTime ?? booking.time, '—'),
     paymentStatus,
-    bookingStatus: normalizeStatus(data.bookingStatus ?? data.status, 'pending'),
+    bookingStatus: normalizeBookingStatusFromRecord(data),
     syncStatus: normalizeStatus(data.syncStatus ?? data.sync_status, 'not_ready'),
     syncReason: asText(data.syncReason ?? data.sync_reason, '—'),
     reminderStatus: readReminderStatus(data),
@@ -92,7 +96,9 @@ function mapBooking(id: string, data: Record<string, unknown>, sourcePath: 'root
     registrationStatus: asText(data.registrationStatus, '—'),
     slotStartAt: asText(data.startAt ?? booking.startAt, '—'),
     slotEndAt: asText(data.endAt ?? booking.endAt, '—'),
-    amount: asNumber(payment.amount ?? data.paymentAmount ?? data.amount ?? data.total, 0),
+    amount: reportFields.totalAmount || asNumber(payment.amount ?? data.paymentAmount ?? data.amount ?? data.total, 0),
+    amountReceived: reportFields.amountReceived,
+    amountOutstanding: reportFields.amountOutstanding,
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
   }
 }
@@ -221,8 +227,9 @@ function BookingCard({ booking }: { booking: BookingRow }) {
           </div>
           <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Amount</p>
-              <p className="text-xl font-bold text-slate-950">{formatMoney(booking.amount)}</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Received / Outstanding</p>
+              <p className="text-xl font-bold text-slate-950">{formatMoney(booking.amountReceived)}</p>
+              <p className="text-xs text-slate-500">Balance: {formatMoney(booking.amountOutstanding)}</p>
             </div>
             <Link className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5" to={`/bookings/${booking.id}`}>
               Open
@@ -286,6 +293,8 @@ export default function BookingsReport() {
     syncPending: filtered.filter(booking => booking.syncStatus === 'pending').length,
     synced: filtered.filter(booking => booking.syncStatus === 'synced').length,
     value: filtered.reduce((sum, booking) => sum + booking.amount, 0),
+    received: filtered.reduce((sum, booking) => sum + booking.amountReceived, 0),
+    outstanding: filtered.reduce((sum, booking) => sum + booking.amountOutstanding, 0),
   }), [filtered])
 
   const summaryCards: SummaryCard[] = [
@@ -294,7 +303,7 @@ export default function BookingsReport() {
     { label: 'Sync pending', value: totals.syncPending, helper: 'Waiting for App Script sync', tone: '#a855f7' },
     { label: 'Booking value', value: formatMoney(totals.value), helper: 'Total value from filtered rows', tone: '#0f766e' },
     { label: 'Pending', value: totals.pending, helper: 'Needs confirmation or payment review', tone: '#f97316' },
-    { label: 'Paid', value: totals.paid, helper: 'Payment marked as paid or successful', tone: '#059669' },
+    { label: 'Received', value: formatMoney(totals.received), helper: 'Paid revenue received; partial bookings only count deposits', tone: '#059669' },
     { label: 'Cancelled', value: totals.cancelled, helper: 'Cancelled booking records', tone: '#ef4444' },
     { label: 'Completed', value: totals.completed, helper: 'Finished booking records', tone: '#2563eb' },
   ]
@@ -319,6 +328,8 @@ export default function BookingsReport() {
       cancelledAt: formatDate(booking.cancelledAt),
       completedAt: formatDate(booking.completedAt),
       amount: booking.amount,
+      amountReceived: booking.amountReceived,
+      amountOutstanding: booking.amountOutstanding,
       createdAt: formatDate(booking.createdAt),
     })))
   }
@@ -345,6 +356,8 @@ export default function BookingsReport() {
         syncStatus: booking.syncStatus,
         reminderStatus: booking.reminderStatus,
         amount: booking.amount,
+        amountReceived: booking.amountReceived,
+        amountOutstanding: booking.amountOutstanding,
         createdAt: formatDate(booking.createdAt),
       })),
     })

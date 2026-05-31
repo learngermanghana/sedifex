@@ -4,12 +4,14 @@ import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
+import { deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type BusinessSaleRow = {
   id: string
   type: 'pos' | 'online' | 'booking' | 'cash'
   label: string
   reference: string
+  bookingId: string
   customerName: string
   customerContact: string
   itemName: string
@@ -88,6 +90,7 @@ function mapPosSale(id: string, data: Record<string, unknown>): BusinessSaleRow 
     type: 'pos',
     label: 'POS / Sell',
     reference: asText(data.receiptNumber ?? data.reference ?? data.saleId, id),
+    bookingId: '',
     customerName: asText(customer.name ?? data.customerName, 'Walk-in customer'),
     customerContact: asText(customer.phone ?? customer.email ?? data.customerPhone ?? data.customerEmail, ''),
     itemName: asText(first.name ?? first.itemName ?? data.itemName, 'POS sale'),
@@ -106,19 +109,23 @@ function mapIntegrationOrder(id: string, data: Record<string, unknown>, type: 'o
   const payment = getNestedObject(data, 'payment')
   const first = firstItem(data)
   const storeOnly = data.storeOnly === true || data.excludedFromSedifexSettlement === true
+  const reportFields = deriveReportPaymentFields(data)
+  const bookingStatus = normalizeBookingStatusFromRecord(data)
+  const orderStatus = type === 'booking' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : asText(data.orderStatus ?? data.order_status ?? data.bookingStatus ?? data.status, 'pending')
   return {
     id: `${type}-${id}`,
     type,
     label: type === 'booking' ? 'Booking / Service' : 'Online order',
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
+    bookingId: asText(data.booking_id ?? data.bookingId, type === 'booking' ? id : ''),
     customerName: asText(customer.name ?? data.customerName ?? data.name, 'Customer'),
     customerContact: asText(customer.phone ?? customer.email ?? data.customerPhone ?? data.customerEmail ?? data.phone ?? data.email, ''),
     itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? first.name ?? first.itemName ?? first.productName, type === 'booking' ? 'Service booking' : 'Online order'),
-    amount: readAmount(data),
+    amount: reportFields.amountReceived,
     currency: asText(payment.currency ?? data.currency, 'GHS'),
     paymentMethod: asText(data.paymentCollectionMode ?? data.paymentMethod ?? data.payment_method ?? payment.mode, 'online_checkout'),
-    paymentStatus: asText(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending'),
-    orderStatus: asText(data.orderStatus ?? data.order_status ?? data.bookingStatus ?? data.status, 'pending'),
+    paymentStatus: reportFields.paymentStatus,
+    orderStatus,
     settlementScope: storeOnly ? 'store_only' : 'sedifex_settlement',
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
   }
@@ -132,6 +139,7 @@ function mapCashOrder(id: string, data: Record<string, unknown>): BusinessSaleRo
     type: 'cash',
     label: 'Store cash / Manual',
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference, id),
+    bookingId: '',
     customerName: asText(customer.name ?? data.customerName, 'Customer'),
     customerContact: asText(customer.phone ?? customer.email ?? data.customerPhone ?? data.customerEmail, ''),
     itemName: asText(data.itemName ?? data.serviceName ?? data.productName ?? first.name ?? first.itemName, 'Manual cash sale'),
@@ -185,8 +193,21 @@ export default function SalesCashReport() {
     }
   }, [storeId])
 
-  const rows = useMemo(() => [...posRows, ...onlineRows, ...bookingRows, ...cashRows]
-    .filter(row => inRange(row.createdAt, range))
+  const rows = useMemo(() => {
+    const rowsByBookingId = new Map<string, BusinessSaleRow>()
+    onlineRows.forEach(row => {
+      if (row.bookingId) rowsByBookingId.set(row.bookingId, row)
+    })
+    const mergedOnlineRows = onlineRows.filter(row => !row.bookingId)
+    bookingRows.forEach(row => {
+      if (!row.bookingId) {
+        mergedOnlineRows.push(row)
+        return
+      }
+      rowsByBookingId.set(row.bookingId, { ...rowsByBookingId.get(row.bookingId), ...row, id: `booking-${row.bookingId}` })
+    })
+    return [...posRows, ...mergedOnlineRows, ...Array.from(rowsByBookingId.values()), ...cashRows]
+      .filter(row => inRange(row.createdAt, range))
     .filter(row => typeFilter === 'all' || row.type === typeFilter)
     .filter(row => {
       if (statusFilter === 'all') return true
@@ -196,7 +217,8 @@ export default function SalesCashReport() {
       if (statusFilter === 'settlement') return row.settlementScope === 'sedifex_settlement'
       return true
     })
-    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)), [bookingRows, cashRows, onlineRows, posRows, range, statusFilter, typeFilter])
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+  }, [bookingRows, cashRows, onlineRows, posRows, range, statusFilter, typeFilter])
 
   const totals = useMemo(() => {
     const paidRows = rows.filter(row => isPaidLike(row.paymentStatus) || isPaidLike(row.orderStatus))

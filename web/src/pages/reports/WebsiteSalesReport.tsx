@@ -3,7 +3,8 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
-import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type OrderRow = {
   id: string
@@ -71,15 +72,6 @@ function itemTypeLabel(type: OrderRow['itemType']) {
   return 'Product'
 }
 
-function readAmount(data: Record<string, unknown>) {
-  const payment = getNestedObject(data, 'payment')
-  const pricing = getNestedObject(data, 'pricingSnapshot')
-  const pricingSnake = getNestedObject(data, 'pricing_snapshot')
-  const amountMinor = asNumber(data.amountMinor, 0)
-  if (amountMinor > 0) return amountMinor / 100
-  return asNumber(payment.amount ?? payment.customerTotal ?? data.amount ?? data.total ?? data.grandTotal ?? pricing.final_total ?? pricingSnake.final_total ?? pricing.subtotal ?? pricingSnake.subtotal, 0)
-}
-
 function sourceLabel(sourceChannel: string) {
   if (sourceChannel === 'client_website') return 'Client Website'
   if (sourceChannel === 'sedifex_market') return 'Sedifex Market'
@@ -93,6 +85,9 @@ function mapOrder(id: string, data: Record<string, unknown>): OrderRow {
   const sourceChannel = normalizeSourceChannel(data.sourceChannel ?? data.source_channel ?? data.source)
   const item = firstItem(data)
   const itemType = readItemType(data)
+  const reportFields = deriveReportPaymentFields(data)
+  const bookingStatus = normalizeBookingStatusFromRecord(data)
+  const orderStatus = itemType === 'service' || itemType === 'course' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : asText(data.orderStatus ?? data.order_status ?? data.status, 'pending')
   return {
     id,
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
@@ -100,10 +95,10 @@ function mapOrder(id: string, data: Record<string, unknown>): OrderRow {
     sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceLabel(sourceChannel)),
     customerName: asText(customer.name ?? data.customerName ?? data.name, 'Customer'),
     customerPhone: asText(customer.phone ?? customer.email ?? data.customerPhone ?? data.phone ?? data.email, ''),
-    amount: readAmount(data),
+    amount: reportFields.amountReceived,
     currency: asText(payment.currency ?? data.currency, 'GHS'),
-    paymentStatus: asText(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending'),
-    orderStatus: asText(data.orderStatus ?? data.order_status ?? data.status, 'pending'),
+    paymentStatus: reportFields.paymentStatus,
+    orderStatus,
     paymentCollectionMode: asText(data.paymentCollectionMode ?? data.payment_collection_mode ?? payment.mode, 'online_checkout'),
     itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? item.name ?? item.itemName ?? item.productName ?? item.serviceName, itemType === 'service' || itemType === 'course' ? 'Service booking' : 'Product order'),
     itemType,

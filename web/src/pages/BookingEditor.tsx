@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Timestamp, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { Timestamp, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
+import { deriveLastEventType, deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizePaymentStatus as normalizeCanonicalPaymentStatus } from '../lib/bookingStatus'
 import './BookingEditor.css'
 
 type BookingFormState = {
@@ -70,18 +71,15 @@ function firstStringValue(...values: unknown[]): string {
 }
 
 function normalizePaymentStatusValue(value: unknown, fallback = 'pending'): string {
-  const raw = stringValue(value).trim().toLowerCase().replace(/[\s-]+/g, '_')
-  if (!raw) return fallback
-  if (['paid', 'payment_paid', 'confirmed', 'success', 'succeeded', 'complete', 'completed'].includes(raw)) return 'paid'
-  if (['partially_paid', 'partial', 'payment_partial'].includes(raw)) return 'partial'
-  if (['awaiting_verification', 'manual_review', 'payment_awaiting_verification'].includes(raw)) return 'awaiting_verification'
-  if (['pending', 'payment_pending', 'unpaid', 'pending_payment'].includes(raw)) return 'pending'
-  return raw
+  const safeFallback = ['pending', 'partial', 'paid', 'awaiting_verification'].includes(fallback) ? fallback : 'pending'
+  return normalizeCanonicalPaymentStatus(value, safeFallback as 'pending' | 'partial' | 'paid' | 'awaiting_verification')
 }
 
 function normalizePaymentStatus(data: Record<string, unknown>, payment: Record<string, unknown>): string {
+  const explicitStatus = firstStringValue(data.paymentStatus, data.payment_status, payment.paymentStatus, payment.payment_status, payment.status)
+  if (explicitStatus) return normalizePaymentStatusValue(explicitStatus, 'pending')
   if (payment.confirmed === true) return 'paid'
-  return normalizePaymentStatusValue(firstStringValue(data.paymentStatus, data.payment_status, payment.status), 'pending')
+  return 'pending'
 }
 
 function normalizeBookingStatusValue(value: unknown, fallback = 'pending'): string {
@@ -189,11 +187,12 @@ async function syncBookingToSheet(payload: BookingSheetPayload) {
 }
 
 function syncReasonForStatus(status: string, paymentStatus: string) {
-  if (status === 'completed') return 'booking_completed'
-  if (status === 'cancelled') return 'booking_cancelled'
-  if (status === 'confirmed' && paymentStatus.toLowerCase() === 'paid') return 'booking_confirmed_paid'
-  if (status === 'confirmed') return 'booking_confirmed'
-  return 'booking_updated'
+  return deriveLastEventType(status, paymentStatus)
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
@@ -296,11 +295,19 @@ export default function BookingEditor() {
     try {
       const normalizedStatus = normalizeBookingStatusValue(form.status, 'pending')
       const normalizedPaymentStatus = normalizePaymentStatusValue(form.paymentStatus, 'pending')
+      const paymentAmount = numberValue(form.paymentAmount, 0)
+      const rawDepositAmount = numberValue(form.depositAmount, 0)
       const isPaid = normalizedPaymentStatus === 'paid'
+      const isPartial = normalizedPaymentStatus === 'partial'
       const isConfirmedPaid = normalizedStatus === 'confirmed' && isPaid
+      const isConfirmedPartial = normalizedStatus === 'confirmed' && isPartial
+      const depositAmount = isPaid ? paymentAmount : rawDepositAmount
+      const amountReceived = isPaid ? paymentAmount : isPartial ? rawDepositAmount : rawDepositAmount
+      const amountOutstanding = Math.max(paymentAmount - amountReceived, 0)
+      const orderStatus = deriveOnlineOrderStatusFromBooking(normalizedStatus)
       const now = Timestamp.now()
       const paymentConfirmedAt = existingPaymentConfirmedAt || now
-      const lastEventType = isConfirmedPaid ? 'confirmed_paid' : syncReasonForStatus(normalizedStatus, normalizedPaymentStatus)
+      const lastEventType = syncReasonForStatus(normalizedStatus, normalizedPaymentStatus)
       const statusTimestamps = {
         ...(normalizedStatus === 'confirmed' ? { confirmedAt: now, confirmedBy: 'staff_admin' } : {}),
         ...(normalizedStatus === 'completed' ? { completedAt: now } : {}),
@@ -328,7 +335,12 @@ export default function BookingEditor() {
         quantity: quantityValue,
         notes: form.notes.trim(),
         paymentAmount: form.paymentAmount.trim(),
-        depositAmount: form.depositAmount.trim(),
+        depositAmount: String(depositAmount || ''),
+        deposit_amount: depositAmount,
+        amountReceived,
+        amount_received: amountReceived,
+        amountOutstanding,
+        amount_outstanding: amountOutstanding,
         paymentMethod: form.paymentMethod.trim(),
         paymentReference: form.paymentReference.trim(),
         reference: form.paymentReference.trim(),
@@ -340,11 +352,18 @@ export default function BookingEditor() {
         status: normalizedStatus,
         paymentStatus: normalizedPaymentStatus,
         payment_status: normalizedPaymentStatus,
+        orderStatus,
+        order_status: orderStatus,
         lastEventType,
         last_event_type: lastEventType,
         payment: {
           amount: form.paymentAmount.trim(),
-          depositAmount: form.depositAmount.trim(),
+          depositAmount: String(depositAmount || ''),
+          deposit_amount: depositAmount,
+          amountReceived,
+          amount_received: amountReceived,
+          amountOutstanding,
+          amount_outstanding: amountOutstanding,
           method: form.paymentMethod.trim(),
           reference: form.paymentReference.trim(),
           status: normalizedPaymentStatus,
@@ -392,6 +411,46 @@ export default function BookingEditor() {
         'Saving booking timed out. Please try again.',
       )
 
+      const reportFields = deriveReportPaymentFields(payload)
+      const orderPatch = {
+        bookingId: targetId,
+        booking_id: targetId,
+        bookingStatus: normalizedStatus,
+        booking_status: normalizedStatus,
+        paymentStatus: normalizedPaymentStatus,
+        payment_status: normalizedPaymentStatus,
+        orderStatus,
+        order_status: orderStatus,
+        lastEventType,
+        last_event_type: lastEventType,
+        amountReceived: reportFields.amountReceived,
+        amount_received: reportFields.amountReceived,
+        amountOutstanding: reportFields.amountOutstanding,
+        amount_outstanding: reportFields.amountOutstanding,
+        depositAmount: reportFields.depositAmount,
+        deposit_amount: reportFields.depositAmount,
+        updatedAt: serverTimestamp(),
+      }
+      const rootOrderBySnakeQuery = query(collection(db, 'integrationOrders'), where('booking_id', '==', targetId))
+      const rootOrderByCamelQuery = query(collection(db, 'integrationOrders'), where('bookingId', '==', targetId))
+      const storeOrderBySnakeQuery = query(collection(db, 'stores', storeId, 'integrationOrders'), where('booking_id', '==', targetId))
+      const storeOrderByCamelQuery = query(collection(db, 'stores', storeId, 'integrationOrders'), where('bookingId', '==', targetId))
+      const [rootSnakeSnap, rootCamelSnap, storeSnakeSnap, storeCamelSnap, rootIdSnap, storeIdSnap] = await Promise.all([
+        getDocs(rootOrderBySnakeQuery),
+        getDocs(rootOrderByCamelQuery),
+        getDocs(storeOrderBySnakeQuery),
+        getDocs(storeOrderByCamelQuery),
+        getDoc(doc(db, 'integrationOrders', targetId)),
+        getDoc(doc(db, 'stores', storeId, 'integrationOrders', targetId)),
+      ])
+      const orderRefs = new Map<string, DocumentReference<DocumentData>>()
+      ;[rootSnakeSnap, rootCamelSnap, storeSnakeSnap, storeCamelSnap].forEach(snapshot => {
+        snapshot.docs.forEach(orderDoc => orderRefs.set(orderDoc.ref.path, orderDoc.ref))
+      })
+      if (rootIdSnap.exists()) orderRefs.set(rootIdSnap.ref.path, rootIdSnap.ref)
+      if (storeIdSnap.exists()) orderRefs.set(storeIdSnap.ref.path, storeIdSnap.ref)
+      await Promise.all(Array.from(orderRefs.values()).map(orderRef => setDoc(orderRef, orderPatch, { merge: true })))
+
       await syncBookingToSheet({
         type: 'booking',
         bookingId: String(booking.id || booking.bookingId || targetId || `BOOK-${Date.now()}`),
@@ -410,7 +469,7 @@ export default function BookingEditor() {
         payment_confirmed_at: isPaid ? stringValue(paymentConfirmedAt) : '',
         last_event_type: lastEventType,
         lastEventType,
-        source: isConfirmedPaid ? 'sedifex-booking-confirmed-paid' : 'sedifex-booking-update',
+        source: isConfirmedPaid ? 'sedifex-booking-confirmed-paid' : isConfirmedPartial ? 'sedifex-booking-partial-payment' : 'sedifex-booking-update',
       })
 
       const saveMessage = isCreateMode

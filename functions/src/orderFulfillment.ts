@@ -63,7 +63,7 @@ export function checkoutCreatedFulfillmentFields(reference: string, storeId: str
 }
 
 export function paidFulfillmentUpdateFields(reference: string, storeId: string, fulfillmentType = 'delivery') {
-  const orderStatus = 'paid'
+  const orderStatus = 'pending_store_confirmation'
   const fulfillmentStatus = 'pending_store_confirmation'
   const deliveryStatus = fulfillmentType === 'pickup' ? 'not_started' : 'not_started'
   const entry = historyEntry({
@@ -72,7 +72,7 @@ export function paidFulfillmentUpdateFields(reference: string, storeId: string, 
     fulfillmentStatus,
     deliveryStatus,
     source: 'paystackWebhook',
-    note: 'Payment confirmed. Waiting for store to accept and fulfill the order.',
+    note: 'Payment confirmed. Waiting for store confirmation while payment_status remains paid.',
     reference,
     storeId,
   })

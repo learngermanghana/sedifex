@@ -3,11 +3,13 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
 type SettlementRow = {
   id: string
   collectionName: 'integrationOrders' | 'integrationBookings'
   reference: string
+  bookingId: string
   sourceChannel: string
   sourceLabel: string
   customerName: string
@@ -163,23 +165,27 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
   const customer = getNestedObject(data, 'customer')
   const payment = getNestedObject(data, 'payment')
   const sourceChannel = normalizeSourceChannel(data.sourceChannel ?? data.source_channel ?? data.source)
-  const paymentStatus = asText(data.paymentStatus ?? data.payment_status ?? payment.status, 'pending')
+  const reportFields = deriveReportPaymentFields(data)
+  const paymentStatus = reportFields.paymentStatus
+  const bookingStatus = normalizeBookingStatusFromRecord(data)
+  const orderStatus = collectionName === 'integrationBookings' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : asText(data.orderStatus ?? data.order_status ?? data.bookingStatus, 'pending')
   const split = readPaystackSplit(data)
   return {
     id,
     collectionName,
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference, id),
+    bookingId: asText(data.booking_id ?? data.bookingId, collectionName === 'integrationBookings' ? id : ''),
     sourceChannel,
     sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Sedifex Market' : 'Sedifex Public Page'),
     customerName: asText(customer.name ?? customer.email, 'Customer'),
-    grossAmount: readAmount(data),
-    baseAmount: readBaseAmount(data),
+    grossAmount: reportFields.amountReceived,
+    baseAmount: Math.min(readBaseAmount(data), reportFields.amountReceived || readBaseAmount(data)),
     customerProcessingFee: readCustomerProcessingFee(data),
     sedifexCommission: readSedifexCommission(data),
     merchantNet: readMerchantNet(data),
     currency: readCurrency(data),
     paymentStatus,
-    orderStatus: asText(data.orderStatus ?? data.order_status ?? data.bookingStatus, 'pending'),
+    orderStatus,
     paymentCollectionMode: asText(data.paymentCollectionMode ?? payment.mode, 'online_checkout'),
     subaccountCode: split.subaccount,
     splitEnabled: split.enabled,
@@ -224,12 +230,26 @@ export default function SettlementReport() {
     return () => { unsubOrders(); unsubBookings() }
   }, [storeId])
 
-  const rows = useMemo(() => [...orders, ...bookings]
-    .filter(row => inRange(row, range))
-    .filter(row => source === 'all' || row.sourceChannel === source)
-    .filter(row => paymentView === 'all' || (paymentView === 'online' ? row.paymentCollectionMode === 'online_checkout' : row.paymentCollectionMode === paymentView))
-    .filter(row => splitView === 'all' || (splitView === 'split' ? row.splitEnabled : !row.splitEnabled))
-    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)), [bookings, orders, paymentView, range, source, splitView])
+  const rows = useMemo(() => {
+    const rowsByBookingId = new Map<string, SettlementRow>()
+    orders.forEach(row => {
+      if (row.bookingId) rowsByBookingId.set(row.bookingId, row)
+    })
+    const mergedRows = orders.filter(row => !row.bookingId)
+    bookings.forEach(row => {
+      if (!row.bookingId) {
+        mergedRows.push(row)
+        return
+      }
+      rowsByBookingId.set(row.bookingId, { ...rowsByBookingId.get(row.bookingId), ...row, id: row.bookingId })
+    })
+    return [...mergedRows, ...Array.from(rowsByBookingId.values())]
+      .filter(row => inRange(row, range))
+      .filter(row => source === 'all' || row.sourceChannel === source)
+      .filter(row => paymentView === 'all' || (paymentView === 'online' ? row.paymentCollectionMode === 'online_checkout' : row.paymentCollectionMode === paymentView))
+      .filter(row => splitView === 'all' || (splitView === 'split' ? row.splitEnabled : !row.splitEnabled))
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+  }, [bookings, orders, paymentView, range, source, splitView])
 
   const paidRows = useMemo(() => rows.filter(row => isPaidLike(row.paymentStatus)), [rows])
   const onlineRows = useMemo(() => rows.filter(row => row.paymentCollectionMode === 'online_checkout' || isOnlineCheckout(row as unknown as Record<string, unknown>)), [rows])
