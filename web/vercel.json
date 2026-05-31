@@ -1,11 +1,19 @@
 {
   "rewrites": [
     {
+      "source": "/__/auth/:path*",
+      "destination": "https://sedifex-web.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/__/firebase/:path*",
+      "destination": "https://sedifex-web.firebaseapp.com/__/firebase/:path*"
+    },
+    {
       "source": "/api/google-business/locations",
       "destination": "https://us-central1-sedifex-web.cloudfunctions.net/googleBusinessLocations"
     },
     {
-      "source": "/((?!api/|assets/|.*\\..*).*)",
+      "source": "/((?!api/|assets/|__/auth/|__/firebase/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
