@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Timestamp, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore'
+import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
@@ -215,6 +215,7 @@ export default function BookingEditor() {
   const [form, setForm] = useState<BookingFormState>(DEFAULT_FORM)
   const [loading, setLoading] = useState(!isCreateMode)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [existingPaymentConfirmedAt, setExistingPaymentConfirmedAt] = useState<unknown>(null)
@@ -496,6 +497,45 @@ export default function BookingEditor() {
     }
   }
 
+  async function handleDeleteBooking() {
+    if (!storeId || isCreateMode) {
+      setErrorMessage('Select an existing booking before deleting.')
+      return
+    }
+
+    const confirmed = window.confirm('Delete this booking? This will remove it from Sedifex bookings.')
+    if (!confirmed) return
+
+    setDeleting(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+
+    try {
+      await withTimeout(
+        Promise.all([
+          deleteDoc(doc(db, 'stores', storeId, 'integrationBookings', bookingId)),
+          deleteDoc(doc(db, 'integrationBookings', bookingId)),
+        ]),
+        15000,
+        'Deleting booking timed out. Please try again.',
+      )
+
+      const deleteMessage = 'Booking deleted successfully.'
+      setSuccessMessage(deleteMessage)
+      publish({ tone: 'success', message: deleteMessage })
+      void playSound('success')
+      navigate('/bookings')
+    } catch (error) {
+      console.error('[booking-editor] Failed to delete booking', error)
+      const failureMessage = 'Unable to delete booking right now.'
+      setErrorMessage(failureMessage)
+      publish({ tone: 'error', message: failureMessage })
+      void playSound('error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <main className="page booking-editor-page">
       <section className="card booking-editor-page__card stack gap-3">
@@ -557,8 +597,20 @@ export default function BookingEditor() {
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
 
             <div className="booking-editor-page__actions">
+              {!isCreateMode && (
+                <button
+                  type="button"
+                  className="button button--outline booking-editor-page__delete"
+                  disabled={saving || deleting}
+                  onClick={() => {
+                    void handleDeleteBooking()
+                  }}
+                >
+                  {deleting ? 'Deleting…' : 'Delete booking'}
+                </button>
+              )}
               <Link to="/bookings" className="button button--outline">Back</Link>
-              <button type="submit" className="button button--primary" disabled={saving}>
+              <button type="submit" className="button button--primary" disabled={saving || deleting}>
                 {saving ? 'Saving…' : isCreateMode ? 'Create booking' : 'Save changes'}
               </button>
             </div>
