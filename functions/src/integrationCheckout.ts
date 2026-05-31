@@ -54,6 +54,8 @@ type CheckoutBody = {
   service_price?: unknown
   totalAmount?: unknown
   total_amount?: unknown
+  bookingId?: unknown
+  booking_id?: unknown
 }
 
 function clean(value: unknown, max = 500) {
@@ -64,6 +66,37 @@ function normalizeServiceLikeItemId(rawValue: unknown) {
   const value = clean(rawValue, 220)
   if (!value) return ''
   return value.toLowerCase().startsWith('draft-') ? value.slice(6).trim() : value
+}
+
+
+function getBookingId(body: CheckoutBody) {
+  const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata as Record<string, unknown> : {}
+  return clean(body.bookingId ?? body.booking_id ?? metadata.bookingId ?? metadata.booking_id, 220)
+}
+
+async function findExistingIntegrationOrderRefs(storeId: string, identifiers: string[]) {
+  const unique = Array.from(new Set(identifiers.map(value => clean(value, 260)).filter(Boolean)))
+  const refs = new Map<string, FirebaseFirestore.DocumentReference>()
+  for (const identifier of unique) {
+    const rootDirect = defaultDb.collection('integrationOrders').doc(identifier)
+    const storeDirect = defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(identifier)
+    const [rootSnap, storeSnap] = await Promise.all([rootDirect.get(), storeDirect.get()])
+    if (rootSnap.exists) refs.set(rootDirect.path, rootDirect)
+    if (storeSnap.exists) refs.set(storeDirect.path, storeDirect)
+  }
+  const fields = ['booking_id', 'bookingId', 'payment_reference', 'paymentReference', 'reference', 'clientOrderId', 'client_order_id']
+  for (const field of fields) {
+    for (let index = 0; index < unique.length; index += 10) {
+      const chunk = unique.slice(index, index + 10)
+      const [rootSnap, storeSnap] = await Promise.all([
+        defaultDb.collection('integrationOrders').where(field, 'in', chunk).get(),
+        defaultDb.collection('stores').doc(storeId).collection('integrationOrders').where(field, 'in', chunk).get(),
+      ])
+      rootSnap.docs.forEach(docSnap => refs.set(docSnap.ref.path, docSnap.ref))
+      storeSnap.docs.forEach(docSnap => refs.set(docSnap.ref.path, docSnap.ref))
+    }
+  }
+  return Array.from(refs.values())
 }
 
 function numberValue(value: unknown) {
@@ -768,7 +801,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const email = normalized.customer.email
     const phone = normalized.customer.phone
     const amountMajor = normalized.amountMajor
-    const reference = clean(body.payment_reference ?? body.reference, 220) || clean(body.client_order_id ?? body.clientOrderId, 220) || `${storeId}_${Date.now()}`
+    const bookingId = getBookingId(body)
+    const reference = clean(body.payment_reference ?? body.reference, 220) || clean(body.client_order_id ?? body.clientOrderId, 220) || bookingId || `${storeId}_${Date.now()}`
     const currency = clean(body.currency, 20) || 'GHS'
     const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
     const sourceChannel = normalized.sourceChannel
@@ -819,6 +853,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
         merchantId: storeId,
         clientOrderId: clean(body.client_order_id ?? body.clientOrderId, 220) || reference,
         sedifexOrderId: reference,
+        bookingId: bookingId || null,
+        booking_id: bookingId || null,
         sourceChannel,
         sourceLabel,
         paystackSubaccountCode: subaccount || null,
@@ -845,6 +881,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       source_channel: sourceChannel,
       sourceLabel,
       source_label: sourceLabel,
+      bookingId: bookingId || null,
+      booking_id: bookingId || null,
       customer: { email, phone: phone || null },
       amount: amountMajor,
       amountMinor: Math.round(amountMajor * 100),
@@ -874,10 +912,15 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       updatedAt: now,
     }
 
-    await Promise.all([
-      defaultDb.collection('integrationOrders').doc(reference).set(record, { merge: true }),
-      defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference).set(record, { merge: true }),
-    ])
+    const matchingOrderRefs = await findExistingIntegrationOrderRefs(storeId, [bookingId, reference, clean(body.client_order_id ?? body.clientOrderId, 220)])
+    if (matchingOrderRefs.length) {
+      await Promise.all(matchingOrderRefs.map(orderRef => orderRef.set({ ...record, updatedAt: now, duplicateSuppressedAt: now }, { merge: true })))
+    } else {
+      await Promise.all([
+        defaultDb.collection('integrationOrders').doc(reference).set(record, { merge: true }),
+        defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference).set(record, { merge: true }),
+      ])
+    }
 
     res.status(200).json({
       ok: true,

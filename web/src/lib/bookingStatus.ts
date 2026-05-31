@@ -55,6 +55,53 @@ export function deriveOnlineOrderStatusFromBooking(bookingStatus: unknown): Cano
   return 'pending_store_confirmation'
 }
 
+export function canonicalBookingOrderKey(source: BookingStatusSource, fallbackId = ''): string {
+  const payment = objectValue(source.payment)
+  const metadata = objectValue(source.metadata)
+  const key = text(
+    source.booking_id
+      ?? source.bookingId
+      ?? metadata.booking_id
+      ?? metadata.bookingId
+      ?? source.payment_reference
+      ?? source.paymentReference
+      ?? payment.reference
+      ?? source.reference
+      ?? fallbackId,
+  )
+  return key || fallbackId
+}
+
+export function deriveCanonicalOrderStatus(source: BookingStatusSource, fallback: CanonicalOrderStatus | string = 'pending_store_confirmation'): CanonicalOrderStatus | string {
+  const bookingStatus = normalizeBookingStatusFromRecord(source)
+  const paymentStatus = normalizePaymentStatusFromRecord(source)
+  const rawOrderStatus = text(source.orderStatus ?? source.order_status, '')
+  if (bookingStatus === 'confirmed' && (paymentStatus === 'paid' || paymentStatus === 'partial')) return 'booking_confirmed'
+  if ((paymentStatus === 'paid' || paymentStatus === 'partial') && bookingStatus === 'pending') return 'pending_store_confirmation'
+  if (rawOrderStatus) return rawOrderStatus
+  if (bookingStatus !== 'pending') return deriveOnlineOrderStatusFromBooking(bookingStatus)
+  return fallback
+}
+
+function completenessScore(source: object): number {
+  return Object.values(source).reduce((score, value) => {
+    if (value === null || value === undefined || value === '') return score
+    if (Array.isArray(value)) return score + value.length
+    if (typeof value === 'object') return score + Object.keys(value as Record<string, unknown>).length
+    return score + 1
+  }, 0)
+}
+
+export function chooseMoreCompleteRecord<T extends object & { createdAt?: Date | null; updatedAt?: Date | null }>(current: T, candidate: T): T {
+  const candidateScore = completenessScore(candidate)
+  const currentScore = completenessScore(current)
+  const candidateTime = (candidate.updatedAt ?? candidate.createdAt)?.getTime?.() ?? 0
+  const currentTime = (current.updatedAt ?? current.createdAt)?.getTime?.() ?? 0
+  if (candidateScore > currentScore) return candidate
+  if (candidateScore === currentScore && candidateTime >= currentTime) return candidate
+  return current
+}
+
 export function deriveLastEventType(bookingStatus: unknown, paymentStatus: unknown): string {
   const booking = normalizeBookingStatus(bookingStatus)
   const payment = normalizePaymentStatus(paymentStatus)

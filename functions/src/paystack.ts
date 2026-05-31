@@ -92,6 +92,26 @@ function assertAuthenticated(context: functions.https.CallableContext) {
 
 const toTrimmedString = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 
+
+async function findStoreIntegrationOrderRefs(storeId: string, identifiers: string[]) {
+  const unique = Array.from(new Set(identifiers.map(value => toTrimmedString(value)).filter(Boolean)))
+  const refs = new Map<string, FirebaseFirestore.DocumentReference>()
+  for (const identifier of unique) {
+    const direct = defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(identifier)
+    const snap = await direct.get()
+    if (snap.exists) refs.set(direct.path, direct)
+  }
+  const fields = ['booking_id', 'bookingId', 'payment_reference', 'paymentReference', 'reference', 'clientOrderId', 'client_order_id', 'sedifexOrderId', 'sedifex_order_id', 'paystackReference']
+  for (const field of fields) {
+    for (let index = 0; index < unique.length; index += 10) {
+      const chunk = unique.slice(index, index + 10)
+      const snap = await defaultDb.collection('stores').doc(storeId).collection('integrationOrders').where(field, 'in', chunk).get()
+      snap.docs.forEach(docSnap => refs.set(docSnap.ref.path, docSnap.ref))
+    }
+  }
+  return Array.from(refs.values())
+}
+
 function getFulfillmentTypeFromMetadata(metadata: Record<string, any>) {
   const value = toTrimmedString(metadata.fulfillmentType || metadata.fulfillment_type || metadata.deliveryMethod || metadata.delivery_method).toLowerCase()
   return ['pickup', 'self_pickup', 'collection'].includes(value) ? 'pickup' : 'delivery'
@@ -315,7 +335,30 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     orderUpdate.paymentFailedAt = now
   }
 
-  await orderRef.set(orderUpdate, { merge: true })
+  const initialIdentifiers = [
+    reference,
+    toTrimmedString(data.reference),
+    toTrimmedString(metadata.reference),
+    toTrimmedString(metadata.paymentReference),
+    toTrimmedString(metadata.payment_reference),
+    toTrimmedString(metadata.clientOrderId),
+    toTrimmedString(metadata.client_order_id),
+    toTrimmedString(metadata.sedifexOrderId),
+    toTrimmedString(metadata.sedifex_order_id),
+    toTrimmedString(metadata.paystackReference),
+    toTrimmedString(metadata.bookingId),
+    toTrimmedString(metadata.booking_id),
+  ]
+  const storeOrderRefs = await findStoreIntegrationOrderRefs(storeId, initialIdentifiers)
+  if (storeOrderRefs.length) {
+    for (let index = 0; index < storeOrderRefs.length; index += 450) {
+      const batch = defaultDb.batch()
+      storeOrderRefs.slice(index, index + 450).forEach(ref => batch.set(ref, orderUpdate, { merge: true }))
+      await batch.commit()
+    }
+  } else {
+    await orderRef.set(orderUpdate, { merge: true })
+  }
 
   const orderSnap = await orderRef.get()
   const orderData = (orderSnap.data() ?? {}) as Record<string, unknown>
@@ -339,6 +382,10 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     toTrimmedString(orderData.paymentReference),
     toTrimmedString(orderData.payment_reference),
     toTrimmedString(orderData.paystackReference),
+    toTrimmedString(metadata.bookingId),
+    toTrimmedString(metadata.booking_id),
+    toTrimmedString(orderData.bookingId),
+    toTrimmedString(orderData.booking_id),
   ].filter(Boolean)
   const identifiers = Array.from(new Set(candidateIdentifiers))
   const fieldsToMatch = [
@@ -350,6 +397,8 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     'sedifexOrderId',
     'sedifex_order_id',
     'paystackReference',
+    'bookingId',
+    'booking_id',
   ]
 
   const topLevelMatched = new Map<string, FirebaseFirestore.DocumentReference>()

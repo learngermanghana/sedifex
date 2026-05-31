@@ -186,3 +186,85 @@ export const repairDataConsistency = functions.runWith({ timeoutSeconds: 540, me
     res.status(500).json({ error: error instanceof Error ? error.message : 'repair-failed' })
   }
 })
+
+function duplicateCanonicalKey(docId: string, data: Record<string, unknown>) {
+  return clean(data.booking_id ?? data.bookingId ?? data.payment_reference ?? data.paymentReference ?? data.reference, 260) || docId
+}
+
+function duplicateStatusPatch(data: Record<string, unknown>) {
+  const paymentStatus = clean(data.paymentStatus ?? data.payment_status, 80) || 'pending'
+  const bookingStatus = clean(data.bookingStatus ?? data.booking_status, 80)
+  const confirmed = ['confirmed', 'approved', 'booking_confirmed'].includes(bookingStatus.toLowerCase())
+  const orderStatus = confirmed && ['paid', 'partial', 'paid_cash'].includes(paymentStatus.toLowerCase())
+    ? 'booking_confirmed'
+    : clean(data.orderStatus ?? data.order_status, 80) || 'pending_store_confirmation'
+  return {
+    paymentStatus,
+    payment_status: paymentStatus,
+    bookingStatus: bookingStatus || null,
+    booking_status: bookingStatus || null,
+    orderStatus,
+    order_status: orderStatus,
+    canonicalOrderKey: duplicateCanonicalKey('', data),
+    duplicateVisible: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }
+}
+
+export const repairDuplicateBookingOrders = functions.runWith({ timeoutSeconds: 540, memory: '512MB' }).https.onRequest(async (req, res): Promise<void> => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'method-not-allowed' })
+    return
+  }
+  if (!isAllowed(req)) {
+    res.status(403).json({ error: 'repair-token-required' })
+    return
+  }
+
+  const body = getRecord(req.body)
+  const dryRun = body.dryRun !== false
+  const limit = Math.min(Math.max(asNumber(body.limit, 500), 1), 1500)
+  const specificStoreId = clean(body.storeId, 180)
+  const groups = new Map<string, Array<{ ref: FirebaseFirestore.DocumentReference; id: string; data: Record<string, unknown> }>>()
+
+  try {
+    let query: FirebaseFirestore.Query = defaultDb.collection('integrationOrders').limit(limit)
+    if (specificStoreId) query = defaultDb.collection('integrationOrders').where('storeId', '==', specificStoreId).limit(limit)
+    const snapshot = await query.get()
+    snapshot.docs.forEach(docSnap => {
+      const data = docSnap.data() as Record<string, unknown>
+      const storeId = clean(data.storeId ?? data.merchantId, 180)
+      const key = `${storeId || 'unknown'}:${duplicateCanonicalKey(docSnap.id, data)}`
+      const list = groups.get(key) ?? []
+      list.push({ ref: docSnap.ref, id: docSnap.id, data })
+      groups.set(key, list)
+    })
+
+    let duplicateGroups = 0
+    let recordsUpdated = 0
+    const examples: Array<Record<string, unknown>> = []
+    for (const [key, records] of groups) {
+      if (records.length < 2) continue
+      duplicateGroups += 1
+      const canonical = records.reduce((best, candidate) => Object.keys(candidate.data).length >= Object.keys(best.data).length ? candidate : best, records[0])
+      const patch = duplicateStatusPatch(canonical.data)
+      if (!dryRun) {
+        const batch = defaultDb.batch()
+        records.forEach(record => batch.set(record.ref, { ...patch, duplicateVisible: record.id === canonical.id }, { merge: true }))
+        await batch.commit()
+      }
+      recordsUpdated += records.length
+      if (examples.length < 10) examples.push({ key, canonicalId: canonical.id, duplicateIds: records.map(record => record.id) })
+    }
+
+    res.status(200).json({ ok: true, dryRun, inspected: snapshot.size, duplicateGroups, recordsUpdated, examples })
+  } catch (error) {
+    functions.logger.error('repairDuplicateBookingOrders failed', { error })
+    res.status(500).json({ error: error instanceof Error ? error.message : 'duplicate-repair-failed' })
+  }
+})
