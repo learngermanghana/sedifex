@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { deriveOnlineOrderStatusFromBooking, normalizeBookingStatusFromRecord, normalizePaymentStatusFromRecord, orderStatusLabel, paymentStatusLabel } from '../lib/bookingStatus'
 
 type OrderTab = 'all' | 'pending' | 'cash' | 'online-paid' | 'services' | 'products'
 type OrderCollection = 'integrationOrders' | 'integrationBookings' | 'cashOrders'
@@ -10,6 +11,7 @@ type OrderRecord = {
   id: string
   collectionName: OrderCollection
   reference: string
+  bookingId: string
   customerName: string
   customerEmail: string
   customerPhone: string
@@ -68,6 +70,14 @@ function toDate(value: unknown): Date | null {
 
 function normalizeStatus(value: string) {
   return value.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+}
+
+function displayPaymentStatus(value: string) {
+  return paymentStatusLabel(value)
+}
+
+function displayOrderStatus(value: string) {
+  return orderStatusLabel(value)
 }
 
 function formatMoney(amount: number, currency: string) {
@@ -163,11 +173,22 @@ function mapOrder(id: string, collectionName: OrderCollection, source: Record<st
   const itemType = readItemType(source, collectionName, recordType)
 
   const createdAt = toDate(source.createdAtServer ?? source.createdAt ?? source.created_at ?? source.orderDate ?? source.order_date ?? source.createdAtIso)
+  const bookingId = asText(source.booking_id ?? source.bookingId ?? source.booking_id_ref, collectionName === 'integrationBookings' ? id : '')
+  const bookingStatus = normalizeBookingStatusFromRecord(source)
+  const paymentStatus = normalizePaymentStatusFromRecord(source)
+  const rawOrderStatus = asText(source.orderStatus ?? source.order_status, '')
+  const rawOrderStatusKey = rawOrderStatus.toLowerCase().replace(/[\s-]+/g, '_')
+  const orderStatus = collectionName === 'integrationBookings'
+    ? deriveOnlineOrderStatusFromBooking(bookingStatus)
+    : bookingId && ['paid', 'success', 'captured', 'confirmed'].includes(rawOrderStatusKey)
+      ? deriveOnlineOrderStatusFromBooking(bookingStatus)
+      : rawOrderStatus || (bookingId ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending')
 
   return {
     id,
     collectionName,
     reference: asText(source.reference ?? source.paymentReference ?? source.payment_reference, id),
+    bookingId,
     customerName: asText(customer.name ?? source.customerName ?? source.customer_name ?? metadata.customerName, 'Customer'),
     customerEmail: asText(customer.email ?? source.customerEmail ?? source.customer_email ?? metadata.customerEmail, ''),
     customerPhone: asText(customer.phone ?? source.customerPhone ?? source.customer_phone ?? metadata.customerPhone, ''),
@@ -175,8 +196,8 @@ function mapOrder(id: string, collectionName: OrderCollection, source: Record<st
     quantity: asNumber(item.quantity ?? item.qty, 1),
     amount: readAmount(source),
     currency: asText(payment.currency ?? source.currency, 'GHS'),
-    paymentStatus: asText(source.paymentStatus ?? source.payment_status ?? payment.status, 'pending'),
-    orderStatus: asText(source.orderStatus ?? source.order_status ?? source.status, 'pending'),
+    paymentStatus,
+    orderStatus,
     fulfillmentStatus: asText(source.fulfillmentStatus ?? source.fulfillment_status, ''),
     paymentCollectionMode: asText(source.paymentCollectionMode ?? source.payment_collection_mode ?? payment.mode, collectionName === 'cashOrders' ? 'cash' : 'online_checkout'),
     paymentMethod: asText(source.paymentMethod ?? source.payment_method ?? metadata.paymentMethod, collectionName === 'cashOrders' ? 'CASH' : ''),
@@ -229,7 +250,22 @@ function rowTypeLabel(record: OrderRecord) {
 }
 
 function primaryStatus(record: OrderRecord) {
-  return record.fulfillmentStatus || record.orderStatus || record.paymentStatus
+  const orderStatusKey = record.orderStatus.toLowerCase().replace(/[\s-]+/g, '_')
+  const fulfillmentStatusKey = record.fulfillmentStatus.toLowerCase().replace(/[\s-]+/g, '_')
+  if (['paid', 'success', 'captured'].includes(orderStatusKey) && fulfillmentStatusKey === 'pending_store_confirmation') return record.fulfillmentStatus
+  return record.orderStatus || record.fulfillmentStatus || record.paymentStatus
+}
+
+function mergeBookingStatusIntoOrder(order: OrderRecord, booking: OrderRecord): OrderRecord {
+  return {
+    ...order,
+    bookingId: order.bookingId || booking.bookingId || booking.id,
+    paymentStatus: booking.paymentStatus || order.paymentStatus,
+    orderStatus: booking.orderStatus || order.orderStatus,
+    fulfillmentStatus: booking.fulfillmentStatus || order.fulfillmentStatus,
+    amount: booking.amount || order.amount,
+    itemName: booking.itemName || order.itemName,
+  }
 }
 
 function statusStyle(status: string): React.CSSProperties {
@@ -383,7 +419,17 @@ export default function MarketplaceOrdersV2({ compactHeader = false }: { compact
     }
   }
 
-  const allRecords = useMemo(() => [...orders, ...bookings, ...cashOrders].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)), [bookings, cashOrders, orders])
+  const allRecords = useMemo(() => {
+    const bookingById = new Map<string, OrderRecord>()
+    bookings.forEach(booking => bookingById.set(booking.bookingId || booking.id, booking))
+    const mergedOrders = orders.map(order => {
+      const matchingBooking = order.bookingId ? bookingById.get(order.bookingId) : undefined
+      return matchingBooking ? mergeBookingStatusIntoOrder(order, matchingBooking) : order
+    })
+    const orderBookingIds = new Set(mergedOrders.map(order => order.bookingId).filter(Boolean))
+    const standaloneBookings = bookings.filter(booking => !orderBookingIds.has(booking.bookingId || booking.id))
+    return [...mergedOrders, ...standaloneBookings, ...cashOrders].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+  }, [bookings, cashOrders, orders])
 
   const stats = useMemo(() => ({
     all: allRecords,
@@ -407,6 +453,7 @@ export default function MarketplaceOrdersV2({ compactHeader = false }: { compact
       record.sourceLabel,
       record.paymentStatus,
       record.orderStatus,
+      record.bookingId,
       record.recordType,
       record.paymentMethod,
     ].join(' ').toLowerCase().includes(search))
@@ -496,8 +543,8 @@ export default function MarketplaceOrdersV2({ compactHeader = false }: { compact
                       <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.itemName}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{rowTypeLabel(record)}</span><br /><span style={{ color: '#94A3B8', fontSize: 12 }}>{record.recordType}</span></td>
                       <td style={{ padding: '12px 8px' }}><strong style={{ color: '#0F172A' }}>{record.sourceLabel}</strong><br /><span style={{ color: record.storeOnly ? '#92400E' : '#64748B', fontSize: 12, fontWeight: 800 }}>{record.storeOnly ? 'Store-only data' : record.collectionName}</span></td>
                       <td style={{ padding: '12px 8px', color: '#0F172A', fontWeight: 800 }}>{formatMoney(record.amount, record.currency)}</td>
-                      <td style={{ padding: '12px 8px' }}><strong>{normalizeStatus(record.paymentCollectionMode)}</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{normalizeStatus(record.paymentStatus)}</span>{isCash(record) ? <><br /><span style={{ color: record.cashConfirmed ? '#16A34A' : '#92400E', fontSize: 12, fontWeight: 900 }}>{record.cashConfirmed ? 'Cash confirmed' : 'Awaiting cash'}</span></> : null}</td>
-                      <td style={{ padding: '12px 8px' }}><span style={{ display: 'inline-flex', borderRadius: 999, padding: '4px 9px', fontSize: 12, fontWeight: 900, ...colors }}>{normalizeStatus(status || record.paymentStatus)}</span><br /><span style={{ color: '#64748B', fontSize: 12 }}>{record.reference}</span></td>
+                      <td style={{ padding: '12px 8px' }}><strong>Payment</strong><br /><span style={{ color: '#64748B', fontSize: 13 }}>{displayPaymentStatus(record.paymentStatus)}</span>{isCash(record) ? <><br /><span style={{ color: record.cashConfirmed ? '#16A34A' : '#92400E', fontSize: 12, fontWeight: 900 }}>{record.cashConfirmed ? 'Cash confirmed' : 'Awaiting cash'}</span></> : null}</td>
+                      <td style={{ padding: '12px 8px' }}><span style={{ display: 'inline-flex', borderRadius: 999, padding: '4px 9px', fontSize: 12, fontWeight: 900, ...colors }}>{displayOrderStatus(status || record.paymentStatus)}</span><br /><span style={{ color: '#64748B', fontSize: 12 }}>{record.bookingId || record.reference}</span></td>
                       <td style={{ padding: '12px 8px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 150 }}>
                           {pendingCash ? (
