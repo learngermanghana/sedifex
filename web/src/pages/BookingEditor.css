@@ -14,32 +14,8 @@
   gap: 0.35rem;
 }
 
-.booking-editor-page__notes,
-.booking-editor-page__quick-status {
+.booking-editor-page__notes {
   grid-column: 1 / -1;
-}
-
-.booking-editor-page__quick-status {
-  display: grid;
-  gap: 0.75rem;
-  border: 1px solid #dbe4f0;
-  border-radius: 1rem;
-  background: #f8fafc;
-  padding: 0.9rem;
-}
-
-.booking-editor-page__quick-status strong {
-  color: #0f172a;
-}
-
-.booking-editor-page__quick-status .form__hint {
-  margin: 0.25rem 0 0;
-}
-
-.booking-editor-page__quick-status-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 .booking-editor-page__actions {
