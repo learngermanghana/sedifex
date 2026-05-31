@@ -142,6 +142,43 @@ function statusLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
+const bookingAppsScriptUrl = 'https://script.google.com/macros/s/AKfycbxl0IdT746Z_yL2LJbAOKi0wsn3iNct4H1omFYWaxq8nzzI7rc_cebfxXcMxMydtvO4Eg/exec'
+
+type BookingSheetPayload = Record<string, string>
+
+type BookingSheetSource = {
+  id?: string
+  bookingId?: string
+  name?: string
+  customerName?: string
+  email?: string
+  customerEmail?: string
+  phone?: string
+  customerPhone?: string
+  service?: string
+  serviceName?: string
+  date?: string
+  bookingDate?: string
+  time?: string
+  bookingTime?: string
+}
+
+async function syncBookingToSheet(payload: BookingSheetPayload) {
+  const url = bookingAppsScriptUrl
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  const text = await res.text()
+  console.log('Booking sheet sync response:', text)
+  return text
+}
+
 function syncReasonForStatus(status: string, paymentStatus: string) {
   if (status === 'completed') return 'booking_completed'
   if (status === 'cancelled') return 'booking_cancelled'
@@ -326,6 +363,12 @@ export default function BookingEditor() {
             source_channel: 'manual_admin',
           } : {}),
         }
+      const booking = payload as BookingSheetSource
+      if (normalizedStatus === 'confirmed') {
+        console.log('CONFIRM BOOKING CLICKED', booking)
+        console.log('BOOKING WEBHOOK URL', bookingAppsScriptUrl)
+      }
+
       await withTimeout(
         Promise.all([
           setDoc(doc(db, 'stores', storeId, 'integrationBookings', targetId), payload, { merge: true }),
@@ -334,6 +377,21 @@ export default function BookingEditor() {
         15000,
         'Saving booking timed out. Please try again.',
       )
+
+      if (normalizedStatus === 'confirmed') {
+        await syncBookingToSheet({
+          type: 'booking',
+          bookingId: booking.id || booking.bookingId || `BOOK-${Date.now()}`,
+          customerName: booking.customerName || booking.name || '',
+          customerEmail: booking.customerEmail || booking.email || '',
+          customerPhone: booking.customerPhone || booking.phone || '',
+          serviceName: booking.serviceName || booking.service || '',
+          bookingDate: booking.bookingDate || booking.date || '',
+          bookingTime: booking.bookingTime || booking.time || '',
+          status: 'confirmed',
+          source: 'sedifex-booking-confirm',
+        })
+      }
 
       const saveMessage = isCreateMode
         ? 'Booking created successfully. Email will be sent to the customer.'
