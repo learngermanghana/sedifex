@@ -44,7 +44,7 @@ const DEFAULT_FORM: BookingFormState = {
   depositAmount: '',
   paymentMethod: '',
   paymentReference: '',
-  paymentStatus: 'payment_pending',
+  paymentStatus: 'pending',
 }
 
 function stringValue(value: unknown): string {
@@ -69,12 +69,26 @@ function firstStringValue(...values: unknown[]): string {
   return ''
 }
 
+function normalizePaymentStatusValue(value: unknown, fallback = 'pending'): string {
+  const raw = stringValue(value).trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (!raw) return fallback
+  if (['paid', 'payment_paid', 'confirmed', 'success', 'succeeded', 'complete', 'completed'].includes(raw)) return 'paid'
+  if (['partially_paid', 'partial', 'payment_partial'].includes(raw)) return 'partial'
+  if (['awaiting_verification', 'manual_review', 'payment_awaiting_verification'].includes(raw)) return 'awaiting_verification'
+  if (['pending', 'payment_pending', 'unpaid', 'pending_payment'].includes(raw)) return 'pending'
+  return raw
+}
+
 function normalizePaymentStatus(data: Record<string, unknown>, payment: Record<string, unknown>): string {
   if (payment.confirmed === true) return 'paid'
-  const raw = firstStringValue(data.paymentStatus, data.payment_status, payment.status).toLowerCase()
-  if (!raw) return 'payment_pending'
-  if (['paid', 'confirmed', 'success', 'succeeded', 'complete', 'completed'].includes(raw)) return 'paid'
-  if (['pending', 'payment_pending', 'unpaid'].includes(raw)) return 'payment_pending'
+  return normalizePaymentStatusValue(firstStringValue(data.paymentStatus, data.payment_status, payment.status), 'pending')
+}
+
+function normalizeBookingStatusValue(value: unknown, fallback = 'pending'): string {
+  const raw = stringValue(value).trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (!raw) return fallback
+  if (['pending_approval', 'pending'].includes(raw)) return 'pending'
+  if (['confirmed', 'completed', 'cancelled'].includes(raw)) return raw
   return raw
 }
 
@@ -82,7 +96,7 @@ function normalizeBookingForm(data: Record<string, unknown>): BookingFormState {
   const customer = recordValue(data.customer)
   const booking = recordValue(data.booking)
   const payment = recordValue(data.payment)
-  const status = firstStringValue(data.bookingStatus, data.status) || 'confirmed'
+  const status = normalizeBookingStatusValue(firstStringValue(data.bookingStatus, data.booking_status, data.status), 'confirmed')
 
   return {
     fullName: firstStringValue(data.fullName, data.name, data.customerName, customer.name),
@@ -138,9 +152,6 @@ function normalizeTimeInput(value: unknown): string {
   return ''
 }
 
-function statusLabel(value: string) {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
-}
 
 const bookingAppsScriptUrl = 'https://script.google.com/macros/s/AKfycbxl0IdT746Z_yL2LJbAOKi0wsn3iNct4H1omFYWaxq8nzzI7rc_cebfxXcMxMydtvO4Eg/exec'
 
@@ -174,9 +185,7 @@ async function syncBookingToSheet(payload: BookingSheetPayload) {
     body: JSON.stringify(payload),
   })
 
-  const text = await res.text()
-  console.log('Booking sheet sync response:', text)
-  return text
+  return res.text()
 }
 
 function syncReasonForStatus(status: string, paymentStatus: string) {
@@ -209,10 +218,12 @@ export default function BookingEditor() {
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [existingPaymentConfirmedAt, setExistingPaymentConfirmedAt] = useState<unknown>(null)
   const { publish } = useToast()
 
   useEffect(() => {
     if (!storeId || isCreateMode) {
+      setExistingPaymentConfirmedAt(null)
       setLoading(false)
       return
     }
@@ -246,6 +257,7 @@ export default function BookingEditor() {
 
         if (cancelled) return
         setForm(normalizeBookingForm(data))
+        setExistingPaymentConfirmedAt(data.paymentConfirmedAt ?? data.payment_confirmed_at ?? null)
       } catch (error) {
         console.error('[booking-editor] Failed to load booking', error)
         if (!cancelled) {
@@ -266,17 +278,6 @@ export default function BookingEditor() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
   }, [form.quantity])
 
-  function setStatusDraft(nextStatus: string, nextPaymentStatus?: string) {
-    setForm(prev => ({
-      ...prev,
-      status: nextStatus,
-      paymentStatus: nextPaymentStatus ?? prev.paymentStatus,
-    }))
-    const message = `Status set to ${statusLabel(nextStatus)}. Click Save changes to send the update.`
-    setSuccessMessage(message)
-    publish({ tone: 'info', message })
-  }
-
   async function handleSave() {
     if (!storeId) {
       setErrorMessage('Select a workspace before editing bookings.')
@@ -293,81 +294,94 @@ export default function BookingEditor() {
     const targetId = isCreateMode ? doc(db, 'stores', storeId, 'integrationBookings').id : bookingId
 
     try {
-      const normalizedStatus = (form.status.trim() || 'pending_approval').toLowerCase()
-      const normalizedPaymentStatus = form.paymentStatus.trim() || 'payment_pending'
+      const normalizedStatus = normalizeBookingStatusValue(form.status, 'pending')
+      const normalizedPaymentStatus = normalizePaymentStatusValue(form.paymentStatus, 'pending')
+      const isPaid = normalizedPaymentStatus === 'paid'
+      const isConfirmedPaid = normalizedStatus === 'confirmed' && isPaid
       const now = Timestamp.now()
+      const paymentConfirmedAt = existingPaymentConfirmedAt || now
+      const lastEventType = isConfirmedPaid ? 'confirmed_paid' : syncReasonForStatus(normalizedStatus, normalizedPaymentStatus)
       const statusTimestamps = {
         ...(normalizedStatus === 'confirmed' ? { confirmedAt: now, confirmedBy: 'staff_admin' } : {}),
         ...(normalizedStatus === 'completed' ? { completedAt: now } : {}),
         ...(normalizedStatus === 'cancelled' ? { cancelledAt: now } : {}),
-        ...(['paid', 'confirmed'].includes(normalizedPaymentStatus.toLowerCase()) ? {
-          paymentConfirmedAt: now,
+        ...(isPaid ? {
+          paymentConfirmedAt,
+          payment_confirmed_at: paymentConfirmedAt,
           paymentVerifiedAt: now,
           paymentVerifiedBy: 'staff_admin',
         } : {}),
       }
+      const normalizedFormPayload = {
+        name: form.fullName.trim(),
+        fullName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        serviceName: form.serviceName.trim(),
+        serviceId: form.serviceId.trim(),
+        date: normalizeDateInput(form.bookingDate),
+        bookingDate: normalizeDateInput(form.bookingDate),
+        time: normalizeTimeInput(form.bookingTime),
+        bookingTime: normalizeTimeInput(form.bookingTime),
+        preferredBranch: form.preferredBranch.trim(),
+        preferredContactMethod: form.preferredContactMethod.trim(),
+        quantity: quantityValue,
+        notes: form.notes.trim(),
+        paymentAmount: form.paymentAmount.trim(),
+        depositAmount: form.depositAmount.trim(),
+        paymentMethod: form.paymentMethod.trim(),
+        paymentReference: form.paymentReference.trim(),
+        reference: form.paymentReference.trim(),
+      }
       const payload = {
+        ...normalizedFormPayload,
+        bookingStatus: normalizedStatus,
+        booking_status: normalizedStatus,
+        status: normalizedStatus,
+        paymentStatus: normalizedPaymentStatus,
+        payment_status: normalizedPaymentStatus,
+        lastEventType,
+        last_event_type: lastEventType,
+        payment: {
+          amount: form.paymentAmount.trim(),
+          depositAmount: form.depositAmount.trim(),
+          method: form.paymentMethod.trim(),
+          reference: form.paymentReference.trim(),
+          status: normalizedPaymentStatus,
+          paymentStatus: normalizedPaymentStatus,
+          payment_status: normalizedPaymentStatus,
+          confirmed: isPaid,
+        },
+        booking: {
+          serviceId: form.serviceId.trim(),
+          serviceName: form.serviceName.trim(),
+          preferredDate: normalizeDateInput(form.bookingDate),
+          preferredTime: normalizeTimeInput(form.bookingTime),
+          status: normalizedStatus,
+          bookingStatus: normalizedStatus,
+          booking_status: normalizedStatus,
+        },
+        customer: {
           name: form.fullName.trim(),
-          fullName: form.fullName.trim(),
           phone: form.phone.trim(),
           email: form.email.trim(),
-          serviceName: form.serviceName.trim(),
-          serviceId: form.serviceId.trim(),
-          date: normalizeDateInput(form.bookingDate),
-          bookingDate: normalizeDateInput(form.bookingDate),
-          time: normalizeTimeInput(form.bookingTime),
-          bookingTime: normalizeTimeInput(form.bookingTime),
-          preferredBranch: form.preferredBranch.trim(),
-          preferredContactMethod: form.preferredContactMethod.trim(),
-          bookingStatus: normalizedStatus,
-          status: normalizedStatus === 'pending_approval' ? 'pending' : normalizedStatus,
-          quantity: quantityValue,
-          notes: form.notes.trim(),
-          paymentAmount: form.paymentAmount.trim(),
-          depositAmount: form.depositAmount.trim(),
-          paymentMethod: form.paymentMethod.trim(),
-          paymentReference: form.paymentReference.trim(),
-          reference: form.paymentReference.trim(),
-          paymentStatus: normalizedPaymentStatus,
-          payment: {
-            amount: form.paymentAmount.trim(),
-            depositAmount: form.depositAmount.trim(),
-            method: form.paymentMethod.trim(),
-            reference: form.paymentReference.trim(),
-            status: normalizedPaymentStatus,
-            confirmed: ['paid', 'confirmed'].includes(normalizedPaymentStatus.toLowerCase()),
-          },
-          booking: {
-            serviceId: form.serviceId.trim(),
-            serviceName: form.serviceName.trim(),
-            preferredDate: normalizeDateInput(form.bookingDate),
-            preferredTime: normalizeTimeInput(form.bookingTime),
-          },
-          customer: {
-            name: form.fullName.trim(),
-            phone: form.phone.trim(),
-            email: form.email.trim(),
-          },
-          bookingId: targetId,
-          booking_id: targetId,
-          syncStatus: 'pending',
-          syncReason: syncReasonForStatus(normalizedStatus, normalizedPaymentStatus),
-          syncRequestedAt: now,
-          syncConfigDetected: true,
-          ...statusTimestamps,
-          updatedAt: serverTimestamp(),
-          ...(isCreateMode ? {
-            createdAt: serverTimestamp(),
-            source: 'manual_admin',
-            sourceChannel: 'manual_admin',
-            source_channel: 'manual_admin',
-          } : {}),
-        }
-      const booking = payload as BookingSheetSource
-      if (normalizedStatus === 'confirmed') {
-        console.log('CONFIRM BOOKING CLICKED', booking)
-        console.log('BOOKING WEBHOOK URL', bookingAppsScriptUrl)
+        },
+        bookingId: targetId,
+        booking_id: targetId,
+        syncStatus: 'pending',
+        syncReason: lastEventType,
+        syncRequestedAt: now,
+        syncConfigDetected: true,
+        ...statusTimestamps,
+        updatedAt: serverTimestamp(),
+        ...(isCreateMode ? {
+          createdAt: serverTimestamp(),
+          source: 'manual_admin',
+          sourceChannel: 'manual_admin',
+          source_channel: 'manual_admin',
+        } : {}),
       }
+      const booking = payload as BookingSheetSource & Record<string, unknown>
 
       await withTimeout(
         Promise.all([
@@ -378,20 +392,26 @@ export default function BookingEditor() {
         'Saving booking timed out. Please try again.',
       )
 
-      if (normalizedStatus === 'confirmed') {
-        await syncBookingToSheet({
-          type: 'booking',
-          bookingId: booking.id || booking.bookingId || `BOOK-${Date.now()}`,
-          customerName: booking.customerName || booking.name || '',
-          customerEmail: booking.customerEmail || booking.email || '',
-          customerPhone: booking.customerPhone || booking.phone || '',
-          serviceName: booking.serviceName || booking.service || '',
-          bookingDate: booking.bookingDate || booking.date || '',
-          bookingTime: booking.bookingTime || booking.time || '',
-          status: 'confirmed',
-          source: 'sedifex-booking-confirm',
-        })
-      }
+      await syncBookingToSheet({
+        type: 'booking',
+        bookingId: String(booking.id || booking.bookingId || targetId || `BOOK-${Date.now()}`),
+        booking_id: String(booking.booking_id || booking.bookingId || targetId),
+        customerName: String(booking.customerName || booking.name || ''),
+        customerEmail: String(booking.customerEmail || booking.email || ''),
+        customerPhone: String(booking.customerPhone || booking.phone || ''),
+        serviceName: String(booking.serviceName || booking.service || ''),
+        bookingDate: String(booking.bookingDate || booking.date || ''),
+        bookingTime: String(booking.bookingTime || booking.time || ''),
+        status: normalizedStatus,
+        booking_status: normalizedStatus,
+        bookingStatus: normalizedStatus,
+        payment_status: normalizedPaymentStatus,
+        paymentStatus: normalizedPaymentStatus,
+        payment_confirmed_at: isPaid ? stringValue(paymentConfirmedAt) : '',
+        last_event_type: lastEventType,
+        lastEventType,
+        source: isConfirmedPaid ? 'sedifex-booking-confirmed-paid' : 'sedifex-booking-update',
+      })
 
       const saveMessage = isCreateMode
         ? 'Booking created successfully. Email will be sent to the customer.'
@@ -448,8 +468,7 @@ export default function BookingEditor() {
             <label>
               <span>Status</span>
               <select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}>
-                <option value="pending_approval">Pending approval</option>
-                <option value="pending">Pending</option>
+                <option value="pending">Pending approval</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="rescheduled">Rescheduled</option>
                 <option value="completed">Completed</option>
@@ -464,33 +483,13 @@ export default function BookingEditor() {
             <label>
               <span>Payment status</span>
               <select value={form.paymentStatus} onChange={event => setForm(prev => ({ ...prev, paymentStatus: event.target.value }))}>
-                <option value="payment_pending">Payment pending</option>
+                <option value="pending">Payment pending</option>
                 <option value="paid">Paid</option>
-                <option value="manual_review">Manual review</option>
-                <option value="refunded">Refunded</option>
+                <option value="partial">Partially paid</option>
+                <option value="awaiting_verification">Awaiting verification</option>
               </select>
             </label>
             <label className="booking-editor-page__notes"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} rows={4} /></label>
-
-            {!isCreateMode && (
-              <div className="booking-editor-page__quick-status" aria-label="Quick status shortcuts">
-                <div>
-                  <strong>Quick status</strong>
-                  <p className="form__hint">These buttons only set the fields above. Click Save changes to send the update.</p>
-                </div>
-                <div className="booking-editor-page__quick-status-actions">
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('completed')}>
-                    Set completed
-                  </button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('cancelled')}>
-                    Set cancelled
-                  </button>
-                  <button type="button" className="button button--outline" disabled={saving} onClick={() => setStatusDraft('confirmed', 'paid')}>
-                    Set confirmed + paid
-                  </button>
-                </div>
-              </div>
-            )}
 
             <div className="booking-editor-page__actions">
               <Link to="/bookings" className="button button--outline">Back</Link>
