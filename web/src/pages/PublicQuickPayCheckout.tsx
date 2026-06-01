@@ -38,6 +38,8 @@ const FUNCTION_BASE_URL =
 
 const CONTRACT_VERSION =
   import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || "2026-04-13";
+const DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT = 1.95;
+
 const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = [
   "SERVICE",
   "PRODUCT",
@@ -63,6 +65,20 @@ function money(value: number) {
     style: "currency",
     currency: "GHS",
   }).format(value);
+}
+
+function calculateCustomerProcessingFee(
+  baseAmount: number,
+  feePercent = DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT,
+) {
+  if (!Number.isFinite(baseAmount) || baseAmount <= 0) return 0;
+  if (!Number.isFinite(feePercent) || feePercent <= 0) return 0;
+
+  const rate = feePercent / 100;
+  if (rate >= 1) return 0;
+
+  const baseMinor = Math.round(baseAmount * 100);
+  return (Math.max(0, Math.ceil(baseMinor / (1 - rate)) - baseMinor)) / 100;
 }
 
 function normalizeCheckoutItemType(type: QuickPayItemType) {
@@ -214,6 +230,11 @@ export default function PublicQuickPayCheckout() {
     selectedItem?.type === "MANUAL"
       ? Number(customAmount || 0)
       : unitAmount * quantity;
+  const processingFee =
+    paymentMethod === "ONLINE"
+      ? calculateCustomerProcessingFee(finalAmount)
+      : 0;
+  const onlineTotalAmount = finalAmount + processingFee;
 
   useEffect(() => {
     let isMounted = true;
@@ -363,6 +384,9 @@ export default function PublicQuickPayCheckout() {
         },
         metadata: {
           quickPay: true,
+          baseAmount: finalAmount,
+          displayedProcessingFee: processingFee,
+          displayedTotalToPay: onlineTotalAmount,
           storeId,
           itemId: selectedItem.id,
           slotId: selectedItem.slotId || requestedSlotId || null,
@@ -688,9 +712,27 @@ export default function PublicQuickPayCheckout() {
                   </label>
                 )}
                 <div className="qp-total-row">
-                  <span className="qp-total-label">Total</span>
+                  <span className="qp-total-label">Items / services</span>
                   <strong className="qp-total-value">
                     {money(finalAmount || 0)}
+                  </strong>
+                </div>
+                {paymentMethod === "ONLINE" ? (
+                  <div className="qp-total-row">
+                    <span className="qp-total-label">Processing fee</span>
+                    <strong className="qp-total-value">
+                      {money(processingFee || 0)}
+                    </strong>
+                  </div>
+                ) : null}
+                <div className="qp-total-row qp-total-row-final">
+                  <span className="qp-total-label">Total to pay</span>
+                  <strong className="qp-total-value">
+                    {money(
+                      paymentMethod === "ONLINE"
+                        ? onlineTotalAmount || 0
+                        : finalAmount || 0,
+                    )}
                   </strong>
                 </div>
               </div>
@@ -773,7 +815,7 @@ export default function PublicQuickPayCheckout() {
                 : selectedItem
                   ? paymentMethod === "CASH"
                     ? `Save cash order ${money(finalAmount || 0)}`
-                    : `Pay ${money(finalAmount || 0)}`
+                    : `Pay ${money(onlineTotalAmount || 0)}`
                   : "Enter payment details"}
             </button>
             <p className="qp-powered">
