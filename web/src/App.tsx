@@ -16,6 +16,7 @@ import { useSessionHeartbeat } from './hooks/useSessionHeartbeat'
 import { useQueueMessageToasts } from './hooks/useQueueMessageToasts'
 import { PwaProvider } from './context/PwaContext'
 import { CanonicalLink } from './components/CanonicalLink'
+import AskSedifexAgent from './components/AskSedifexAgent'
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -187,6 +188,7 @@ export default function App() {
     <PwaProvider isPwaApp={isPwaApp}>
       <CanonicalLink />
       {content}
+      <AskSedifexAgent enabled={Boolean(user) && !isPublicRoute && storeAccessStatus === 'ready'} />
     </PwaProvider>
   )
 }
