@@ -413,7 +413,10 @@
 }
 
 .qp-total-label { color: #64748b; font-size: 14px; font-weight: 700; }
-.qp-total-value { color: #0f172a; font-size: 26px; font-weight: 900; }
+.qp-total-value { color: #0f172a; font-size: 20px; font-weight: 900; }
+.qp-total-row-final { border-top-color: #cbd5e1; }
+.qp-total-row-final .qp-total-label { color: #0f172a; font-weight: 900; }
+.qp-total-row-final .qp-total-value { color: #0f172a; font-size: 26px; }
 
 .qp-form-fields {
   display: grid;

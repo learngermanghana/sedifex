@@ -82,10 +82,64 @@ class MockDocumentReference {
   }
 }
 
-class MockCollectionReference {
-  constructor(db, path) {
+class MockQuerySnapshot {
+  constructor(docs) {
+    this.docs = docs
+  }
+
+  get empty() {
+    return this.docs.length === 0
+  }
+}
+
+class MockQueryDocumentSnapshot extends MockDocSnapshot {
+  constructor(ref, data) {
+    super(data)
+    this.ref = ref
+    this.id = ref.id
+  }
+}
+
+function getNestedField(data, field) {
+  return String(field)
+    .split('.')
+    .reduce((value, key) => (value && typeof value === 'object' ? value[key] : undefined), data)
+}
+
+class MockQuery {
+  constructor(db, path, filters = [], limitCount = null) {
     this._db = db
     this._path = path
+    this._filters = filters
+    this._limitCount = limitCount
+  }
+
+  where(field, op, value) {
+    return new MockQuery(this._db, this._path, [...this._filters, { field, op, value }], this._limitCount)
+  }
+
+  limit(count) {
+    return new MockQuery(this._db, this._path, this._filters, count)
+  }
+
+  async get() {
+    let docs = this._db
+      .listCollection(this._path)
+      .filter(({ data }) => this._filters.every(({ field, op, value }) => {
+        const actual = getNestedField(data, field)
+        if (op === '==') return actual === value
+        if (op === 'in') return Array.isArray(value) && value.includes(actual)
+        return false
+      }))
+      .map(({ id, data }) => new MockQueryDocumentSnapshot(new MockDocumentReference(this._db, `${this._path}/${id}`), data))
+    if (Number.isFinite(this._limitCount)) docs = docs.slice(0, this._limitCount)
+    return new MockQuerySnapshot(docs)
+  }
+}
+
+class MockCollectionReference extends MockQuery {
+  constructor(db, path) {
+    super(db, path)
   }
 
   doc(id) {

@@ -12,6 +12,20 @@ type CheckoutBody = Record<string, unknown>
 
 type NormalizedItemType = 'product' | 'service' | 'course'
 
+const DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT = 1.95
+const DEFAULT_SEDIFEX_COMMISSION_PERCENT = 3
+
+type ResolvedPaymentRouting = {
+  paystackSubaccountCode: string
+  percentageCharge: number
+  settlementMode: string
+  status: string
+  source: string
+  splitEnabled: boolean
+  splitDisabledReason: string | null
+  raw: Record<string, unknown>
+}
+
 function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
@@ -142,8 +156,153 @@ function getSubaccount(body: CheckoutBody) {
 
 function getTransactionChargeMinor(body: CheckoutBody) {
   const split = getRecord(body.splitPayment)
-  const value = numberValue(split.transactionChargeMinor ?? split.transaction_charge ?? split.transactionCharge)
+  const value = numberValue(split.transactionChargeMinor ?? split.transaction_charge ?? split.transactionCharge ?? body.transactionChargeMinor ?? body.transaction_charge)
   return value !== null && value > 0 ? Math.round(value) : null
+}
+
+function getPercentageCharge(value: unknown, fallback = DEFAULT_SEDIFEX_COMMISSION_PERCENT) {
+  const parsed = numberValue(value)
+  return parsed !== null && parsed > 0 ? parsed : fallback
+}
+
+function isQuickPayCheckout(body: CheckoutBody, metadata: Record<string, unknown>, sourceChannel: string) {
+  return metadata.quickPay === true
+    || metadata.quick_pay === true
+    || clean(body.quickPay, 20).toLowerCase() === 'true'
+    || clean(body.quick_pay, 20).toLowerCase() === 'true'
+    || sourceChannel.toLowerCase().startsWith('quick_pay')
+}
+
+function calculateCustomerProcessingFeeMinor(
+  baseTotalMinor: number,
+  feePercent = DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT,
+) {
+  if (!Number.isFinite(baseTotalMinor) || baseTotalMinor <= 0) return 0
+  if (!Number.isFinite(feePercent) || feePercent <= 0) return 0
+
+  const rate = feePercent / 100
+
+  if (rate >= 1) {
+    throw new Error('Processing fee percent must be less than 100.')
+  }
+
+  return Math.max(0, Math.ceil(baseTotalMinor / (1 - rate)) - baseTotalMinor)
+}
+
+function calculateSedifexCommissionMinor(
+  baseTotalMinor: number,
+  commissionPercent = DEFAULT_SEDIFEX_COMMISSION_PERCENT,
+) {
+  if (!Number.isFinite(baseTotalMinor) || baseTotalMinor <= 0) return 0
+  if (!Number.isFinite(commissionPercent) || commissionPercent <= 0) return 0
+
+  return Math.round(baseTotalMinor * (commissionPercent / 100))
+}
+
+function normalizeRoutingSnapshot(input: {
+  subaccount: string
+  percentageCharge?: unknown
+  settlementMode?: unknown
+  status?: unknown
+  source: string
+  raw?: Record<string, unknown>
+}): ResolvedPaymentRouting {
+  const subaccount = clean(input.subaccount, 140)
+  const settlementMode = clean(input.settlementMode, 80) || (subaccount ? 'subaccount' : '')
+  const status = clean(input.status, 80) || (subaccount ? 'active' : '')
+  const inactive = ['inactive', 'disabled', 'blocked', 'suspended'].includes(status.toLowerCase())
+  const wrongMode = Boolean(settlementMode) && settlementMode.toLowerCase() !== 'subaccount'
+  const splitEnabled = Boolean(subaccount) && !inactive && !wrongMode
+  return {
+    paystackSubaccountCode: subaccount,
+    percentageCharge: getPercentageCharge(input.percentageCharge),
+    settlementMode: settlementMode || 'subaccount',
+    status: status || (splitEnabled ? 'active' : 'missing'),
+    source: input.source,
+    splitEnabled,
+    splitDisabledReason: splitEnabled ? null : (!subaccount ? 'missing_paystack_subaccount' : inactive ? `routing_${status.toLowerCase()}` : 'settlement_mode_not_subaccount'),
+    raw: input.raw ?? {},
+  }
+}
+
+function routingFromBody(body: CheckoutBody): ResolvedPaymentRouting | null {
+  const split = getRecord(body.splitPayment)
+  const routing = getRecord(body.paymentRouting)
+  const subaccount = getSubaccount(body)
+  if (!subaccount) return null
+  return normalizeRoutingSnapshot({
+    subaccount,
+    percentageCharge: routing.percentageCharge ?? routing.percentage_charge ?? split.percentageCharge ?? split.percentage_charge,
+    settlementMode: routing.settlementMode ?? routing.settlement_mode ?? split.settlementMode ?? split.settlement_mode,
+    status: routing.status ?? split.status,
+    source: 'request_body',
+    raw: { ...routing, ...split },
+  })
+}
+
+async function loadPaymentRoutingFromFirestore(storeId: string): Promise<ResolvedPaymentRouting> {
+  const empty = normalizeRoutingSnapshot({
+    subaccount: '',
+    source: 'firestore',
+    raw: {},
+  })
+  if (!storeId) return empty
+
+  const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
+  const storeData = storeSnap.exists ? getRecord(storeSnap.data()) : {}
+  const storeRouting = getRecord(storeData.paymentRouting)
+  const storeNestedCode = clean(storeRouting.paystackSubaccountCode ?? storeRouting.subaccountCode, 140)
+  if (storeNestedCode) {
+    return normalizeRoutingSnapshot({
+      subaccount: storeNestedCode,
+      percentageCharge: storeRouting.percentageCharge ?? storeRouting.percentage_charge,
+      settlementMode: storeRouting.settlementMode ?? storeRouting.settlement_mode,
+      status: storeRouting.status,
+      source: 'stores.paymentRouting',
+      raw: storeRouting,
+    })
+  }
+
+  const storeRootCode = clean(storeData.paystackSubaccountCode ?? storeData.paystack_subaccount_code, 140)
+  if (storeRootCode) {
+    return normalizeRoutingSnapshot({
+      subaccount: storeRootCode,
+      percentageCharge: storeRouting.percentageCharge ?? storeRouting.percentage_charge,
+      settlementMode: storeRouting.settlementMode ?? storeRouting.settlement_mode,
+      status: storeRouting.status,
+      source: 'stores.paystackSubaccountCode',
+      raw: storeRouting,
+    })
+  }
+
+  const settingsSnap = await defaultDb.collection('storeSettings').doc(storeId).get()
+  const settingsData = settingsSnap.exists ? getRecord(settingsSnap.data()) : {}
+  const settingsRouting = getRecord(settingsData.paymentRouting)
+  const settingsNestedCode = clean(settingsRouting.paystackSubaccountCode ?? settingsRouting.subaccountCode, 140)
+  if (settingsNestedCode) {
+    return normalizeRoutingSnapshot({
+      subaccount: settingsNestedCode,
+      percentageCharge: settingsRouting.percentageCharge ?? settingsRouting.percentage_charge,
+      settlementMode: settingsRouting.settlementMode ?? settingsRouting.settlement_mode,
+      status: settingsRouting.status,
+      source: 'storeSettings.paymentRouting',
+      raw: settingsRouting,
+    })
+  }
+
+  const settingsRootCode = clean(settingsData.paystackSubaccountCode ?? settingsData.paystack_subaccount_code, 140)
+  if (settingsRootCode) {
+    return normalizeRoutingSnapshot({
+      subaccount: settingsRootCode,
+      percentageCharge: settingsRouting.percentageCharge ?? settingsRouting.percentage_charge,
+      settlementMode: settingsRouting.settlementMode ?? settingsRouting.settlement_mode,
+      status: settingsRouting.status,
+      source: 'storeSettings.paystackSubaccountCode',
+      raw: settingsRouting,
+    })
+  }
+
+  return empty
 }
 
 function normalizeItemType(value: unknown): NormalizedItemType | '' {
@@ -320,9 +479,9 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
     const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
-    const subaccount = getSubaccount(body)
     const transactionChargeMinor = getTransactionChargeMinor(body)
     const details = deriveCheckoutDetails(body)
+    const quickPayCheckout = isQuickPayCheckout(body, details.metadata, sourceChannel)
 
     if (!storeId) {
       res.status(400).json({ error: 'missing-store-id' })
@@ -337,9 +496,68 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       return
     }
 
+    const baseTotalMinor = Math.round(amountMajor * 100)
+    const bodyRouting = routingFromBody(body)
+    const firestoreRouting = quickPayCheckout && !bodyRouting
+      ? await loadPaymentRoutingFromFirestore(storeId)
+      : null
+    const paymentRouting = bodyRouting ?? firestoreRouting ?? normalizeRoutingSnapshot({ subaccount: '', source: 'none' })
+    const subaccount = paymentRouting.splitEnabled ? paymentRouting.paystackSubaccountCode : ''
+    const commissionPercent = paymentRouting.percentageCharge || DEFAULT_SEDIFEX_COMMISSION_PERCENT
+    const processingFeeMinor = quickPayCheckout
+      ? calculateCustomerProcessingFeeMinor(baseTotalMinor)
+      : 0
+    const customerTotalMinor = baseTotalMinor + processingFeeMinor
+    const sedifexCommissionMinor = subaccount
+      ? (quickPayCheckout
+        ? calculateSedifexCommissionMinor(baseTotalMinor, commissionPercent)
+        : transactionChargeMinor ?? 0)
+      : 0
+    const pricingSnapshot = {
+      baseTotalMinor,
+      processingFeeMinor,
+      customerTotalMinor,
+      sedifexCommissionMinor,
+      customerPaysProcessingFee: quickPayCheckout,
+      merchantPaysCommission: sedifexCommissionMinor > 0,
+    }
+    const paymentRoutingSnapshot = {
+      paystackSubaccountCode: paymentRouting.paystackSubaccountCode || null,
+      percentageCharge: commissionPercent,
+      settlementMode: paymentRouting.settlementMode,
+      status: paymentRouting.status,
+      source: paymentRouting.source,
+      splitEnabled: Boolean(subaccount),
+      splitDisabledReason: subaccount ? null : paymentRouting.splitDisabledReason,
+    }
+    const paystackSplitSnapshot = subaccount ? {
+      enabled: true,
+      provider: 'paystack',
+      mode: 'subaccount',
+      subaccount,
+      transactionChargeMinor: sedifexCommissionMinor,
+      transaction_charge: sedifexCommissionMinor,
+      bearer: sedifexCommissionMinor > 0 ? 'subaccount' : null,
+      percentageCharge: commissionPercent,
+      customerPaysProcessingFee: quickPayCheckout,
+      merchantPaysCommission: sedifexCommissionMinor > 0,
+    } : {
+      enabled: false,
+      provider: 'paystack',
+      mode: 'subaccount',
+      subaccount: null,
+      transactionChargeMinor: 0,
+      transaction_charge: 0,
+      bearer: null,
+      percentageCharge: commissionPercent,
+      customerPaysProcessingFee: quickPayCheckout,
+      merchantPaysCommission: false,
+      splitDisabledReason: paymentRouting.splitDisabledReason,
+    }
+
     const storedMetadata = {
       ...details.metadata,
-      quickPay: details.metadata.quickPay ?? true,
+      quickPay: details.metadata.quickPay ?? quickPayCheckout,
       storeId,
       merchantId: storeId,
       clientOrderId: clean(body.client_order_id ?? body.clientOrderId, 220) || reference,
@@ -358,22 +576,32 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       orderType: details.recordType,
       recordType: details.recordType,
       paystackSubaccountCode: subaccount || null,
+      baseTotalMinor,
+      processingFeeMinor,
+      customerTotalMinor,
+      sedifexCommissionMinor,
+      customerPaysProcessingFee: quickPayCheckout,
+      merchantPaysCommission: sedifexCommissionMinor > 0,
+      settlementMode: paymentRouting.settlementMode,
       splitEnabled: Boolean(subaccount),
+      splitDisabledReason: subaccount ? null : paymentRouting.splitDisabledReason,
     }
 
     const paystackPayload: Record<string, unknown> = {
       email: customer.email,
-      amount: Math.round(amountMajor * 100),
+      amount: customerTotalMinor,
       reference,
       currency,
       callback_url: callbackUrl,
       metadata: storedMetadata,
     }
 
-    if (subaccount) paystackPayload.subaccount = subaccount
-    if (subaccount && transactionChargeMinor) {
-      paystackPayload.transaction_charge = transactionChargeMinor
-      paystackPayload.bearer = 'subaccount'
+    if (subaccount) {
+      paystackPayload.subaccount = subaccount
+      if (sedifexCommissionMinor > 0) {
+        paystackPayload.transaction_charge = sedifexCommissionMinor
+        paystackPayload.bearer = 'subaccount'
+      }
     }
 
     const paystack = await initializePaystack(paystackPayload)
@@ -405,9 +633,18 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       customer_email: customer.email,
       customerPhone: customer.phone || null,
       customer_phone: customer.phone || null,
-      amount: amountMajor,
-      amountMinor: Math.round(amountMajor * 100),
-      amount_minor: Math.round(amountMajor * 100),
+      amount: customerTotalMinor / 100,
+      amountMinor: customerTotalMinor,
+      amount_minor: customerTotalMinor,
+      baseAmount: baseTotalMinor / 100,
+      baseAmountMinor: baseTotalMinor,
+      base_amount_minor: baseTotalMinor,
+      processingFeeMinor,
+      processing_fee_minor: processingFeeMinor,
+      customerTotalMinor,
+      customer_total_minor: customerTotalMinor,
+      sedifexCommissionMinor,
+      sedifex_commission_minor: sedifexCommissionMinor,
       currency,
       itemName: details.itemName || details.productName || details.serviceName || null,
       productName: details.productName || null,
@@ -428,8 +665,10 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
         recordType: details.recordType,
       },
       items: details.enrichedItems,
-      pricingSnapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
-      pricing_snapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
+      pricingSnapshot,
+      pricing_snapshot: pricingSnapshot,
+      clientPricingSnapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
+      client_pricing_snapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
       marketplaceFees: body.marketplace_fees ?? body.marketplaceFees ?? null,
       marketplace_fees: body.marketplace_fees ?? body.marketplaceFees ?? null,
       metadata: storedMetadata,
@@ -447,7 +686,9 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       status: 'pending_payment',
       paymentCollectionMode: 'online_checkout',
       payment_collection_mode: 'online_checkout',
-      paystackSplit: subaccount ? { enabled: true, subaccount, transactionChargeMinor, bearer: transactionChargeMinor ? 'subaccount' : null, commissionControlledBy: 'sedifex' } : { enabled: false },
+      paymentRouting: paymentRoutingSnapshot,
+      payment_routing: paymentRoutingSnapshot,
+      paystackSplit: paystackSplitSnapshot,
       authorizationUrl,
       checkoutUrl: authorizationUrl,
       orderDate: nowIso,
@@ -481,7 +722,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       order_status: 'pending_payment',
       recordType: details.recordType,
       orderType: details.recordType,
-      paystackSplit: subaccount ? { enabled: true, subaccount } : { enabled: false },
+      pricingSnapshot,
+      paystackSplit: paystackSplitSnapshot,
     })
   } catch (error) {
     functions.logger.error('integrationCheckoutCreate failed', { error })
