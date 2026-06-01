@@ -1000,14 +1000,10 @@ export default function ProductsServiceFirst() {
                 <button type="button" className="button button--ghost" onClick={() => { updateDraft('imageUrl', ''); setImageUploadState('idle'); setImageStatusMessage('') }}>Remove image</button>
               </div>
             ) : null}
-            <div className="field">
-              <label className="field__label" htmlFor="item-image-alt">Image alt text</label>
-              <input id="item-image-alt" value={draft.imageAlt} onChange={event => updateDraft('imageAlt', event.target.value)} />
-            </div>
             <div className="products-page__visibility-grid">
               <label className="checkbox"><input type="checkbox" checked={draft.isPublished} onChange={event => setDraft(current => ({ ...current, isPublished: event.target.checked }))} /><span>Publish item</span></label>
               <label className="checkbox"><input type="checkbox" checked={draft.isMarketplaceVisible} onChange={event => setDraft(current => ({ ...current, isMarketplaceVisible: event.target.checked }))} /><span>Show on SedifexMarket</span></label>
-              <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on website integrations</span></label>
+              <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on your website</span></label>
             </div>
             <div className="products-page__list-actions">
               <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
