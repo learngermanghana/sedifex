@@ -410,19 +410,21 @@ const payload = {
 }
 ```
 
-For Firebase Functions URLs, the route may map cleanly to:
+Use the direct deployed Cloud Functions endpoint for online checkout creation:
 
 ```text
-https://us-central1-<project>.cloudfunctions.net/integrationCheckoutCreate
+https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
 ```
 
-For proxy/API deployments, it may map to:
+Recommended website environment variable:
 
-```text
-/integration/checkout/create
+```bash
+SEDIFEX_INTEGRATION_CHECKOUT_CREATE_URL=https://us-central1-sedifex-web.cloudfunctions.net/integrationCheckoutCreate
 ```
 
-The client website should hide this difference inside its own server API route.
+If the website stores only the Functions base URL, build the checkout URL as `${SEDIFEX_INTEGRATION_API_BASE_URL}/integrationCheckoutCreate`. Do **not** call `/integration/checkout/create` unless a deployed router or hosting rewrite explicitly maps that path to `integrationCheckoutCreate`; with the current Sedifex structure, the checkout function is exposed directly as `/integrationCheckoutCreate`.
+
+The client website can still hide this URL inside its own server API route, but that route should forward to the dedicated Cloud Functions URL above.
 
 ## Paystack redirect snapshot and success fallback
 
