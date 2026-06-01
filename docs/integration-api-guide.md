@@ -886,6 +886,70 @@ Recommended flow:
 
 Do not trust totals calculated only in the browser. Always confirm totals server-side with Sedifex before payment.
 
+### Sandbox checkout testing
+
+Developers can test website checkout plumbing without creating a Paystack transaction and without saving an `integrationOrders` record in Sedifex. Send any one of these flags on the checkout-create request:
+
+- Header: `X-Sedifex-Sandbox: true`
+- Body: `sandbox: true`
+- Body: `testMode: true`
+- Body: `mode: "sandbox"`
+- Metadata: `metadata.sandbox: true`
+
+Sandbox mode still validates the store ID, customer email, amount, item details, contract version, and payment-routing snapshot. The response returns `sandbox: true`, `persisted: false`, `payment_status: "sandbox_created"`, and a synthetic `checkoutUrl`. Because the order is intentionally not persisted, do not call the order-status endpoint for sandbox references.
+
+Example request:
+
+```http
+POST /integrationCheckoutCreate
+X-Sedifex-Contract-Version: 2026-04-13
+X-Sedifex-Sandbox: true
+Content-Type: application/json
+```
+
+```json
+{
+  "storeId": "store_123",
+  "reference": "sandbox_order_001",
+  "amount": 600,
+  "currency": "GHS",
+  "customer": {
+    "email": "developer@example.com",
+    "name": "Developer Test"
+  },
+  "sourceChannel": "client_website",
+  "returnUrl": "https://clientsite.com/checkout/complete",
+  "items": [
+    {
+      "item_id": "service-schengen-travel-assistance-a65e6f",
+      "name": "Schengen Travel Assistance",
+      "qty": 1,
+      "type": "SERVICE"
+    }
+  ],
+  "metadata": {
+    "sandbox": true
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "sandbox": true,
+  "persisted": false,
+  "reference": "sandbox_order_001",
+  "payment_status": "sandbox_created",
+  "order_status": "sandbox_created",
+  "paymentProvider": "sandbox",
+  "checkoutUrl": "https://clientsite.com/checkout/complete?sedifex_sandbox=true&reference=sandbox_order_001&status=sandbox_created"
+}
+```
+
+Use this mode for checkout UI tests, end-to-end smoke tests, and developer test accounts that should not appear in Sedifex dashboards or reports. Remove the sandbox flag when testing real Paystack test keys or when you want Sedifex to save the order.
+
 ---
 
 ## 9. Next.js server example
