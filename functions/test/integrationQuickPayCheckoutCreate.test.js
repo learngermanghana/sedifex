@@ -251,6 +251,39 @@ async function runExternalBodySubaccountCompatibilityTest() {
   assert.strictEqual(payload.metadata.customerPaysProcessingFee, false)
 }
 
+
+async function runSandboxCheckoutDoesNotPersistTest() {
+  currentDefaultDb = new MockFirestore({
+    'stores/store-123': {
+      paymentRouting: {
+        paystackSubaccountCode: 'ACCT_sandbox_store',
+        percentageCharge: 3,
+        settlementMode: 'subaccount',
+        status: 'active',
+      },
+    },
+  })
+  process.env.PAYSTACK_SECRET_KEY = 'test_secret'
+  paystackPayloads = []
+
+  const { integrationCheckoutCreate } = loadQuickPayModule()
+  const state = await post(integrationCheckoutCreate, quickPayBody({
+    reference: 'qp_sandbox_checkout',
+    sandbox: true,
+    returnUrl: 'https://merchant.example/thanks',
+  }))
+
+  assert.strictEqual(state.statusCode, 200)
+  assert.strictEqual(state.body.sandbox, true)
+  assert.strictEqual(state.body.persisted, false)
+  assert.strictEqual(state.body.payment_status, 'sandbox_created')
+  assert.strictEqual(state.body.paymentProvider, 'sandbox')
+  assert.strictEqual(state.body.checkoutUrl, 'https://merchant.example/thanks?sedifex_sandbox=true&reference=qp_sandbox_checkout&status=sandbox_created')
+  assert.strictEqual(paystackPayloads.length, 0)
+  assert.strictEqual(currentDefaultDb.getDoc('integrationOrders/qp_sandbox_checkout'), undefined)
+  assert.strictEqual(currentDefaultDb.getDoc('stores/store-123/integrationOrders/qp_sandbox_checkout'), undefined)
+}
+
 async function runCashQuickPayNoProcessingFeeTest() {
   currentDefaultDb = new MockFirestore({ 'stores/store-123': {} })
   const { integrationCashCheckoutCreate } = loadCashModule()
@@ -277,6 +310,7 @@ async function run() {
   await runQuickPayStoreRoutingTest()
   await runMissingSubaccountTest()
   await runExternalBodySubaccountCompatibilityTest()
+  await runSandboxCheckoutDoesNotPersistTest()
   await runCashQuickPayNoProcessingFeeTest()
 }
 
