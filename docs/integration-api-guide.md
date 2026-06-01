@@ -898,51 +898,6 @@ Developers can test website checkout plumbing without creating a Paystack transa
 
 Sandbox mode still validates the store ID, customer email, amount, item details, contract version, and payment-routing snapshot. The response returns `sandbox: true`, `persisted: false`, `payment_status: "sandbox_created"`, and a synthetic `checkoutUrl`. Because the order is intentionally not persisted, do not call the order-status endpoint for sandbox references.
 
-#### Recommended setup
-
-1. Add a server-only environment variable to the developer, staging, or automated test environment:
-
-   ```bash
-   SEDIFEX_CHECKOUT_SANDBOX=true
-   ```
-
-   Keep production unset or set it to `false`. Do not expose this flag as `NEXT_PUBLIC_*` because the website backend should decide when checkout is allowed to run in sandbox mode.
-
-2. In the website backend route that calls Sedifex checkout create, translate the server-only flag into the sandbox header:
-
-   ```ts
-   const sandboxCheckout = process.env.SEDIFEX_CHECKOUT_SANDBOX === 'true'
-
-   const response = await fetch(`${SEDIFEX_BASE_URL}/integrationCheckoutCreate`, {
-     method: 'POST',
-     headers: {
-       ...sedifexHeaders(),
-       'Content-Type': 'application/json',
-       ...(sandboxCheckout ? { 'X-Sedifex-Sandbox': 'true' } : {}),
-     },
-     body: JSON.stringify(checkoutPayload),
-   })
-   ```
-
-3. After parsing the response, handle sandbox results as a completed developer handoff instead of a real order lookup:
-
-   ```ts
-   const checkout = await response.json()
-
-   if (checkout.sandbox) {
-     return {
-       sandbox: true,
-       reference: checkout.reference,
-       redirectUrl: checkout.checkoutUrl,
-       message: 'Sandbox checkout created. Nothing was charged or saved in Sedifex.',
-     }
-   }
-   ```
-
-4. For automated tests, assert that the checkout response includes `sandbox: true` and `persisted: false`. Do not assert that the reference appears in Sedifex order status, because sandbox references are intentionally not stored.
-
-5. For real payment testing with Paystack test keys, turn `SEDIFEX_CHECKOUT_SANDBOX` off. That path initializes Paystack and saves Sedifex order records as normal.
-
 Example request:
 
 ```http
