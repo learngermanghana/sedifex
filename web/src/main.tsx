@@ -41,7 +41,6 @@ import PaymentSettlement from './pages/PaymentSettlement'
 import BulkMessaging from './pages/BulkMessaging'
 import BulkEmail from './pages/BulkEmail'
 import StaffManagement from './pages/StaffManagement'
-import StoreActivity from './pages/StoreActivity'
 import { BillingVerifyPage } from './pages/BillingVerifyPage'
 import Expenses from './pages/Expenses'
 import FundsLedger from './pages/FundsLedger'
@@ -158,7 +157,6 @@ const router = createBrowserRouter([
       { path: 'close-day', element: <Navigate to="/sell/close-day" replace /> },
       { path: 'onboarding', element: <Onboarding /> },
       { path: 'staff', element: <StaffManagement /> },
-      { path: 'store-activity', element: <StoreActivity /> },
       { path: 'account', element: <CleanAccountOverview /> },
       { path: 'account/overview', element: <CleanAccountOverview /> },
       { path: 'public-page', element: <Navigate to="/account" replace /> },
