@@ -41,6 +41,42 @@ function getFirstArrayRecord(value: unknown): Record<string, unknown> {
 }
 
 
+
+function isTruthyFlag(value: unknown) {
+  if (value === true) return true
+  const normalized = clean(value, 40).toLowerCase()
+  return ['1', 'true', 'yes', 'y', 'on', 'sandbox', 'test', 'test_mode'].includes(normalized)
+}
+
+function isSandboxCheckout(req: functions.https.Request, body: CheckoutBody) {
+  const metadata = getRecord(body.metadata)
+  return isTruthyFlag(req.get('x-sedifex-sandbox'))
+    || isTruthyFlag(body.sandbox)
+    || isTruthyFlag(body.sandboxMode)
+    || isTruthyFlag(body.sandbox_mode)
+    || isTruthyFlag(body.testMode)
+    || isTruthyFlag(body.test_mode)
+    || clean(body.mode, 40).toLowerCase() === 'sandbox'
+    || isTruthyFlag(metadata.sandbox)
+    || isTruthyFlag(metadata.sandboxMode)
+    || isTruthyFlag(metadata.sandbox_mode)
+    || isTruthyFlag(metadata.testMode)
+    || isTruthyFlag(metadata.test_mode)
+}
+
+function getSandboxCheckoutUrl(reference: string, callbackUrl?: string) {
+  if (!callbackUrl) return `https://sandbox.sedifex.test/checkout/${encodeURIComponent(reference)}`
+  try {
+    const url = new URL(callbackUrl)
+    url.searchParams.set('sedifex_sandbox', 'true')
+    url.searchParams.set('reference', reference)
+    url.searchParams.set('status', 'sandbox_created')
+    return url.toString()
+  } catch (_error) {
+    return `https://sandbox.sedifex.test/checkout/${encodeURIComponent(reference)}`
+  }
+}
+
 function getBookingId(body: CheckoutBody) {
   const metadata = getRecord(body.metadata)
   return firstText([body.booking_id, body.bookingId, metadata.booking_id, metadata.bookingId], 220)
@@ -86,7 +122,7 @@ function firstText(values: unknown[], max = 220) {
 
 function setCors(res: functions.Response, methods = 'POST, OPTIONS') {
   res.set('Access-Control-Allow-Origin', '*')
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, X-Sedifex-Contract-Version')
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, X-Sedifex-Contract-Version, X-Sedifex-Sandbox')
   res.set('Access-Control-Allow-Methods', methods)
 }
 
@@ -482,6 +518,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const transactionChargeMinor = getTransactionChargeMinor(body)
     const details = deriveCheckoutDetails(body)
     const quickPayCheckout = isQuickPayCheckout(body, details.metadata, sourceChannel)
+    const sandboxCheckout = isSandboxCheckout(req, body)
 
     if (!storeId) {
       res.status(400).json({ error: 'missing-store-id' })
@@ -585,6 +622,33 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       settlementMode: paymentRouting.settlementMode,
       splitEnabled: Boolean(subaccount),
       splitDisabledReason: subaccount ? null : paymentRouting.splitDisabledReason,
+    }
+
+    if (sandboxCheckout) {
+      const sandboxCheckoutUrl = getSandboxCheckoutUrl(reference, callbackUrl)
+      res.status(200).json({
+        ok: true,
+        sandbox: true,
+        persisted: false,
+        reference,
+        payment_reference: reference,
+        authorizationUrl: sandboxCheckoutUrl,
+        checkoutUrl: sandboxCheckoutUrl,
+        accessCode: `sandbox_${reference}`,
+        orderId: reference,
+        payment_status: 'sandbox_created',
+        order_status: 'sandbox_created',
+        status: 'sandbox_created',
+        paymentProvider: 'sandbox',
+        payment_provider: 'sandbox',
+        recordType: details.recordType,
+        orderType: details.recordType,
+        pricingSnapshot,
+        paymentRouting: paymentRoutingSnapshot,
+        paystackSplit: paystackSplitSnapshot,
+        message: 'Sandbox checkout validated successfully. No Paystack transaction was initialized and no Sedifex order was saved.',
+      })
+      return
     }
 
     const paystackPayload: Record<string, unknown> = {
