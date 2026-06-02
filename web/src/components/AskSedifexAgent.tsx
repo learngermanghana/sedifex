@@ -1,5 +1,6 @@
 import React, { FormEvent, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import ProductPhotoAssist from './ProductPhotoAssist'
 
 type Change = {
   field: 'name' | 'price' | 'description'
@@ -137,7 +138,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
           <div style={{ background: '#0f172a', color: '#fff', padding: 16, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <strong>Ask Sedifex</strong>
-              <p style={{ margin: '4px 0 0', color: '#cbd5e1', fontSize: 12 }}>Product Agent: name, price, and description.</p>
+              <p style={{ margin: '4px 0 0', color: '#cbd5e1', fontSize: 12 }}>Product Agent: name, price, description, and image.</p>
             </div>
             <button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: '#fff', fontSize: 20, cursor: 'pointer' }}>x</button>
           </div>
@@ -146,6 +147,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
               <textarea value={command} onChange={event => setCommand(event.target.value)} placeholder="Tell Sedifex what to change..." rows={3} style={{ width: '100%', borderRadius: 16, border: '1px solid #cbd5e1', padding: 12, font: 'inherit', resize: 'vertical' }} />
               <button type="submit" style={{ border: 0, borderRadius: 16, padding: '12px 14px', background: '#4f46e5', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Prepare edit</button>
             </form>
+            <ProductPhotoAssist />
             {message ? <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.6, color: '#334155' }}>{message}</p> : null}
             {changes.length ? (
               <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
