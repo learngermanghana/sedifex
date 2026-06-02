@@ -25,6 +25,9 @@ function writeField(id: string, value: string) {
 }
 
 function getTargetIds() {
+  if (document.getElementById('item-name') && document.getElementById('item-price') && document.getElementById('item-description')) {
+    return { name: 'item-name', price: 'item-price', description: 'item-description' }
+  }
   if (document.getElementById('edit-name') && document.getElementById('edit-price') && document.getElementById('edit-description')) {
     return { name: 'edit-name', price: 'edit-price', description: 'edit-description' }
   }
@@ -144,7 +147,13 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
           </div>
           <div style={{ padding: 16 }}>
             <form onSubmit={prepare} style={{ display: 'grid', gap: 10 }}>
-              <textarea value={command} onChange={event => setCommand(event.target.value)} placeholder="Tell Sedifex what to change..." rows={3} style={{ width: '100%', borderRadius: 16, border: '1px solid #cbd5e1', padding: 12, font: 'inherit', resize: 'vertical' }} />
+              <textarea
+                value={command}
+                onChange={event => setCommand(event.target.value)}
+                placeholder="Tell Sedifex what to change..."
+                rows={3}
+                style={{ width: '100%', borderRadius: 16, border: '1px solid #cbd5e1', padding: 12, font: 'inherit', resize: 'vertical', background: '#ffffff', color: '#0f172a', WebkitTextFillColor: '#0f172a', caretColor: '#4f46e5', opacity: 1 }}
+              />
               <button type="submit" style={{ border: 0, borderRadius: 16, padding: '12px 14px', background: '#4f46e5', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Prepare edit</button>
             </form>
             <ProductPhotoAssist />
