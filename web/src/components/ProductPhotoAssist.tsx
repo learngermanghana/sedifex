@@ -8,10 +8,15 @@ function setFieldValue(input: HTMLInputElement, value: string) {
 }
 
 function findPhotoUrlField() {
-  const addIds = ['add-image-url', 'add-image-url-2', 'add-image-url-3']
-  for (const id of addIds) {
+  const preferredIds = ['item-image', 'add-image-url', 'add-image-url-2', 'add-image-url-3']
+  for (const id of preferredIds) {
     const field = document.getElementById(id)
     if (field instanceof HTMLInputElement && !field.value.trim()) return field
+  }
+
+  for (const id of preferredIds) {
+    const field = document.getElementById(id)
+    if (field instanceof HTMLInputElement) return field
   }
 
   const urlFields = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="url"]'))
