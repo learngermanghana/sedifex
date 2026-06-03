@@ -103,7 +103,7 @@ Full URL example:
 https://us-central1-sedifex-web.cloudfunctions.net/v1IntegrationProducts?storeId=<storeId>
 ```
 
-Use this endpoint when a client website needs to show Sedifex products or services.
+Use this endpoint when a client website needs to show Sedifex products or services. Product records include `brand` (with `manufacturerName` kept as a backward-compatible alias), so websites can build brand pages that group products by the same label.
 
 ### PowerShell test
 
@@ -136,6 +136,8 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
       "storeId": "store_123",
       "name": "Place Holder",
       "category": "General Services",
+      "brand": null,
+      "manufacturerName": null,
       "description": "Service description",
       "price": 600,
       "priceMinor": 60000,

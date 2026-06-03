@@ -17,6 +17,7 @@ export type Product = {
   imageAlt?: string | null
   taxRate?: number | null
   expiryDate?: Date | null
+  brand?: string | null
   manufacturerName?: string | null
   productionDate?: Date | null
   batchNumber?: string | null

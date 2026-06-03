@@ -38,6 +38,7 @@ type Draft = {
   expiryDate: string
   imageUrl: string
   imageAlt: string
+  brand: string
   serviceKind: ServiceKind
   durationMinutes: string
   location: string
@@ -117,6 +118,7 @@ const blankDraft: Draft = {
   expiryDate: '',
   imageUrl: '',
   imageAlt: '',
+  brand: '',
   serviceKind: 'consultation',
   durationMinutes: '',
   location: '',
@@ -412,7 +414,8 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     taxRate: cleanNumber(data.taxRate),
     expiryDate: itemType === 'product' ? toDate(data.expiryDate) : null,
     productionDate: itemType === 'product' ? toDate(data.productionDate) : null,
-    manufacturerName: itemType === 'product' && typeof data.manufacturerName === 'string' ? data.manufacturerName : null,
+    brand: itemType === 'product' ? cleanText(data.brand ?? data.manufacturerName) : null,
+    manufacturerName: itemType === 'product' ? cleanText(data.manufacturerName ?? data.brand) : null,
     batchNumber: itemType === 'product' && typeof data.batchNumber === 'string' ? data.batchNumber : null,
     showOnReceipt: itemType === 'product' && data.showOnReceipt === true,
     imageUrl,
@@ -480,6 +483,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const isPublished = draft.isPublished === true
   const status: 'draft' | 'published' = isPublished ? 'published' : 'draft'
   const description = cleanSavedDescription(draft.description)
+  const brand = behavesLikeService ? null : draft.brand.trim() || null
 
   return {
     storeId,
@@ -525,7 +529,8 @@ function buildSavePayload(draft: Draft, storeId: string) {
     courseMode: isCourse ? draft.courseMode : null,
     classTimes: isCourse ? draft.preferredTimes.trim() || draft.classTimes.trim() || null : null,
     productionDate: null,
-    manufacturerName: null,
+    brand,
+    manufacturerName: brand,
     batchNumber: null,
     showOnReceipt: false,
     imageUrl: trimmedImageUrl || null,
@@ -682,6 +687,7 @@ export default function ProductsServiceFirst() {
       expiryDate: itemType === 'product' ? formatDateInput(item.expiryDate) : '',
       imageUrl: item.imageUrl ?? '',
       imageAlt: item.imageAlt ?? item.name,
+      brand: item.itemType === 'product' ? (item.brand ?? item.manufacturerName ?? '') : '',
       serviceKind: ((item as any).serviceKind === 'quote_request' ? 'quote_request' : 'consultation') as ServiceKind,
       durationMinutes: typeof (item as any).durationMinutes === 'number' ? String((item as any).durationMinutes) : '',
       location: typeof (item as any).location === 'string' ? (item as any).location : '',
@@ -878,6 +884,10 @@ export default function ProductsServiceFirst() {
                   <input id="item-sku" value={draft.sku} onChange={event => updateDraft('sku', event.target.value)} />
                 </div>
                 <div className="field">
+                  <label className="field__label" htmlFor="item-brand">Brand</label>
+                  <input id="item-brand" value={draft.brand} onChange={event => updateDraft('brand', event.target.value)} placeholder="e.g. Nike, Samsung, Local label" />
+                </div>
+                <div className="field">
                   <label className="field__label" htmlFor="item-cost">Cost price</label>
                   <input id="item-cost" type="number" min="0" step="0.01" value={draft.costPrice} onChange={event => updateDraft('costPrice', event.target.value)} />
                 </div>
@@ -1064,6 +1074,7 @@ export default function ProductsServiceFirst() {
                     ) : (
                       <>
                         <div className="products-page__list-field"><label className="field__label">Product category</label><p className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">Brand</label><p className="products-page__list-value">{item.brand || item.manufacturerName || '—'}</p></div>
                         <div className="products-page__list-field"><label className="field__label">SKU / Barcode</label><p className="products-page__list-value">{item.sku || item.barcode || '—'}</p></div>
                         <div className="products-page__list-field"><label className="field__label">On hand</label><p className="products-page__list-value">{item.stockCount ?? 0}</p></div>
                         <div className="products-page__list-field"><label className="field__label">Reorder point</label><p className="products-page__list-value">{item.reorderPoint ?? '—'}</p></div>
