@@ -17,6 +17,7 @@ type IntegrationProduct = {
   imageUrl?: string | null
   sku?: string | null
   barcode?: string | null
+  brand?: string | null
   manufacturerName?: string | null
 }
 
@@ -686,7 +687,8 @@ async function fetchIntegrationProducts(params: {
       imageUrl: normalizeString(entry.imageUrl) || null,
       sku: normalizeString(entry.sku) || null,
       barcode: normalizeString(entry.barcode) || null,
-      manufacturerName: normalizeString(entry.manufacturerName) || null,
+      brand: normalizeString(entry.brand ?? entry.manufacturerName) || null,
+      manufacturerName: normalizeString(entry.manufacturerName ?? entry.brand) || null,
     }
   })
 }
@@ -701,6 +703,7 @@ function validateAndTransform(
   const description = normalizeString(product.description)
   const imageLink = normalizeString(product.imageUrl)
   const brand =
+    normalizeString(product.brand) ||
     normalizeString(product.manufacturerName) ||
     normalizeString(options.storeBrandFallback) ||
     resolveCategoryBrandDefault(product.category)

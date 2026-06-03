@@ -12,6 +12,8 @@ export type ProductReadModel = {
   imageUrl: string | null
   imageUrls: string[]
   imageAlt: string | null
+  brand?: string | null
+  manufacturerName?: string | null
   updatedAt: FirebaseFirestore.Timestamp | null
   listingType?: 'product' | 'service' | 'course' | null
   salesMode?: 'buy_now' | 'book_now' | 'register' | 'request_quote' | null

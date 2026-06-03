@@ -31,6 +31,8 @@ type IntegrationProductItem = {
   imageUrl?: string | null
   imageUrls: string[]
   imageAlt?: string | null
+  brand?: string | null
+  manufacturerName?: string | null
   sortOrder?: number | null
   order?: number | null
   updatedAt?: string | null
@@ -193,6 +195,7 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
   const priceMinor = getPriceMinor(record)
   const imageUrls = getImageUrls(record)
   const order = numberValue(record.order)
+  const brand = cleanIntegrationText(record.brand ?? record.manufacturerName ?? record.manufacturer ?? record.vendor, 180)
   const sortOrder = numberValue(record.sortOrder ?? record.featuredRank ?? record.rank)
 
   return {
@@ -209,6 +212,8 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
     imageUrl: imageUrls[0] || null,
     imageUrls,
     imageAlt: cleanIntegrationText(record.imageAlt ?? record.alt, 220) || name,
+    brand: brand || null,
+    manufacturerName: brand || null,
     sortOrder: sortOrder === null ? null : sortOrder,
     order: order === null ? null : order,
     updatedAt: toDateIso(record.updatedAt ?? record.createdAt),

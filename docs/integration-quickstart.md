@@ -356,6 +356,8 @@ type Product = {
   stockCount?: number
   imageUrl?: string | null
   imageUrls?: string[]
+  brand?: string | null
+  manufacturerName?: string | null
 }
 
 const FALLBACK_PRODUCTS: Product[] = [
@@ -425,6 +427,15 @@ function groupByCategory(products: Product[]) {
     const category = product.category?.trim() || 'Uncategorized'
     if (!acc[category]) acc[category] = []
     acc[category].push(product)
+    return acc
+  }, {})
+}
+
+function groupByBrand(products: Product[]) {
+  return products.reduce<Record<string, Product[]>>((acc, product) => {
+    const brand = product.brand?.trim() || product.manufacturerName?.trim() || 'Other brands'
+    if (!acc[brand]) acc[brand] = []
+    acc[brand].push(product)
     return acc
   }, {})
 }
