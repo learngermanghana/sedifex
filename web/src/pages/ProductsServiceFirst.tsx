@@ -6,7 +6,6 @@ import {
   doc,
   limit,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -20,6 +19,7 @@ import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import type { ItemType, Product } from '../types/product'
+import { productMatchesSearch } from '../utils/productSearch'
 
 type ItemFormType = 'product' | 'service' | 'course'
 type ServiceKind = 'consultation' | 'quote_request'
@@ -450,6 +450,10 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
   }
 }
 
+function getProductSortTime(product: Product): number {
+  return toDate(product.updatedAt)?.getTime() ?? toDate(product.createdAt)?.getTime() ?? 0
+}
+
 function buildSavePayload(draft: Draft, storeId: string) {
   const isService = draft.itemType === 'service'
   const isCourse = draft.itemType === 'course'
@@ -587,9 +591,11 @@ export default function ProductsServiceFirst() {
       setItems([])
       return
     }
-    const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('updatedAt', 'desc'), limit(500))
+    const q = query(collection(db, 'products'), where('storeId', '==', storeId), limit(500))
     return onSnapshot(q, snapshot => {
-      const rows = snapshot.docs.map(documentSnapshot => normalizeProduct(documentSnapshot.id, documentSnapshot.data() as Record<string, unknown>))
+      const rows = snapshot.docs
+        .map(documentSnapshot => normalizeProduct(documentSnapshot.id, documentSnapshot.data() as Record<string, unknown>))
+        .sort((a, b) => getProductSortTime(b) - getProductSortTime(a) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
       setItems(rows)
     })
   }, [storeId])
@@ -817,7 +823,7 @@ export default function ProductsServiceFirst() {
   const visibleItems = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return items
-    return items.filter(item => [item.name, item.category ?? '', item.sku ?? '', item.itemType].join(' ').toLowerCase().includes(term))
+    return items.filter(item => productMatchesSearch(item, term))
   }, [items, search])
 
   return (

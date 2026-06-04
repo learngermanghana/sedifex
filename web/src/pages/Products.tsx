@@ -40,6 +40,7 @@ import { requestAiAdvisor } from '../api/aiAdvisor'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
 import { buildPromoSlug } from '../utils/promoSlug'
+import { productMatchesSearch } from '../utils/productSearch'
 
 type CachedProduct = Omit<Product, 'id'>
 type AbcBucket = 'A' | 'B' | 'C'
@@ -905,14 +906,7 @@ export default function Products() {
     }
 
     if (searchText.trim()) {
-      const term = searchText.trim().toLowerCase()
-      result = result.filter(p => {
-        const inName = p.name.toLowerCase().includes(term)
-        const inCategory = (p.category ?? '').toLowerCase().includes(term)
-        const inSku = (p.sku ?? '').toLowerCase().includes(term)
-        const inBarcode = (p.barcode ?? '').toLowerCase().includes(term)
-        return inName || inCategory || inSku || inBarcode
-      })
+      result = result.filter(product => productMatchesSearch(product, searchText))
     }
 
     return result
