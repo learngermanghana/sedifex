@@ -4,6 +4,7 @@ import type { User } from 'firebase/auth'
 import { onAuthStateChanged } from 'firebase/auth'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import './App.css'
+import './pages/Products.mobile.css'
 import './pwa'
 import { auth } from './firebase'
 import { configureAuthPersistence } from './controllers/sessionController'
@@ -16,6 +17,7 @@ import { useSessionHeartbeat } from './hooks/useSessionHeartbeat'
 import { useQueueMessageToasts } from './hooks/useQueueMessageToasts'
 import { PwaProvider } from './context/PwaContext'
 import { CanonicalLink } from './components/CanonicalLink'
+import AskSedifexAgent from './components/AskSedifexAgent'
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -187,6 +189,7 @@ export default function App() {
     <PwaProvider isPwaApp={isPwaApp}>
       <CanonicalLink />
       {content}
+      <AskSedifexAgent enabled={Boolean(user) && !isPublicRoute && storeAccessStatus === 'ready'} />
     </PwaProvider>
   )
 }
