@@ -26,6 +26,7 @@ import { setOnboardingStatus } from '../utils/onboarding'
 import { normalizeGhanaPhoneE164 } from '../utils/phone'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, type Industry } from '../config/navigation'
 import { SEDIFEX_PRICING_PLANS, SEDIFEX_PRICING_RULES } from '../config/pricingPlans'
+import UsedByBusinesses from '../components/UsedByBusinesses'
 
 const AUTH_VISUAL_IMAGE_URL = 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1200&q=80'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -237,6 +238,7 @@ export default function AuthPage() {
         <aside className="app__visual" aria-label="Sedifex business operating system"><div className="app__visual-media" role="presentation"><img src={AUTH_VISUAL_IMAGE_URL} alt="Business team using a laptop" loading="lazy" /></div><div className="app__visual-overlay" /><div className="app__visual-dashboard" aria-hidden="true"><div><span>Today sales</span><strong>GHS 2,450</strong></div><div><span>Bookings</span><strong>18</strong></div><div><span>Website</span><strong>Published</strong></div></div><div className="app__visual-caption"><span className="app__visual-pill">Africa-first. Global-ready.</span><h2>Run your business. Sell online. Grow from one workspace.</h2><p>Manage operations, publish connected websites, sync to Sedifex Market, accept payments, and grow with automation tools.</p></div></aside>
       </div>
       <section className="app__promo-strategy" aria-label="Why businesses choose Sedifex"><header className="app__promo-strategy-header"><span className="app__pill">What Sedifex does</span><h2>One connected workspace for growing businesses in Africa and beyond.</h2><p>Sedifex helps shops, schools, NGOs, service businesses, travel businesses, and booking businesses manage operations, websites, payments, marketplace sales, customers, and growth tools without switching between many systems.</p></header><div className="app__promo-pillars"><h3>What you can run</h3><ul><li><strong>Operate:</strong> sales, inventory, receipts, invoices, bookings, customers, students, donors, and funds.</li><li><strong>Publish:</strong> connected websites with products, services, bookings, gallery, social links, SEO, and custom domains.</li><li><strong>Sell:</strong> accept payments, use Quick Pay, sync products/services to Sedifex Market, and track marketplace sales.</li><li><strong>Grow:</strong> branded text messaging, email, automation tools, reports, and integrations from one business workspace.</li></ul></div></section>
+      <UsedByBusinesses onCtaClick={startSignup} />
       <section className="app__pricing" aria-label="Sedifex pricing plans">
         <header className="app__pricing-header"><span className="app__pill">Simple pricing</span><h2>Start free. Upgrade when you need marketplace sync, websites, bookings, payments, and growth tools.</h2><p>Paid plans include unlimited products/services under fair use. Branded text messaging is available when message credits are purchased.</p></header>
         <div className="grid gap-5 lg:grid-cols-3">
