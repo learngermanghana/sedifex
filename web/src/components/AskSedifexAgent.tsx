@@ -190,6 +190,10 @@ function formatPrice(value: number | null) {
   return typeof value === 'number' ? `GHS ${value.toFixed(2)}` : 'No price'
 }
 
+function describeItem(item: AgentItem) {
+  return `${formatPrice(item.price)} · ${item.category} · ${item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}`
+}
+
 export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -200,14 +204,20 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
   const [changes, setChanges] = useState<Change[]>([])
   const [items, setItems] = useState<AgentItem[]>([])
   const [matches, setMatches] = useState<AgentItem[]>([])
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [itemsLoading, setItemsLoading] = useState(false)
   const isProductsPage = location.pathname.startsWith('/products') || location.pathname.startsWith('/items')
   const storeIds = useMemo(() => readLegacyStoreIds(storeId), [storeId])
   const activeStoreLabel = storeIds[0] ?? null
+  const selectedItem = useMemo(() => {
+    if (!selectedItemId) return null
+    return items.find(item => item.id === selectedItemId) ?? matches.find(item => item.id === selectedItemId) ?? null
+  }, [items, matches, selectedItemId])
 
   useEffect(() => {
     if (!enabled || storeIds.length === 0) {
       setItems([])
+      setSelectedItemId(null)
       setItemsLoading(false)
       return undefined
     }
@@ -219,6 +229,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
     function publishMergedRows() {
       const merged = mergeAgentItems(Array.from(rowsByQuery.values()).flat())
       setItems(merged)
+      setSelectedItemId(current => (current && merged.some(item => item.id === current) ? current : null))
       if (!receivedFirstResult) {
         receivedFirstResult = true
         setItemsLoading(false)
@@ -258,11 +269,17 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
 
   if (!enabled) return null
 
+  function selectItem(item: AgentItem) {
+    setSelectedItemId(item.id)
+    setMessage(`Selected: ${item.name}. You can now open Items, choose this item, and ask me to prepare a safe edit.`)
+  }
+
   function runSearch(term: string) {
     setChanges([])
 
     if (!activeStoreLabel) {
       setMatches([])
+      setSelectedItemId(null)
       setMessage('I am not connected to an active store yet. Refresh the workspace or select a store first.')
       return
     }
@@ -275,6 +292,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
 
     if (!items.length) {
       setMatches([])
+      setSelectedItemId(null)
       setMessage('I am connected to your store, but I could not load any items for this workspace yet. Open Items to confirm products/services exist, then try again.')
       return
     }
@@ -282,10 +300,12 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
     const found = findMatches(items, term)
     setMatches(found)
     if (!found.length) {
+      setSelectedItemId(null)
       setMessage(`I searched ${items.length} item${items.length === 1 ? '' : 's'}, but did not find “${term}”. Try a shorter product name or category.`)
       return
     }
-    setMessage(`I found ${found.length} matching item${found.length === 1 ? '' : 's'} for “${term}”.`)
+    setSelectedItemId(found[0].id)
+    setMessage(`I found ${found.length} matching item${found.length === 1 ? '' : 's'} for “${term}” and selected the best match.`)
   }
 
   function prepare(event: FormEvent<HTMLFormElement>) {
@@ -310,8 +330,9 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
     if (!isProductsPage || !ids) {
       const found = findMatches(items, rawText)
       setMatches(found)
+      if (found.length) setSelectedItemId(found[0].id)
       setMessage(found.length
-        ? 'I found possible items. To change details, open the Items page, choose the item, then ask me to edit it.'
+        ? `I selected ${found[0].name}. Open the Items page, choose this item, then ask me to edit it.`
         : items.length
           ? 'To edit an item, open the Items page and click Add Item or edit a product first. To search, just type the product name.'
           : 'I could not load your product list yet. Open Items to confirm your products/services exist, then try again.'
@@ -389,18 +410,38 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
             </form>
             <ProductPhotoAssist />
             {message ? <p className="ask-sedifex__message">{message}</p> : null}
+            {selectedItem ? (
+              <div className="ask-sedifex__selected" aria-live="polite">
+                <span className="ask-sedifex__selected-label">Selected item</span>
+                <strong className="ask-sedifex__selected-name">{selectedItem.name}</strong>
+                <p className="ask-sedifex__selected-meta">{describeItem(selectedItem)}</p>
+                {!isProductsPage ? <button type="button" className="ask-sedifex__selected-action" onClick={() => navigate('/products')}>Open Items page</button> : null}
+              </div>
+            ) : null}
             {matches.length ? (
               <div className="ask-sedifex__results">
-                {matches.map(item => (
-                  <div key={item.id} className={`ask-sedifex__item-card${item.imageUrl ? '' : ' ask-sedifex__item-card--no-image'}`}>
-                    {item.imageUrl ? <img className="ask-sedifex__item-image" src={item.imageUrl} alt={item.name} /> : null}
-                    <div className="ask-sedifex__item-body">
-                      <strong className="ask-sedifex__item-name">{item.name}</strong>
-                      <p className="ask-sedifex__item-meta">{formatPrice(item.price)} · {item.category}</p>
-                      <p className="ask-sedifex__item-note">{item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}{item.isMarketplaceVisible ? ' · Marketplace visible' : ''}</p>
-                    </div>
-                  </div>
-                ))}
+                {matches.map(item => {
+                  const isSelected = item.id === selectedItemId
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`ask-sedifex__item-card${item.imageUrl ? '' : ' ask-sedifex__item-card--no-image'}${isSelected ? ' ask-sedifex__item-card--selected' : ''}`}
+                      onClick={() => selectItem(item)}
+                      aria-pressed={isSelected}
+                    >
+                      {item.imageUrl ? <img className="ask-sedifex__item-image" src={item.imageUrl} alt={item.name} /> : null}
+                      <span className="ask-sedifex__item-body">
+                        <span className="ask-sedifex__item-row">
+                          <strong className="ask-sedifex__item-name">{item.name}</strong>
+                          {isSelected ? <span className="ask-sedifex__selected-badge">Selected</span> : null}
+                        </span>
+                        <span className="ask-sedifex__item-meta">{formatPrice(item.price)} · {item.category}</span>
+                        <span className="ask-sedifex__item-note">{item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}{item.isMarketplaceVisible ? ' · Marketplace visible' : ''}</span>
+                      </span>
+                    </button>
+                  )
+                })}
                 {!isProductsPage ? <button type="button" className="ask-sedifex__dark-action" onClick={() => navigate('/products')}>Open Items page</button> : null}
               </div>
             ) : null}
