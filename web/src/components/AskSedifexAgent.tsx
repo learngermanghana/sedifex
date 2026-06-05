@@ -24,6 +24,8 @@ type AgentItem = {
   isMarketplaceVisible: boolean
 }
 
+const STORE_ID_FIELDS = ['storeId', 'store_id', 'workspaceId', 'businessId'] as const
+
 function readField(id: string) {
   const element = document.getElementById(id)
   if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return element.value.trim()
@@ -101,21 +103,68 @@ function isEditCommand(text: string) {
   ].some(word => lower.includes(word))
 }
 
+function firstString(data: Record<string, unknown>, keys: string[], fallback = '') {
+  for (const key of keys) {
+    const value = data[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return fallback
+}
+
+function firstNumber(data: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = data[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return null
+}
+
 function normalizeItem(id: string, data: Record<string, unknown>): AgentItem {
-  const itemType = data.itemType === 'service' ? 'service' : data.itemType === 'course' ? 'course' : 'product'
-  const price = typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null
-  const stockCount = typeof data.stockCount === 'number' && Number.isFinite(data.stockCount) ? data.stockCount : null
+  const rawItemType = firstString(data, ['itemType', 'listingType', 'type'], 'product').toLowerCase()
+  const itemType = rawItemType === 'service' ? 'service' : rawItemType === 'course' ? 'course' : 'product'
+  const price = firstNumber(data, ['price', 'sellingPrice', 'salePrice', 'amount', 'fee'])
+  const stockCount = firstNumber(data, ['stockCount', 'stock', 'quantity', 'openingStock', 'qty'])
+  const name = firstString(data, ['name', 'productName', 'serviceName', 'courseName', 'title'], 'Untitled item')
+  const category = firstString(
+    data,
+    ['category', 'categoryName', 'productCategory', 'serviceCategory', 'industry'],
+    itemType === 'service' ? 'Services' : itemType === 'course' ? 'Courses' : 'Products',
+  )
+  const imageUrl = firstString(data, ['imageUrl', 'image_url', 'image', 'photoUrl', 'coverImageUrl'], '')
+
   return {
     id,
-    name: typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item',
-    category: typeof data.category === 'string' && data.category.trim() ? titleCase(data.category) : itemType === 'service' ? 'Services' : itemType === 'course' ? 'Courses' : 'Products',
+    name: titleCase(name),
+    category: titleCase(category),
     itemType,
     price,
     stockCount,
-    imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null,
+    imageUrl: imageUrl || null,
     isPublished: data.isPublished === true || data.status === 'published',
     isMarketplaceVisible: data.isMarketplaceVisible === true,
   }
+}
+
+function mergeAgentItems(rows: AgentItem[]) {
+  const byId = new Map<string, AgentItem>()
+  rows.forEach(item => byId.set(item.id, item))
+  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function readLegacyStoreIds(currentStoreId: string | null) {
+  const ids = new Set<string>()
+  if (currentStoreId?.trim()) ids.add(currentStoreId.trim())
+
+  if (typeof window !== 'undefined') {
+    const legacyStoreId = window.localStorage.getItem('storeId')
+    if (legacyStoreId?.trim()) ids.add(legacyStoreId.trim())
+  }
+
+  return Array.from(ids)
 }
 
 function findMatches(items: AgentItem[], term: string) {
@@ -150,36 +199,89 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
   const [changes, setChanges] = useState<Change[]>([])
   const [items, setItems] = useState<AgentItem[]>([])
   const [matches, setMatches] = useState<AgentItem[]>([])
+  const [itemsLoading, setItemsLoading] = useState(false)
   const isProductsPage = location.pathname.startsWith('/products') || location.pathname.startsWith('/items')
+  const storeIds = useMemo(() => readLegacyStoreIds(storeId), [storeId])
+  const activeStoreLabel = storeIds[0] ?? null
 
   useEffect(() => {
-    if (!enabled || !storeId) {
+    if (!enabled || storeIds.length === 0) {
       setItems([])
+      setItemsLoading(false)
       return undefined
     }
 
-    const productsQuery = query(collection(db, 'products'), where('storeId', '==', storeId), limit(200))
-    return onSnapshot(productsQuery, snapshot => {
-      setItems(snapshot.docs.map(doc => normalizeItem(doc.id, doc.data() as Record<string, unknown>)))
-    }, error => {
-      console.warn('[ask-sedifex] Could not load product search list', error)
-      setItems([])
-    })
-  }, [enabled, storeId])
+    setItemsLoading(true)
+    const rowsByQuery = new Map<string, AgentItem[]>()
+    let receivedFirstResult = false
+
+    function publishMergedRows() {
+      const merged = mergeAgentItems(Array.from(rowsByQuery.values()).flat())
+      setItems(merged)
+      if (!receivedFirstResult) {
+        receivedFirstResult = true
+        setItemsLoading(false)
+      }
+    }
+
+    const unsubscribers = storeIds.flatMap(currentStoreId =>
+      STORE_ID_FIELDS.map(fieldName => {
+        const queryKey = `${fieldName}:${currentStoreId}`
+        const productsQuery = query(collection(db, 'products'), where(fieldName, '==', currentStoreId), limit(200))
+        return onSnapshot(productsQuery, snapshot => {
+          rowsByQuery.set(queryKey, snapshot.docs.map(doc => normalizeItem(doc.id, doc.data() as Record<string, unknown>)))
+          publishMergedRows()
+        }, error => {
+          console.warn(`[ask-sedifex] Could not load product list for ${queryKey}`, error)
+          rowsByQuery.set(queryKey, [])
+          publishMergedRows()
+        })
+      }),
+    )
+
+    const fallbackTimer = window.setTimeout(() => {
+      setItemsLoading(false)
+    }, 3500)
+
+    return () => {
+      window.clearTimeout(fallbackTimer)
+      unsubscribers.forEach(unsubscribe => unsubscribe())
+    }
+  }, [enabled, storeIds.join('|')])
 
   const helperText = useMemo(() => {
-    if (!storeId) return 'Select a store first, then ask me to find or edit items.'
-    return 'Type a product name to search. Type an action to edit, for example: change price to 50.'
-  }, [storeId])
+    if (!activeStoreLabel) return 'I am waiting for your active store connection. Open your workspace or refresh if this stays empty.'
+    if (itemsLoading) return 'Connecting to your items…'
+    return `Connected to ${items.length} item${items.length === 1 ? '' : 's'}. Search a product, service, or course name.`
+  }, [activeStoreLabel, items.length, itemsLoading])
 
   if (!enabled) return null
 
   function runSearch(term: string) {
+    setChanges([])
+
+    if (!activeStoreLabel) {
+      setMatches([])
+      setMessage('I am not connected to an active store yet. Refresh the workspace or select a store first.')
+      return
+    }
+
+    if (itemsLoading) {
+      setMatches([])
+      setMessage('I am still connecting to your items. Try again in a moment.')
+      return
+    }
+
+    if (!items.length) {
+      setMatches([])
+      setMessage('I am connected to your store, but I could not load any items for this workspace yet. Open Items to confirm products/services exist, then try again.')
+      return
+    }
+
     const found = findMatches(items, term)
     setMatches(found)
-    setChanges([])
     if (!found.length) {
-      setMessage(`I did not find an item matching “${term}”. Try another product name or category.`)
+      setMessage(`I searched ${items.length} item${items.length === 1 ? '' : 's'}, but did not find “${term}”. Try a shorter product name or category.`)
       return
     }
     setMessage(`I found ${found.length} matching item${found.length === 1 ? '' : 's'} for “${term}”.`)
@@ -209,7 +311,9 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
       setMatches(found)
       setMessage(found.length
         ? 'I found possible items. To change details, open the Items page, choose the item, then ask me to edit it.'
-        : 'To edit an item, open the Items page and click Add Item or edit a product first. To search, just type the product name.'
+        : items.length
+          ? 'To edit an item, open the Items page and click Add Item or edit a product first. To search, just type the product name.'
+          : 'I could not load your product list yet. Open Items to confirm your products/services exist, then try again.'
       )
       return
     }
