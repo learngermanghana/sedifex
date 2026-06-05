@@ -1,4 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  collection,
+  getDocs,
+  limit,
+  query,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+} from 'firebase/firestore'
+import { db } from '../firebase'
 
 type BusinessCardData = {
   id: string
@@ -13,73 +22,114 @@ type UsedByBusinessesProps = {
   onCtaClick: () => void
 }
 
-function svgLogoDataUrl(label: string, accent: string, background: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="38" fill="${background}"/><circle cx="118" cy="42" r="24" fill="${accent}" opacity="0.18"/><path d="M36 102c18-38 42-58 72-60 11-.8 19 7 17 18-4 28-26 50-63 64-18 7-34-5-26-22Z" fill="${accent}" opacity="0.92"/><text x="80" y="92" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="36" font-weight="900" fill="white">${label}</text></svg>`
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+const STORE_SLIDE_LIMIT = 12
+const SLIDE_INTERVAL_MS = 5000
+
+function cleanText(value: unknown, max = 220) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
-const sampleBusinesses: BusinessCardData[] = [
-  {
-    id: 'ama-fresh-mart',
-    name: 'Ama Fresh Mart',
-    category: 'Grocery & provisions',
-    location: 'Kumasi, Ghana',
-    modules: ['Inventory', 'Sales', 'Payments'],
-    logoUrl: svgLogoDataUrl('AF', '#06b6d4', '#0f172a'),
-  },
-  {
-    id: 'northstar-beauty-studio',
-    name: 'Northstar Beauty Studio',
-    category: 'Salon & appointments',
-    location: 'Accra, Ghana',
-    modules: ['Bookings', 'Customers', 'Payments'],
-  },
-  {
-    id: 'kente-lane-boutique',
-    name: 'Kente Lane Boutique',
-    category: 'Fashion retail',
-    location: 'East Legon',
-    modules: ['Inventory', 'Website', 'Sales'],
-    logoUrl: svgLogoDataUrl('KL', '#8b5cf6', '#1e1b4b'),
-  },
-  {
-    id: 'cedar-scholars-academy',
-    name: 'Cedar Scholars Academy',
-    category: 'Training school',
-    location: 'Tema, Ghana',
-    modules: ['Students', 'Registrations', 'Payments'],
-  },
-  {
-    id: 'urbanbite-kitchen',
-    name: 'UrbanBite Kitchen',
-    category: 'Food service',
-    location: 'Osu, Accra',
-    modules: ['Sales', 'Quick Pay', 'Customers'],
-    logoUrl: '/missing-urbanbite-logo.png',
-  },
-  {
-    id: 'noble-care-pharmacy',
-    name: 'Noble Care Pharmacy',
-    category: 'Health retail',
-    location: 'Takoradi',
-    modules: ['Inventory', 'Receipts', 'Reports'],
-  },
-  {
-    id: 'bluepath-travel',
-    name: 'BluePath Travel',
-    category: 'Travel services',
-    location: 'Spintex, Accra',
-    modules: ['Bookings', 'Invoices', 'Customers'],
-    logoUrl: svgLogoDataUrl('BP', '#0ea5e9', '#172554'),
-  },
-  {
-    id: 'hopebridge-foundation',
-    name: 'HopeBridge Foundation',
-    category: 'Nonprofit operations',
-    location: 'Cape Coast',
-    modules: ['Donors', 'Funds', 'Reports'],
-  },
-]
+function getNestedRecord(source: Record<string, unknown>, key: string) {
+  const value = source[key]
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function getFirstText(source: Record<string, unknown>, keys: string[], max = 220) {
+  for (const key of keys) {
+    const value = cleanText(source[key], max)
+    if (value) return value
+  }
+
+  return ''
+}
+
+function getFirstNestedText(source: Record<string, unknown>, containers: string[], keys: string[], max = 220) {
+  for (const containerKey of containers) {
+    const container = getNestedRecord(source, containerKey)
+    if (!container) continue
+    const value = getFirstText(container, keys, max)
+    if (value) return value
+  }
+
+  return ''
+}
+
+function normalizeModuleLabel(value: unknown) {
+  if (typeof value !== 'string') return ''
+  return value
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase())
+    .slice(0, 40)
+}
+
+function getModuleLabels(source: Record<string, unknown>) {
+  const moduleKeys = ['modules', 'selectedModules', 'enabledModules', 'features', 'selectedSections']
+  const labels: string[] = []
+
+  for (const key of moduleKeys) {
+    const value = source[key]
+    if (!Array.isArray(value)) continue
+    value.forEach(item => {
+      const label = normalizeModuleLabel(item)
+      if (label && !labels.includes(label)) labels.push(label)
+    })
+  }
+
+  if (labels.length) return labels.slice(0, 3)
+
+  const businessType = getFirstText(source, ['businessType', 'category', 'industry', 'type'], 80).toLowerCase()
+  if (/beauty|spa|salon|barber|appointment|booking/.test(businessType)) {
+    return ['Bookings', 'Services', 'Payments']
+  }
+  if (/school|academy|course|training|education/.test(businessType)) {
+    return ['Courses', 'Students', 'Payments']
+  }
+  if (/travel|visa|consult/.test(businessType)) {
+    return ['Bookings', 'Invoices', 'Customers']
+  }
+
+  return ['Sales', 'Inventory', 'Payments']
+}
+
+function mapStoreSnapshot(snapshot: QueryDocumentSnapshot<DocumentData>): BusinessCardData | null {
+  const source = snapshot.data() || {}
+
+  if (source.hiddenOnLanding === true || source.showOnLanding === false || source.status === 'deleted') {
+    return null
+  }
+
+  const nestedContainers = ['profile', 'businessProfile', 'storeProfile', 'publicProfile', 'websiteSettings']
+  const name =
+    getFirstText(source, ['name', 'storeName', 'businessName', 'companyName', 'company', 'displayName']) ||
+    getFirstNestedText(source, nestedContainers, ['name', 'storeName', 'businessName', 'companyName', 'company', 'displayName'])
+
+  if (!name) return null
+
+  const category =
+    getFirstText(source, ['businessType', 'category', 'industry', 'storeType', 'type'], 100) ||
+    getFirstNestedText(source, nestedContainers, ['businessType', 'category', 'industry', 'storeType', 'type'], 100) ||
+    undefined
+
+  const location =
+    getFirstText(source, ['location', 'city', 'area', 'address', 'branchName'], 140) ||
+    getFirstNestedText(source, nestedContainers, ['location', 'city', 'area', 'address', 'branchName'], 140) ||
+    undefined
+
+  const logoUrl =
+    getFirstText(source, ['logoUrl', 'logoURL', 'logo', 'photoUrl', 'imageUrl', 'brandLogoUrl'], 900) ||
+    getFirstNestedText(source, nestedContainers, ['logoUrl', 'logoURL', 'logo', 'photoUrl', 'imageUrl', 'brandLogoUrl'], 900) ||
+    undefined
+
+  return {
+    id: snapshot.id,
+    name,
+    category,
+    location,
+    modules: getModuleLabels(source),
+    logoUrl,
+  }
+}
 
 function getInitials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean)
@@ -91,6 +141,10 @@ function getInitials(name: string) {
 function BusinessLogo({ business }: { business: BusinessCardData }) {
   const [shouldUsePlaceholder, setShouldUsePlaceholder] = useState(!business.logoUrl)
   const initials = getInitials(business.name)
+
+  useEffect(() => {
+    setShouldUsePlaceholder(!business.logoUrl)
+  }, [business.logoUrl])
 
   if (shouldUsePlaceholder || !business.logoUrl) {
     return (
@@ -120,7 +174,7 @@ function BusinessLogo({ business }: { business: BusinessCardData }) {
 
 function BusinessCard({ business }: { business: BusinessCardData }) {
   return (
-    <article className="used-businesses__card">
+    <article className="used-businesses__card" aria-label={`Sedifex store: ${business.name}`}>
       <div className="used-businesses__card-header">
         <BusinessLogo business={business} />
         <span className="used-businesses__badge">Sedifex Store</span>
@@ -141,6 +195,70 @@ function BusinessCard({ business }: { business: BusinessCardData }) {
 }
 
 export default function UsedByBusinesses({ onCtaClick }: UsedByBusinessesProps) {
+  const [businesses, setBusinesses] = useState<BusinessCardData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadBusinesses() {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const storesQuery = query(collection(db, 'stores'), limit(STORE_SLIDE_LIMIT))
+        const snapshot = await getDocs(storesQuery)
+        if (cancelled) return
+
+        const rows = snapshot.docs
+          .map(mapStoreSnapshot)
+          .filter((business): business is BusinessCardData => Boolean(business))
+
+        setBusinesses(rows)
+        setActiveIndex(0)
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[UsedByBusinesses] Failed to load stores', err)
+          setError('Store list could not load right now.')
+          setBusinesses([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadBusinesses()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (businesses.length < 2) return undefined
+
+    const interval = window.setInterval(() => {
+      setActiveIndex(current => (current + 1) % businesses.length)
+    }, SLIDE_INTERVAL_MS)
+
+    return () => window.clearInterval(interval)
+  }, [businesses.length])
+
+  const activeBusiness = useMemo(() => {
+    if (businesses.length === 0) return null
+    return businesses[activeIndex % businesses.length]
+  }, [activeIndex, businesses])
+
+  function showPreviousStore() {
+    setActiveIndex(current => (current - 1 + businesses.length) % businesses.length)
+  }
+
+  function showNextStore() {
+    setActiveIndex(current => (current + 1) % businesses.length)
+  }
+
   return (
     <section className="used-businesses" aria-labelledby="used-businesses-title">
       <header className="used-businesses__header">
@@ -151,16 +269,54 @@ export default function UsedByBusinesses({ onCtaClick }: UsedByBusinessesProps) 
           inventory, bookings, payments, and customer operations.
         </p>
         <p className="used-businesses__purpose">
-          This section is designed to make every signed-up business look organized and professional,
-          even when their uploaded logo is missing, inconsistent, or not homepage-ready.
+          This section now uses real store records from Firestore and shows one business at a time,
+          so every signed-up business looks organized even when their logo is missing or inconsistent.
         </p>
       </header>
 
-      <div className="used-businesses__grid">
-        {sampleBusinesses.map(business => (
-          <BusinessCard key={business.id} business={business} />
-        ))}
+      <div className="used-businesses__grid" aria-live="polite">
+        {loading && <p className="used-businesses__modules">Loading signed-up stores…</p>}
+        {!loading && error && <p className="used-businesses__modules">{error}</p>}
+        {!loading && !error && !activeBusiness && (
+          <p className="used-businesses__modules">No signed-up stores are ready to show yet.</p>
+        )}
+        {!loading && !error && activeBusiness && <BusinessCard key={activeBusiness.id} business={activeBusiness} />}
       </div>
+
+      {businesses.length > 1 && (
+        <div
+          aria-label="Store slider controls"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={showPreviousStore}
+            aria-label="Show previous store"
+            style={{ width: 'auto', minWidth: 118 }}
+          >
+            Previous
+          </button>
+          <span className="used-businesses__meta" aria-label={`Store ${activeIndex + 1} of ${businesses.length}`}>
+            {activeIndex + 1} / {businesses.length}
+          </span>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={showNextStore}
+            aria-label="Show next store"
+            style={{ width: 'auto', minWidth: 118 }}
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       <div className="used-businesses__cta">
         <button type="button" className="primary-button used-businesses__cta-button" onClick={onCtaClick}>
