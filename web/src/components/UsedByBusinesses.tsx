@@ -82,11 +82,6 @@ const usedByBusinessesStyles = `
     line-height: 1.75;
   }
 
-  .used-businesses__purpose {
-    max-width: 780px;
-    color: #dbeafe !important;
-  }
-
   .used-businesses__showcase {
     position: relative;
     display: grid;
@@ -586,10 +581,6 @@ export default function UsedByBusinesses({ onCtaClick }: UsedByBusinessesProps) 
         <p>
           From shops and spas to service brands, Sedifex helps businesses manage sales,
           bookings, payments, inventory, websites, and customer operations from one workspace.
-        </p>
-        <p className="used-businesses__purpose">
-          Each business is presented in a clean Sedifex frame, so the homepage stays consistent
-          and professional across every brand.
         </p>
       </header>
 
