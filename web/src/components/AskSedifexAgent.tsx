@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import ProductPhotoAssist from './ProductPhotoAssist'
+import './AskSedifexAgent.css'
 
 type Change = {
   field: 'name' | 'price' | 'description'
@@ -250,7 +251,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
   }, [enabled, storeIds.join('|')])
 
   const helperText = useMemo(() => {
-    if (!activeStoreLabel) return 'I am waiting for your active store connection. Open your workspace or refresh if this stays empty.'
+    if (!activeStoreLabel) return 'Waiting for your active store connection. Open your workspace or refresh if this stays empty.'
     if (itemsLoading) return 'Connecting to your items…'
     return `Connected to ${items.length} item${items.length === 1 ? '' : 's'}. Search a product, service, or course name.`
   }, [activeStoreLabel, items.length, itemsLoading])
@@ -361,61 +362,67 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 80, maxWidth: 'calc(100vw - 32px)' }}>
+    <div className="ask-sedifex">
       {open ? (
-        <div style={{ width: 'min(420px, calc(100vw - 32px))', background: '#fff', border: '1px solid #dbe3ef', borderRadius: 24, boxShadow: '0 20px 55px rgba(15,23,42,.22)', overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ background: '#0f172a', color: '#fff', padding: 16, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <strong>Ask Sedifex</strong>
-              <p style={{ margin: '4px 0 0', color: '#cbd5e1', fontSize: 12 }}>Search items or prepare safe product edits.</p>
+        <div className="ask-sedifex__panel">
+          <div className="ask-sedifex__header">
+            <div className="ask-sedifex__brand">
+              <span className="ask-sedifex__avatar" aria-hidden="true">Sx</span>
+              <div>
+                <h2 className="ask-sedifex__title">Ask Sedifex</h2>
+                <p className="ask-sedifex__subtitle">Search items or prepare safe product edits.</p>
+              </div>
             </div>
-            <button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: '#fff', fontSize: 20, cursor: 'pointer' }}>x</button>
+            <button type="button" className="ask-sedifex__close" onClick={() => setOpen(false)} aria-label="Close Ask Sedifex">×</button>
           </div>
-          <div style={{ padding: 16 }}>
-            <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.5, color: '#475569' }}>{helperText}</p>
-            <form onSubmit={prepare} style={{ display: 'grid', gap: 10 }}>
+          <div className="ask-sedifex__body">
+            <p className="ask-sedifex__status"><span className="ask-sedifex__status-dot" aria-hidden="true" />{helperText}</p>
+            <form className="ask-sedifex__form" onSubmit={prepare}>
               <textarea
+                className="ask-sedifex__textarea"
                 value={command}
                 onChange={event => setCommand(event.target.value)}
                 placeholder="Search Cream, or type: change price to 150"
                 rows={3}
-                style={{ width: '100%', borderRadius: 16, border: '1px solid #cbd5e1', padding: 12, font: 'inherit', resize: 'vertical', background: '#ffffff', color: '#0f172a', WebkitTextFillColor: '#0f172a', caretColor: '#4f46e5', opacity: 1 }}
               />
-              <button type="submit" style={{ border: 0, borderRadius: 16, padding: '12px 14px', background: '#4f46e5', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Search / prepare edit</button>
+              <button type="submit" className="ask-sedifex__primary">Search / prepare edit</button>
             </form>
             <ProductPhotoAssist />
-            {message ? <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.6, color: '#334155' }}>{message}</p> : null}
+            {message ? <p className="ask-sedifex__message">{message}</p> : null}
             {matches.length ? (
-              <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+              <div className="ask-sedifex__results">
                 {matches.map(item => (
-                  <div key={item.id} style={{ display: 'grid', gridTemplateColumns: item.imageUrl ? '52px 1fr' : '1fr', gap: 10, border: '1px solid #e2e8f0', borderRadius: 14, padding: 10, background: '#f8fafc' }}>
-                    {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover' }} /> : null}
-                    <div>
-                      <strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{item.name}</strong>
-                      <p style={{ margin: '4px 0 0', color: '#475569', fontSize: 12 }}>{formatPrice(item.price)} · {item.category}</p>
-                      <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 12 }}>{item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}{item.isMarketplaceVisible ? ' · Marketplace visible' : ''}</p>
+                  <div key={item.id} className={`ask-sedifex__item-card${item.imageUrl ? '' : ' ask-sedifex__item-card--no-image'}`}>
+                    {item.imageUrl ? <img className="ask-sedifex__item-image" src={item.imageUrl} alt={item.name} /> : null}
+                    <div className="ask-sedifex__item-body">
+                      <strong className="ask-sedifex__item-name">{item.name}</strong>
+                      <p className="ask-sedifex__item-meta">{formatPrice(item.price)} · {item.category}</p>
+                      <p className="ask-sedifex__item-note">{item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}{item.isMarketplaceVisible ? ' · Marketplace visible' : ''}</p>
                     </div>
                   </div>
                 ))}
-                {!isProductsPage ? <button type="button" onClick={() => navigate('/products')} style={{ border: 0, borderRadius: 14, padding: 10, background: '#0f172a', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Open Items page</button> : null}
+                {!isProductsPage ? <button type="button" className="ask-sedifex__dark-action" onClick={() => navigate('/products')}>Open Items page</button> : null}
               </div>
             ) : null}
             {changes.length ? (
-              <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+              <div className="ask-sedifex__changes">
                 {changes.map(change => (
-                  <div key={change.field} style={{ border: '1px solid #e2e8f0', borderRadius: 14, padding: 10, background: '#f8fafc' }}>
-                    <strong style={{ display: 'block', fontSize: 12, color: '#475569' }}>{change.label}</strong>
-                    <p style={{ margin: '6px 0 0', fontSize: 12, color: '#0f172a' }}><b>Current:</b> {change.current || 'Empty'}</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#0f172a' }}><b>New:</b> {change.value}</p>
+                  <div key={change.field} className="ask-sedifex__change-card">
+                    <strong className="ask-sedifex__change-label">{change.label}</strong>
+                    <p className="ask-sedifex__change-text"><b>Current:</b> {change.current || 'Empty'}</p>
+                    <p className="ask-sedifex__change-text"><b>New:</b> {change.value}</p>
                   </div>
                 ))}
-                <button type="button" onClick={applyChanges} style={{ border: 0, borderRadius: 14, padding: 10, background: '#0f172a', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Apply to form</button>
+                <button type="button" className="ask-sedifex__dark-action" onClick={applyChanges}>Apply to form</button>
               </div>
             ) : null}
           </div>
         </div>
       ) : null}
-      <button type="button" onClick={() => setOpen(value => !value)} style={{ border: 0, borderRadius: 999, padding: '13px 18px', background: 'linear-gradient(135deg, #38bdf8, #8b5cf6)', color: '#fff', fontWeight: 900, boxShadow: '0 14px 30px rgba(15,23,42,.35)', cursor: 'pointer' }}>Ask Sedifex</button>
+      <button type="button" className="ask-sedifex__launcher" onClick={() => setOpen(value => !value)}>
+        <span className="ask-sedifex__launcher-icon" aria-hidden="true">Sx</span>
+        Ask Sedifex
+      </button>
     </div>
   )
 }
