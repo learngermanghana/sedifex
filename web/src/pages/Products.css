@@ -786,3 +786,12 @@
   .products-page__visibility-grid { grid-template-columns: 1fr; }
   .products-page__list-card__header { gap: 10px; }
 }
+
+.category-select {
+  display: grid;
+  gap: 14px;
+}
+
+.products-page__list-field .category-select {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}

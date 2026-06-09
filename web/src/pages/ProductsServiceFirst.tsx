@@ -20,8 +20,10 @@ import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import type { ItemType, Product } from '../types/product'
 import { productMatchesSearch } from '../utils/productSearch'
+import { CategorySelect } from '../components/CategorySelect'
+import { ITEM_CATEGORIES } from '../utils/itemCategories'
 
-type ItemFormType = 'product' | 'service' | 'course'
+type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
 type ServiceKind = 'consultation' | 'quote_request'
 type CourseMode = 'online' | 'in_person' | 'hybrid'
 
@@ -29,6 +31,7 @@ type Draft = {
   name: string
   itemType: ItemFormType
   category: string
+  subcategory: string
   price: string
   costPrice: string
   description: string
@@ -73,42 +76,11 @@ const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
 
-const PRODUCT_CATEGORIES = [
-  PRODUCT_CATEGORY,
-  'Skin Care',
-  'Hair Care',
-  'Supplements',
-  'Household',
-  'Electronics',
-  'Fashion',
-]
-
-const SERVICE_CATEGORIES = [
-  SERVICE_CATEGORY,
-  'Beauty Services',
-  'Spa Services',
-  'Hair Services',
-  'Training / Classes',
-  'Consultation',
-  'Repairs',
-  'Delivery Services',
-]
-
-const COURSE_CATEGORIES = [
-  EDUCATION_CATEGORY,
-  'Language Classes',
-  'Beauty Training',
-  'Professional Training',
-  'Online Course',
-  'In-Person Course',
-  'Workshop',
-  'Certification',
-]
-
 const blankDraft: Draft = {
   name: '',
   itemType: 'product',
   category: PRODUCT_CATEGORY,
+  subcategory: '',
   price: '',
   costPrice: '',
   description: '',
@@ -184,17 +156,18 @@ function formatMoney(value: number | null | undefined) {
 
 function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
   const raw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
-  const lowered = raw.toLowerCase()
-  if (itemType === 'course') {
-    if (!raw || lowered === 'general product' || lowered === 'general products' || lowered === 'general service' || lowered === 'general services') return EDUCATION_CATEGORY
-    return titleCase(raw)
+  if (!raw) {
+    if (itemType === 'course') return EDUCATION_CATEGORY
+    if (itemType === 'service' || itemType === 'made_to_order') return SERVICE_CATEGORY
+    return PRODUCT_CATEGORY
   }
-  if (itemType === 'service') {
-    if (!raw || lowered === 'general product' || lowered === 'general products') return SERVICE_CATEGORY
-    return titleCase(raw)
-  }
-  if (!raw || lowered === 'general service' || lowered === 'general services' || lowered === 'education') return PRODUCT_CATEGORY
-  return titleCase(raw)
+  return ITEM_CATEGORIES.find(category => category.toLowerCase() === raw.toLowerCase()) ?? raw
+}
+
+function formatItemType(itemType: ItemType) {
+  if (itemType === 'made_to_order') return 'Booking'
+  if (itemType === 'digital_item') return 'Digital Item'
+  return titleCase(itemType)
 }
 
 function splitSentences(text: string) {
@@ -395,7 +368,10 @@ function improveDescription(text: string): string {
 }
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
-  const itemType: ItemType = data.itemType === 'course' ? 'course' : data.itemType === 'service' ? 'service' : 'product'
+  const itemType: ItemType =
+    data.itemType === 'course' || data.itemType === 'service' || data.itemType === 'made_to_order' || data.itemType === 'digital_item'
+      ? data.itemType
+      : 'product'
   const itemFormType: ItemFormType = itemType === 'course' || (itemType === 'service' && data.listingType === 'course') ? 'course' : itemType
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
   const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
@@ -404,6 +380,7 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     name,
     itemType,
     category: normalizeCategory(data.category, itemFormType),
+    subcategory: typeof data.subcategory === 'string' && data.subcategory.trim() ? data.subcategory.trim() : null,
     description: typeof data.description === 'string' && data.description.trim() ? cleanSavedDescription(data.description) : null,
     sku: itemType === 'product' && typeof data.sku === 'string' && data.sku.trim() ? data.sku.trim() : null,
     barcode: itemType === 'product' && typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : null,
@@ -455,11 +432,11 @@ function getProductSortTime(product: Product): number {
 }
 
 function buildSavePayload(draft: Draft, storeId: string) {
-  const isService = draft.itemType === 'service'
+  const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
   const isCourse = draft.itemType === 'course'
-  const behavesLikeService = isService || isCourse
+  const behavesLikeService = draft.itemType !== 'product'
   const name = titleCase(draft.name)
-  const category = normalizeCategory(draft.category, isCourse ? 'course' : isService ? 'service' : 'product')
+  const category = normalizeCategory(draft.category, draft.itemType)
   const price = cleanNumber(draft.price)
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
@@ -493,12 +470,13 @@ function buildSavePayload(draft: Draft, storeId: string) {
     storeId,
     storeName: null,
     name,
-    itemType: isCourse ? 'course' : isService ? 'service' : 'product',
+    itemType: draft.itemType,
     listingType,
     serviceKind: isCourse ? 'course_enrollment' : serviceKind,
     salesMode,
     enrollmentMode: isCourse ? 'always_open' : null,
     category,
+    subcategory: draft.subcategory.trim() || null,
     categoryKey,
     categoryName,
     status,
@@ -581,10 +559,10 @@ export default function ProductsServiceFirst() {
 
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
-  const isService = draft.itemType === 'service'
+  const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
   const isCourse = draft.itemType === 'course'
-  const behavesLikeService = isService || isCourse
-  const categoryOptions = draft.itemType === 'course' ? COURSE_CATEGORIES : draft.itemType === 'service' ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES
+  const behavesLikeService = draft.itemType !== 'product'
+  const categoryOptions = useMemo(() => Array.from(new Set([...ITEM_CATEGORIES, ...items.map(item => normalizeCategory(item.category, item.itemType))])), [items])
 
   useEffect(() => {
     if (!storeId) {
@@ -611,6 +589,7 @@ export default function ProductsServiceFirst() {
         return {
           ...current,
           itemType: nextItemType,
+          subcategory: '',
           category: shouldSwitchToProduct
             ? PRODUCT_CATEGORY
             : shouldSwitchToService
@@ -666,8 +645,8 @@ export default function ProductsServiceFirst() {
     setEditingId(null)
     setDraft(current => ({
       ...blankDraft,
-      itemType: current.itemType === 'service' ? 'service' : current.itemType === 'course' ? 'course' : 'product',
-      category: current.itemType === 'service' ? SERVICE_CATEGORY : current.itemType === 'course' ? EDUCATION_CATEGORY : PRODUCT_CATEGORY,
+      itemType: current.itemType,
+      category: normalizeCategory('', current.itemType),
       serviceKind: current.itemType === 'service' ? current.serviceKind : 'consultation',
       isMarketplaceVisible: current.isMarketplaceVisible,
       isWebsiteVisible: current.isWebsiteVisible,
@@ -678,12 +657,13 @@ export default function ProductsServiceFirst() {
   }
 
   function editItem(item: Product) {
-    const itemType: ItemFormType = item.itemType === 'course' || (item.itemType === 'service' && item.listingType === 'course') ? 'course' : item.itemType === 'service' ? 'service' : 'product'
+    const itemType: ItemFormType = item.itemType === 'course' || (item.itemType === 'service' && item.listingType === 'course') ? 'course' : item.itemType
     setEditingId(item.id)
     setDraft({
       name: item.name,
       itemType,
       category: normalizeCategory(item.category, itemType),
+      subcategory: item.subcategory ?? '',
       price: typeof item.price === 'number' ? String(item.price) : '',
       costPrice: itemType === 'product' && typeof item.costPrice === 'number' ? String(item.costPrice) : '',
       description: item.description ?? '',
@@ -853,9 +833,11 @@ export default function ProductsServiceFirst() {
             <div className="field">
               <label className="field__label" htmlFor="item-type">Item type</label>
               <select id="item-type" value={draft.itemType} onChange={event => updateDraft('itemType', event.target.value)}>
-                <option value="product">Physical product</option>
+                <option value="product">Product</option>
                 <option value="service">Service</option>
-                <option value="course">Course / Programme</option>
+                <option value="made_to_order">Booking</option>
+                <option value="course">Course</option>
+                <option value="digital_item">Digital Item</option>
               </select>
             </div>
 
@@ -864,19 +846,14 @@ export default function ProductsServiceFirst() {
               <input id="item-name" value={draft.name} onChange={event => updateDraft('name', event.target.value)} required />
             </div>
 
-            <div className="field">
-              <label className="field__label" htmlFor="item-category">{behavesLikeService ? 'Category' : 'Product category'}</label>
-              <input
-                id="item-category"
-                value={draft.category}
-                onChange={event => updateDraft('category', event.target.value)}
-                onBlur={event => updateDraft('category', normalizeCategory(event.target.value, draft.itemType))}
-                list="item-category-options"
-              />
-              <datalist id="item-category-options">
-                {categoryOptions.map(category => <option key={category} value={category} />)}
-              </datalist>
-            </div>
+            <CategorySelect
+              idPrefix="item"
+              category={draft.category}
+              onCategoryChange={category => updateDraft('category', category)}
+              subcategory={draft.subcategory}
+              onSubcategoryChange={subcategory => updateDraft('subcategory', subcategory)}
+              existingCategories={categoryOptions}
+            />
 
             <div className="field">
               <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
@@ -1039,8 +1016,8 @@ export default function ProductsServiceFirst() {
           <div className="products-page__list" aria-live="polite">
             {visibleItems.map(item => {
               const itemIsCourse = item.itemType === 'course' || item.listingType === 'course'
-              const itemIsService = item.itemType === 'service'
-              const itemIsServiceLike = itemIsService || itemIsCourse
+              const itemIsService = item.itemType === 'service' || item.itemType === 'made_to_order'
+              const itemIsServiceLike = item.itemType !== 'product'
               return (
                 <article key={item.id} className="products-page__list-card">
                   <header className="products-page__list-card__header">
@@ -1049,7 +1026,7 @@ export default function ProductsServiceFirst() {
                     </div>
                     <div className="products-page__list-title">
                       <h4>{item.name}</h4>
-                      <span className="products-page__badge products-page__badge--muted">{itemIsCourse ? 'Course' : itemIsService ? 'Service' : 'Product'}</span>
+                      <span className="products-page__badge products-page__badge--muted">{formatItemType(item.itemType)}</span>
                       <span className={`products-page__badge ${(item as any).isPublished === false ? 'products-page__badge--draft' : 'products-page__badge--published'}`}>{(item as any).isPublished === false ? 'Draft' : 'Published'}</span>
                       {(item as any).isMarketplaceVisible ? <span className="products-page__badge products-page__badge--market">Marketplace Visible</span> : null}
                       <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
@@ -1087,6 +1064,7 @@ export default function ProductsServiceFirst() {
                         <div className="products-page__list-field"><label className="field__label">Expiry</label><p className="products-page__list-value">{item.expiryDate ? item.expiryDate.toLocaleDateString() : '—'}</p></div>
                       </>
                     )}
+                    <div className="products-page__list-field"><label className="field__label">Subcategory</label><p className="products-page__list-value">{item.subcategory || '—'}</p></div>
                     <div className="products-page__list-field"><label className="field__label">Description</label><p className="products-page__list-value">{item.description || '—'}</p></div>
                   </div>
 

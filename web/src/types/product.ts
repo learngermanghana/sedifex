@@ -1,9 +1,10 @@
-export type ItemType = 'product' | 'service' | 'course' | 'made_to_order'
+export type ItemType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
 
 export type Product = {
   id: string
   name: string
   category?: string | null
+  subcategory?: string | null
   description?: string | null
   sku: string | null
   barcode: string | null
