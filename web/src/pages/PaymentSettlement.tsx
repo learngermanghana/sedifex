@@ -167,7 +167,8 @@ export default function PaymentSettlement() {
       const response = await callable(payload)
       setStatus({ ...((response.data ?? {}) as SetupStatus), configured: true })
       setPaymentNumber('')
-      publish({ message: 'Payment settlement setup saved.', tone: 'success' })
+      const action = (response.data as { action?: string } | undefined)?.action
+      publish({ message: action === 'updated' ? 'Payout details updated in Paystack.' : 'Payout details saved and Paystack subaccount created.', tone: 'success' })
     } catch (error) {
       console.error('[payment-settlement] save failed', error)
       setErrorMessage(typeof (error as { message?: unknown })?.message === 'string' ? (error as { message: string }).message : 'Unable to save settlement details.')
@@ -181,7 +182,7 @@ export default function PaymentSettlement() {
   return (
     <div className="account-overview">
       <h1>Payments / Settlement</h1>
-      <p className="account-overview__subtitle">Add where store payouts should settle after Sedifex online checkout.</p>
+      <p className="account-overview__subtitle">Save payout details to create or update the store’s Paystack subaccount immediately.</p>
       {storeLoading ? <p>Loading workspace…</p> : null}
       {!storeId && !storeLoading ? <p>Select a workspace to configure settlement.</p> : null}
       {storeId && !isOwner ? <div className="account-overview__error" role="alert">Only the workspace owner can set up settlement.</div> : null}
@@ -204,7 +205,7 @@ export default function PaymentSettlement() {
             </dl>
           </section>
           <section aria-labelledby="settlement-form">
-            <div className="account-overview__section-header"><h2 id="settlement-form">Create or update setup</h2><p className="account-overview__hint">Choose bank or mobile money to auto-fill the Paystack routing code. Manual code entry remains available if a provider is missing.</p></div>
+            <div className="account-overview__section-header"><h2 id="settlement-form">Create or update payout details</h2><p className="account-overview__hint">Saving creates or updates the Paystack subaccount immediately. Choose bank or mobile money to auto-fill the Paystack routing code.</p></div>
             <form className="account-overview__profile-form" onSubmit={handleSubmit}>
               <div className="account-overview__grid" style={{ marginBottom: 16 }}>
                 <button type="button" className={`button ${paymentType === 'bank' ? 'button--primary' : 'button--secondary'}`} onClick={() => { setPaymentType('bank'); setSelectedBankCode(''); setRoutingCode('') }}>Bank account</button>
