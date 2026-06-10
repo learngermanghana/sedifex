@@ -256,8 +256,22 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
       }),
     }
 
-    const response = await paystackRequest<PaystackSubaccountResponse>('/subaccount', {
-      method: 'POST',
+    const storedSubaccountSnap = await defaultDb.collection('paystackSubaccounts').doc(storeId).get()
+    const storeRouting = storeData.paymentRouting && typeof storeData.paymentRouting === 'object'
+      ? storeData.paymentRouting as Record<string, unknown>
+      : {}
+    const storedSubaccountCode = cleanText(
+      storedSubaccountSnap.data()?.subaccountCode
+        ?? storeRouting.paystackSubaccountCode
+        ?? storeRouting.subaccountCode
+        ?? storeData.paystackSubaccountCode,
+      80,
+    )
+    const paystackPath = storedSubaccountCode
+      ? `/subaccount/${encodeURIComponent(storedSubaccountCode)}`
+      : '/subaccount'
+    const response = await paystackRequest<PaystackSubaccountResponse>(paystackPath, {
+      method: storedSubaccountCode ? 'PUT' : 'POST',
       body: JSON.stringify(requestPayload),
     })
 
@@ -304,7 +318,8 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
       percentageCharge: docPayload.percentageCharge,
       commissionControlledBy: 'sedifex',
       isVerified: docPayload.isVerified,
-      message: response.message ?? 'Subaccount created',
+      action: storedSubaccountCode ? 'updated' : 'created',
+      message: response.message ?? (storedSubaccountCode ? 'Subaccount updated' : 'Subaccount created'),
     }
   },
 )

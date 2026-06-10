@@ -209,6 +209,11 @@ function isQuickPayCheckout(body: CheckoutBody, metadata: Record<string, unknown
     || sourceChannel.toLowerCase().startsWith('quick_pay')
 }
 
+function isWebsiteCommerceCheckout(quickPayCheckout: boolean, details: ReturnType<typeof deriveCheckoutDetails>) {
+  if (quickPayCheckout) return false
+  return ['service_booking', 'service_purchase', 'product_order'].includes(details.recordType)
+}
+
 function calculateCustomerProcessingFeeMinor(
   baseTotalMinor: number,
   feePercent = DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT,
@@ -518,6 +523,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const transactionChargeMinor = getTransactionChargeMinor(body)
     const details = deriveCheckoutDetails(body)
     const quickPayCheckout = isQuickPayCheckout(body, details.metadata, sourceChannel)
+    const websiteCommerceCheckout = isWebsiteCommerceCheckout(quickPayCheckout, details)
     const sandboxCheckout = isSandboxCheckout(req, body)
 
     if (!storeId) {
@@ -535,18 +541,22 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
 
     const baseTotalMinor = Math.round(amountMajor * 100)
     const bodyRouting = routingFromBody(body)
-    const firestoreRouting = quickPayCheckout && !bodyRouting
+    const firestoreRouting = (quickPayCheckout || websiteCommerceCheckout) && !bodyRouting
       ? await loadPaymentRoutingFromFirestore(storeId)
       : null
     const paymentRouting = bodyRouting ?? firestoreRouting ?? normalizeRoutingSnapshot({ subaccount: '', source: 'none' })
     const subaccount = paymentRouting.splitEnabled ? paymentRouting.paystackSubaccountCode : ''
-    const commissionPercent = paymentRouting.percentageCharge || DEFAULT_SEDIFEX_COMMISSION_PERCENT
-    const processingFeeMinor = quickPayCheckout
+    const commissionPercent = websiteCommerceCheckout
+      ? DEFAULT_SEDIFEX_COMMISSION_PERCENT
+      : paymentRouting.percentageCharge || DEFAULT_SEDIFEX_COMMISSION_PERCENT
+    const customerPaysProcessingFee = quickPayCheckout || websiteCommerceCheckout
+    const processingFeeMinor = customerPaysProcessingFee
       ? calculateCustomerProcessingFeeMinor(baseTotalMinor)
       : 0
     const customerTotalMinor = baseTotalMinor + processingFeeMinor
+    const automaticSedifexCommission = quickPayCheckout || websiteCommerceCheckout
     const sedifexCommissionMinor = subaccount
-      ? (quickPayCheckout
+      ? (automaticSedifexCommission
         ? calculateSedifexCommissionMinor(baseTotalMinor, commissionPercent)
         : transactionChargeMinor ?? 0)
       : 0
@@ -555,7 +565,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       processingFeeMinor,
       customerTotalMinor,
       sedifexCommissionMinor,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
+      automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
     }
     const paymentRoutingSnapshot = {
@@ -576,7 +587,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       transaction_charge: sedifexCommissionMinor,
       bearer: sedifexCommissionMinor > 0 ? 'subaccount' : null,
       percentageCharge: commissionPercent,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
+      automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
     } : {
       enabled: false,
@@ -587,7 +599,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       transaction_charge: 0,
       bearer: null,
       percentageCharge: commissionPercent,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
+      automaticSedifexCommission,
       merchantPaysCommission: false,
       splitDisabledReason: paymentRouting.splitDisabledReason,
     }
@@ -617,7 +630,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       processingFeeMinor,
       customerTotalMinor,
       sedifexCommissionMinor,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
+      automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
       settlementMode: paymentRouting.settlementMode,
       splitEnabled: Boolean(subaccount),

@@ -197,12 +197,65 @@ async function runQuickPayStoreRoutingTest() {
     customerTotalMinor: 101989,
     sedifexCommissionMinor: 3000,
     customerPaysProcessingFee: true,
+    automaticSedifexCommission: true,
     merchantPaysCommission: true,
   })
   assert.strictEqual(order.paymentRouting.source, 'stores.paymentRouting')
   assert.strictEqual(order.paystackSplit.subaccount, 'ACCT_store_nested')
   assert.strictEqual(order.paystackSplit.transactionChargeMinor, 3000)
   assert.strictEqual(state.body.paystackSplit.enabled, true)
+}
+
+async function runWebsiteCommerceAutomaticCommissionTest() {
+  currentDefaultDb = new MockFirestore({
+    'stores/website-store': {
+      paymentRouting: {
+        paystackSubaccountCode: 'ACCT_website_store',
+        percentageCharge: 8,
+        settlementMode: 'subaccount',
+        status: 'active',
+      },
+    },
+  })
+  process.env.PAYSTACK_SECRET_KEY = 'test_secret'
+
+  const cases = [
+    { reference: 'website_booking', accountingType: 'booking', itemType: 'service', expectedRecordType: 'service_booking' },
+    { reference: 'website_service', accountingType: 'service', itemType: 'service', expectedRecordType: 'service_purchase' },
+    { reference: 'website_product', accountingType: 'product', itemType: 'product', expectedRecordType: 'product_order' },
+  ]
+
+  for (const checkoutCase of cases) {
+    paystackPayloads = []
+    const { integrationCheckoutCreate } = loadQuickPayModule()
+    const state = await post(integrationCheckoutCreate, {
+      storeId: 'website-store',
+      reference: checkoutCase.reference,
+      amount: 1000,
+      currency: 'GHS',
+      customer: { email: 'website-buyer@example.com' },
+      sourceChannel: 'integration_checkout',
+      accountingType: checkoutCase.accountingType,
+      itemType: checkoutCase.itemType,
+      items: [{ item_id: 'item-1', name: 'Website item', itemType: checkoutCase.itemType, qty: 1 }],
+    })
+
+    assert.strictEqual(state.statusCode, 200)
+    const payload = paystackPayloads[0]
+    assert.strictEqual(payload.amount, 101989)
+    assert.strictEqual(payload.subaccount, 'ACCT_website_store')
+    assert.strictEqual(payload.transaction_charge, 3000)
+    assert.strictEqual(payload.bearer, 'subaccount')
+    assert.strictEqual(payload.metadata.recordType, checkoutCase.expectedRecordType)
+    assert.strictEqual(payload.metadata.automaticSedifexCommission, true)
+    assert.strictEqual(payload.metadata.processingFeeMinor, 1989)
+    assert.strictEqual(payload.metadata.customerTotalMinor, 101989)
+    assert.strictEqual(payload.metadata.customerPaysProcessingFee, true)
+    assert.strictEqual(state.body.pricingSnapshot.baseTotalMinor, 100000)
+    assert.strictEqual(state.body.pricingSnapshot.processingFeeMinor, 1989)
+    assert.strictEqual(state.body.pricingSnapshot.customerTotalMinor, 101989)
+    assert.strictEqual(state.body.pricingSnapshot.sedifexCommissionMinor, 3000)
+  }
 }
 
 async function runMissingSubaccountTest() {
@@ -244,11 +297,13 @@ async function runExternalBodySubaccountCompatibilityTest() {
 
   assert.strictEqual(state.statusCode, 200)
   const payload = paystackPayloads[0]
-  assert.strictEqual(payload.amount, 100000)
+  assert.strictEqual(payload.amount, 101989)
   assert.strictEqual(payload.subaccount, 'ACCT_from_body')
-  assert.strictEqual(payload.transaction_charge, 2500)
-  assert.strictEqual(payload.metadata.processingFeeMinor, 0)
-  assert.strictEqual(payload.metadata.customerPaysProcessingFee, false)
+  assert.strictEqual(payload.transaction_charge, 3000)
+  assert.strictEqual(payload.metadata.automaticSedifexCommission, true)
+  assert.strictEqual(payload.metadata.processingFeeMinor, 1989)
+  assert.strictEqual(payload.metadata.customerTotalMinor, 101989)
+  assert.strictEqual(payload.metadata.customerPaysProcessingFee, true)
 }
 
 
@@ -308,6 +363,7 @@ async function runCashQuickPayNoProcessingFeeTest() {
 
 async function run() {
   await runQuickPayStoreRoutingTest()
+  await runWebsiteCommerceAutomaticCommissionTest()
   await runMissingSubaccountTest()
   await runExternalBodySubaccountCompatibilityTest()
   await runSandboxCheckoutDoesNotPersistTest()
