@@ -9,6 +9,7 @@ on:
       - 'firebase.json'
       - '.firebaserc'
       - '.github/workflows/deploy-functions.yml'
+      - '.github/scripts/deploy-functions-with-retry.sh'
 
 concurrency:
   group: firebase-functions-deploy
@@ -51,6 +52,7 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json" >> "$GITHUB_ENV"
           echo "GOOGLE_CLOUD_PROJECT=sedifex-web" >> "$GITHUB_ENV"
           echo "GCLOUD_PROJECT=sedifex-web" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=sedifex-web" >> "$GITHUB_ENV"
 
       - name: Activate Google service account
         run: |
@@ -81,4 +83,4 @@ jobs:
           echo "FUNCTIONS_ONLY=$(printf '%s' "$FUNCTIONS_LIST" | sed 's/[^,]*/functions:&/g')" >> "$GITHUB_ENV"
 
       - name: Deploy Firebase Functions
-        run: firebase deploy --only "$FUNCTIONS_ONLY" --project sedifex-web --force
+        run: .github/scripts/deploy-functions-with-retry.sh
