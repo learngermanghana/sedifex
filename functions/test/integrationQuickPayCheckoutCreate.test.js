@@ -242,13 +242,19 @@ async function runWebsiteCommerceAutomaticCommissionTest() {
 
     assert.strictEqual(state.statusCode, 200)
     const payload = paystackPayloads[0]
-    assert.strictEqual(payload.amount, 100000)
+    assert.strictEqual(payload.amount, 101989)
     assert.strictEqual(payload.subaccount, 'ACCT_website_store')
     assert.strictEqual(payload.transaction_charge, 3000)
     assert.strictEqual(payload.bearer, 'subaccount')
     assert.strictEqual(payload.metadata.recordType, checkoutCase.expectedRecordType)
     assert.strictEqual(payload.metadata.automaticSedifexCommission, true)
-    assert.strictEqual(payload.metadata.customerPaysProcessingFee, false)
+    assert.strictEqual(payload.metadata.processingFeeMinor, 1989)
+    assert.strictEqual(payload.metadata.customerTotalMinor, 101989)
+    assert.strictEqual(payload.metadata.customerPaysProcessingFee, true)
+    assert.strictEqual(state.body.pricingSnapshot.baseTotalMinor, 100000)
+    assert.strictEqual(state.body.pricingSnapshot.processingFeeMinor, 1989)
+    assert.strictEqual(state.body.pricingSnapshot.customerTotalMinor, 101989)
+    assert.strictEqual(state.body.pricingSnapshot.sedifexCommissionMinor, 3000)
   }
 }
 
@@ -291,12 +297,13 @@ async function runExternalBodySubaccountCompatibilityTest() {
 
   assert.strictEqual(state.statusCode, 200)
   const payload = paystackPayloads[0]
-  assert.strictEqual(payload.amount, 100000)
+  assert.strictEqual(payload.amount, 101989)
   assert.strictEqual(payload.subaccount, 'ACCT_from_body')
   assert.strictEqual(payload.transaction_charge, 3000)
   assert.strictEqual(payload.metadata.automaticSedifexCommission, true)
-  assert.strictEqual(payload.metadata.processingFeeMinor, 0)
-  assert.strictEqual(payload.metadata.customerPaysProcessingFee, false)
+  assert.strictEqual(payload.metadata.processingFeeMinor, 1989)
+  assert.strictEqual(payload.metadata.customerTotalMinor, 101989)
+  assert.strictEqual(payload.metadata.customerPaysProcessingFee, true)
 }
 
 

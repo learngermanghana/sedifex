@@ -549,7 +549,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const commissionPercent = websiteCommerceCheckout
       ? DEFAULT_SEDIFEX_COMMISSION_PERCENT
       : paymentRouting.percentageCharge || DEFAULT_SEDIFEX_COMMISSION_PERCENT
-    const processingFeeMinor = quickPayCheckout
+    const customerPaysProcessingFee = quickPayCheckout || websiteCommerceCheckout
+    const processingFeeMinor = customerPaysProcessingFee
       ? calculateCustomerProcessingFeeMinor(baseTotalMinor)
       : 0
     const customerTotalMinor = baseTotalMinor + processingFeeMinor
@@ -564,7 +565,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       processingFeeMinor,
       customerTotalMinor,
       sedifexCommissionMinor,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
     }
@@ -586,7 +587,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       transaction_charge: sedifexCommissionMinor,
       bearer: sedifexCommissionMinor > 0 ? 'subaccount' : null,
       percentageCharge: commissionPercent,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
     } : {
@@ -598,7 +599,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       transaction_charge: 0,
       bearer: null,
       percentageCharge: commissionPercent,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: false,
       splitDisabledReason: paymentRouting.splitDisabledReason,
@@ -629,7 +630,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       processingFeeMinor,
       customerTotalMinor,
       sedifexCommissionMinor,
-      customerPaysProcessingFee: quickPayCheckout,
+      customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
       settlementMode: paymentRouting.settlementMode,
