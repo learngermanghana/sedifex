@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Timestamp, doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -180,7 +181,7 @@ export default function PromoSettings() {
 
           <section className="account-overview__card">
             <h2>Promo image</h2>
-            {imageUrl ? <img src={imageUrl} alt={imageAlt || title || 'Promo image'} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 16, border: '1px solid #e5e7eb' }} /> : <p className="account-overview__hint">No promo image yet.</p>}
+            {imageUrl ? <SafeFirebaseImage src={imageUrl} alt={imageAlt || title || 'Promo image'} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 16, border: '1px solid #e5e7eb' }} /> : <p className="account-overview__hint">No promo image yet.</p>}
             <form className="account-overview__website-sync-test" onSubmit={event => event.preventDefault()}>
               <label><span>Upload image</span><input type="file" accept="image/*" onChange={event => setImageFile(event.target.files?.[0] ?? null)} /></label>
               <button type="button" className="button button--secondary" disabled={!imageFile || uploading} onClick={() => void uploadImage()}>{uploading ? 'Uploading…' : 'Upload image'}</button>

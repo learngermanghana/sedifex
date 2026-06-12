@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
@@ -289,7 +290,7 @@ export default function GallerySettings() {
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
               {activeImages.map(image => (
                 <figure key={image.id} style={{ margin: 0, border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                  <img src={image.url} alt={image.alt || image.caption || 'Gallery image'} style={{ width: '100%', height: 130, objectFit: 'cover', display: 'block' }} />
+                  <SafeFirebaseImage src={image.url} alt={image.alt || image.caption || 'Gallery image'} style={{ width: '100%', height: 130, objectFit: 'cover', display: 'block' }} />
                   <figcaption style={{ padding: 8, fontSize: 12 }}>{image.caption || image.alt || 'Gallery image'}</figcaption>
                   <button type="button" className="button button--ghost" onClick={() => void deleteImage(image.id)}>Remove</button>
                 </figure>

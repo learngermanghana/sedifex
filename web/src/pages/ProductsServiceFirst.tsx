@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
@@ -989,7 +990,7 @@ export default function ProductsServiceFirst() {
             </div>
             {draft.imageUrl ? (
               <div className="products-page__image-preview-box">
-                <img className="products-page__image-preview" src={draft.imageUrl} alt={draft.imageAlt || draft.name || 'Preview'} />
+                <SafeFirebaseImage className="products-page__image-preview" src={draft.imageUrl} alt={draft.imageAlt || draft.name || 'Preview'} />
                 <button type="button" className="button button--ghost" onClick={() => { updateDraft('imageUrl', ''); setImageUploadState('idle'); setImageStatusMessage('') }}>Remove image</button>
               </div>
             ) : null}
@@ -1022,7 +1023,7 @@ export default function ProductsServiceFirst() {
                 <article key={item.id} className="products-page__list-card">
                   <header className="products-page__list-card__header">
                     <div className="products-page__thumb-wrap">
-                      {item.imageUrl ? <img className="products-page__thumb" src={item.imageUrl} alt={item.imageAlt ?? item.name} /> : <div className="products-page__thumb products-page__thumb--placeholder">No image</div>}
+                      {item.imageUrl ? <SafeFirebaseImage className="products-page__thumb" src={item.imageUrl} alt={item.imageAlt ?? item.name} /> : <div className="products-page__thumb products-page__thumb--placeholder">No image</div>}
                     </div>
                     <div className="products-page__list-title">
                       <h4>{item.name}</h4>

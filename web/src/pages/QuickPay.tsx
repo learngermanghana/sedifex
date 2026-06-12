@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import PageSection from '../layout/PageSection'
@@ -114,7 +115,7 @@ export default function QuickPay() {
         <section className="quick-pay-admin__hero">
           <div className="quick-pay-admin__store">
             <div className="quick-pay-admin__avatar" aria-hidden="true">
-              {profile.logoUrl ? <img src={profile.logoUrl} alt="" /> : <span>{storeInitial}</span>}
+              {profile.logoUrl ? <SafeFirebaseImage src={profile.logoUrl} alt="" /> : <span>{storeInitial}</span>}
             </div>
             <div>
               <p className="quick-pay-admin__eyebrow">Quick Pay setup</p>

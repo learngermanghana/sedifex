@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -93,7 +94,7 @@ export default function Logi() {
           </p>
         </div>
         <div className="logi__hero-figure">
-          <img
+          <SafeFirebaseImage
             src={LOGI_PARTNER_IMAGE_URL}
             alt="Market team arranging inventory"
             className="logi__image"

@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './QuickPayLanding.css'
@@ -25,7 +26,7 @@ function getStorePayUrl(storeId: string) {
 function StoreAvatar({ store }: { store: PublicStore }) {
   return (
     <div className="quickpay-avatar">
-      {store.logoUrl ? <img src={store.logoUrl} alt="" /> : store.name.slice(0, 1).toUpperCase()}
+      {store.logoUrl ? <SafeFirebaseImage src={store.logoUrl} alt="" /> : store.name.slice(0, 1).toUpperCase()}
     </div>
   )
 }

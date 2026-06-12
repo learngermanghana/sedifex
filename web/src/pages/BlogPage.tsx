@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './BlogPage.css'
 import {
@@ -608,7 +609,7 @@ export default function BlogPage() {
               </div>
               {selectedFileName ? <p className="blog-page__upload-status">File: {selectedFileName}</p> : null}
               {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
-              {imageUrl ? <img className="blog-page__image-preview" src={imageUrl} alt="Selected blog featured preview" /> : null}
+              {imageUrl ? <SafeFirebaseImage className="blog-page__image-preview" src={imageUrl} alt="Selected blog featured preview" /> : null}
             </div>
           </div>
         </header>
@@ -705,7 +706,7 @@ export default function BlogPage() {
             {posts.map(post => (
               <li key={post.id} className="blog-post-item">
                 <div className="blog-post-item__top">
-                  {post.imageUrl ? <img className="blog-post-item__image" src={post.imageUrl} alt={post.title} /> : null}
+                  {post.imageUrl ? <SafeFirebaseImage className="blog-post-item__image" src={post.imageUrl} alt={post.title} /> : null}
                   <div>
                     <h3 className="blog-post-item__title">{post.title}</h3>
                     <div className="blog-post-item__meta">

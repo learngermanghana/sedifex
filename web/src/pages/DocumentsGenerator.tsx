@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import { buildInvoicePdf, type InvoiceLine } from '../utils/invoice'
@@ -277,7 +278,7 @@ export default function DocumentsGenerator() {
               {companyLogoUrl.trim() ? (
                 <div className="form__field">
                   <span className="form__hint">Logo preview</span>
-                  <img
+                  <SafeFirebaseImage
                     src={companyLogoUrl}
                     alt="Company logo"
                     style={{ maxWidth: 120, maxHeight: 120, objectFit: 'contain' }}

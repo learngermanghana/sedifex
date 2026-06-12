@@ -1,3 +1,4 @@
+import SafeFirebaseImage from './SafeFirebaseImage'
 import React, { FormEvent, useEffect, useMemo, useState } from 'react'
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -430,7 +431,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
                       onClick={() => selectItem(item)}
                       aria-pressed={isSelected}
                     >
-                      {item.imageUrl ? <img className="ask-sedifex__item-image" src={item.imageUrl} alt={item.name} /> : null}
+                      {item.imageUrl ? <SafeFirebaseImage className="ask-sedifex__item-image" src={item.imageUrl} alt={item.name} /> : null}
                       <span className="ask-sedifex__item-body">
                         <span className="ask-sedifex__item-row">
                           <strong className="ask-sedifex__item-name">{item.name}</strong>

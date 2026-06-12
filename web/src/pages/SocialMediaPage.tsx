@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import { useEffect, useMemo, useState } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore'
@@ -718,7 +719,7 @@ export default function SocialMediaPage() {
               <p style={{ margin: 0, fontSize: 14 }}>{selectedPreview.description}</p>
             )}
             {selectedPreview.imageUrl ? (
-              <img src={selectedPreview.imageUrl} alt={`${selectedProduct?.name} preview`} style={{ maxWidth: 220, borderRadius: 8 }} />
+              <SafeFirebaseImage src={selectedPreview.imageUrl} alt={`${selectedProduct?.name} preview`} style={{ maxWidth: 220, borderRadius: 8 }} />
             ) : (
               <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>No image available for this item.</p>
             )}

@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { BrowserQRCodeSvgWriter } from '@zxing/browser'
@@ -189,7 +190,7 @@ export default function PublicCustomerIntake() {
     return (
       <main className={`public-customer-intake public-customer-intake--qr public-customer-intake--${variant}`}>
         <section className="public-customer-intake__card" style={{ borderColor: `${profile.accentColor}33` }}>
-          {profile.logoUrl ? <img src={profile.logoUrl} alt={`${title} logo`} className="public-customer-intake__logo" /> : null}
+          {profile.logoUrl ? <SafeFirebaseImage src={profile.logoUrl} alt={`${title} logo`} className="public-customer-intake__logo" /> : null}
           <p className="public-customer-intake__kicker" style={{ color: profile.accentColor }}>Customer Invite</p>
           <h1 className="public-customer-intake__headline">{profile.headline}</h1>
           <p>{profile.storeName ? `You are joining ${profile.storeName} customer list.` : 'You are joining our customer list.'}</p>
@@ -231,7 +232,7 @@ export default function PublicCustomerIntake() {
   return (
     <main className="public-customer-intake">
       <section className="public-customer-intake__card" style={{ borderColor: `${profile.accentColor}33` }}>
-        {profile.logoUrl ? <img src={profile.logoUrl} alt={`${title} logo`} className="public-customer-intake__logo" /> : null}
+        {profile.logoUrl ? <SafeFirebaseImage src={profile.logoUrl} alt={`${title} logo`} className="public-customer-intake__logo" /> : null}
         <p className="public-customer-intake__kicker" style={{ color: profile.accentColor }}>{title}</p>
         <h1>{profile.storeName ? `Join ${profile.storeName} customer list` : 'Join our customer list'}</h1>
         <p className="public-customer-intake__intro">{profile.tagline}</p>
