@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -450,7 +451,7 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
         <aside className="documents-builder__preview" aria-label={`${mode} preview`}>
           <div className="documents-builder__paper">
             <div className="documents-builder__paper-header">
-              {storeSnapshot.logo ? <img src={storeSnapshot.logo} alt="Store logo" /> : <div className="documents-builder__logo-placeholder">Logo</div>}
+              {storeSnapshot.logo ? <SafeFirebaseImage src={storeSnapshot.logo} alt="Store logo" /> : <div className="documents-builder__logo-placeholder">Logo</div>}
               <div>
                 <h3>{storeSnapshot.businessName || 'Business name'}</h3>
                 <p>{[storeSnapshot.phone, storeSnapshot.email, storeSnapshot.website].filter(Boolean).join(' • ')}</p>

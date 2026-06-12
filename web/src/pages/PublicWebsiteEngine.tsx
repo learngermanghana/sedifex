@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from "react";
 import {
   collection,
@@ -926,7 +927,7 @@ export default function PublicWebsiteEngine() {
             className="flex items-center gap-3 text-white no-underline"
           >
             {profile.logoUrl ? (
-              <img
+              <SafeFirebaseImage
                 src={profile.logoUrl}
                 alt={`${profile.name} logo`}
                 className="h-11 w-11 rounded-2xl object-cover"
@@ -1205,7 +1206,7 @@ function GallerySection({
                 key={item.id}
                 className={`group overflow-hidden rounded-[2rem] bg-slate-200 shadow-sm ${index === 0 ? "lg:col-span-2 lg:row-span-2" : ""}`}
               >
-                <img
+                <SafeFirebaseImage
                   src={item.url}
                   alt={item.alt}
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
@@ -1360,7 +1361,7 @@ function ItemCard({
   return (
     <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
       {item.imageUrl ? (
-        <img
+        <SafeFirebaseImage
           src={item.imageUrl}
           alt={item.name}
           className="h-48 w-full object-cover"

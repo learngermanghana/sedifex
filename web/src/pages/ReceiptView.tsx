@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
@@ -74,7 +75,7 @@ export default function ReceiptView() {
       {receipt.companyName ? <p><strong>Company:</strong> {receipt.companyName}</p> : null}
       {receipt.companyLogoUrl ? (
         <p>
-          <img
+          <SafeFirebaseImage
             src={receipt.companyLogoUrl}
             alt="Company logo"
             style={{ maxWidth: 120, maxHeight: 120, objectFit: 'contain' }}

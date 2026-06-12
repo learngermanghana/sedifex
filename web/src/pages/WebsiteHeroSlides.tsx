@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   collection,
@@ -443,7 +444,7 @@ export default function WebsiteHeroSlides() {
                   <p className="account-overview__hint">Uploads are stored under stores/{storeId}/hero-slides.</p>
                 </div>
 
-                {draft.imageUrl ? <img src={draft.imageUrl} alt={draft.title || 'Hero slide preview'} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 18, border: '1px solid #e5e7eb' }} /> : null}
+                {draft.imageUrl ? <SafeFirebaseImage src={draft.imageUrl} alt={draft.title || 'Hero slide preview'} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 18, border: '1px solid #e5e7eb' }} /> : null}
 
                 <Field label="Image URL"><input type="url" value={draft.imageUrl} onChange={event => updateDraft('imageUrl', event.target.value)} placeholder="Upload an image and the URL fills automatically" /></Field>
                 <Field label="Small label / eyebrow"><input value={draft.eyebrow} onChange={event => updateDraft('eyebrow', event.target.value)} placeholder="New collection" /></Field>
@@ -482,7 +483,7 @@ function SlideCard({ slide, onEdit, onPause, onRemove }: { slide: HeroSlide; onE
     <article style={{ border: '1px solid #e5e7eb', borderRadius: 22, background: active ? '#f8fafc' : '#fff', padding: 16 }}>
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', alignItems: 'start' }}>
         <div style={{ minHeight: 190, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(135deg, #020617, #4338ca)' }}>
-          {slide.imageUrl ? <img src={slide.imageUrl} alt={slide.title || 'Hero slide'} style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} /> : <div style={{ color: '#fff', padding: 24, fontWeight: 800 }}>No image uploaded</div>}
+          {slide.imageUrl ? <SafeFirebaseImage src={slide.imageUrl} alt={slide.title || 'Hero slide'} style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} /> : <div style={{ color: '#fff', padding: 24, fontWeight: 800 }}>No image uploaded</div>}
         </div>
         <div>
           <p style={{ margin: 0, color: slide.accent || '#4f46e5', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', fontSize: 12 }}>{slide.eyebrow || 'Homepage slide'}</p>

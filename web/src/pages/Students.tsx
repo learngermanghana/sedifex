@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import { useEffect, useMemo, useState } from 'react'
 import { collection, getDocs, limit, query, where, type Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -389,7 +390,7 @@ export default function Students() {
                     <td style={{ ...styles.td, ...styles.stickyStudentTd }}>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                         <div style={styles.photo}>
-                          {student.studentPhotoUrl ? <img src={student.studentPhotoUrl} alt={studentName(student)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}
+                          {student.studentPhotoUrl ? <SafeFirebaseImage src={student.studentPhotoUrl} alt={studentName(student)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'PHOTO'}
                         </div>
                         <div>
                           <strong style={{ color: '#0f172a' }}>{studentName(student)}</strong>

@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -434,7 +435,7 @@ export default function QuickPayPrint() {
 
         <div className="quick-pay-qr-wrap">
           <div className="quick-pay-qr-frame">
-            <img src={qrCodeUrl} alt={`${displayName} Quick Pay QR code`} />
+            <SafeFirebaseImage src={qrCodeUrl} alt={`${displayName} Quick Pay QR code`} />
           </div>
         </div>
 

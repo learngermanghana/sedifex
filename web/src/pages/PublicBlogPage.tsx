@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -36,7 +37,7 @@ export default function PublicBlogPage() {
       {posts.map(post => (
         <article key={post.id} className="card" style={{ marginBottom: 16, padding: 16 }}>
           <h2>{post.title}</h2>
-          {post.imageUrl ? <img src={post.imageUrl} alt={post.title} style={{ maxWidth: 320 }} /> : null}
+          {post.imageUrl ? <SafeFirebaseImage src={post.imageUrl} alt={post.title} style={{ maxWidth: 320 }} /> : null}
           <p>{slug ? post.content : (post.excerpt || `${post.content.slice(0, 220)}...`)}</p>
           {!slug ? <p><Link to={`/public-blog/${storeId}/${post.slug}`}>Read article</Link></p> : null}
           {post.linkUrl ? <p><a href={post.linkUrl} target="_blank" rel="noreferrer">Read more</a></p> : null}

@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 // web/src/pages/AccountOverview.tsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -3006,7 +3007,7 @@ export default function AccountOverview({
                         />
                       </label>
                       {item.url.trim().length > 0 ? (
-                        <img
+                        <SafeFirebaseImage
                           src={item.url}
                           alt={item.alt || 'Gallery image'}
                           style={{
@@ -3136,7 +3137,7 @@ export default function AccountOverview({
                                   background: '#fff',
                                 }}
                               >
-                                <img
+                                <SafeFirebaseImage
                                   src={item.url}
                                   alt={item.alt || 'Gallery image preview'}
                                   style={{

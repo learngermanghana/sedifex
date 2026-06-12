@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { normalizeGhanaPhoneDigits } from '../utils/phone'
@@ -695,7 +696,7 @@ export default function PromoLandingPage() {
                 const descriptionPreview = item.description ? getCatalogDescriptionPreview(item.description) : null
                 return (
                   <article key={item.id} className="promo-catalog-card" role="listitem">
-                    {item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || `${item.name} image`} loading="lazy" /> : null}
+                    {item.imageUrl ? <SafeFirebaseImage src={item.imageUrl} alt={item.imageAlt || `${item.name} image`} loading="lazy" /> : null}
                     <div className="promo-catalog-card__body">
                       <span className="promo-pill">{catalogTypeLabel(item.itemType)}</span>
                       <h3>{item.name}</h3>
@@ -741,7 +742,7 @@ export default function PromoLandingPage() {
             <div className="promo-blog-grid">
               {featuredBlogPosts.map(post => (
                 <article key={post.id} className="promo-blog-card">
-                  {post.imageUrl ? <img src={post.imageUrl} alt={post.title} loading="lazy" /> : null}
+                  {post.imageUrl ? <SafeFirebaseImage src={post.imageUrl} alt={post.title} loading="lazy" /> : null}
                   <div>
                     <p className="promo-label">Article</p>
                     <h3>{post.title}</h3>
@@ -769,7 +770,7 @@ export default function PromoLandingPage() {
               {featuredGalleryItems.map(item => (
                 <figure key={item.id} className="promo-gallery-item promo-gallery-item--modern" role="listitem">
                   <button type="button" className="promo-gallery-item__image-button" onClick={() => openGalleryItem(item.id)} aria-label={`Open image ${item.alt || item.caption || item.id}`}>
-                    <img src={item.url} alt={item.alt || `${profile.storeName} gallery image`} loading="lazy" />
+                    <SafeFirebaseImage src={item.url} alt={item.alt || `${profile.storeName} gallery image`} loading="lazy" />
                   </button>
                   {item.caption ? <figcaption>{item.caption}</figcaption> : null}
                 </figure>
@@ -787,7 +788,7 @@ export default function PromoLandingPage() {
             </div>
             {!profile.promoEnabled ? <span className="promo-status-pill">No active promo</span> : <span className="promo-status-pill is-active">Active promo</span>}
           </div>
-          {profile.imageUrl ? <img className="promo-image" src={profile.imageUrl} alt={profile.imageAlt || `${profile.storeName} promo image`} loading="lazy" /> : null}
+          {profile.imageUrl ? <SafeFirebaseImage className="promo-image" src={profile.imageUrl} alt={profile.imageAlt || `${profile.storeName} promo image`} loading="lazy" /> : null}
           <p>{promoSummary}</p>
           {profile.storePhone ? <p className="promo-meta">Contact: <a href={`tel:${profile.storePhone}`}>{profile.storePhone}</a></p> : null}
           {primaryPromoVideoEmbedUrl ? (
@@ -818,7 +819,7 @@ export default function PromoLandingPage() {
               <button type="button" className="promo-gallery-viewer__close" aria-label="Close image viewer" onClick={closeGalleryViewer}>×</button>
               <button type="button" className="promo-gallery-viewer__nav" onClick={showPreviousGalleryImage} aria-label="View previous image">‹</button>
               <figure className="promo-gallery-viewer__figure">
-                <img src={activeGalleryItem.url} alt={activeGalleryItem.alt || `${profile?.storeName || 'Store'} gallery image`} />
+                <SafeFirebaseImage src={activeGalleryItem.url} alt={activeGalleryItem.alt || `${profile?.storeName || 'Store'} gallery image`} />
                 {activeGalleryItem.caption ? <figcaption>{activeGalleryItem.caption}</figcaption> : null}
               </figure>
               <button type="button" className="promo-gallery-viewer__nav" onClick={showNextGalleryImage} aria-label="View next image">›</button>

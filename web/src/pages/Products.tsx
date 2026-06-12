@@ -1,3 +1,4 @@
+import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -1919,7 +1920,7 @@ export default function Products() {
                 {addPhotoPreviewUrls.length ? (
                   addPhotoPreviewUrls.map((url, index) => (
                     <article key={`${url}-${index}`} className="products-page__photo-preview">
-                      <img src={url} alt={index === 0 ? 'Main image preview' : `Image ${index + 1} preview`} />
+                      <SafeFirebaseImage src={url} alt={index === 0 ? 'Main image preview' : `Image ${index + 1} preview`} />
                       <p>{index === 0 ? 'Main image' : `Image ${index + 1}`}</p>
                     </article>
                   ))
@@ -2288,7 +2289,7 @@ export default function Products() {
                     <header className="products-page__list-card__header">
                       <div className="products-page__thumb-wrap">
                         {product.imageUrl ? (
-                          <img
+                          <SafeFirebaseImage
                             className="products-page__thumb"
                             src={product.imageUrl}
                             alt={product.imageAlt ?? product.name}
@@ -2403,7 +2404,7 @@ export default function Products() {
                                   .filter((url): url is string => Boolean(url))
                                   .map((url, index) => (
                                     <article key={`${url}-${index}`} className="products-page__photo-preview">
-                                      <img src={url} alt={index === 0 ? 'Main image preview' : `Image ${index + 1} preview`} />
+                                      <SafeFirebaseImage src={url} alt={index === 0 ? 'Main image preview' : `Image ${index + 1} preview`} />
                                       <p>{index === 0 ? 'Main image' : `Image ${index + 1}`}</p>
                                     </article>
                                   ))

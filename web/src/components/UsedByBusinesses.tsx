@@ -1,3 +1,4 @@
+import SafeFirebaseImage from './SafeFirebaseImage'
 import { useEffect, useMemo, useState } from 'react'
 import {
   collection,
@@ -460,7 +461,7 @@ function BusinessLogo({ business }: { business: BusinessCardData }) {
 
   return (
     <div className="used-businesses__logo" aria-hidden="true">
-      <img
+      <SafeFirebaseImage
         src={business.logoUrl}
         alt=""
         loading="lazy"
