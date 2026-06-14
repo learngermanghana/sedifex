@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, resolveNavigation } from './navigation'
 
 describe('resolveNavigation', () => {
+  it('uses the selected industry preset when no enabled modules are stored', () => {
+    const items = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: {
+        industry: 'ngo',
+        labelPolicy: 'industry_aliases',
+        enabledModules: [],
+      },
+    })
+
+    expect(items.map(item => item.id)).toContain('volunteers')
+    expect(items.map(item => item.id)).not.toContain('sell')
+  })
+
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
     const items = resolveNavigation({
       role: 'staff',

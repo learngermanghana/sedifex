@@ -389,6 +389,7 @@ type AccountOverviewProps = {
 
 type AccountTab =
   | 'workspace'
+  | 'navigation'
   | 'integrations'
   | 'promotions'
   | 'billing'
@@ -1926,6 +1927,14 @@ export default function AccountOverview({
         <nav className="account-overview__tabs" aria-label="Account sections">
           <button
             type="button"
+            className={`account-overview__tab ${activeTab === 'navigation' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'navigation'}
+            onClick={() => setActiveTab('navigation')}
+          >
+            Navigation settings
+          </button>
+          <button
+            type="button"
             className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
             aria-pressed={activeTab === 'workspace'}
             onClick={() => setActiveTab('workspace')}
@@ -2029,15 +2038,6 @@ export default function AccountOverview({
               <dd>{formatTimestamp(profile.updatedAt)}</dd>
             </div>
           </dl>
-
-          <NavigationSettingsSection
-            preferences={preferences.navigation}
-            canEdit={isOwner}
-            onSave={async navigation => {
-              await updatePreferences({ navigation })
-              publish({ message: 'Navigation settings updated.', tone: 'success' })
-            }}
-          />
 
           {isOwner && isEditingProfile && (
             <form
@@ -2233,6 +2233,17 @@ export default function AccountOverview({
             </form>
           )}
         </section>
+      )}
+
+      {!isPromotionsView && activeTab === 'navigation' && (
+        <NavigationSettingsSection
+          preferences={preferences.navigation}
+          canEdit={isOwner}
+          onSave={async navigation => {
+            await updatePreferences({ navigation })
+            publish({ message: 'Navigation settings updated.', tone: 'success' })
+          }}
+        />
       )}
 
 
