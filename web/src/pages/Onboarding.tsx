@@ -1,19 +1,9 @@
-import React, { useEffect, useState } from 'react'
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  Timestamp,
-  where,
-} from 'firebase/firestore'
-import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NavigationSettingsSection from '../components/NavigationSettingsSection'
+import { useActiveStore } from '../hooks/useActiveStore'
 import { useAuthUser } from '../hooks/useAuthUser'
-import { db } from '../firebase' // ✅ use only default Firestore
-import { getStoreIdFromRecord } from '../utils/storeId'
+import { useStorePreferences } from '../hooks/useStorePreferences'
 import {
   fetchOnboardingStatus,
   getOnboardingStatus,
@@ -22,502 +12,78 @@ import {
 } from '../utils/onboarding'
 import './Onboarding.css'
 
-type TeamMemberDocument = {
-  uid?: string | null
-  storeId?: string | null
-  role?: string | null
-  email?: string | null
-  phone?: string | null
-  createdAt?: Timestamp | null
-  updatedAt?: Timestamp | null
-}
-
-type TeamMemberDetails = TeamMemberDocument & { id: string }
-
-type StoreDocument = {
-  ownerId?: string | null
-  status?: string | null
-  contractStatus?: string | null
-  createdAt?: Timestamp | null
-  updatedAt?: Timestamp | null
-}
-
-type StoreDetails = StoreDocument & { id: string }
-
-function formatTimestamp(value: unknown): string | null {
-  if (!value) return null
-
-  if (value instanceof Timestamp) {
-    return value.toDate().toLocaleString()
-  }
-
-  if (value instanceof Date) {
-    return value.toLocaleString()
-  }
-
-  if (typeof value === 'object' && value !== null && 'toDate' in value) {
-    try {
-      const date = (value as { toDate: () => Date }).toDate()
-      return date.toLocaleString()
-    } catch (error) {
-      console.warn('[onboarding] Unable to format timestamp value', error)
-    }
-  }
-
-  if (typeof value === 'string') {
-    return value
-  }
-
-  return null
-}
-
-function formatLabel(value: string | null | undefined): string {
-  if (!value) return '—'
-  const normalized = value.trim()
-  if (!normalized) return '—'
-  return normalized.replace(/\b\w/g, letter => letter.toUpperCase())
-}
-
-function formatRole(value: string | null | undefined): string {
-  const label = formatLabel(value ?? 'Owner')
-  return label
-}
-
 export default function Onboarding() {
   const user = useAuthUser()
   const navigate = useNavigate()
-  const [status, setStatus] = useState<OnboardingStatus>(() =>
-    getOnboardingStatus(user?.uid ?? null) ?? 'pending',
+  const { storeId, isLoading, error } = useActiveStore()
+  const { preferences, updatePreferences } = useStorePreferences(storeId)
+  const [status, setStatus] = useState<OnboardingStatus>(
+    () => getOnboardingStatus(user?.uid ?? null) ?? 'pending',
   )
-  const [teamMemberDetails, setTeamMemberDetails] =
-    useState<TeamMemberDetails | null>(null)
-  const [storeDetails, setStoreDetails] = useState<StoreDetails | null>(null)
-  const [detailsError, setDetailsError] = useState<string | null>(null)
-  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
-
-  const ownerUid = teamMemberDetails?.uid ?? user?.uid ?? '—'
-  const ownerEmail = teamMemberDetails?.email ?? user?.email ?? '—'
-  const ownerRole = formatRole(teamMemberDetails?.role)
-  const createdAtLabel = formatTimestamp(teamMemberDetails?.createdAt ?? null)
-  const storeIdLabel =
-    teamMemberDetails?.storeId ?? storeDetails?.id ?? user?.uid ?? '—'
-  const storeStatusLabel = formatLabel(storeDetails?.status)
-  const contractStatusLabel = formatLabel(storeDetails?.contractStatus)
-  const updatedAtLabel = formatTimestamp(storeDetails?.updatedAt ?? null)
 
   useEffect(() => {
     let isActive = true
-
-    const syncStatus = async () => {
-      const uid = user?.uid ?? null
-      const storedStatus = await fetchOnboardingStatus(uid)
-      const resolvedStatus = storedStatus ?? getOnboardingStatus(uid) ?? 'pending'
-
-      if (!isActive) return
-
-      setStatus(resolvedStatus)
-      await setOnboardingStatus(uid, resolvedStatus)
-    }
-
-    void syncStatus()
-
-    return () => {
-      isActive = false
-    }
-  }, [user?.uid])
-
-  useEffect(() => {
-    if (!user?.uid) {
-      setTeamMemberDetails(null)
-      setStoreDetails(null)
-      setDetailsError(null)
-      setIsLoadingDetails(false)
-      return
-    }
-
-    let isActive = true
-    setIsLoadingDetails(true)
-    setDetailsError(null)
-
-    const fetchDetails = async () => {
-      try {
-        // ✅ read teamMembers from the *default* Firestore DB
-        const teamMembersRef = collection(db, 'teamMembers')
-        const membershipQuery = query(
-          teamMembersRef,
-          where('uid', '==', user.uid),
-          limit(1),
-        )
-        const membershipSnapshot = await getDocs(membershipQuery)
-        const membershipDoc = membershipSnapshot.docs[0] ?? null
-
-        if (!isActive) return
-
-        if (membershipDoc) {
-          setTeamMemberDetails({
-            id: membershipDoc.id,
-            ...(membershipDoc.data() as TeamMemberDocument),
-          })
-        } else {
-          setTeamMemberDetails(null)
-        }
-
-        const storeDetails = await loadStoreDetails(user.uid, membershipDoc)
-        if (!isActive) return
-
-        setStoreDetails(storeDetails)
-      } catch (error) {
-        if (!isActive) return
-        console.warn('[onboarding] Failed to load workspace details', error)
-        setTeamMemberDetails(null)
-        setStoreDetails(null)
-        setDetailsError(
-          'We couldn’t load your workspace details. Refresh to try again.',
-        )
-      } finally {
-        if (isActive) {
-          setIsLoadingDetails(false)
-        }
-      }
-    }
-
-    void fetchDetails()
-
-    return () => {
-      isActive = false
-    }
-  }, [user?.uid])
-
-  const hasCompleted = status === 'completed'
-
-  function handleComplete() {
-    if (!user) return
 
     void (async () => {
-      await setOnboardingStatus(user.uid, 'completed')
-      setStatus('completed')
-      navigate('/', { replace: true })
+      const uid = user?.uid ?? null
+      const resolvedStatus =
+        (await fetchOnboardingStatus(uid)) ?? getOnboardingStatus(uid) ?? 'pending'
+      if (!isActive) return
+      setStatus(resolvedStatus)
+      await setOnboardingStatus(uid, resolvedStatus)
     })()
-  }
 
-  function goToContractAndBilling() {
-    navigate({ pathname: '/account', hash: '#account-overview-contract' })
-  }
+    return () => {
+      isActive = false
+    }
+  }, [user?.uid])
 
-  function goToProducts() {
-    navigate('/products')
-  }
-
-  function goToCustomers() {
-    navigate('/customers')
-  }
-
-  function goToSell() {
-    navigate('/sell')
-  }
-
-  function goToPublicPage() {
-    navigate('/public-page')
+  async function handleComplete() {
+    if (!user) return
+    await setOnboardingStatus(user.uid, 'completed')
+    setStatus('completed')
+    navigate('/', { replace: true })
   }
 
   return (
-    <div
-      className="page onboarding-page"
-      role="region"
-      aria-labelledby="onboarding-title"
-    >
+    <div className="page onboarding-page" role="region" aria-labelledby="onboarding-title">
       <header className="page__header onboarding-page__header">
         <div>
-          <h1 className="page__title" id="onboarding-title">
-            Welcome to Sedifex
-          </h1>
+          <h1 className="page__title" id="onboarding-title">Choose your navigation</h1>
           <p className="page__subtitle">
-            Let&apos;s confirm your workspace details and walk through your
-            contract next steps.
-          </p>
-          <p className="page__subtitle">
-            New here? Start with <a href="/docs/how-to-use-sedifex">/docs/how-to-use-sedifex</a> and continue setup from the linked guides.
+            Select your business type and the pages your team needs. Sedifex starts with
+            the recommended primary navigation for your industry.
           </p>
         </div>
-        {hasCompleted && (
-          <span
-            className="onboarding-page__status"
-            role="status"
-            aria-live="polite"
-          >
-            Onboarding complete
-          </span>
+        {status === 'completed' && (
+          <span className="onboarding-page__status" role="status">Onboarding complete</span>
         )}
       </header>
 
-      <section
-        className="card onboarding-card"
-        aria-labelledby="onboarding-step-1"
-      >
-        <header className="onboarding-card__header">
-          <span className="onboarding-card__step">Step 1</span>
-          <h2 className="onboarding-card__title" id="onboarding-step-1">
-            Confirm your owner account
-          </h2>
-        </header>
-        <p>
-          You&apos;re signed in as the workspace owner. We recommend keeping
-          this login private and using it only for high-impact controls like
-          payouts, data exports, and team access. Add a recovery email in case
-          you ever need to reset your password.
-        </p>
-        <ul className="onboarding-card__list">
-          <li>Keep your owner credentials secure.</li>
-          <li>Turn on multi-factor authentication for extra protection.</li>
-          <li>Plan which teammates need day-to-day access to Sedifex.</li>
-        </ul>
-        <div className="onboarding-card__details" aria-live="polite">
-          <div className="onboarding-card__details-header">
-            <h3
-              className="onboarding-card__details-title"
-              id="onboarding-owner-details"
-            >
-              Review your workspace details
-            </h3>
-            <p className="onboarding-card__details-subtitle">
-              Confirm that your owner profile and store information look correct
-              before inviting your team.
-            </p>
-          </div>
-          {isLoadingDetails ? (
-            <p className="onboarding-card__details-status">
-              Loading your workspace data…
-            </p>
-          ) : detailsError ? (
-            <p className="onboarding-card__details-status onboarding-card__details-status--error">
-              {detailsError}
-            </p>
-          ) : (
-            <div
-              className="onboarding-card__details-columns"
-              aria-describedby="onboarding-owner-details"
-            >
-              <div className="onboarding-card__details-section">
-                <p className="onboarding-card__details-section-title">
-                  Account
-                </p>
-                <dl className="onboarding-card__details-grid">
-                  <div className="onboarding-card__details-row">
-                    <dt className="onboarding-card__details-term">Owner UID</dt>
-                    <dd className="onboarding-card__details-value">
-                      {ownerUid}
-                    </dd>
-                  </div>
-                  <div className="onboarding-card__details-row">
-                    <dt className="onboarding-card__details-term">Email</dt>
-                    <dd className="onboarding-card__details-value">
-                      {ownerEmail}
-                    </dd>
-                  </div>
-                  <div className="onboarding-card__details-row">
-                    <dt className="onboarding-card__details-term">Role</dt>
-                    <dd className="onboarding-card__details-value">
-                      {ownerRole}
-                    </dd>
-                  </div>
-                  {createdAtLabel ? (
-                    <div className="onboarding-card__details-row">
-                      <dt className="onboarding-card__details-term">
-                        Created
-                      </dt>
-                      <dd className="onboarding-card__details-value">
-                        {createdAtLabel}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </div>
-              <div className="onboarding-card__details-section">
-                <p className="onboarding-card__details-section-title">Store</p>
-                <dl className="onboarding-card__details-grid">
-                  <div className="onboarding-card__details-row">
-                    <dt className="onboarding-card__details-term">Store ID</dt>
-                    <dd className="onboarding-card__details-value">
-                      {storeIdLabel}
-                    </dd>
-                  </div>
-                  <div className="onboarding-card__details-row">
-                    <dt className="onboarding-card__details-term">Status</dt>
-                    <dd className="onboarding-card__details-value">
-                      {storeStatusLabel}
-                    </dd>
-                  </div>
-                  <div className="onboarding-card__details-row">
-                    <dt className="onboarding-card__details-term">
-                      Contract
-                    </dt>
-                    <dd className="onboarding-card__details-value">
-                      {contractStatusLabel}
-                    </dd>
-                  </div>
-                  {updatedAtLabel ? (
-                    <div className="onboarding-card__details-row">
-                      <dt className="onboarding-card__details-term">
-                        Last updated
-                      </dt>
-                      <dd className="onboarding-card__details-value">
-                        {updatedAtLabel}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </div>
-            </div>
-          )}
-        </div>
+      <section className="card onboarding-card" aria-label="Navigation setup">
+        {isLoading ? (
+          <p role="status">Loading your workspace…</p>
+        ) : error ? (
+          <p role="alert">{error}</p>
+        ) : storeId ? (
+          <NavigationSettingsSection
+            preferences={preferences.navigation}
+            canEdit
+            onSave={async navigation => updatePreferences({ navigation })}
+          />
+        ) : (
+          <p role="status">Select a workspace to configure its navigation.</p>
+        )}
       </section>
 
-      <section
-        className="card onboarding-card"
-        aria-labelledby="onboarding-step-2"
+      <button
+        type="button"
+        className="button button--primary onboarding-card__cta"
+        disabled={!storeId}
+        onClick={() => void handleComplete()}
       >
-        <header className="onboarding-card__header">
-          <span className="onboarding-card__step">Step 2</span>
-          <h2 className="onboarding-card__title" id="onboarding-step-2">
-            Review your contract
-          </h2>
-        </header>
-        <p>
-          Your Sedifex contract outlines workspace ownership, billing,
-          and support expectations. Review the terms to understand renewal
-          timelines and who to contact for updates.
-        </p>
-        <ul className="onboarding-card__list">
-          <li>Confirm the active contract status for this store.</li>
-          <li>Note your billing plan and renewal cadence.</li>
-          <li>Keep your account manager details handy for changes.</li>
-        </ul>
-        <p className="onboarding-card__cta">
-          Need to adjust the contract? Your Sedifex account manager can help
-          with renewals, plan changes, or updated contacts.
-        </p>
-        <button
-          type="button"
-          className="button button--primary onboarding-card__cta"
-          onClick={goToContractAndBilling}
-        >
-          View contract &amp; billing
-        </button>
-      </section>
-
-      <section
-        className="card onboarding-card"
-        aria-labelledby="onboarding-step-3"
-      >
-        <header className="onboarding-card__header">
-          <span className="onboarding-card__step">Step 3</span>
-          <h2 className="onboarding-card__title" id="onboarding-step-3">
-            Finish setup
-          </h2>
-        </header>
-        <p>
-          When you&apos;re ready, head to the dashboard to start using Sedifex.
-          You can return to your contract details anytime from the Account
-          page.
-        </p>
-        <button
-          type="button"
-          className="secondary-button onboarding-card__cta"
-          onClick={handleComplete}
-        >
-          {hasCompleted ? 'Return to dashboard' : 'I’m ready to continue'}
-        </button>
-      </section>
-
-      <section
-        className="card onboarding-card"
-        aria-labelledby="onboarding-step-4"
-      >
-        <header className="onboarding-card__header">
-          <span className="onboarding-card__step">Step 4</span>
-          <h2 className="onboarding-card__title" id="onboarding-step-4">
-            Launch checklist for new stores
-          </h2>
-        </header>
-        <p>
-          New stores move faster when the team practices one full sales cycle:
-          add a product, add a customer, run a sale, and confirm staff access.
-          Use these quick actions to teach your team by doing.
-        </p>
-        <div className="onboarding-card__quick-actions">
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={goToProducts}
-          >
-            Add your first product
-          </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={goToCustomers}
-          >
-            Add your first customer
-          </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={goToSell}
-          >
-            Run a test sale
-          </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={goToPublicPage}
-          >
-            Set up public page
-          </button>
-        </div>
-        <ol className="onboarding-card__playbook">
-          <li>Products: Create at least 3 real items with prices.</li>
-          <li>Customers: Add one repeat customer profile.</li>
-          <li>Sell: Complete one cash sale and one digital payment test.</li>
-          <li>Public page: Publish store details customers can find online.</li>
-        </ol>
-      </section>
+        Save and open dashboard
+      </button>
     </div>
   )
-}
-
-function normalizeStoreIdCandidate(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed ? trimmed : null
-}
-
-async function loadStoreDetails(
-  userUid: string,
-  membershipDoc: QueryDocumentSnapshot<DocumentData> | null,
-): Promise<StoreDetails | null> {
-  const membershipData = membershipDoc?.data() as
-    | TeamMemberDocument
-    | undefined
-  const storeIdFromRecord = membershipData
-    ? getStoreIdFromRecord(membershipData)
-    : null
-  const candidates = Array.from(
-    new Set(
-      [storeIdFromRecord, membershipDoc?.id, userUid]
-        .map(normalizeStoreIdCandidate)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  )
-
-  for (const candidateId of candidates) {
-    const snapshot = await getDoc(doc(db, 'stores', candidateId))
-    if (snapshot.exists()) {
-      return {
-        id: snapshot.id,
-        ...(snapshot.data() as StoreDocument),
-      }
-    }
-  }
-
-  return null
 }

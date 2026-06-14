@@ -95,7 +95,11 @@ function hasPermissions(requiredPermissions: string[] | undefined, grantedPermis
 export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
   const { role, workspaceProfile } = input
   const aliasLabels = workspaceProfile.labelPolicy === 'industry_aliases' ? INDUSTRY_LABELS[workspaceProfile.industry] : {}
-  const enabledModules = workspaceProfile.enabledModules && workspaceProfile.enabledModules.length > 0 ? new Set(workspaceProfile.enabledModules) : null
+  const enabledModules = new Set(
+    workspaceProfile.enabledModules && workspaceProfile.enabledModules.length > 0
+      ? workspaceProfile.enabledModules
+      : INDUSTRY_ENABLED_MODULE_PRESETS[workspaceProfile.industry],
+  )
   if (enabledModules && WEBSITE_BUILDER_SECTION_IDS.some(id => enabledModules.has(id))) {
     enabledModules.add('website-builder')
   }
@@ -104,7 +108,7 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
     if (!item.rolesAllowed.includes(role)) return false
     if (item.industries && !item.industries.includes(workspaceProfile.industry)) return false
     if (item.hideFromPrimaryNav) return false
-    if (item.id !== 'account' && enabledModules && !enabledModules.has(item.id)) return false
+    if (item.id !== 'account' && !enabledModules.has(item.id)) return false
     return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {
     const customLabel = workspaceProfile.customLabels?.[item.target]?.trim()
