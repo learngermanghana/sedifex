@@ -1927,6 +1927,14 @@ export default function AccountOverview({
         <nav className="account-overview__tabs" aria-label="Account sections">
           <button
             type="button"
+            className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
+            aria-pressed={activeTab === 'workspace'}
+            onClick={() => setActiveTab('workspace')}
+          >
+            Account
+          </button>
+          <button
+            type="button"
             className={`account-overview__tab ${activeTab === 'navigation' ? 'is-active' : ''}`}
             aria-pressed={activeTab === 'navigation'}
             onClick={() => setActiveTab('navigation')}
@@ -1935,19 +1943,11 @@ export default function AccountOverview({
           </button>
           <button
             type="button"
-            className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
-            aria-pressed={activeTab === 'workspace'}
-            onClick={() => setActiveTab('workspace')}
-          >
-            Workspace
-          </button>
-          <button
-            type="button"
             className={`account-overview__tab ${activeTab === 'integrations' ? 'is-active' : ''}`}
             aria-pressed={activeTab === 'integrations'}
             onClick={() => setActiveTab('integrations')}
           >
-            Integrations
+            Integration
           </button>
           <button
             type="button"

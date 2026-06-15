@@ -48,7 +48,7 @@ describe('resolveNavigation', () => {
     })
 
     expect(items.map(item => item.id)).toEqual(['reports', 'sell', 'customers', 'blog'])
-    expect(items.find(item => item.id === 'customers')?.label).toBe('Travelers')
+    expect(items.find(item => item.id === 'customers')?.label).toBe('Customers')
   })
 
   it('prefers custom labels over industry aliases', () => {
