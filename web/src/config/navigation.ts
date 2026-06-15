@@ -51,7 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
 
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
   shop: {},
-  travel: { '/customers': 'Travelers', '/bookings': 'Trips', '/upcoming-events': 'Upcoming trips', '/marketplace-orders': 'Online Orders', '/website-builder': 'Website Builder', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
+  travel: { '/customers': 'Customers', '/bookings': 'Booking', '/upcoming-events': 'Upcoming trips', '/marketplace-orders': 'Online Orders', '/website-builder': 'Website Builder', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
   ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/marketplace-orders': 'Online Orders', '/website-builder': 'Website Builder', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
   school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/marketplace-orders': 'Registrations & Orders', '/website-builder': 'Website Builder', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
 }

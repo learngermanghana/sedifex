@@ -302,6 +302,6 @@ describe('Shell', () => {
 
     renderShell(['/dashboard'])
     expect(screen.getByRole('link', { name: 'Guests' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Trips' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Booking' })).toBeInTheDocument()
   })
 })
