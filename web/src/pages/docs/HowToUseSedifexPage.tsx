@@ -61,7 +61,7 @@ export default function HowToUseSedifexPage() {
           <li>Load catalog records in <strong>Items</strong> and use <strong>Ask Sedifex</strong> for item search, edit prep, and image upload.</li>
           <li>Use <strong>Sell</strong>, <strong>Quick Pay</strong>, <strong>Invoices</strong>, <strong>Receipts</strong>, and <strong>Marketplace Orders</strong> for sales and payments.</li>
           <li>Use <strong>Bookings</strong>, <strong>Upcoming events</strong>, registrations, volunteers, or support requests for operational intake.</li>
-          <li>Build the public site in <strong>Website Builder</strong> and connect APIs, checkout, gallery, Google Business, and email from <strong>Integrations</strong>.</li>
+          <li>Build the public site in <strong>Website Builder</strong> and connect APIs, checkout, gallery, and email from <strong>Integrations</strong>.</li>
         </ol>
       </section>
 

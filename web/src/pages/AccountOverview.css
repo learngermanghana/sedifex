@@ -242,6 +242,32 @@
   opacity: 0.65;
 }
 
+.account-overview__quick-settings {
+  margin-bottom: 16px;
+}
+
+.account-overview__quick-settings-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-overview__quick-settings-card h2 {
+  margin: 0 0 6px;
+}
+
+.account-overview__quick-settings-card .account-overview__subtitle {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .account-overview__quick-settings-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 @media (prefers-contrast: more) {
   .account-overview__plan-toggle {
     border-color: #64748b;

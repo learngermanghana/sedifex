@@ -757,8 +757,19 @@ describe('AccountOverview', () => {
     expect(await screen.findByRole('link', { name: /open settings page/i })).toHaveAttribute('href', '/settings/integrations/website')
     expect(screen.getByRole('link', { name: /bookings settings/i })).toHaveAttribute('href', '/settings/integrations/bookings')
     expect(screen.getByRole('link', { name: /email settings/i })).toHaveAttribute('href', '/settings/integrations/email')
-    expect(screen.getByRole('link', { name: /google settings/i })).toHaveAttribute('href', '/settings/integrations/google-business')
+    expect(screen.queryByRole('button', { name: /google business/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /google settings/i })).not.toBeInTheDocument()
     expect(screen.getByText(/integration health summary/i)).toBeInTheDocument()
+  })
+
+  it('surfaces navigation settings from the account tab', async () => {
+    render(<AccountOverview />)
+
+    expect(await screen.findByRole('heading', { name: /navigation settings/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /open navigation settings/i }))
+
+    expect(await screen.findByText(/tick the pages you want in the sidebar/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save navigation settings/i })).toBeInTheDocument()
   })
 
   it('switches integration sections from shortcut buttons', async () => {

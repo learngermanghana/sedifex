@@ -172,7 +172,6 @@ const router = createBrowserRouter([
       { path: 'settings/integrations/website', element: <IntegrationWebsiteSettings /> },
       { path: 'settings/integrations/bookings', element: <IntegrationBookingsSettings /> },
       { path: 'settings/integrations/email', element: <IntegrationEmailSettings /> },
-      { path: 'settings/integrations/google-business', element: <Navigate to="/account" replace /> },
     ]},
     { path: 'reset-password', element: <ResetPassword /> },
     { path: 'verify-email', element: <VerifyEmail /> },
