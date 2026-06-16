@@ -27,10 +27,6 @@
         "function": "googleAdsCampaign"
       },
       {
-        "source": "/api/google-ads/metrics-sync",
-        "function": "googleAdsMetricsSync"
-      },
-      {
         "source": "/api/google-business/locations",
         "function": "googleBusinessLocations"
       },

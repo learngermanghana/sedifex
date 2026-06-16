@@ -37,7 +37,11 @@ export {
   notifyStudentRegistrationCreated,
   sendBrandedNotificationPreview,
 } from './notifications'
-export * from './googleShopping'
+export {
+  googleMerchantPendingAccounts,
+  googleMerchantSelectAccount,
+  googleShoppingSync,
+} from './googleShopping'
 export * from './googleBusinessProfile'
 
 export { createIntegrationApiKey, listIntegrationApiKeys } from './integrationApiKeys'
