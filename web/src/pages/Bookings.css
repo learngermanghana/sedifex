@@ -26,3 +26,10 @@
   .bookings-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fff; }
   .bookings-card h3, .bookings-card p { margin: 0 0 6px; }
 }
+.bookings-page__bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; }
+.bookings-page__bulk-actions span { color: #374151; font-size: 0.9rem; font-weight: 700; }
+.bookings-table__select { width: 44px; text-align: center; }
+.bookings-card__select { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; color: #374151; font-size: 0.9rem; font-weight: 700; }
+.bookings-page .btn-danger { border-color: #fecaca; background: #fee2e2; color: #991b1b; }
+.bookings-page .btn-danger:hover:not(:disabled) { background: #fecaca; }
+.bookings-page .btn:disabled { cursor: not-allowed; opacity: 0.55; }
