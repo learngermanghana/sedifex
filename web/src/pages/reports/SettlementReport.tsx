@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
 import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveCanonicalOrderStatus, deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
 
@@ -311,6 +312,17 @@ export default function SettlementReport() {
     })
   }
 
+  const columns: ReportColumn<SettlementRow>[] = [
+    { key: 'reference', label: 'Reference', sortable: true, value: row => `${row.reference} ${row.collectionName}`, render: row => <><strong>{row.reference}</strong><br /><small>{row.collectionName === 'integrationBookings' ? 'Service booking' : 'Product order'}</small></> },
+    { key: 'source', label: 'Source', sortable: true, value: row => `${row.sourceLabel} ${row.customerName}`, render: row => <>{row.sourceLabel}<br /><small>{row.customerName}</small></> },
+    { key: 'gross', label: 'Gross', align: 'right', sortable: true, value: row => row.grossAmount, render: row => <>{formatMoney(row.grossAmount, row.currency)}<br /><small>Base: {formatMoney(row.baseAmount, row.currency)}</small></> },
+    { key: 'fees', label: 'Fees / commission', align: 'right', sortable: true, value: row => row.sedifexCommission + row.customerProcessingFee, render: row => <>{formatMoney(row.sedifexCommission, row.currency)}<br /><small>Customer fee: {formatMoney(row.customerProcessingFee, row.currency)}</small></> },
+    { key: 'merchantNet', label: 'Merchant net', align: 'right', sortable: true, value: row => row.merchantNet, render: row => formatMoney(row.merchantNet, row.currency) },
+    { key: 'split', label: 'Split', sortable: true, value: row => `${row.splitEnabled ? 'Enabled' : 'Missing'} ${row.subaccountCode}`, render: row => <>{row.splitEnabled ? 'Enabled' : 'Missing'}<br /><small>{row.subaccountCode || 'No subaccount'}</small></> },
+    { key: 'status', label: 'Status', sortable: true, value: row => `${row.paymentStatus} ${row.orderStatus}`, render: row => <>{row.paymentStatus}<br /><small>{row.orderStatus}</small></> },
+    { key: 'date', label: 'Date', sortable: true, value: row => row.createdAt, render: row => formatDate(row.createdAt) },
+  ]
+
   return (
     <div className="workspace-page">
       <section className="workspace-card">
@@ -326,19 +338,15 @@ export default function SettlementReport() {
         <article className="workspace-card"><strong>{totals.missingSplit}</strong><span>Online records missing split</span></article>
       </section>
 
-      <section className="workspace-card">
-        <div className="workspace-section-header">
-          <div>
-            <h2>Settlement details</h2>
-            <p className="workspace-muted">Totals use paid records when available. If no paid records are found, totals show selected records for planning/reconciliation.</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="button button--secondary" onClick={exportPdf} disabled={!rows.length}>Export PDF</button>
-            <button type="button" className="button button--primary" onClick={exportRows} disabled={!rows.length}>Export CSV</button>
-          </div>
-        </div>
-
-        <div className="workspace-toolbar">
+      <ReportDataTable
+        title="Settlement details"
+        subtitle="Totals use paid records when available. If no paid records are found, totals show selected records for planning/reconciliation."
+        rows={rows}
+        columns={columns}
+        getRowKey={row => `${row.collectionName}-${row.id}`}
+        searchPlaceholder="Search reference, source, customer, status, or split…"
+        actions={<><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!rows.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportRows} disabled={!rows.length}>Export CSV</button></>}
+        filters={<>
           <select value={range} onChange={event => setRange(event.target.value)}>
             <option value="today">Today</option>
             <option value="7d">Last 7 days</option>
@@ -363,47 +371,8 @@ export default function SettlementReport() {
             <option value="split">Split enabled</option>
             <option value="missing">Missing split</option>
           </select>
-        </div>
-
-        <div className="workspace-grid workspace-grid--four" style={{ marginTop: 12 }}>
-          <article className="workspace-card"><strong>{totals.records}</strong><span>Selected records</span></article>
-          <article className="workspace-card"><strong>{totals.paidRecords}</strong><span>Paid/confirmed records</span></article>
-          <article className="workspace-card"><strong>{totals.splitEnabled}</strong><span>Split enabled</span></article>
-          <article className="workspace-card"><strong>{formatMoney(totals.customerFees, totals.currency)}</strong><span>Customer processing fees</span></article>
-        </div>
-
-        <div className="workspace-table-wrap">
-          <table className="workspace-table">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Source</th>
-                <th>Gross</th>
-                <th>Fees / commission</th>
-                <th>Merchant net</th>
-                <th>Split</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr key={`${row.collectionName}-${row.id}`}>
-                  <td><strong>{row.reference}</strong><br /><small>{row.collectionName === 'integrationBookings' ? 'Service booking' : 'Product order'}</small></td>
-                  <td>{row.sourceLabel}<br /><small>{row.customerName}</small></td>
-                  <td>{formatMoney(row.grossAmount, row.currency)}<br /><small>Base: {formatMoney(row.baseAmount, row.currency)}</small></td>
-                  <td>{formatMoney(row.sedifexCommission, row.currency)}<br /><small>Customer fee: {formatMoney(row.customerProcessingFee, row.currency)}</small></td>
-                  <td>{formatMoney(row.merchantNet, row.currency)}</td>
-                  <td>{row.splitEnabled ? 'Enabled' : 'Missing'}<br /><small>{row.subaccountCode || 'No subaccount'}</small></td>
-                  <td>{row.paymentStatus}<br /><small>{row.orderStatus}</small></td>
-                  <td>{formatDate(row.createdAt)}</td>
-                </tr>
-              ))}
-              {!rows.length ? <tr><td colSpan={8}>No settlement records found for this filter.</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        </>}
+      />
     </div>
   )
 }

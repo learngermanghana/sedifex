@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatMoney } from './reportUtils'
 
 type Fund = { id: string; fundName: string; sourceName: string; restrictionType: string; openingBalance: number; endDate?: string; reportDueDate?: string; status: string }
@@ -59,11 +60,33 @@ export default function FundsReport() {
     ], rows: fundRows })
   }
 
+  const fundColumns: ReportColumn<FundSummary>[] = [
+    { key: 'fund', label: 'Fund', sortable: true, value: fund => fund.fundName },
+    { key: 'source', label: 'Source / donor', sortable: true, value: fund => fund.sourceName, render: fund => fund.sourceName || '—' },
+    { key: 'type', label: 'Type', sortable: true, value: fund => fund.restrictionType },
+    { key: 'opening', label: 'Opening', align: 'right', sortable: true, value: fund => fund.openingBalance, render: fund => formatMoney(fund.openingBalance) },
+    { key: 'inflows', label: 'Inflows', align: 'right', sortable: true, value: fund => fund.inflows, render: fund => formatMoney(fund.inflows) },
+    { key: 'outflows', label: 'Outflows', align: 'right', sortable: true, value: fund => fund.outflows, render: fund => formatMoney(fund.outflows) },
+    { key: 'remaining', label: 'Remaining', align: 'right', sortable: true, value: fund => fund.remaining, render: fund => formatMoney(fund.remaining) },
+    { key: 'endDate', label: 'End', sortable: true, value: fund => fund.endDate, render: fund => fund.endDate || '—' },
+    { key: 'reportDueDate', label: 'Report due', sortable: true, value: fund => fund.reportDueDate, render: fund => fund.reportDueDate || '—' },
+  ]
+
+  const transactionColumns: ReportColumn<Tx>[] = [
+    { key: 'date', label: 'Date', sortable: true, value: tx => tx.date, render: tx => tx.date || '—' },
+    { key: 'fund', label: 'Fund', sortable: true, value: tx => fundNameById.get(tx.fundId) || tx.fundName || '', render: tx => fundNameById.get(tx.fundId) || tx.fundName || '—' },
+    { key: 'direction', label: 'Direction', sortable: true, value: tx => tx.direction, render: tx => tx.direction === 'inflow' ? 'Inflow / donation received' : 'Outflow / expense' },
+    { key: 'amount', label: 'Amount', align: 'right', sortable: true, value: tx => tx.amount, render: tx => formatMoney(tx.amount) },
+    { key: 'project', label: 'Project', sortable: true, value: tx => tx.project, render: tx => tx.project || '—' },
+    { key: 'category', label: 'Category', sortable: true, value: tx => tx.category, render: tx => tx.category || '—' },
+    { key: 'description', label: 'Description', sortable: true, value: tx => tx.description, render: tx => tx.description || '—' },
+  ]
+
   return <div className="workspace-page">
     <section className="workspace-card"><p className="workspace-eyebrow">Reports / Funds</p><h1>Funds report</h1><p className="workspace-muted">Funds ledger report for fund buckets, opening balances, donor/source inflows, outflows, remaining balances, CSV export, and PDF export.</p></section>
     <section className="workspace-card" style={{ borderLeft: '5px solid #4f46e5' }}><strong>Opening balance is not the donor amount.</strong><p className="workspace-muted">Opening balance means the money already inside that fund before you started tracking it in Sedifex. If a donor gives money now, record it as an inflow transaction.</p></section>
     <section className="workspace-grid workspace-grid--four"><article className="workspace-card"><strong>{totals.funds}</strong><span>Funds</span></article><article className="workspace-card"><strong>{formatMoney(totals.inflows)}</strong><span>Donor/source inflows</span></article><article className="workspace-card"><strong>{formatMoney(totals.outflows)}</strong><span>Outflows</span></article><article className="workspace-card"><strong>{formatMoney(totals.remaining)}</strong><span>Remaining</span></article></section>
-    <section className="workspace-card"><div className="workspace-section-header"><div><h2>Fund buckets</h2><p className="workspace-muted">Saved funds show here even before any transaction is added.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filteredFundSummaries.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportFunds} disabled={!filteredFundSummaries.length}>Export fund CSV</button></div></div><div className="workspace-toolbar"><select value={fundFilter} onChange={event => setFundFilter(event.target.value)}><option value="all">All funds</option>{funds.map(fund => <option key={fund.id} value={fund.id}>{fund.fundName}</option>)}</select></div><div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Fund</th><th>Source / donor</th><th>Type</th><th>Opening</th><th>Inflows</th><th>Outflows</th><th>Remaining</th><th>End</th><th>Report due</th></tr></thead><tbody>{filteredFundSummaries.length === 0 ? <tr><td colSpan={9}>No fund buckets saved yet.</td></tr> : null}{filteredFundSummaries.map(fund => <tr key={fund.id}><td>{fund.fundName}</td><td>{fund.sourceName || '—'}</td><td>{fund.restrictionType}</td><td>{formatMoney(fund.openingBalance)}</td><td>{formatMoney(fund.inflows)}</td><td>{formatMoney(fund.outflows)}</td><td>{formatMoney(fund.remaining)}</td><td>{fund.endDate || '—'}</td><td>{fund.reportDueDate || '—'}</td></tr>)}</tbody></table></div></section>
-    <section className="workspace-card"><div className="workspace-section-header"><div><h2>Fund transactions</h2><p className="workspace-muted">These are donor/source inflows and expenses/outflows linked to the selected fund.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="button button--primary" onClick={exportRows} disabled={!filteredTx.length}>Export transactions CSV</button></div></div><div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Date</th><th>Fund</th><th>Direction</th><th>Amount</th><th>Project</th><th>Category</th><th>Description</th></tr></thead><tbody>{filteredTx.length === 0 ? <tr><td colSpan={7}>No transactions for this fund yet.</td></tr> : null}{filteredTx.map(tx => <tr key={tx.id}><td>{tx.date || '—'}</td><td>{fundNameById.get(tx.fundId) || tx.fundName || '—'}</td><td>{tx.direction === 'inflow' ? 'Inflow / donation received' : 'Outflow / expense'}</td><td>{formatMoney(tx.amount)}</td><td>{tx.project || '—'}</td><td>{tx.category || '—'}</td><td>{tx.description || '—'}</td></tr>)}</tbody></table></div></section>
+    <ReportDataTable title="Fund buckets" subtitle="Saved funds show here even before any transaction is added." rows={filteredFundSummaries} columns={fundColumns} getRowKey={fund => fund.id} searchPlaceholder="Search fund, source, or type…" actions={<><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filteredFundSummaries.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportFunds} disabled={!filteredFundSummaries.length}>Export fund CSV</button></>} filters={<select value={fundFilter} onChange={event => setFundFilter(event.target.value)}><option value="all">All funds</option>{funds.map(fund => <option key={fund.id} value={fund.id}>{fund.fundName}</option>)}</select>} />
+    <ReportDataTable title="Fund transactions" subtitle="These are donor/source inflows and expenses/outflows linked to the selected fund." rows={filteredTx} columns={transactionColumns} getRowKey={tx => tx.id} searchPlaceholder="Search transaction date, fund, project, category, or description…" actions={<button type="button" className="button button--primary" onClick={exportRows} disabled={!filteredTx.length}>Export transactions CSV</button>} />
   </div>
 }
