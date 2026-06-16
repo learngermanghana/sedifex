@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
+  deleteDoc,
+  doc,
   getDocs,
   query,
   Timestamp,
@@ -116,6 +118,9 @@ export default function Bookings() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deletingIds, setDeletingIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<
     "needs_action" | "today" | "upcoming" | "all" | "cancelled"
   >("needs_action");
@@ -271,6 +276,7 @@ export default function Bookings() {
     if (!storeId) return;
     setLoading(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
     try {
       const serviceMap = new Map<string, string>();
       for (const collectionName of [
@@ -454,6 +460,91 @@ export default function Bookings() {
     [activeTab, bookings, todayStr],
   );
 
+  const deleteBookingRecords = useCallback(
+    async (booking: BookingRecord) => {
+      if (!storeId) return;
+      const collectionName =
+        booking.sourcePath === "order"
+          ? "integrationOrders"
+          : "integrationBookings";
+      await Promise.all([
+        deleteDoc(doc(db, "stores", storeId, collectionName, booking.id)),
+        deleteDoc(doc(db, collectionName, booking.id)),
+      ]);
+    },
+    [storeId],
+  );
+
+  const handleDeleteBooking = useCallback(
+    async (booking: BookingRecord) => {
+      const label = booking.serviceName || booking.reference || "this booking";
+      if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+
+      setDeletingIds((current) => [...new Set([...current, booking.id])]);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      try {
+        await deleteBookingRecords(booking);
+        setBookings((current) =>
+          current.filter((item) => item.id !== booking.id),
+        );
+        setSelectedIds((current) => current.filter((id) => id !== booking.id));
+        setSuccessMessage("Booking deleted successfully.");
+      } catch (error) {
+        console.error(error);
+        setErrorMessage("Unable to delete booking right now. Please try again.");
+      } finally {
+        setDeletingIds((current) => current.filter((id) => id !== booking.id));
+      }
+    },
+    [deleteBookingRecords],
+  );
+
+  const handleBulkDelete = useCallback(async () => {
+    const selected = bookings.filter((booking) =>
+      selectedIds.includes(booking.id),
+    );
+    if (!selected.length) return;
+    if (
+      !window.confirm(
+        `Delete ${selected.length} selected booking${
+          selected.length === 1 ? "" : "s"
+        }? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setDeletingIds((current) => [
+      ...new Set([...current, ...selected.map((booking) => booking.id)]),
+    ]);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      await Promise.all(
+        selected.map((booking) => deleteBookingRecords(booking)),
+      );
+      setBookings((current) =>
+        current.filter((booking) => !selectedIds.includes(booking.id)),
+      );
+      setSelectedIds([]);
+      setSuccessMessage(
+        `${selected.length} booking${
+          selected.length === 1 ? "" : "s"
+        } deleted successfully.`,
+      );
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        "Unable to delete selected bookings right now. Please try again.",
+      );
+    } finally {
+      setDeletingIds((current) =>
+        current.filter((id) => !selected.some((booking) => booking.id === id)),
+      );
+    }
+  }, [bookings, deleteBookingRecords, selectedIds]);
+
   return (
     <main className="page bookings-page">
       <section className="card stack gap-4 bookings-board">
@@ -516,6 +607,42 @@ export default function Bookings() {
           ))}
         </div>
 
+        {!loading && !errorMessage ? (
+          <div className="bookings-page__bulk-actions">
+            <span>{selectedIds.length} selected</span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() =>
+                setSelectedIds(visible.map((booking) => booking.id))
+              }
+              disabled={!visible.length}
+            >
+              Select visible
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setSelectedIds([])}
+              disabled={!selectedIds.length}
+            >
+              Clear selection
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => void handleBulkDelete()}
+              disabled={!selectedIds.length || deletingIds.length > 0}
+            >
+              {deletingIds.length > 0 ? "Deleting…" : "Delete selected"}
+            </button>
+          </div>
+        ) : null}
+
+        {successMessage ? (
+          <p className="form__success">{successMessage}</p>
+        ) : null}
+
         {loading ? (
           <p>Loading bookings…</p>
         ) : errorMessage ? (
@@ -525,6 +652,33 @@ export default function Bookings() {
             <table className="table bookings-table">
               <thead>
                 <tr>
+                  <th className="bookings-table__select">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible bookings"
+                      checked={
+                        visible.length > 0 &&
+                        visible.every((booking) =>
+                          selectedIds.includes(booking.id),
+                        )
+                      }
+                      onChange={(event) =>
+                        setSelectedIds(
+                          event.target.checked
+                            ? Array.from(
+                                new Set([
+                                  ...selectedIds,
+                                  ...visible.map((booking) => booking.id),
+                                ]),
+                              )
+                            : selectedIds.filter(
+                                (id) =>
+                                  !visible.some((booking) => booking.id === id),
+                              ),
+                        )
+                      }
+                    />
+                  </th>
                   <th>Booking</th>
                   <th>Customer</th>
                   <th>Schedule</th>
@@ -538,6 +692,20 @@ export default function Bookings() {
                 {visible.map((b) => {
                   return (
                     <tr key={b.id}>
+                      <td className="bookings-table__select">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${b.serviceName}`}
+                          checked={selectedIds.includes(b.id)}
+                          onChange={(event) =>
+                            setSelectedIds((current) =>
+                              event.target.checked
+                                ? Array.from(new Set([...current, b.id]))
+                                : current.filter((id) => id !== b.id),
+                            )
+                          }
+                        />
+                      </td>
                       <td>
                         <strong>{b.serviceName}</strong>
                         <small>
@@ -608,6 +776,16 @@ export default function Bookings() {
                           >
                             Open
                           </Link>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => void handleDeleteBooking(b)}
+                            disabled={deletingIds.includes(b.id)}
+                          >
+                            {deletingIds.includes(b.id)
+                              ? "Deleting…"
+                              : "Delete"}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -626,9 +804,36 @@ export default function Bookings() {
                   <p>
                     {statusLabel(b.status)} • {paymentLabel(b.paymentStatus)}
                   </p>
-                  <Link className="btn btn-secondary" to={`/bookings/${b.id}`}>
-                    Open
-                  </Link>
+                  <label className="bookings-card__select">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(b.id)}
+                      onChange={(event) =>
+                        setSelectedIds((current) =>
+                          event.target.checked
+                            ? Array.from(new Set([...current, b.id]))
+                            : current.filter((id) => id !== b.id),
+                        )
+                      }
+                    />
+                    Select
+                  </label>
+                  <div className="bookings-page__row-actions">
+                    <Link
+                      className="btn btn-secondary"
+                      to={`/bookings/${b.id}`}
+                    >
+                      Open
+                    </Link>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => void handleDeleteBooking(b)}
+                      disabled={deletingIds.includes(b.id)}
+                    >
+                      {deletingIds.includes(b.id) ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
