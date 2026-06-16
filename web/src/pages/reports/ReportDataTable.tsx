@@ -19,6 +19,7 @@ type ReportDataTableProps<T> = {
   columns: ReportColumn<T>[]
   searchPlaceholder?: string
   actions?: React.ReactNode
+  filters?: React.ReactNode
   defaultPageSize?: number
   getRowKey: (row: T, index: number) => string
 }
@@ -30,6 +31,7 @@ export default function ReportDataTable<T>({
   columns,
   searchPlaceholder = 'Search rows…',
   actions,
+  filters,
   defaultPageSize = 25,
   getRowKey,
 }: ReportDataTableProps<T>) {
@@ -69,6 +71,7 @@ export default function ReportDataTable<T>({
     </div>}
     <div className="workspace-toolbar report-toolbar-inline">
       <input value={query} onChange={e => { setQuery(e.target.value); setPage(1) }} placeholder={searchPlaceholder} />
+      {filters}
       <label>Rows per page<select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
     </div>
     <div className="workspace-table-wrap report-table-wrap">

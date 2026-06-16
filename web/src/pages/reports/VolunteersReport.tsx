@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asText, downloadCsv, exportReportPdf, formatDate, getNestedObject, toDate } from './reportUtils'
 
 type VolunteerRow = {
@@ -68,11 +69,19 @@ export default function VolunteersReport() {
     })
   }
 
+  const columns: ReportColumn<VolunteerRow>[] = [
+    { key: 'volunteer', label: 'Volunteer', sortable: true, value: row => `${row.name} ${row.phone} ${row.email}`, render: row => <><strong>{row.name}</strong><br /><small>{row.phone || row.email || 'No contact'}</small></> },
+    { key: 'skills', label: 'Skills', sortable: true, value: row => row.skills, render: row => row.skills || '—' },
+    { key: 'availability', label: 'Availability', sortable: true, value: row => row.availability },
+    { key: 'status', label: 'Status', sortable: true, value: row => row.status },
+    { key: 'createdAt', label: 'Date', sortable: true, value: row => row.createdAt, render: row => formatDate(row.createdAt) },
+  ]
+
   return (
     <div className="workspace-page">
       <section className="workspace-card"><p className="workspace-eyebrow">Reports / Volunteers</p><h1>Volunteers report</h1><p className="workspace-muted">Volunteer applications, skills, availability, status, and CSV export.</p></section>
       <section className="workspace-grid workspace-grid--four"><article className="workspace-card"><strong>{totals.count}</strong><span>Total volunteers</span></article><article className="workspace-card"><strong>{totals.newRows}</strong><span>New applications</span></article><article className="workspace-card"><strong>{totals.active}</strong><span>Active/approved</span></article><article className="workspace-card"><strong>{statuses.length}</strong><span>Status groups</span></article></section>
-      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Volunteer details</h2><p className="workspace-muted">Filter by status and export data.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></div></div><div className="workspace-toolbar"><select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{statuses.map(name => <option key={name} value={name}>{name}</option>)}</select></div><div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Volunteer</th><th>Skills</th><th>Availability</th><th>Status</th><th>Date</th></tr></thead><tbody>{filtered.map(row => <tr key={row.id}><td><strong>{row.name}</strong><br /><small>{row.phone || row.email || 'No contact'}</small></td><td>{row.skills || '—'}</td><td>{row.availability}</td><td>{row.status}</td><td>{formatDate(row.createdAt)}</td></tr>)}</tbody></table></div></section>
+      <ReportDataTable title="Volunteer details" subtitle="Filter by status and export data." rows={filtered} columns={columns} getRowKey={row => row.id} searchPlaceholder="Search volunteer, skills, availability, or status…" actions={<><button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></>} filters={<select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{statuses.map(name => <option key={name} value={name}>{name}</option>)}</select>} />
     </div>
   )
 }

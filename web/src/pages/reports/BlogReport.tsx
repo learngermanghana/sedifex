@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, formatDate, toDate } from './reportUtils'
 
 type BlogRow = {
@@ -50,11 +51,19 @@ export default function BlogReport() {
     downloadCsv('sedifex-blog-report.csv', filtered.map(row => ({ title: row.title, slug: row.slug, status: row.status, views: row.views, createdAt: formatDate(row.createdAt), publishedAt: formatDate(row.publishedAt) })))
   }
 
+  const columns: ReportColumn<BlogRow>[] = [
+    { key: 'title', label: 'Title', sortable: true, value: row => `${row.title} ${row.slug}`, render: row => <><strong>{row.title}</strong><br /><small>{row.slug || 'No slug'}</small></> },
+    { key: 'status', label: 'Status', sortable: true, value: row => row.status },
+    { key: 'views', label: 'Views', align: 'right', sortable: true, value: row => row.views },
+    { key: 'createdAt', label: 'Created', sortable: true, value: row => row.createdAt, render: row => formatDate(row.createdAt) },
+    { key: 'publishedAt', label: 'Published', sortable: true, value: row => row.publishedAt, render: row => formatDate(row.publishedAt) },
+  ]
+
   return (
     <div className="workspace-page">
       <section className="workspace-card"><p className="workspace-eyebrow">Reports / Blog</p><h1>Blog report</h1><p className="workspace-muted">Published and draft content, simple content metrics, and CSV export.</p></section>
       <section className="workspace-grid workspace-grid--four"><article className="workspace-card"><strong>{totals.count}</strong><span>Total posts</span></article><article className="workspace-card"><strong>{totals.published}</strong><span>Published</span></article><article className="workspace-card"><strong>{totals.drafts}</strong><span>Drafts</span></article><article className="workspace-card"><strong>{totals.views}</strong><span>Views</span></article></section>
-      <section className="workspace-card"><div className="workspace-section-header"><div><h2>Post details</h2><p className="workspace-muted">Filter by status and export CSV.</p></div><button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button></div><div className="workspace-toolbar"><select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{statuses.map(name => <option key={name} value={name}>{name}</option>)}</select></div><div className="workspace-table-wrap"><table className="workspace-table"><thead><tr><th>Title</th><th>Status</th><th>Views</th><th>Created</th><th>Published</th></tr></thead><tbody>{filtered.map(row => <tr key={row.id}><td><strong>{row.title}</strong><br /><small>{row.slug || 'No slug'}</small></td><td>{row.status}</td><td>{row.views}</td><td>{formatDate(row.createdAt)}</td><td>{formatDate(row.publishedAt)}</td></tr>)}</tbody></table></div></section>
+      <ReportDataTable title="Post details" subtitle="Filter by status and export CSV." rows={filtered} columns={columns} getRowKey={row => row.id} searchPlaceholder="Search title, slug, or status…" actions={<button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>} filters={<select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{statuses.map(name => <option key={name} value={name}>{name}</option>)}</select>} />
     </div>
   )
 }
