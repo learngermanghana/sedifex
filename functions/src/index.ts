@@ -14,6 +14,7 @@ export {
 export { integrationCashCheckoutCreate } from './integrationCashCheckout'
 export { publicQuickPayReceipt } from './publicQuickPayReceipt'
 export { syncIntegrationOrderCustomer } from './integrationOrderCustomerSync'
+export { materializePaidIntegrationBooking } from './paidIntegrationBooking'
 export { repairDataConsistency, repairDuplicateBookingOrders } from './dataConsistency'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationHeroSlides } from './integrationHeroSlides'
