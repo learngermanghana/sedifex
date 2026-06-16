@@ -144,44 +144,6 @@ async function deleteQueryInPages(query: admin.firestore.Query, batchSize: numbe
   }
 }
 
-async function cleanPendingReportDataForStore(input: {
-  storeId: string
-  batchSize: number
-  requestedBy: string
-  source: 'callable' | 'scheduled'
-  writeAudit?: boolean
-}) {
-  const details: Record<string, number> = {}
-  let deleted = 0
-
-  for (const collectionName of pendingReportCollections) {
-    for (const field of pendingReportFields) {
-      const count = await deleteQueryInPages(
-        db.collection(collectionName).where('storeId', '==', input.storeId).where(field, 'in', pendingStatuses),
-        input.batchSize,
-      )
-      if (count) {
-        details[`${collectionName}.${field}`] = count
-        deleted += count
-      }
-    }
-  }
-
-  if (input.writeAudit ?? true) {
-    await db.collection('reportCleanups').add({
-      storeId: input.storeId,
-      deleted,
-      details,
-      pendingStatuses,
-      requestedBy: input.requestedBy,
-      source: input.source,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
-  }
-
-  return { storeId: input.storeId, deleted, details }
-}
-
 export const cleanPendingReportData = functions.https.onCall(
   async (rawData: { storeId?: unknown; batchSize?: unknown } | undefined, context) => {
     const storeId = cleanText(rawData?.storeId)
@@ -189,56 +151,31 @@ export const cleanPendingReportData = functions.https.onCall(
     await assertCanCleanReports(context, storeId)
 
     const batchSize = Math.min(Math.max(Number(rawData?.batchSize) || 250, 25), 450)
-    const result = await cleanPendingReportDataForStore({
-      storeId,
-      batchSize,
-      requestedBy: context.auth!.uid,
-      source: 'callable',
-    })
-
-    return { ok: true, ...result }
-  },
-)
-
-export const scheduledCleanPendingReportData = functions
-  .runWith({ timeoutSeconds: 540, memory: '512MB' })
-  .pubsub.schedule('every day 03:30')
-  .timeZone('Etc/UTC')
-  .onRun(async () => {
-    const batchSize = 250
-    const storesSnap = await db.collection('stores').get()
-    const storeResults = []
+    const details: Record<string, number> = {}
     let deleted = 0
 
-    for (const storeDoc of storesSnap.docs) {
-      const result = await cleanPendingReportDataForStore({
-        storeId: storeDoc.id,
-        batchSize,
-        requestedBy: 'system:scheduledCleanPendingReportData',
-        source: 'scheduled',
-        writeAudit: false,
-      })
-      if (result.deleted > 0) storeResults.push(result)
-      deleted += result.deleted
+    for (const collectionName of pendingReportCollections) {
+      for (const field of pendingReportFields) {
+        const count = await deleteQueryInPages(
+          db.collection(collectionName).where('storeId', '==', storeId).where(field, 'in', pendingStatuses),
+          batchSize,
+        )
+        if (count) {
+          details[`${collectionName}.${field}`] = count
+          deleted += count
+        }
+      }
     }
 
     await db.collection('reportCleanups').add({
+      storeId,
       deleted,
-      storesChecked: storesSnap.docs.length,
-      storesCleaned: storeResults.length,
-      storeResults,
+      details,
       pendingStatuses,
-      requestedBy: 'system:scheduledCleanPendingReportData',
-      source: 'scheduled',
-      schedule: 'every day 03:30 Etc/UTC',
+      requestedBy: context.auth!.uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     })
 
-    functions.logger.info('Scheduled pending report cleanup completed', {
-      deleted,
-      storesChecked: storesSnap.docs.length,
-      storesCleaned: storeResults.length,
-    })
-
-    return null
-  })
+    return { ok: true, storeId, deleted, details }
+  },
+)
