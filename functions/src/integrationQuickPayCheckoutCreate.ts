@@ -782,10 +782,11 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     if (matchingOrderRefs.length) {
       await Promise.all(matchingOrderRefs.map(orderRef => orderRef.set({ ...record, updatedAt: now, updatedAtIso: nowIso, duplicateSuppressedAt: now }, { merge: true })))
     } else {
-      await Promise.all([
-        defaultDb.collection('integrationOrders').doc(reference).set(record, { merge: true }),
-        defaultDb.collection('stores').doc(storeId).collection('integrationOrders').doc(reference).set(record, { merge: true }),
-      ])
+      await defaultDb.collection('checkoutIntents').doc(reference).set({
+        ...record,
+        checkoutIntent: true,
+        persistedAsOrder: false,
+      }, { merge: true })
     }
 
     res.status(200).json({
