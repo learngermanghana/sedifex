@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
@@ -186,9 +186,18 @@ function StatusPill({ label, type = 'booking' }: { label: string; type?: 'bookin
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold capitalize ${badgeClass(label, type)}`}>{formatLabel(label)}</span>
 }
 
-function BookingCard({ booking }: { booking: BookingRow }) {
+function BookingCard({ booking, checked, deleting, onSelect, onDelete }: { booking: BookingRow; checked: boolean; deleting: boolean; onSelect: (checked: boolean) => void; onDelete: () => void }) {
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <label className="inline-flex items-center gap-2 text-sm font-bold text-slate-700">
+          <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={checked} onChange={event => onSelect(event.target.checked)} />
+          Select booking
+        </label>
+        <button type="button" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50" onClick={onDelete} disabled={deleting}>
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
+      </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.95fr)_minmax(220px,0.7fr)] xl:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -253,11 +262,17 @@ export default function BookingsReport() {
   const [source, setSource] = useState('all')
   const [sync, setSync] = useState('all')
   const [range, setRange] = useState('30d')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [deletingIds, setDeletingIds] = useState<string[]>([])
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (!storeId) {
       setRootBookings([])
       setStoreBookings([])
+      setSelectedIds([])
+      setDeletingIds([])
       return undefined
     }
     const unsubRoot = onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => {
@@ -289,6 +304,62 @@ export default function BookingsReport() {
     const dateOk = inDateRange(booking.createdAt, range)
     return statusOk && sourceOk && syncOk && dateOk
   }), [bookings, range, source, status, sync])
+
+
+  useEffect(() => {
+    setSelectedIds(current => current.filter(id => filtered.some(booking => booking.id === id)))
+  }, [filtered])
+
+  async function deleteBookingRecords(booking: BookingRow) {
+    if (!storeId) return
+    await Promise.all([
+      deleteDoc(doc(db, 'stores', storeId, 'integrationBookings', booking.id)),
+      deleteDoc(doc(db, 'integrationBookings', booking.id)),
+    ])
+  }
+
+  async function deleteOneBooking(booking: BookingRow) {
+    const label = booking.serviceName || booking.reference || 'this booking'
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return
+
+    setDeletingIds(current => Array.from(new Set([...current, booking.id])))
+    setSuccessMessage(null)
+    setErrorMessage(null)
+    try {
+      await deleteBookingRecords(booking)
+      setSelectedIds(current => current.filter(id => id !== booking.id))
+      setSuccessMessage('Booking deleted successfully.')
+    } catch (error) {
+      console.error(error)
+      setErrorMessage('Unable to delete booking right now. Please try again.')
+    } finally {
+      setDeletingIds(current => current.filter(id => id !== booking.id))
+    }
+  }
+
+  async function deleteSelectedBookings() {
+    const selected = filtered.filter(booking => selectedIds.includes(booking.id))
+    if (!selected.length) return
+    if (!window.confirm(`Delete ${selected.length} selected booking${selected.length === 1 ? '' : 's'}? This cannot be undone.`)) return
+
+    setDeletingIds(current => Array.from(new Set([...current, ...selected.map(booking => booking.id)])))
+    setSuccessMessage(null)
+    setErrorMessage(null)
+    try {
+      await Promise.all(selected.map(booking => deleteBookingRecords(booking)))
+      setSelectedIds([])
+      setSuccessMessage(`${selected.length} booking${selected.length === 1 ? '' : 's'} deleted successfully.`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage('Unable to delete selected bookings right now. Please try again.')
+    } finally {
+      setDeletingIds(current => current.filter(id => !selected.some(booking => booking.id === id)))
+    }
+  }
+
+  function setBookingSelected(bookingId: string, checked: boolean) {
+    setSelectedIds(current => checked ? Array.from(new Set([...current, bookingId])) : current.filter(id => id !== bookingId))
+  }
 
   const totals = useMemo(() => ({
     count: filtered.length,
@@ -399,6 +470,15 @@ export default function BookingsReport() {
           <span className="w-fit rounded-full bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700">{filtered.length} showing</span>
         </div>
 
+        <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <span className="text-sm font-bold text-slate-700">{selectedIds.length} selected</span>
+          <button type="button" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => setSelectedIds(filtered.map(booking => booking.id))} disabled={!filtered.length}>Select all filtered</button>
+          <button type="button" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => setSelectedIds([])} disabled={!selectedIds.length}>Clear selection</button>
+          <button type="button" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => void deleteSelectedBookings()} disabled={!selectedIds.length || deletingIds.length > 0}>{deletingIds.length ? 'Deleting…' : 'Delete selected'}</button>
+        </div>
+        {successMessage ? <p className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{successMessage}</p> : null}
+        {errorMessage ? <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{errorMessage}</p> : null}
+
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="block text-sm font-semibold text-slate-700">
             Date range
@@ -446,7 +526,16 @@ export default function BookingsReport() {
       </section>
 
       <section className="space-y-4">
-        {filtered.map(booking => <BookingCard key={booking.id} booking={booking} />)}
+        {filtered.map(booking => (
+          <BookingCard
+            key={booking.id}
+            booking={booking}
+            checked={selectedIds.includes(booking.id)}
+            deleting={deletingIds.includes(booking.id)}
+            onSelect={checked => setBookingSelected(booking.id, checked)}
+            onDelete={() => void deleteOneBooking(booking)}
+          />
+        ))}
         {!filtered.length ? (
           <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
             <h3 className="text-xl font-semibold text-slate-950">No booking records found</h3>
