@@ -94,6 +94,18 @@ async function findStoreIntegrationOrderRefs(storeId, identifiers) {
     }
     return Array.from(refs.values());
 }
+async function loadCheckoutIntent(reference, storeId) {
+    if (!reference)
+        return null;
+    const snap = await firestore_1.defaultDb.collection('checkoutIntents').doc(reference).get();
+    if (!snap.exists)
+        return null;
+    const data = (snap.data() ?? {});
+    const intentStoreId = toTrimmedString(data.storeId) || toTrimmedString(data.merchantId);
+    if (intentStoreId && intentStoreId !== storeId)
+        return null;
+    return data;
+}
 function getFulfillmentTypeFromMetadata(metadata) {
     const value = toTrimmedString(metadata.fulfillmentType || metadata.fulfillment_type || metadata.deliveryMethod || metadata.delivery_method).toLowerCase();
     return ['pickup', 'self_pickup', 'collection'].includes(value) ? 'pickup' : 'delivery';
@@ -311,6 +323,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
         toTrimmedString(metadata.bookingId),
         toTrimmedString(metadata.booking_id),
     ];
+    const checkoutIntent = await loadCheckoutIntent(reference, storeId);
     const storeOrderRefs = await findStoreIntegrationOrderRefs(storeId, initialIdentifiers);
     if (storeOrderRefs.length) {
         for (let index = 0; index < storeOrderRefs.length; index += 450) {
@@ -319,8 +332,11 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
             await batch.commit();
         }
     }
+    else if (isSuccess) {
+        await orderRef.set({ ...(checkoutIntent ?? {}), ...orderUpdate, checkoutIntent: false, persistedAsOrder: true }, { merge: true });
+    }
     else {
-        await orderRef.set(orderUpdate, { merge: true });
+        await firestore_1.defaultDb.collection('checkoutIntents').doc(reference).set({ ...orderUpdate, persistedAsOrder: false }, { merge: true });
     }
     const orderSnap = await orderRef.get();
     const orderData = (orderSnap.data() ?? {});
@@ -384,7 +400,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
             });
         }
     }
-    if (topLevelMatched.size > 0) {
+    if (topLevelMatched.size > 0 || isSuccess) {
         const topLevelUpdate = {
             provider: 'paystack',
             paymentProvider: 'paystack',
@@ -415,11 +431,14 @@ async function updateIntegrationOrderFromPaystackEvent(evtType, data) {
             topLevelUpdate.payment_status = 'failed';
             topLevelUpdate.paymentFailedAt = now;
         }
+        if (topLevelMatched.size === 0 && isSuccess) {
+            topLevelMatched.set(firestore_1.defaultDb.collection('integrationOrders').doc(reference).path, firestore_1.defaultDb.collection('integrationOrders').doc(reference));
+        }
         const matchedRefs = Array.from(topLevelMatched.values());
         for (let i = 0; i < matchedRefs.length; i += 450) {
             const batch = firestore_1.defaultDb.batch();
             matchedRefs.slice(i, i + 450).forEach((docRef) => {
-                batch.set(docRef, topLevelUpdate, { merge: true });
+                batch.set(docRef, { ...(checkoutIntent ?? {}), ...topLevelUpdate, checkoutIntent: false, persistedAsOrder: true }, { merge: true });
             });
             await batch.commit();
         }

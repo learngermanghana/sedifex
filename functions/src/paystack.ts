@@ -112,6 +112,17 @@ async function findStoreIntegrationOrderRefs(storeId: string, identifiers: strin
   return Array.from(refs.values())
 }
 
+
+async function loadCheckoutIntent(reference: string, storeId: string) {
+  if (!reference) return null
+  const snap = await defaultDb.collection('checkoutIntents').doc(reference).get()
+  if (!snap.exists) return null
+  const data = (snap.data() ?? {}) as Record<string, unknown>
+  const intentStoreId = toTrimmedString(data.storeId) || toTrimmedString(data.merchantId)
+  if (intentStoreId && intentStoreId !== storeId) return null
+  return data
+}
+
 function getFulfillmentTypeFromMetadata(metadata: Record<string, any>) {
   const value = toTrimmedString(metadata.fulfillmentType || metadata.fulfillment_type || metadata.deliveryMethod || metadata.delivery_method).toLowerCase()
   return ['pickup', 'self_pickup', 'collection'].includes(value) ? 'pickup' : 'delivery'
@@ -349,6 +360,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     toTrimmedString(metadata.bookingId),
     toTrimmedString(metadata.booking_id),
   ]
+  const checkoutIntent = await loadCheckoutIntent(reference, storeId)
   const storeOrderRefs = await findStoreIntegrationOrderRefs(storeId, initialIdentifiers)
   if (storeOrderRefs.length) {
     for (let index = 0; index < storeOrderRefs.length; index += 450) {
@@ -356,8 +368,10 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
       storeOrderRefs.slice(index, index + 450).forEach(ref => batch.set(ref, orderUpdate, { merge: true }))
       await batch.commit()
     }
+  } else if (isSuccess) {
+    await orderRef.set({ ...(checkoutIntent ?? {}), ...orderUpdate, checkoutIntent: false, persistedAsOrder: true }, { merge: true })
   } else {
-    await orderRef.set(orderUpdate, { merge: true })
+    await defaultDb.collection('checkoutIntents').doc(reference).set({ ...orderUpdate, persistedAsOrder: false }, { merge: true })
   }
 
   const orderSnap = await orderRef.get()
@@ -426,7 +440,7 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
     }
   }
 
-  if (topLevelMatched.size > 0) {
+  if (topLevelMatched.size > 0 || isSuccess) {
     const topLevelUpdate: Record<string, unknown> = {
       provider: 'paystack',
       paymentProvider: 'paystack',
@@ -458,11 +472,15 @@ async function updateIntegrationOrderFromPaystackEvent(evtType: string, data: Pa
       topLevelUpdate.paymentFailedAt = now
     }
 
+    if (topLevelMatched.size === 0 && isSuccess) {
+      topLevelMatched.set(defaultDb.collection('integrationOrders').doc(reference).path, defaultDb.collection('integrationOrders').doc(reference))
+    }
+
     const matchedRefs = Array.from(topLevelMatched.values())
     for (let i = 0; i < matchedRefs.length; i += 450) {
       const batch = defaultDb.batch()
       matchedRefs.slice(i, i + 450).forEach((docRef) => {
-        batch.set(docRef, topLevelUpdate, { merge: true })
+        batch.set(docRef, { ...(checkoutIntent ?? {}), ...topLevelUpdate, checkoutIntent: false, persistedAsOrder: true }, { merge: true })
       })
       await batch.commit()
     }
