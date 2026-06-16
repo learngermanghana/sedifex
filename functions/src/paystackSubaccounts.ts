@@ -178,6 +178,124 @@ function buildSubaccountDoc(input: {
   }
 }
 
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function settlementSyncKey(input: {
+  businessName: string
+  settlementBank: string
+  accountNumber: string
+  primaryContactEmail: string
+  primaryContactName: string
+  primaryContactPhone: string
+}) {
+  return [
+    input.businessName,
+    input.settlementBank,
+    input.accountNumber,
+    input.primaryContactEmail,
+    input.primaryContactName,
+    input.primaryContactPhone,
+  ].join('|')
+}
+
+function getSettlementInputFromStore(storeId: string, storeData: Record<string, unknown>) {
+  const routing = getRecord(storeData.paymentRouting)
+  const businessName = cleanText(routing.businessName ?? routing.accountName ?? storeData.name ?? storeData.displayName, 120)
+  const settlementBank = cleanText(routing.settlementBank ?? routing.bankCode ?? routing.routingCode ?? storeData.settlementBank ?? storeData.bankCode, 30)
+  const accountNumber = cleanText(
+    routing.accountNumber ?? routing.settlementAccountNumber ?? routing.paymentNumber ?? storeData.settlementAccountNumber ?? storeData.accountNumber,
+    30,
+  )
+  const primaryContactEmail = cleanText(routing.primaryContactEmail ?? storeData.ownerEmail ?? storeData.email, 220)
+  const primaryContactName = cleanText(routing.primaryContactName ?? storeData.displayName ?? storeData.name, 160)
+  const primaryContactPhone = cleanText(routing.primaryContactPhone ?? storeData.phone, 80)
+  return {
+    storeId,
+    businessName,
+    settlementBank,
+    accountNumber,
+    primaryContactEmail,
+    primaryContactName,
+    primaryContactPhone,
+    description: `Sedifex settlement account for ${businessName || storeId}`,
+  }
+}
+
+async function syncPaystackSubaccount(input: ReturnType<typeof getSettlementInputFromStore>, actorUid: string) {
+  const percentageCharge = resolveSedifexCommissionPercentage()
+  const requestPayload = {
+    business_name: input.businessName,
+    settlement_bank: input.settlementBank,
+    account_number: input.accountNumber,
+    percentage_charge: percentageCharge,
+    description: input.description,
+    primary_contact_email: input.primaryContactEmail || undefined,
+    primary_contact_name: input.primaryContactName || undefined,
+    primary_contact_phone: input.primaryContactPhone || undefined,
+    metadata: JSON.stringify({
+      storeId: input.storeId,
+      platform: 'sedifex',
+      source: 'sedifex_dashboard',
+      commissionControlledBy: 'sedifex',
+      commissionPercent: percentageCharge,
+    }),
+  }
+
+  const storedSubaccountSnap = await defaultDb.collection('paystackSubaccounts').doc(input.storeId).get()
+  const storeSnap = await defaultDb.collection('stores').doc(input.storeId).get()
+  const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
+  const storeRouting = getRecord(storeData.paymentRouting)
+  const storedSubaccountCode = cleanText(
+    storedSubaccountSnap.data()?.subaccountCode
+      ?? storeRouting.paystackSubaccountCode
+      ?? storeRouting.subaccountCode
+      ?? storeData.paystackSubaccountCode,
+    80,
+  )
+  const response = await paystackRequest<PaystackSubaccountResponse>(
+    storedSubaccountCode ? `/subaccount/${encodeURIComponent(storedSubaccountCode)}` : '/subaccount',
+    { method: storedSubaccountCode ? 'PUT' : 'POST', body: JSON.stringify(requestPayload) },
+  )
+
+  if (!response.data?.subaccount_code) {
+    throw new functions.https.HttpsError('internal', 'Paystack did not return a subaccount code.')
+  }
+
+  const docPayload = buildSubaccountDoc({
+    storeId: input.storeId,
+    request: requestPayload,
+    data: response.data,
+    percentageCharge,
+    actorUid,
+  })
+
+  await defaultDb.collection('paystackSubaccounts').doc(input.storeId).set(docPayload, { merge: true })
+  await defaultDb.collection('stores').doc(input.storeId).set(
+    {
+      paymentRouting: {
+        provider: 'paystack',
+        settlementMode: 'subaccount',
+        paystackSubaccountCode: response.data!.subaccount_code,
+        percentageCharge: docPayload.percentageCharge,
+        commissionControlledBy: 'sedifex',
+        accountName: docPayload.accountName,
+        accountNumberLast4: docPayload.accountNumberLast4,
+        settlementBank: docPayload.settlementBank,
+        status: 'active',
+        lastSyncKey: settlementSyncKey(input),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      paystackSubaccountCode: response.data!.subaccount_code,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+
+  return { response, docPayload, action: storedSubaccountCode ? 'updated' : 'created' }
+}
+
 export const fetchPaystackSettlementBanks = functions.https.onCall(
   async (_rawData: { country?: unknown; currency?: unknown } | undefined, context) => {
     assertAuthenticated(context)
@@ -228,7 +346,6 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
     const businessName = cleanText(rawData?.businessName, 120) || cleanText(storeData.name ?? storeData.displayName, 120)
     const settlementBank = cleanText(rawData?.settlementBank ?? rawData?.bankCode, 30)
     const accountNumber = cleanText(rawData?.accountNumber, 30)
-    const percentageCharge = resolveSedifexCommissionPercentage()
     const primaryContactEmail = cleanText(rawData?.primaryContactEmail, 220) || cleanText(storeData.ownerEmail ?? storeData.email, 220)
     const primaryContactName = cleanText(rawData?.primaryContactName, 160) || cleanText(storeData.displayName ?? storeData.name, 160)
     const primaryContactPhone = cleanText(rawData?.primaryContactPhone, 80) || cleanText(storeData.phone, 80)
@@ -238,91 +355,63 @@ export const createPaystackMerchantSubaccount = functions.https.onCall(
     if (!settlementBank) throw new functions.https.HttpsError('invalid-argument', 'settlementBank/bankCode is required.')
     if (!accountNumber) throw new functions.https.HttpsError('invalid-argument', 'accountNumber is required.')
 
-    const requestPayload = {
-      business_name: businessName,
-      settlement_bank: settlementBank,
-      account_number: accountNumber,
-      percentage_charge: percentageCharge,
-      description,
-      primary_contact_email: primaryContactEmail || undefined,
-      primary_contact_name: primaryContactName || undefined,
-      primary_contact_phone: primaryContactPhone || undefined,
-      metadata: JSON.stringify({
-        storeId,
-        platform: 'sedifex',
-        source: 'sedifex_dashboard',
-        commissionControlledBy: 'sedifex',
-        commissionPercent: percentageCharge,
-      }),
-    }
-
-    const storedSubaccountSnap = await defaultDb.collection('paystackSubaccounts').doc(storeId).get()
-    const storeRouting = storeData.paymentRouting && typeof storeData.paymentRouting === 'object'
-      ? storeData.paymentRouting as Record<string, unknown>
-      : {}
-    const storedSubaccountCode = cleanText(
-      storedSubaccountSnap.data()?.subaccountCode
-        ?? storeRouting.paystackSubaccountCode
-        ?? storeRouting.subaccountCode
-        ?? storeData.paystackSubaccountCode,
-      80,
-    )
-    const paystackPath = storedSubaccountCode
-      ? `/subaccount/${encodeURIComponent(storedSubaccountCode)}`
-      : '/subaccount'
-    const response = await paystackRequest<PaystackSubaccountResponse>(paystackPath, {
-      method: storedSubaccountCode ? 'PUT' : 'POST',
-      body: JSON.stringify(requestPayload),
-    })
-
-    if (!response.data?.subaccount_code) {
-      throw new functions.https.HttpsError('internal', 'Paystack did not return a subaccount code.')
-    }
-
-    const docPayload = buildSubaccountDoc({
+    const syncResult = await syncPaystackSubaccount({
       storeId,
-      request: requestPayload,
-      data: response.data,
-      percentageCharge,
-      actorUid: context.auth!.uid,
-    })
-
-    await defaultDb.collection('paystackSubaccounts').doc(storeId).set(docPayload, { merge: true })
-    await defaultDb.collection('stores').doc(storeId).set(
-      {
-        paymentRouting: {
-          provider: 'paystack',
-          settlementMode: 'subaccount',
-          paystackSubaccountCode: response.data.subaccount_code,
-          percentageCharge: docPayload.percentageCharge,
-          commissionControlledBy: 'sedifex',
-          accountName: docPayload.accountName,
-          accountNumberLast4: docPayload.accountNumberLast4,
-          settlementBank: docPayload.settlementBank,
-          status: 'active',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        paystackSubaccountCode: response.data.subaccount_code,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    )
+      businessName,
+      settlementBank,
+      accountNumber,
+      primaryContactEmail,
+      primaryContactName,
+      primaryContactPhone,
+      description,
+    }, context.auth!.uid)
+    const { response, docPayload } = syncResult
 
     return {
       ok: true,
       storeId,
-      subaccountCode: response.data.subaccount_code,
-      accountName: response.data.account_name ?? null,
+      subaccountCode: response.data!.subaccount_code,
+      accountName: response.data!.account_name ?? null,
       accountNumberLast4: docPayload.accountNumberLast4,
       settlementBank: docPayload.settlementBank,
       percentageCharge: docPayload.percentageCharge,
       commissionControlledBy: 'sedifex',
       isVerified: docPayload.isVerified,
-      action: storedSubaccountCode ? 'updated' : 'created',
-      message: response.message ?? (storedSubaccountCode ? 'Subaccount updated' : 'Subaccount created'),
+      action: syncResult.action,
+      message: response.message ?? (syncResult.action === 'updated' ? 'Subaccount updated' : 'Subaccount created'),
     }
   },
 )
+
+export const syncPaystackMerchantSubaccountOnStoreWrite = functions.firestore
+  .document('stores/{storeId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return
+    const storeId = cleanText(context.params.storeId, 180)
+    const storeData = (change.after.data() ?? {}) as Record<string, unknown>
+    const input = getSettlementInputFromStore(storeId, storeData)
+    if (!input.businessName || !input.settlementBank || !input.accountNumber) return
+
+    const routing = getRecord(storeData.paymentRouting)
+    const nextSyncKey = settlementSyncKey(input)
+    if (cleanText(routing.lastSyncKey, 600) === nextSyncKey) return
+
+    try {
+      await syncPaystackSubaccount(input, cleanText(storeData.ownerUid, 180) || 'system')
+    } catch (error) {
+      functions.logger.error('Unable to sync store settlement details to Paystack', { storeId, error })
+      await defaultDb.collection('stores').doc(storeId).set(
+        {
+          paymentRouting: {
+            status: 'sync_failed',
+            lastSyncError: error instanceof Error ? error.message : 'Unable to sync settlement details to Paystack.',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true },
+      )
+    }
+  })
 
 export const fetchPaystackMerchantSubaccount = functions.https.onCall(
   async (rawData: { storeId?: unknown } | undefined, context) => {

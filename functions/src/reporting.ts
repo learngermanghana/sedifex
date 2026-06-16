@@ -1,6 +1,8 @@
 import * as functions from 'firebase-functions/v1'
 import { admin, defaultDb as db } from './firestore'
 
+type CallableContext = functions.https.CallableContext
+
 type SaleItem = {
   productId?: string
   name?: string
@@ -100,3 +102,80 @@ export const onSaleReportingAggregate = functions.firestore
   .onCreate(async (snapshot, context) => {
     await writeAggregateForSale(snapshot.data() as SaleRecord, context.params.saleId)
   })
+
+
+function cleanText(value: unknown, max = 180) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+async function assertCanCleanReports(context: CallableContext, storeId: string) {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in required.')
+  const uid = context.auth.uid
+  const storeSnap = await db.collection('stores').doc(storeId).get()
+  const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
+  const ownerUid = cleanText(storeData.ownerUid)
+  const ownerEmail = cleanText(storeData.ownerEmail ?? storeData.email, 220).toLowerCase()
+  const authEmail = cleanText(context.auth.token.email, 220).toLowerCase()
+  if (storeId === uid || ownerUid === uid || (ownerEmail && authEmail && ownerEmail === authEmail)) return
+
+  const memberSnap = await db.collection('teamMembers').doc(uid).get()
+  const memberData = (memberSnap.data() ?? {}) as Record<string, unknown>
+  const memberStoreId = cleanText(memberData.storeId)
+  const role = cleanText(memberData.role, 40).toLowerCase()
+  if (memberStoreId === storeId && ['owner', 'admin'].includes(role)) return
+
+  throw new functions.https.HttpsError('permission-denied', 'Only a workspace owner or admin can clean report data.')
+}
+
+const pendingStatuses = ['pending', 'pending_payment', 'pending_cash', 'awaiting_verification', 'checkout_created', 'syncing']
+const pendingReportCollections = ['reportSnapshots', 'reportRows', 'settlementReports']
+const pendingReportFields = ['status', 'paymentStatus', 'payment_status', 'orderStatus', 'order_status', 'syncStatus']
+
+async function deleteQueryInPages(query: admin.firestore.Query, batchSize: number) {
+  let deleted = 0
+  for (;;) {
+    const snapshot = await query.limit(batchSize).get()
+    if (snapshot.empty) return deleted
+    const batch = db.batch()
+    snapshot.docs.forEach(doc => batch.delete(doc.ref))
+    await batch.commit()
+    deleted += snapshot.docs.length
+    if (snapshot.docs.length < batchSize) return deleted
+  }
+}
+
+export const cleanPendingReportData = functions.https.onCall(
+  async (rawData: { storeId?: unknown; batchSize?: unknown } | undefined, context) => {
+    const storeId = cleanText(rawData?.storeId)
+    if (!storeId) throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
+    await assertCanCleanReports(context, storeId)
+
+    const batchSize = Math.min(Math.max(Number(rawData?.batchSize) || 250, 25), 450)
+    const details: Record<string, number> = {}
+    let deleted = 0
+
+    for (const collectionName of pendingReportCollections) {
+      for (const field of pendingReportFields) {
+        const count = await deleteQueryInPages(
+          db.collection(collectionName).where('storeId', '==', storeId).where(field, 'in', pendingStatuses),
+          batchSize,
+        )
+        if (count) {
+          details[`${collectionName}.${field}`] = count
+          deleted += count
+        }
+      }
+    }
+
+    await db.collection('reportCleanups').add({
+      storeId,
+      deleted,
+      details,
+      pendingStatuses,
+      requestedBy: context.auth!.uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    return { ok: true, storeId, deleted, details }
+  },
+)
