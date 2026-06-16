@@ -27,7 +27,7 @@ type ProductOption = {
 type RegenerateTarget = 'all' | 'caption' | 'hashtags'
 type ContentTone = 'standard' | 'playful' | 'professional'
 type ContentLength = 'short' | 'medium' | 'long'
-type LaunchPlatformTarget = 'instagram' | 'tiktok' | 'google_business'
+type LaunchPlatformTarget = 'instagram' | 'tiktok'
 type SocialHistoryEntry = {
   id: string
   createdAtIso: string
@@ -558,7 +558,7 @@ export default function SocialMediaPage() {
     if (copied) {
       publish({
         tone: 'success',
-        message: `Draft copied with image link. Paste it in ${target === 'instagram' ? 'Instagram' : target === 'tiktok' ? 'TikTok' : 'Google Business Profile'}.`,
+        message: `Draft copied with image link. Paste it in ${target === 'instagram' ? 'Instagram' : 'TikTok'}.`,
       })
     } else {
       publish({
@@ -570,9 +570,7 @@ export default function SocialMediaPage() {
     const destination =
       target === 'instagram'
         ? 'https://www.instagram.com/'
-        : target === 'tiktok'
-          ? 'https://www.tiktok.com/upload?lang=en'
-          : 'https://business.google.com/'
+        : 'https://www.tiktok.com/upload?lang=en'
     window.open(destination, '_blank', 'noopener,noreferrer')
   }
 
@@ -586,7 +584,7 @@ export default function SocialMediaPage() {
       'Manual upload steps:',
       '1. Open the original image link.',
       '2. Hold (mobile) or right-click (desktop) the picture to save it.',
-      `3. Upload image in the ${result.post.platform === 'instagram' ? 'Instagram' : result.post.platform === 'tiktok' ? 'TikTok' : 'Google Business Profile'} app.`,
+      `3. Upload image in the ${result.post.platform === 'instagram' ? 'Instagram' : 'TikTok'} app.`,
       '4. Paste caption + hashtags + image link.',
       '',
       'Draft content:',
@@ -611,7 +609,7 @@ export default function SocialMediaPage() {
 
 
   return (
-    <PageSection title="Social media" subtitle="Generate Instagram, TikTok, or Google Business-ready captions, hashtags, and CTA from your existing product catalog.">
+    <PageSection title="Social media" subtitle="Generate Instagram or TikTok-ready captions, hashtags, and CTA from your existing product catalog.">
       <div
         style={{ display: 'grid', gap: 12 }}
         onKeyDown={event => {
@@ -626,24 +624,8 @@ export default function SocialMediaPage() {
           <select aria-labelledby="social-platform-label" value={platform} onChange={event => setPlatform(event.target.value as SocialPlatform)}>
             <option value="instagram">Instagram</option>
             <option value="tiktok">TikTok</option>
-            <option value="google_business">Google Business</option>
           </select>
         </label>
-
-        {platform === 'google_business' ? (
-          <div style={{ display: 'grid', gap: 8 }}>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => window.open('https://business.google.com/', '_blank', 'noopener,noreferrer')}
-            >
-              Open Google Business Profile
-            </button>
-            <p style={{ margin: 0, fontSize: 13, opacity: 0.85 }}>
-              Sedifex generates the Google post draft for you, then copies caption + hashtags + image link. Final posting still happens inside Google Business Profile.
-            </p>
-          </div>
-        ) : null}
 
         <label style={{ display: 'grid', gap: 6 }}>
           <span id="social-product-search-label">Search products or services</span>
@@ -757,7 +739,7 @@ export default function SocialMediaPage() {
               </p>
             ) : null}
             <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
-              Step 1: Open original image and hold/right-click the picture to save. Step 2: Use Send to Instagram/TikTok/Google Business (or open app manually). Step 3: Paste caption + hashtags + image link.
+              Step 1: Open original image and hold/right-click the picture to save. Step 2: Use Send to Instagram/TikTok (or open app manually). Step 3: Paste caption + hashtags + image link.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button type="button" className="button secondary" onClick={() => void handleSendToPlatform('instagram')}>
@@ -765,9 +747,6 @@ export default function SocialMediaPage() {
               </button>
               <button type="button" className="button secondary" onClick={() => void handleSendToPlatform('tiktok')}>
                 Send to TikTok
-              </button>
-              <button type="button" className="button secondary" onClick={() => void handleSendToPlatform('google_business')}>
-                Send to Google Business
               </button>
               <button type="button" className="button secondary" onClick={() => void handleCopyPost()}>Copy text + image link</button>
               <button type="button" className="button secondary" onClick={handleDownload}>Download .txt</button>
