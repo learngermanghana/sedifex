@@ -47,11 +47,20 @@ export const createIntegrationApiKey = functions.https.onCall(async (rawData: un
   if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Sign in required.')
 
   const body = (rawData ?? {}) as CreateIntegrationApiKeyRequest
-  const storeId = clean(body.storeId, 180)
+  const explicitStoreId = clean(body.storeId, 180)
   const purpose = clean(body.purpose, 80).toLowerCase() || 'website'
   const name = clean(body.name, 180) || `${purpose}-key`
 
-  if (!storeId) throw new functions.https.HttpsError('invalid-argument', 'storeId is required.')
+  const teamSnap = await defaultDb.collection('teamMembers').doc(uid).get()
+  const teamData = (teamSnap.data() ?? {}) as Record<string, unknown>
+  const storeId = explicitStoreId || clean(teamData.storeId, 180)
+
+  if (!storeId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'No store is assigned to this account. Please refresh your workspace or contact support.',
+    )
+  }
   if (!(await canManageStore(uid, storeId))) {
     throw new functions.https.HttpsError('permission-denied', 'You cannot create keys for this store.')
   }
