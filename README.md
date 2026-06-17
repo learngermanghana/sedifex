@@ -1,4 +1,4 @@
-# Sedifex — PWA + Firebase Starter,
+# Sedifex — PWA + Firebase Starter.
 
 This repo is a drop-in starter for **Sedifex** (inventory & POS). It ships as a **website** that is also **installable as a PWA**, with **Firebase** (Auth + Firestore + Functions).
 
