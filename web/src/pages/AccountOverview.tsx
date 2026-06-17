@@ -1414,6 +1414,14 @@ export default function AccountOverview({
   }
 
   async function handleCreateIntegrationApiKey() {
+    if (storeLoading || !storeId) {
+      publish({
+        message: 'Workspace is still loading. Please wait before creating an integration key.',
+        tone: 'warning',
+      })
+      return
+    }
+
     if (!integrationKeyName.trim()) {
       publish({ message: 'Provide a key name first.', tone: 'error' })
       return
@@ -1422,7 +1430,11 @@ export default function AccountOverview({
     try {
       setIsCreatingIntegrationKey(true)
       const callable = httpsCallable(functions, 'createIntegrationApiKey')
-      const response = await callable({ name: integrationKeyName.trim(), storeId })
+      const response = await callable({
+        storeId,
+        name: integrationKeyName.trim(),
+        purpose: 'website',
+      })
       const data = (response.data ?? {}) as { token?: unknown }
       const token = typeof data.token === 'string' ? data.token : ''
 
@@ -2370,9 +2382,13 @@ export default function AccountOverview({
                   type="button"
                   className="button button--secondary"
                   onClick={handleCreateIntegrationApiKey}
-                  disabled={isCreatingIntegrationKey}
+                  disabled={isCreatingIntegrationKey || storeLoading || !storeId}
                 >
-                  {isCreatingIntegrationKey ? 'Creating…' : 'Create integration key'}
+                  {storeLoading || !storeId
+                    ? 'Workspace loading…'
+                    : isCreatingIntegrationKey
+                      ? 'Creating…'
+                      : 'Create integration key'}
                 </button>
               </div>
             )}
