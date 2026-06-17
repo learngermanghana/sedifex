@@ -751,7 +751,7 @@ export default function AccountOverview({
     try {
       setIntegrationKeysLoading(true)
       const callable = httpsCallable(functions, 'listIntegrationApiKeys')
-      const response = await callable({})
+      const response = await callable({ storeId })
       const payload = (response.data ?? {}) as {
         keys?: Array<Record<string, unknown>>
       }
@@ -819,7 +819,7 @@ export default function AccountOverview({
     try {
       setWebhookEndpointsLoading(true)
       const callable = httpsCallable(functions, 'listWebhookEndpoints')
-      const response = await callable({})
+      const response = await callable({ storeId })
       const payload = (response.data ?? {}) as {
         endpoints?: Array<Record<string, unknown>>
       }
@@ -1422,7 +1422,7 @@ export default function AccountOverview({
     try {
       setIsCreatingIntegrationKey(true)
       const callable = httpsCallable(functions, 'createIntegrationApiKey')
-      const response = await callable({ name: integrationKeyName.trim() })
+      const response = await callable({ name: integrationKeyName.trim(), storeId })
       const data = (response.data ?? {}) as { token?: unknown }
       const token = typeof data.token === 'string' ? data.token : ''
 
@@ -1462,7 +1462,7 @@ export default function AccountOverview({
     try {
       setActioningKeyId(keyId)
       const callable = httpsCallable(functions, 'revokeIntegrationApiKey')
-      await callable({ keyId })
+      await callable({ keyId, storeId })
       publish({ message: 'Integration API key revoked.', tone: 'success' })
       await refreshIntegrationApiKeys()
     } catch (error) {
@@ -1477,7 +1477,7 @@ export default function AccountOverview({
     try {
       setActioningKeyId(keyId)
       const callable = httpsCallable(functions, 'rotateIntegrationApiKey')
-      const response = await callable({ keyId })
+      const response = await callable({ keyId, storeId })
       const data = (response.data ?? {}) as { token?: unknown }
       const token = typeof data.token === 'string' ? data.token : ''
       if (token) {
@@ -1559,6 +1559,7 @@ export default function AccountOverview({
         url: webhookEndpointUrl.trim(),
         secret: webhookSecret.trim(),
         events: ['booking.created', 'booking.updated', 'booking.cancelled', 'booking.confirmed', 'booking.approved'],
+        storeId,
       })
       publish({ message: 'Webhook endpoint saved.', tone: 'success' })
       setWebhookSecret('')
@@ -1575,7 +1576,7 @@ export default function AccountOverview({
     try {
       setActioningWebhookEndpointId(endpointId)
       const callable = httpsCallable(functions, 'revokeWebhookEndpoint')
-      await callable({ endpointId })
+      await callable({ endpointId, storeId })
       publish({ message: 'Webhook endpoint revoked.', tone: 'success' })
       await refreshWebhookEndpoints()
     } catch (error) {
@@ -1606,7 +1607,7 @@ export default function AccountOverview({
     try {
       setActioningWebhookEndpointId(endpointId)
       const callable = httpsCallable(functions, 'deleteWebhookEndpoint')
-      await callable({ endpointId })
+      await callable({ endpointId, storeId })
       publish({ message: 'Webhook endpoint deleted.', tone: 'success' })
       await refreshWebhookEndpoints()
     } catch (error) {

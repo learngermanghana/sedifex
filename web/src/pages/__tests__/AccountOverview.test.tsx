@@ -782,6 +782,29 @@ describe('AccountOverview', () => {
     expect(await screen.findByText(/bulk email delivery integration/i)).toBeInTheDocument()
   })
 
+
+  it('passes the active store when creating integration API keys', async () => {
+    const createCallable = vi.fn(async () => ({ data: { token: 'sedx_test_token' } }))
+    httpsCallableMock.mockReturnValue(createCallable)
+    mockUseMemberships.mockReturnValue({
+      memberships: [{ storeId: 'store-123', role: 'owner', status: 'active', email: 'owner@example.com' }],
+      loading: false,
+      error: null,
+    })
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn(async () => undefined) },
+    })
+
+    render(<AccountOverview defaultAccountTab="integrations" defaultIntegrationTab="keys" />)
+
+    await userEvent.type(await screen.findByLabelText(/new integration key name/i), 'Website key')
+    await userEvent.click(screen.getByRole('button', { name: /create integration key/i }))
+
+    await waitFor(() =>
+      expect(createCallable).toHaveBeenCalledWith({ name: 'Website key', storeId: 'store-123' }),
+    )
+  })
+
   it('keeps owner-only integration key controls restricted for non-owners', async () => {
     mockUseMemberships.mockReturnValue({
       memberships: [{ storeId: 'store-123', role: 'staff', status: 'active', email: 'staff@example.com' }],
