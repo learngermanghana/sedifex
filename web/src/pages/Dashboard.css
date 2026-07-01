@@ -183,6 +183,10 @@
   box-shadow: 0 22px 52px -48px rgba(15, 23, 42, 0.45);
 }
 
+section.dashboard-panel:has(> .dashboard-action-grid) {
+  display: none;
+}
+
 .dashboard-panel--muted {
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
