@@ -39,6 +39,8 @@ export default function PublicCustomerIntake() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [birthdate, setBirthdate] = useState('')
+  const [birthdayConsentChecked, setBirthdayConsentChecked] = useState(false)
   const [notes, setNotes] = useState('')
   const [consentChecked, setConsentChecked] = useState(false)
   const [qrSvg, setQrSvg] = useState('')
@@ -47,6 +49,7 @@ export default function PublicCustomerIntake() {
   const [websiteTrap, setWebsiteTrap] = useState('')
 
   const isQrMode = mode === 'qr'
+  const maxBirthdate = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const intakeUrl = useMemo(() => {
     if (!inviteId || typeof window === 'undefined') return ''
     return `${window.location.origin}/join-customers/${encodeURIComponent(inviteId)}`
@@ -133,6 +136,12 @@ export default function PublicCustomerIntake() {
     event.preventDefault()
     if (!inviteId) return
 
+    if (birthdate && !birthdayConsentChecked) {
+      setSubmissionState('error')
+      setMessage('Please agree to birthday greetings and offers, or leave the birthday field empty.')
+      return
+    }
+
     if (!consentChecked) {
       setSubmissionState('error')
       setMessage('Please agree to be contacted before submitting.')
@@ -151,6 +160,8 @@ export default function PublicCustomerIntake() {
           name,
           phone,
           email,
+          birthdate: birthdate || null,
+          birthdayReminderOptIn: Boolean(birthdate && birthdayConsentChecked),
           notes,
           consent: true,
           consentSource: 'public-customer-intake',
@@ -174,6 +185,8 @@ export default function PublicCustomerIntake() {
       setName('')
       setPhone('')
       setEmail('')
+      setBirthdate('')
+      setBirthdayConsentChecked(false)
       setNotes('')
       setConsentChecked(false)
       setWebsiteTrap('')
@@ -268,6 +281,35 @@ export default function PublicCustomerIntake() {
               type="email"
               autoComplete="email"
             />
+          </label>
+          <label>
+            Birthday / Date of birth (optional)
+            <input
+              value={birthdate}
+              onChange={event => {
+                const nextValue = event.target.value
+                setBirthdate(nextValue)
+                if (!nextValue) setBirthdayConsentChecked(false)
+              }}
+              type="date"
+              min="1900-01-01"
+              max={maxBirthdate}
+              autoComplete="bday"
+              aria-describedby="birthday-use-note"
+            />
+          </label>
+          <p id="birthday-use-note" className="public-customer-intake__status">
+            Your birthday is optional and will only be used for birthday greetings, reminders, and birthday offers.
+          </p>
+          <label className="public-customer-intake__consent">
+            <input
+              type="checkbox"
+              checked={birthdayConsentChecked}
+              onChange={event => setBirthdayConsentChecked(event.target.checked)}
+              disabled={!birthdate}
+              required={Boolean(birthdate)}
+            />
+            I agree to receive birthday greetings and birthday offers from this business.
           </label>
           <label>
             Notes (optional)
