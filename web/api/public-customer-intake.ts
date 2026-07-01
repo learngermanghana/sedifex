@@ -18,6 +18,13 @@ type StoreRecord = {
   customerIntakeVanityPath?: unknown
 }
 
+type NormalizedBirthdate = {
+  value: string
+  month: number
+  day: number
+  monthDay: string
+}
+
 function sanitizeString(value: unknown, max = 200): string {
   if (typeof value !== 'string') return ''
   return value.trim().slice(0, max)
@@ -63,6 +70,39 @@ function isValidPhone(value: string): boolean {
   if (!value) return true
   const digits = value.replace(/\D/g, '')
   return digits.length >= 8 && digits.length <= 15
+}
+
+function normalizeBirthdate(input: string): NormalizedBirthdate | null {
+  const value = input.trim()
+  if (!value) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+
+  const [yearText, monthText, dayText] = value.split('-')
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  const now = new Date()
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  if (parsed.getTime() > today.getTime()) return null
+
+  return {
+    value,
+    month,
+    day,
+    monthDay: `${monthText}-${dayText}`,
+  }
 }
 
 function hashValue(value: string): string {
@@ -185,6 +225,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const name = sanitizeString(body.name, 120)
     const phone = normalizePhone(sanitizeString(body.phone, 40))
     const email = normalizeEmail(sanitizeString(body.email, 120))
+    const birthdateInput = sanitizeString(body.birthdate, 10)
+    const birthdate = normalizeBirthdate(birthdateInput)
+    const birthdayReminderOptIn = body.birthdayReminderOptIn === true
     const notes = sanitizeString(body.notes, 500)
     const consent = body.consent === true
     const consentSource = sanitizeString(body.consentSource, 120) || 'public-customer-intake'
@@ -200,6 +243,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (!consent) {
       return res.status(400).json({ error: 'Consent is required before submission.' })
+    }
+    if (birthdateInput && !birthdate) {
+      return res.status(400).json({ error: 'Birthday must be a valid past date in YYYY-MM-DD format.' })
+    }
+    if (birthdate && !birthdayReminderOptIn) {
+      return res.status(400).json({ error: 'Birthday consent is required when a birthday is provided.' })
+    }
+    if (birthdayReminderOptIn && !birthdate) {
+      return res.status(400).json({ error: 'Provide a birthday before enabling birthday reminders.' })
     }
     if (websiteTrap) {
       return res.status(400).json({ error: 'Submission blocked.' })
@@ -261,6 +313,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? existingByPhoneSnap.docs[0]
         : null
 
+    const birthdayTags = birthdate && birthdayReminderOptIn ? ['Birthday Club'] : []
+    const requestedTags = ['Public Invite', ...birthdayTags]
+    const birthdayPatch: Record<string, unknown> = birthdate
+      ? {
+          birthdate: birthdate.value,
+          birthdayMonth: birthdate.month,
+          birthdayDay: birthdate.day,
+          birthdayMonthDay: birthdate.monthDay,
+          birthdayReminderOptIn: true,
+          birthdayReminderStatus: 'active',
+          birthdayConsent: {
+            granted: true,
+            timestamp: FieldValue.serverTimestamp(),
+            source: consentSource,
+            purpose: 'birthday-greetings-and-offers',
+          },
+        }
+      : {}
+
     const intakePayload = {
       storeId: resolved.storeId,
       name,
@@ -274,7 +345,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       submittedFrom,
       inviteId,
       utmSource,
-      tags: ['Public Invite'],
+      tags: requestedTags,
       consent: {
         granted: true,
         timestamp: FieldValue.serverTimestamp(),
@@ -287,7 +358,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         submittedFrom,
         utmSource,
         ipHash,
+        birthdayProvided: Boolean(birthdate),
+        birthdayReminderOptIn: Boolean(birthdate && birthdayReminderOptIn),
       },
+      ...birthdayPatch,
     }
 
     if (existingDoc) {
@@ -295,7 +369,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const existingTags = Array.isArray(existingData.tags)
         ? existingData.tags.filter(tag => typeof tag === 'string')
         : []
-      const mergedTags = Array.from(new Set([...existingTags, 'Public Invite']))
+      const mergedTags = Array.from(new Set([...existingTags, ...requestedTags]))
       const existingNotes = typeof existingData.notes === 'string' ? existingData.notes.trim() : ''
       const mergedNotes = notes ? Array.from(new Set([existingNotes, notes].filter(Boolean))).join(' | ') : existingNotes
 
