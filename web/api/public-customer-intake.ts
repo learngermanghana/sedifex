@@ -295,9 +295,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .get()
       : null
 
-    const existingByPhoneSnap = !existingByEmailSnap?.empty && phone
-      ? null
-      : phone
+    const hasExistingEmailMatch = Boolean(existingByEmailSnap && !existingByEmailSnap.empty)
+    const existingByPhoneSnap = !hasExistingEmailMatch && phone
       ? await firestore
           .collection('customers')
           .where('storeId', '==', resolved.storeId)
