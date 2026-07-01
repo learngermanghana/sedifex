@@ -314,6 +314,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const birthdayTags = birthdate && birthdayReminderOptIn ? ['Birthday Club'] : []
     const requestedTags = ['Public Invite', ...birthdayTags]
+    const contactPatch: Record<string, unknown> = {
+      ...(phone ? { phone, phoneKey } : {}),
+      ...(email ? { email, emailKey } : {}),
+    }
     const birthdayPatch: Record<string, unknown> = birthdate
       ? {
           birthdate: birthdate.value,
@@ -335,10 +339,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       storeId: resolved.storeId,
       name,
       displayName: name,
-      phone: phone || null,
-      phoneKey,
-      email: email || null,
-      emailKey,
+      ...contactPatch,
       notes: notes || null,
       source,
       submittedFrom,
