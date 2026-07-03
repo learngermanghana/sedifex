@@ -10,6 +10,7 @@ type QuickPayItemType =
   | "STUDENT_REGISTRATION"
   | "BOOKING"
   | "MANUAL";
+
 type ManualPaymentType = Exclude<QuickPayItemType, "MANUAL">;
 type QuickPayPaymentMethod = "ONLINE" | "CASH";
 
@@ -23,6 +24,8 @@ type QuickPayItem = {
   imageUrl?: string | null;
   category?: string | null;
   slotId?: string | null;
+  bookingDate?: string | null;
+  bookingTime?: string | null;
 };
 
 type CustomerDetails = {
@@ -49,16 +52,14 @@ const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = [
   "DONATION",
 ];
 
-const DEMO_ITEMS: QuickPayItem[] = [
-  {
-    id: "manual-service",
-    name: "Manual payment request",
-    type: "MANUAL",
-    price: 0,
-    description:
-      "Enter the exact service, item, registration, booking, donation, or course manually.",
-  },
-];
+const MANUAL_ITEM: QuickPayItem = {
+  id: "manual-service",
+  name: "Manual payment request",
+  type: "MANUAL",
+  price: 0,
+  description:
+    "Enter the exact service, item, registration, booking, donation, or course manually.",
+};
 
 function money(value: number) {
   return new Intl.NumberFormat("en-GH", {
@@ -82,8 +83,7 @@ function calculateCustomerProcessingFee(
 }
 
 function normalizeCheckoutItemType(type: QuickPayItemType) {
-  if (type === "PRODUCT") return "PRODUCT";
-  return "SERVICE";
+  return type === "PRODUCT" ? "PRODUCT" : "SERVICE";
 }
 
 function getAccountingType(type: QuickPayItemType) {
@@ -147,10 +147,11 @@ export default function PublicQuickPayCheckout() {
     paymentReturnStatus === "returning" ||
     paymentReturnStatus === "cash_pending" ||
     Boolean(paymentReference);
+
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<QuickPayItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<QuickPayItem | null>(
-    DEMO_ITEMS[0],
+    initialMode === "manual" ? MANUAL_ITEM : null,
   );
   const [manualPaymentType, setManualPaymentType] =
     useState<ManualPaymentType>("SERVICE");
@@ -165,31 +166,23 @@ export default function PublicQuickPayCheckout() {
     phone: "",
   });
   const [status, setStatus] = useState<string | null>(
-    "Loading available items…",
+    "Loading store items…",
   );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const catalogWithManual = useMemo(() => {
-    return items.some((item) => item.id === "manual-service")
-      ? items
-      : [...items, ...DEMO_ITEMS];
-  }, [items]);
-
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return [];
-    return catalogWithManual.filter((item) => {
-      if (item.type === "MANUAL") return false;
+
+    return items.filter((item) => {
       const haystack =
         `${item.name} ${item.description ?? ""} ${item.category ?? ""} ${item.type}`.toLowerCase();
       return haystack.includes(normalized);
     });
-  }, [catalogWithManual, query]);
+  }, [items, query]);
 
   const hasSearch = query.trim().length > 0;
-  const visibleItems = filteredItems;
-
   const unitAmount = selectedItem?.price ?? 0;
   const sanitizedManualPaymentName = manualPaymentName.trim();
   const effectiveQuickPayType: QuickPayItemType | null = selectedItem
@@ -205,6 +198,15 @@ export default function PublicQuickPayCheckout() {
       ? sanitizedManualPaymentName || getManualPaymentName(manualPaymentType)
       : (selectedItem?.name ?? "");
   const effectiveQuantity = selectedItem?.type === "MANUAL" ? 1 : quantity;
+  const finalAmount =
+    selectedItem?.type === "MANUAL"
+      ? Number(customAmount || 0)
+      : unitAmount * quantity;
+  const processingFee =
+    paymentMethod === "ONLINE"
+      ? calculateCustomerProcessingFee(finalAmount)
+      : 0;
+  const onlineTotalAmount = finalAmount + processingFee;
 
   useEffect(() => {
     const existingViewport = document.querySelector('meta[name="viewport"]');
@@ -226,34 +228,30 @@ export default function PublicQuickPayCheckout() {
     };
   }, []);
 
-  const finalAmount =
-    selectedItem?.type === "MANUAL"
-      ? Number(customAmount || 0)
-      : unitAmount * quantity;
-  const processingFee =
-    paymentMethod === "ONLINE"
-      ? calculateCustomerProcessingFee(finalAmount)
-      : 0;
-  const onlineTotalAmount = finalAmount + processingFee;
-
   useEffect(() => {
     let isMounted = true;
+
     async function loadCatalog() {
       if (!storeId) {
         setError("Missing store ID.");
         setStatus(null);
         return;
       }
+
       try {
         const response = await fetch(
           `${FUNCTION_BASE_URL}/publicQuickPayCatalog?storeId=${encodeURIComponent(storeId)}`,
         );
-        if (!response.ok)
+        if (!response.ok) {
           throw new Error(`Catalog request failed (${response.status})`);
+        }
+
         const payload = (await response.json()) as { items?: QuickPayItem[] };
         if (!isMounted) return;
+
         const loadedItems = Array.isArray(payload.items) ? payload.items : [];
         setItems(loadedItems);
+
         const requestedItem = requestedItemId
           ? loadedItems.find(
               (item) =>
@@ -261,36 +259,71 @@ export default function PublicQuickPayCheckout() {
             )
           : null;
         if (requestedItem) setSelectedItem(requestedItem);
-        setStatus(null);
+
+        setStatus(
+          loadedItems.length === 0
+            ? "No store items are available yet. You can enter the payment manually."
+            : null,
+        );
       } catch (catalogError) {
         if (!isMounted) return;
         console.warn("[quick-pay] Catalog load failed", catalogError);
         setItems([]);
-        setStatus(null);
+        setStatus(
+          "Store items could not be loaded. You can still enter the payment manually.",
+        );
       }
     }
+
     if (!shouldShowSuccess) void loadCatalog();
+
     return () => {
       isMounted = false;
     };
   }, [requestedItemId, storeId, shouldShowSuccess]);
 
+  function scrollToCheckout() {
+    document
+      .getElementById("quick-pay-checkout-panel")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function useManualInput() {
+    setSelectedItem(MANUAL_ITEM);
+    setQuery("");
+    setError(null);
+    window.setTimeout(scrollToCheckout, 100);
+  }
+
+  function selectStoreItem(item: QuickPayItem) {
+    setSelectedItem(item);
+    setQuantity(1);
+    setError(null);
+    window.setTimeout(scrollToCheckout, 100);
+  }
+
   async function createCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+
     const cleanCustomer: CustomerDetails = {
       name: customer.name.trim(),
       email: customer.email.trim().toLowerCase(),
       phone: customer.phone.trim(),
     };
-    if (!selectedItem || !effectiveQuickPayType)
-      return setError("Select what you want to pay for.");
-    if (selectedItem.type === "MANUAL" && !sanitizedManualPaymentName)
+
+    if (!selectedItem || !effectiveQuickPayType) {
+      return setError("Search for an item or choose manual entry first.");
+    }
+    if (selectedItem.type === "MANUAL" && !sanitizedManualPaymentName) {
       return setError("Enter the service or item name.");
-    if (!cleanCustomer.email && !cleanCustomer.phone)
+    }
+    if (!cleanCustomer.email && !cleanCustomer.phone) {
       return setError("Enter customer phone number. Email is optional.");
-    if (!finalAmount || finalAmount <= 0)
+    }
+    if (!finalAmount || finalAmount <= 0) {
       return setError("Enter a valid amount.");
+    }
 
     setIsSubmitting(true);
     setStatus(
@@ -298,6 +331,7 @@ export default function PublicQuickPayCheckout() {
         ? "Saving cash order…"
         : "Preparing secure payment…",
     );
+
     try {
       const reference = `qp_${storeId}_${Date.now()}`;
       const checkoutEmail =
@@ -310,6 +344,7 @@ export default function PublicQuickPayCheckout() {
       const accountingType = effectiveAccountingType;
       const manualPaymentCategory =
         selectedItem.type === "MANUAL" ? getTypeLabel(manualPaymentType) : null;
+
       const body = {
         storeId,
         merchantId: storeId,
@@ -415,6 +450,7 @@ export default function PublicQuickPayCheckout() {
           quantity: effectiveQuantity,
         },
       };
+
       const endpoint =
         paymentMethod === "CASH"
           ? "integrationCashCheckoutCreate"
@@ -433,14 +469,16 @@ export default function PublicQuickPayCheckout() {
         error?: string;
         cashCheckout?: boolean;
       } | null;
-      if (!response.ok || !payload)
-        throw new Error(
-          payload?.error || `Checkout failed (${response.status})`,
-        );
+
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error || `Checkout failed (${response.status})`);
+      }
+
       if (paymentMethod === "CASH" || payload.cashCheckout) {
         window.location.href = returnUrl;
         return;
       }
+
       const checkoutUrl = payload.authorizationUrl || payload.checkoutUrl;
       if (!checkoutUrl) throw new Error("Checkout URL was not returned.");
       window.location.href = checkoutUrl;
@@ -454,18 +492,6 @@ export default function PublicQuickPayCheckout() {
       setStatus(null);
       setIsSubmitting(false);
     }
-  }
-
-  function scrollToCheckout() {
-    document
-      .getElementById("quick-pay-checkout-panel")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function useManualInput() {
-    setSelectedItem(DEMO_ITEMS[0]);
-    setQuery("");
-    window.setTimeout(scrollToCheckout, 100);
   }
 
   if (shouldShowSuccess) {
@@ -517,25 +543,18 @@ export default function PublicQuickPayCheckout() {
           <p className="qp-eyebrow">Sedifex Quick Pay</p>
           <h1 className="qp-title">Quick payment</h1>
           <p className="qp-copy">
-            Search an item or use manual input to record a product, service,
-            booking, registration, donation, or course payment.
+            Start by searching the store for the product or service. If it is not
+            listed, you can enter the payment manually.
           </p>
-
-          <button
-            type="button"
-            className="qp-pay-button"
-            onClick={useManualInput}
-            style={{ width: "100%", margin: "18px 0 10px" }}
-          >
-            Input manually
-          </button>
 
           <div className="qp-hero-search">
             <label className="qp-hero-label" htmlFor="quick-pay-search">
-              Search existing item
+              What is the customer paying for?
             </label>
             <div className="qp-hero-input-shell">
-              <span className="qp-hero-search-icon">⌕</span>
+              <span className="qp-hero-search-icon" aria-hidden="true">
+                ⌕
+              </span>
               <input
                 id="quick-pay-search"
                 type="search"
@@ -543,6 +562,7 @@ export default function PublicQuickPayCheckout() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 className="qp-hero-input"
+                autoComplete="off"
               />
               {query ? (
                 <button
@@ -555,54 +575,64 @@ export default function PublicQuickPayCheckout() {
               ) : null}
             </div>
             <p className="qp-hero-help">
-              Manual input is selected by default for faster staff entry.
+              Search by name. Matching store items will appear below for you to
+              select.
             </p>
+          </div>
+
+          <div className="qp-manual-fallback">
+            <div>
+              <strong>Cannot find the item?</strong>
+              <span>Enter the name and amount yourself.</span>
+            </div>
+            <button
+              type="button"
+              className="qp-hero-manual-button"
+              onClick={useManualInput}
+            >
+              Enter payment manually
+            </button>
           </div>
 
           <div className="qp-trust-row">
             <span>♢ Store recorded</span>
             <span>◇ Cash supported</span>
-            <span>▯ Mobile money & card optional</span>
+            <span>▯ Mobile money &amp; card supported</span>
           </div>
         </section>
 
         <div className="qp-grid">
           <section className="qp-panel qp-search-panel">
-            <button
-              type="button"
-              className="qp-manual-link"
-              onClick={useManualInput}
-              style={{ fontSize: 16, padding: "14px 18px" }}
-            >
-              + Input manually
-            </button>
+            <div className="qp-panel-heading">
+              <div>
+                <p className="qp-step-label">Step 1</p>
+                <h2>Choose an item</h2>
+              </div>
+              {selectedItem ? (
+                <span className="qp-selection-badge">Selected</span>
+              ) : null}
+            </div>
+
             {status ? <p className="qp-status">{status}</p> : null}
-            {!hasSearch ? (
-              <p className="qp-status">
-                Use manual input, or search above to select an existing item
-                from the store.
-              </p>
-            ) : null}
+
             {hasSearch ? (
               <div className="qp-items-grid">
-                {visibleItems.map((item) => {
+                {filteredItems.map((item) => {
                   const isSelected = selectedItem?.id === item.id;
                   return (
                     <button
                       key={item.id}
                       type="button"
                       className={`qp-item-card ${isSelected ? "qp-item-card-selected" : ""}`}
-                      onClick={() => {
-                        setSelectedItem(item);
-                        window.setTimeout(scrollToCheckout, 100);
-                      }}
+                      onClick={() => selectStoreItem(item)}
+                      aria-pressed={isSelected}
                     >
                       <div className="qp-item-top">
                         <div className="qp-item-icon">
                           {getItemIcon(item.type)}
                         </div>
                         <div className="qp-item-main">
-                          <h2 className="qp-item-name">{item.name}</h2>
+                          <h3 className="qp-item-name">{item.name}</h3>
                           <div className="qp-item-meta">
                             <span className="qp-badge">
                               {getTypeLabel(item.type)}
@@ -622,13 +652,44 @@ export default function PublicQuickPayCheckout() {
                     </button>
                   );
                 })}
-                {visibleItems.length === 0 ? (
+
+                {filteredItems.length === 0 ? (
                   <div className="qp-empty">
-                    No item matched your search. Use manual input instead.
+                    <strong>No item matched “{query.trim()}”.</strong>
+                    <span>You can still record this payment manually.</span>
+                    <button type="button" onClick={useManualInput}>
+                      Enter payment manually
+                    </button>
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            ) : (
+              <div className="qp-choice-grid">
+                <div className="qp-choice-card qp-choice-card-primary">
+                  <span className="qp-choice-number">1</span>
+                  <div>
+                    <h3>Search the store first</h3>
+                    <p>
+                      Use the search box above and select the correct product,
+                      service, booking, course, or registration.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="qp-choice-card qp-choice-card-button"
+                  onClick={useManualInput}
+                >
+                  <span className="qp-choice-number">2</span>
+                  <div>
+                    <h3>Item is not listed?</h3>
+                    <p>Enter the item name and amount manually.</p>
+                    <strong>Enter payment manually →</strong>
+                  </div>
+                </button>
+              </div>
+            )}
           </section>
 
           <form
@@ -636,173 +697,224 @@ export default function PublicQuickPayCheckout() {
             onSubmit={createCheckout}
             className="qp-panel qp-payment-panel"
           >
-            <h2 className="qp-payment-title">Payment details</h2>
-            <p className="qp-selected-name">
-              {selectedItem ? effectiveItemName : "Manual payment request"}
-            </p>
-            {selectedItem?.type === "MANUAL" ? (
-              <p className="qp-manual-note">
-                Type exactly what the customer is paying for.
-              </p>
-            ) : null}
-            {selectedItem ? (
-              <div className="qp-summary">
+            <div className="qp-panel-heading">
+              <div>
+                <p className="qp-step-label">Step 2</p>
+                <h2>Payment details</h2>
+              </div>
+            </div>
+
+            {!selectedItem ? (
+              <div className="qp-payment-placeholder">
+                <span aria-hidden="true">⌕</span>
+                <strong>Choose what the customer is paying for</strong>
+                <p>
+                  Search and select a store item, or choose manual entry from the
+                  left.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="qp-selected-header">
+                  <span>{getTypeLabel(selectedItem.type)}</span>
+                  <strong>{effectiveItemName}</strong>
+                </div>
+
                 {selectedItem.type === "MANUAL" ? (
-                  <>
+                  <p className="qp-manual-note">
+                    Type exactly what the customer is paying for.
+                  </p>
+                ) : null}
+
+                <div className="qp-summary">
+                  {selectedItem.type === "MANUAL" ? (
+                    <>
+                      <label className="qp-field-label">
+                        Category
+                        <select
+                          value={manualPaymentType}
+                          onChange={(event) =>
+                            setManualPaymentType(
+                              event.target.value as ManualPaymentType,
+                            )
+                          }
+                          className="qp-field"
+                        >
+                          {MANUAL_PAYMENT_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {getTypeLabel(type)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="qp-field-label">
+                        Service / item name
+                        <input
+                          type="text"
+                          value={manualPaymentName}
+                          onChange={(event) =>
+                            setManualPaymentName(event.target.value)
+                          }
+                          className="qp-field"
+                          placeholder="E.g. Facial treatment, delivery fee"
+                          required
+                        />
+                      </label>
+
+                      <label className="qp-field-label">
+                        Amount to pay
+                        <input
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={customAmount}
+                          onChange={(event) =>
+                            setCustomAmount(event.target.value)
+                          }
+                          className="qp-field"
+                          placeholder="Enter amount"
+                          required
+                        />
+                      </label>
+                    </>
+                  ) : (
                     <label className="qp-field-label">
-                      Category
-                      <select
-                        value={manualPaymentType}
-                        onChange={(event) =>
-                          setManualPaymentType(
-                            event.target.value as ManualPaymentType,
-                          )
-                        }
-                        className="qp-field"
-                      >
-                        {MANUAL_PAYMENT_TYPES.map((type) => (
-                          <option key={type} value={type}>
-                            {getTypeLabel(type)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="qp-field-label">
-                      Service / item name
-                      <input
-                        type="text"
-                        value={manualPaymentName}
-                        onChange={(event) =>
-                          setManualPaymentName(event.target.value)
-                        }
-                        className="qp-field"
-                        placeholder="E.g. Facial treatment, delivery fee, consultation"
-                        required
-                      />
-                    </label>
-                    <label className="qp-field-label">
-                      Amount to pay
+                      Quantity
                       <input
                         type="number"
                         min="1"
-                        step="0.01"
-                        value={customAmount}
+                        value={quantity}
                         onChange={(event) =>
-                          setCustomAmount(event.target.value)
+                          setQuantity(
+                            Math.max(1, Number(event.target.value) || 1),
+                          )
                         }
                         className="qp-field"
-                        placeholder="Enter amount"
                       />
                     </label>
-                  </>
-                ) : (
-                  <label className="qp-field-label">
-                    Quantity
-                    <input
-                      type="number"
-                      min="1"
-                      value={quantity}
-                      onChange={(event) =>
-                        setQuantity(
-                          Math.max(1, Number(event.target.value) || 1),
-                        )
-                      }
-                      className="qp-field"
-                    />
-                  </label>
-                )}
-                <div className="qp-total-row">
-                  <span className="qp-total-label">Items / services</span>
-                  <strong className="qp-total-value">
-                    {money(finalAmount || 0)}
-                  </strong>
-                </div>
-                {paymentMethod === "ONLINE" ? (
+                  )}
+
                   <div className="qp-total-row">
-                    <span className="qp-total-label">Processing fee</span>
+                    <span className="qp-total-label">Items / services</span>
                     <strong className="qp-total-value">
-                      {money(processingFee || 0)}
+                      {money(finalAmount || 0)}
                     </strong>
                   </div>
-                ) : null}
-                <div className="qp-total-row qp-total-row-final">
-                  <span className="qp-total-label">Total to pay</span>
-                  <strong className="qp-total-value">
-                    {money(
-                      paymentMethod === "ONLINE"
-                        ? onlineTotalAmount || 0
-                        : finalAmount || 0,
-                    )}
-                  </strong>
+                  {paymentMethod === "ONLINE" ? (
+                    <div className="qp-total-row">
+                      <span className="qp-total-label">Processing fee</span>
+                      <strong className="qp-total-value">
+                        {money(processingFee || 0)}
+                      </strong>
+                    </div>
+                  ) : null}
+                  <div className="qp-total-row qp-total-row-final">
+                    <span className="qp-total-label">Total to pay</span>
+                    <strong className="qp-total-value">
+                      {money(
+                        paymentMethod === "ONLINE"
+                          ? onlineTotalAmount || 0
+                          : finalAmount || 0,
+                      )}
+                    </strong>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            {selectedItem ? (
-              <div className="qp-form-fields">
-                <label className="qp-field-label">
-                  Payment method
-                  <select
-                    value={paymentMethod}
+
+                <fieldset className="qp-payment-methods">
+                  <legend>How will the customer pay?</legend>
+                  <div
+                    className="qp-payment-option-grid"
+                    role="radiogroup"
+                    aria-label="Payment method"
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={paymentMethod === "CASH"}
+                      className={`qp-payment-option ${paymentMethod === "CASH" ? "qp-payment-option-active" : ""}`}
+                      onClick={() => setPaymentMethod("CASH")}
+                    >
+                      <span className="qp-payment-option-icon">₵</span>
+                      <span className="qp-payment-option-copy">
+                        <strong>Pay by Cash</strong>
+                        <small>Store confirms cash received</small>
+                      </span>
+                      <span className="qp-payment-option-check">✓</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={paymentMethod === "ONLINE"}
+                      className={`qp-payment-option ${paymentMethod === "ONLINE" ? "qp-payment-option-active" : ""}`}
+                      onClick={() => setPaymentMethod("ONLINE")}
+                    >
+                      <span className="qp-payment-option-icon">M</span>
+                      <span className="qp-payment-option-copy">
+                        <strong>Pay by MoMo / Card</strong>
+                        <small>Secure online checkout</small>
+                      </span>
+                      <span className="qp-payment-option-check">✓</span>
+                    </button>
+                  </div>
+                </fieldset>
+
+                {paymentMethod === "CASH" ? (
+                  <p className="qp-payment-help">
+                    Sedifex saves this as a pending cash order until the store
+                    confirms the money was received.
+                  </p>
+                ) : (
+                  <p className="qp-payment-help">
+                    The customer will continue to Paystack to pay with Mobile
+                    Money or card.
+                  </p>
+                )}
+
+                <div className="qp-form-fields">
+                  <input
+                    type="text"
+                    placeholder="Customer name"
+                    value={customer.name}
                     onChange={(event) =>
-                      setPaymentMethod(
-                        event.target.value as QuickPayPaymentMethod,
-                      )
+                      setCustomer((previous) => ({
+                        ...previous,
+                        name: event.target.value,
+                      }))
                     }
                     className="qp-field"
-                  >
-                    <option value="CASH">Pay cash to store</option>
-                    <option value="ONLINE">
-                      Pay online with Mobile Money / Card
-                    </option>
-                  </select>
-                </label>
-                {paymentMethod === "CASH" ? (
-                  <p className="qp-manual-note">
-                    No Paystack checkout. Sedifex will save this as pending cash
-                    until the store confirms cash received.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            <div className="qp-form-fields">
-              <input
-                type="text"
-                placeholder="Customer name"
-                value={customer.name}
-                onChange={(event) =>
-                  setCustomer((previous) => ({
-                    ...previous,
-                    name: event.target.value,
-                  }))
-                }
-                className="qp-field"
-              />
-              <input
-                type="email"
-                placeholder="Email (optional)"
-                value={customer.email}
-                onChange={(event) =>
-                  setCustomer((previous) => ({
-                    ...previous,
-                    email: event.target.value,
-                  }))
-                }
-                className="qp-field"
-              />
-              <input
-                type="tel"
-                placeholder="Phone / WhatsApp"
-                value={customer.phone}
-                onChange={(event) =>
-                  setCustomer((previous) => ({
-                    ...previous,
-                    phone: event.target.value,
-                  }))
-                }
-                className="qp-field"
-              />
-            </div>
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email (optional)"
+                    value={customer.email}
+                    onChange={(event) =>
+                      setCustomer((previous) => ({
+                        ...previous,
+                        email: event.target.value,
+                      }))
+                    }
+                    className="qp-field"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone / WhatsApp"
+                    value={customer.phone}
+                    onChange={(event) =>
+                      setCustomer((previous) => ({
+                        ...previous,
+                        phone: event.target.value,
+                      }))
+                    }
+                    className="qp-field"
+                  />
+                </div>
+              </>
+            )}
+
             {error ? <p className="qp-error">{error}</p> : null}
+
             <button
               type="submit"
               disabled={isSubmitting || !selectedItem}
@@ -816,8 +928,9 @@ export default function PublicQuickPayCheckout() {
                   ? paymentMethod === "CASH"
                     ? `Save cash order ${money(finalAmount || 0)}`
                     : `Pay ${money(onlineTotalAmount || 0)}`
-                  : "Enter payment details"}
+                  : "Choose an item first"}
             </button>
+
             <p className="qp-powered">
               Powered by Sedifex. Cash orders are recorded for store
               confirmation.
