@@ -3,14 +3,23 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
+  setDoc,
   Timestamp,
   where,
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
 import { useActiveStore } from "../hooks/useActiveStore";
+import {
+  buildCancelBookingPayload,
+  buildCompleteBookingPayload,
+  buildConfirmBookingPayload,
+  hasAppScriptBookingSyncConfigured,
+  type BookingActionType,
+} from "../utils/bookingActions";
 import "./Bookings.css";
 
 type BookingRecord = {
@@ -121,8 +130,15 @@ export default function Bookings() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
+  const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<
-    "needs_action" | "today" | "upcoming" | "all" | "cancelled"
+    | "needs_action"
+    | "paid"
+    | "awaiting_payment"
+    | "today"
+    | "upcoming"
+    | "all"
+    | "cancelled"
   >("needs_action");
 
   const hydrateBooking = useCallback(
@@ -427,6 +443,7 @@ export default function Bookings() {
     paymentPending: bookings.filter((b) =>
       ["pending", "payment_pending", "manual_review"].includes(b.paymentStatus),
     ).length,
+    paid: bookings.filter((b) => b.paymentStatus === "paid").length,
     confirmed: bookings.filter((b) => b.status === "confirmed").length,
     completed: bookings.filter((b) => b.status === "completed").length,
     cancelled: bookings.filter((b) =>
@@ -440,6 +457,14 @@ export default function Bookings() {
         if (activeTab === "all") return true;
         if (activeTab === "cancelled")
           return ["cancelled", "deleted"].includes(b.status);
+        if (activeTab === "paid") return b.paymentStatus === "paid";
+        if (activeTab === "awaiting_payment")
+          return (
+            !["cancelled", "deleted"].includes(b.status) &&
+            ["pending", "payment_pending", "manual_review"].includes(
+              b.paymentStatus,
+            )
+          );
         if (activeTab === "today") return dateKey(b.bookingDate) === todayStr;
         if (activeTab === "upcoming") {
           const d = b.bookingDate ? new Date(b.bookingDate) : null;
@@ -458,6 +483,81 @@ export default function Bookings() {
         );
       }),
     [activeTab, bookings, todayStr],
+  );
+
+  const applyBookingAction = useCallback(
+    async (booking: BookingRecord, action: BookingActionType) => {
+      if (!storeId) return;
+      const label =
+        action === "confirm"
+          ? "mark this booking as paid and confirmed"
+          : action === "complete"
+            ? "mark this booking as completed"
+            : "cancel this booking";
+      if (!window.confirm(`Are you sure you want to ${label}?`)) return;
+
+      setUpdatingIds((current) => [...new Set([...current, booking.id])]);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      try {
+        const storeSnap = await getDoc(doc(db, "stores", storeId));
+        const shouldQueueSync = hasAppScriptBookingSyncConfigured(
+          storeSnap.exists()
+            ? (storeSnap.data() as Record<string, unknown>)
+            : null,
+        );
+        const payload =
+          action === "confirm"
+            ? buildConfirmBookingPayload(booking.payment, shouldQueueSync)
+            : action === "complete"
+              ? buildCompleteBookingPayload(shouldQueueSync)
+              : buildCancelBookingPayload(shouldQueueSync);
+        const nextPayment =
+          action === "confirm"
+            ? { ...booking.payment, status: "paid", confirmed: true }
+            : booking.payment;
+        const collectionName =
+          booking.sourcePath === "order"
+            ? "integrationOrders"
+            : "integrationBookings";
+        await Promise.all([
+          setDoc(
+            doc(db, "stores", storeId, collectionName, booking.id),
+            payload,
+            { merge: true },
+          ),
+          setDoc(doc(db, collectionName, booking.id), payload, { merge: true }),
+        ]);
+        setBookings((current) =>
+          current.map((item) =>
+            item.id === booking.id
+              ? {
+                  ...item,
+                  status: String(payload.status),
+                  bookingStatus: String(payload.bookingStatus),
+                  paymentStatus:
+                    action === "confirm" ? "paid" : item.paymentStatus,
+                  syncStatus: "pending",
+                  payment: nextPayment,
+                }
+              : item,
+          ),
+        );
+        setSuccessMessage(
+          action === "confirm"
+            ? "Booking marked as paid and confirmed."
+            : action === "complete"
+              ? "Booking marked as completed."
+              : "Booking cancelled successfully.",
+        );
+      } catch (error) {
+        console.error(error);
+        setErrorMessage("Unable to update booking right now. Please try again.");
+      } finally {
+        setUpdatingIds((current) => current.filter((id) => id !== booking.id));
+      }
+    },
+    [storeId],
   );
 
   const deleteBookingRecords = useCallback(
@@ -574,6 +674,7 @@ export default function Bookings() {
             ["New today", summary.newToday],
             ["Pending approval", summary.pending],
             ["Payment pending", summary.paymentPending],
+            ["Paid", summary.paid],
             ["Confirmed", summary.confirmed],
             ["Completed", summary.completed],
             ["Cancelled", summary.cancelled],
@@ -591,6 +692,8 @@ export default function Bookings() {
         <div className="bookings-page__tabs">
           {[
             ["needs_action", "Needs action"],
+            ["paid", "Paid"],
+            ["awaiting_payment", "Awaiting payment"],
             ["today", "Today"],
             ["upcoming", "Upcoming"],
             ["all", "All"],
@@ -776,6 +879,45 @@ export default function Bookings() {
                           >
                             Open
                           </Link>
+                          {b.paymentStatus !== "paid" &&
+                          !["cancelled", "deleted"].includes(b.status) ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() =>
+                                void applyBookingAction(b, "confirm")
+                              }
+                              disabled={updatingIds.includes(b.id)}
+                            >
+                              Paid + confirm
+                            </button>
+                          ) : null}
+                          {!["completed", "cancelled", "deleted"].includes(
+                            b.status,
+                          ) ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() =>
+                                void applyBookingAction(b, "complete")
+                              }
+                              disabled={updatingIds.includes(b.id)}
+                            >
+                              Complete
+                            </button>
+                          ) : null}
+                          {!["cancelled", "deleted"].includes(b.status) ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() =>
+                                void applyBookingAction(b, "cancel")
+                              }
+                              disabled={updatingIds.includes(b.id)}
+                            >
+                              Cancel
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="btn btn-danger"
@@ -825,6 +967,39 @@ export default function Bookings() {
                     >
                       Open
                     </Link>
+                    {b.paymentStatus !== "paid" &&
+                    !["cancelled", "deleted"].includes(b.status) ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void applyBookingAction(b, "confirm")}
+                        disabled={updatingIds.includes(b.id)}
+                      >
+                        Paid + confirm
+                      </button>
+                    ) : null}
+                    {!["completed", "cancelled", "deleted"].includes(
+                      b.status,
+                    ) ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void applyBookingAction(b, "complete")}
+                        disabled={updatingIds.includes(b.id)}
+                      >
+                        Complete
+                      </button>
+                    ) : null}
+                    {!["cancelled", "deleted"].includes(b.status) ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void applyBookingAction(b, "cancel")}
+                        disabled={updatingIds.includes(b.id)}
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="btn btn-danger"
