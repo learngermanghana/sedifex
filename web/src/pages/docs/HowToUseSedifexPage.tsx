@@ -25,7 +25,7 @@ export default function HowToUseSedifexPage() {
         <h2>Pick your workspace type</h2>
         <ul>
           <li><strong>Retail / Shop:</strong> Items, Sell, Marketplace Orders, Quick Pay, Customers, Bookings, Website Builder, and Reports.</li>
-          <li><strong>Travel:</strong> Booking, Customers, Upcoming trips, Online Orders, Trip promos, Trip gallery, and Contact links.</li>
+          <li><strong>Travel:</strong> Booking, Customers, Upcoming events, Online Orders, Trip promos, Trip gallery, and Contact links.</li>
           <li><strong>NGO:</strong> Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, and Petty expenses.</li>
           <li><strong>School:</strong> Students, Classes, Upcoming classes, Student registration, Registrations & Orders, Admissions promo, and School gallery.</li>
         </ul>
