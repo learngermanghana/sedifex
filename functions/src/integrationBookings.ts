@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
+import { createHash } from 'crypto'
 import { admin, defaultDb } from './firestore'
 
 const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
@@ -33,6 +34,116 @@ type BookingRequestBody = {
   source?: unknown
   sourceChannel?: unknown
   source_channel?: unknown
+}
+
+const BOOKING_ABUSE_WINDOW_MS = 10 * 60 * 1000
+const BOOKING_DUPLICATE_WINDOW_MS = 2 * 60 * 1000
+const BOOKING_MAX_REQUESTS_PER_WINDOW = 30
+
+function normalizedIdentity(value: string) {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function validEmail(value: string) {
+  if (!value || value.length > 240) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(value)
+}
+
+function requestIp(req: functions.https.Request) {
+  const forwarded = clean(req.get('x-forwarded-for'), 500).split(',')[0]?.trim()
+  return forwarded || clean(req.ip, 120) || 'unknown'
+}
+
+function abuseHash(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function bookingFingerprint(input: {
+  storeId: string
+  serviceId: string
+  slotId: string
+  customerEmail: string
+  customerPhone: string
+  bookingDate: string
+  bookingTime: string
+}) {
+  return abuseHash([
+    input.storeId,
+    input.serviceId,
+    input.slotId,
+    normalizedIdentity(input.customerEmail),
+    normalizedIdentity(input.customerPhone),
+    input.bookingDate,
+    input.bookingTime,
+  ].join('|'))
+}
+
+async function assertBookingNotAbusive(input: {
+  req: functions.https.Request
+  storeId: string
+  sourceChannel: string
+  serviceId: string
+  slotId: string
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+  bookingDate: string
+  bookingTime: string
+}) {
+  // Staff/internal integrations remain compatible. Website-originated traffic gets
+  // conservative server-side protection even when the client website cannot be changed.
+  const websiteSource = ['client_website', 'client-website', 'website', 'website_booking_form'].includes(input.sourceChannel.toLowerCase())
+  if (!websiteSource) return { ok: true as const }
+
+  if (!input.customerName || (!input.customerEmail && !input.customerPhone)) {
+    return { ok: false as const, status: 400, error: 'invalid-customer-contact' }
+  }
+  if (input.customerEmail && !validEmail(input.customerEmail)) {
+    return { ok: false as const, status: 400, error: 'invalid-customer-email' }
+  }
+
+  const nowMs = Date.now()
+  const ipHash = abuseHash(`${input.storeId}|${requestIp(input.req)}`)
+  const fingerprint = bookingFingerprint(input)
+  const guardRef = defaultDb.collection('bookingAbuseGuards').doc(`${input.storeId}_${ipHash.slice(0, 32)}`)
+  const duplicateRef = defaultDb.collection('bookingAbuseDuplicates').doc(`${input.storeId}_${fingerprint.slice(0, 32)}`)
+
+  return defaultDb.runTransaction(async tx => {
+    const [guardSnap, duplicateSnap] = await Promise.all([tx.get(guardRef), tx.get(duplicateRef)])
+    const guard = (guardSnap.data() ?? {}) as Record<string, unknown>
+    const duplicate = (duplicateSnap.data() ?? {}) as Record<string, unknown>
+    const windowStartedAt = toNumber(guard.windowStartedAtMs, 0)
+    const inWindow = windowStartedAt > 0 && nowMs - windowStartedAt < BOOKING_ABUSE_WINDOW_MS
+    const requestCount = inWindow ? Math.max(0, Math.floor(toNumber(guard.requestCount, 0))) : 0
+
+    if (requestCount >= BOOKING_MAX_REQUESTS_PER_WINDOW) {
+      return { ok: false as const, status: 429, error: 'booking-rate-limited' }
+    }
+
+    const lastAcceptedAtMs = toNumber(duplicate.lastAcceptedAtMs, 0)
+    if (lastAcceptedAtMs > 0 && nowMs - lastAcceptedAtMs < BOOKING_DUPLICATE_WINDOW_MS) {
+      return { ok: false as const, status: 429, error: 'duplicate-booking-submission' }
+    }
+
+    tx.set(guardRef, {
+      storeId: input.storeId,
+      ipHash,
+      windowStartedAtMs: inWindow ? windowStartedAt : nowMs,
+      requestCount: requestCount + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + BOOKING_ABUSE_WINDOW_MS * 2),
+    }, { merge: true })
+
+    tx.set(duplicateRef, {
+      storeId: input.storeId,
+      fingerprint,
+      lastAcceptedAtMs: nowMs,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + BOOKING_DUPLICATE_WINDOW_MS * 2),
+    }, { merge: true })
+
+    return { ok: true as const }
+  })
 }
 
 function clean(value: unknown, max = 500) {
@@ -247,6 +358,28 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
 
     if (!serviceId && !slotId) {
       res.status(400).json({ error: 'missing-service-or-slot' })
+      return
+    }
+
+    const abuseCheck = await assertBookingNotAbusive({
+      req,
+      storeId,
+      sourceChannel,
+      serviceId,
+      slotId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      bookingDate,
+      bookingTime,
+    })
+    if (!abuseCheck.ok) {
+      functions.logger.warn('Blocked abusive integration booking request', {
+        storeId,
+        sourceChannel,
+        reason: abuseCheck.error,
+      })
+      res.status(abuseCheck.status).json({ error: abuseCheck.error })
       return
     }
 
