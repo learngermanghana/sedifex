@@ -38,7 +38,7 @@ type BookingRequestBody = {
 
 const BOOKING_ABUSE_WINDOW_MS = 10 * 60 * 1000
 const BOOKING_DUPLICATE_WINDOW_MS = 2 * 60 * 1000
-const BOOKING_MAX_REQUESTS_PER_WINDOW = 8
+const BOOKING_MAX_REQUESTS_PER_WINDOW = 30
 
 function normalizedIdentity(value: string) {
   return value.toLowerCase().replace(/\s+/g, ' ').trim()
