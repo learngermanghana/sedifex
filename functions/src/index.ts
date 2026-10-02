@@ -41,6 +41,8 @@ export {
   saveAutomationCenterSettings,
 } from './automationCenter'
 export { runEventCommunicationsNow } from './eventCommunications'
+export { notifyUnpaidBookingCreated } from './bookingEmailNotifications'
+export { automateBookingEmailOnWrite } from './bookingEmailAutomation'
 export {
   sendEventContractForSignature,
   getPublicEventContract,
