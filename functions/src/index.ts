@@ -32,41 +32,18 @@ export { cleanPendingReportData, onSaleReportingAggregate } from './reporting'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationHeroSlides } from './integrationHeroSlides'
 export { v1IntegrationBookings } from './integrationBookings'
-export {
-  processBookingSmsNotifications,
-  queueBookingSmsOnWrite,
-} from './bookingSmsAutomation'
-export {
-  processBookingLifecycleSmsNotifications,
-  queueBookingLifecycleSmsOnWrite,
-} from './bookingLifecycleSmsAutomation'
-export {
-  notifyStoreBookingSmsSent,
-  notifyStoreBookingSmsQueueState,
-  processBookingSmsStoreAlertChecks,
-} from './bookingSmsStoreAlerts'
-export {
-  queueBookingSmsDeliveryCheck,
-  processBookingSmsDeliveryChecks,
-} from './bookingSmsDeliveryReports'
-export {
-  notifyUnpaidBookingCreated,
-  processUnpaidBookingEmailNotifications,
-} from './bookingEmailNotifications'
-export {
-  automateBookingEmailOnWrite,
-  processBookingEmailReminders,
-} from './bookingEmailAutomation'
+
+// Recurring Cloud Scheduler jobs and automatic SMS pipelines are intentionally
+// not exported. Sedifex keeps manual/user-triggered communication paths while
+// avoiding background Cloud Run invocations when the product is lightly used.
+export { notifyUnpaidBookingCreated } from './bookingEmailNotifications'
+export { automateBookingEmailOnWrite } from './bookingEmailAutomation'
 export {
   getAutomationCenterState,
   saveAutomationCenterSettings,
 } from './automationCenter'
 export { automateCustomerPortalOnBookingWrite } from './customerPortalBookingAutomation'
-export {
-  automateEventCommunicationsOnWrite,
-  processEventCommunications,
-  runEventCommunicationsNow,
-} from './eventCommunications'
+export { runEventCommunicationsNow } from './eventCommunications'
 export {
   sendEventContractForSignature,
   getPublicEventContract,
