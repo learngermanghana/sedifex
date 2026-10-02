@@ -96,8 +96,6 @@ jobs:
             googleAdsMetricsSyncScheduled \
             runNightlyDataHygiene \
             nightlyDataHygiene \
-            notifyUnpaidBookingCreated \
-            automateBookingEmailOnWrite \
             automateCustomerPortalOnBookingWrite
           do
             firebase functions:delete "$fn" --region us-central1 --project sedifex-web --force || true
