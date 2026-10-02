@@ -75,6 +75,35 @@ jobs:
             echo 'SEDIFEX_PUBLIC_BASE_URL=https://sedifex.com' >> functions/.env.sedifex-web
           fi
 
+      - name: Pause removed background scheduler jobs
+        run: |
+          set -euo pipefail
+          SCHEDULER_JOBS="$(gcloud scheduler jobs list --location us-central1 --project sedifex-web --format='value(name)')"
+          for fn in \
+            exportDailyStoreReports \
+            publishDailyFeaturedProductBlogPost \
+            processBookingSmsNotifications \
+            processBookingLifecycleSmsNotifications \
+            processBookingSmsStoreAlertChecks \
+            processBookingSmsDeliveryChecks \
+            processUnpaidBookingEmailNotifications \
+            processBookingEmailReminders \
+            processEventCommunications \
+            googleAdsMetricsSyncScheduled \
+            runNightlyDataHygiene \
+            nightlyDataHygiene
+          do
+            job="firebase-schedule-${fn}-us-central1"
+            if printf '%s\n' "$SCHEDULER_JOBS" | grep -Eq "(^|/)${job}$"; then
+              echo "Pausing $job"
+              gcloud scheduler jobs pause "$job" --location us-central1 --project sedifex-web --quiet
+              state="$(gcloud scheduler jobs describe "$job" --location us-central1 --project sedifex-web --format='value(state)')"
+              test "$state" = "PAUSED"
+            else
+              echo "Scheduler job not present: $job"
+            fi
+          done
+
       - name: Delete removed background automation functions
         run: |
           for fn in \
