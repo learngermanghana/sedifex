@@ -75,8 +75,27 @@ jobs:
             echo 'SEDIFEX_PUBLIC_BASE_URL=https://sedifex.com' >> functions/.env.sedifex-web
           fi
 
-      - name: Delete removed legacy functions
-        run: firebase functions:delete exportDailyStoreReports --region us-central1 --project sedifex-web --force || true
+      - name: Delete removed background automation functions
+        run: |
+          for fn in \
+            exportDailyStoreReports \
+            publishDailyFeaturedProductBlogPost \
+            processBookingSmsNotifications \
+            queueBookingSmsOnWrite \
+            processBookingLifecycleSmsNotifications \
+            queueBookingLifecycleSmsOnWrite \
+            notifyStoreBookingSmsSent \
+            notifyStoreBookingSmsQueueState \
+            processBookingSmsStoreAlertChecks \
+            queueBookingSmsDeliveryCheck \
+            processBookingSmsDeliveryChecks \
+            processUnpaidBookingEmailNotifications \
+            processBookingEmailReminders \
+            automateEventCommunicationsOnWrite \
+            processEventCommunications
+          do
+            firebase functions:delete "$fn" --region us-central1 --project sedifex-web --force || true
+          done
 
       - name: Build and list functions to deploy
         run: |
