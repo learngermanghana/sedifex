@@ -36,13 +36,10 @@ export { v1IntegrationBookings } from './integrationBookings'
 // Recurring Cloud Scheduler jobs and automatic SMS pipelines are intentionally
 // not exported. Sedifex keeps manual/user-triggered communication paths while
 // avoiding background Cloud Run invocations when the product is lightly used.
-export { notifyUnpaidBookingCreated } from './bookingEmailNotifications'
-export { automateBookingEmailOnWrite } from './bookingEmailAutomation'
 export {
   getAutomationCenterState,
   saveAutomationCenterSettings,
 } from './automationCenter'
-export { automateCustomerPortalOnBookingWrite } from './customerPortalBookingAutomation'
 export { runEventCommunicationsNow } from './eventCommunications'
 export {
   sendEventContractForSignature,
