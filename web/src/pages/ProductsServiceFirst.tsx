@@ -933,6 +933,12 @@ export default function ProductsServiceFirst({
               ) : null}
             </div>
 
+            <details className="products-page__advanced" defaultOpen={Boolean(editingId)}>
+              <summary>
+                <span>Advanced details</span>
+                <small>Stock, scheduling, course setup, and optional business fields</small>
+              </summary>
+              <div className="products-page__advanced-fields">
             {!behavesLikeService ? (
               <>
                 <div className="field">
@@ -982,6 +988,8 @@ export default function ProductsServiceFirst({
                 <div className="field"><label className="field__label" htmlFor="course-mode">Mode</label><select id="course-mode" value={draft.courseMode} onChange={event => updateDraft('courseMode', event.target.value)}><option value="online">Online</option><option value="in_person">In person</option><option value="hybrid">Hybrid</option></select></div>
               </>
             ) : null}
+              </div>
+            </details>
             <div className="field">
               <div className="products-page__label-row">
                 <label className="field__label" htmlFor="item-description">{behavesLikeService ? 'Description' : 'Product description'}</label>
