@@ -1,3 +1,5 @@
+import CatalogPricesEditor, { emptyPrice, type PriceDraft } from '../components/CatalogPricesEditor'
+import { normalizeCatalogPrices, readCatalogPrices, formatCatalogPrice } from '../../../shared/catalogPrices'
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
@@ -33,7 +35,7 @@ type Draft = {
   itemType: ItemFormType
   category: string
   subcategory: string
-  price: string
+  prices: PriceDraft[]
   costPrice: string
   description: string
   sku: string
@@ -82,7 +84,7 @@ const blankDraft: Draft = {
   itemType: 'product',
   category: PRODUCT_CATEGORY,
   subcategory: '',
-  price: '',
+  prices: [emptyPrice()],
   costPrice: '',
   description: '',
   sku: '',
@@ -202,8 +204,7 @@ function buildAiDescriptionPrompt(draft: Draft): string {
     name: titleCase(draft.name.trim()),
     itemType: draft.itemType,
     category: normalizeCategory(draft.category, draft.itemType),
-    price: cleanNumber(draft.price),
-    currency: 'GHS',
+    prices: draft.prices,
     sku: draft.sku.trim() || null,
     openingStock: cleanNumber(draft.openingStock),
     expiryDate: draft.expiryDate || null,
@@ -312,8 +313,8 @@ function generateItemDescription(draft: Draft): string {
     const duration = draft.duration.trim()
     const mode = draft.courseMode === 'online' ? 'online' : draft.courseMode === 'hybrid' ? 'in online and in-person formats' : 'in person'
     const classTimes = draft.preferredTimes.trim() || draft.classTimes.trim()
-    const fee = cleanNumber(draft.price)
-    const feeText = fee !== null ? `Course fee: GHS ${fee.toFixed(2)}.` : ''
+    const fee = normalizeCatalogPrices(draft.prices)[0]
+    const feeText = fee ? `Course fee: ${formatCatalogPrice(fee)}.` : ''
     const intro = `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical guidance, steady progress, and skills they can apply with confidence.`
     const details = `Classes are offered ${mode}${(draft.branch.trim() || locationText) ? ` at ${draft.branch.trim() || locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}${duration ? `, over ${duration}` : ''}.`
     const benefits = ['- Learn through a structured programme that is easy to understand and follow.', '- Build confidence with lessons focused on practical progress, not only theory.', '- Register through the store and keep payment or enquiry records in one place.']
@@ -329,11 +330,11 @@ function generateItemDescription(draft: Draft): string {
     return cleanSavedDescription([intro, booking, ...benefits, durationText, 'Best for: customers who want reliable service with an easy booking process.'].filter(Boolean).join('\n\n'))
   }
 
-  const fee = cleanNumber(draft.price)
+  const fee = normalizeCatalogPrices(draft.prices)[0]
   const stockCount = cleanNumber(draft.openingStock)
   const angle = getProductDescriptionAngle(itemName, category)
   const categoryPhrase = category === PRODUCT_CATEGORY ? 'product' : `${category.toLowerCase()} item`
-  const priceText = fee !== null ? `Price: GHS ${fee.toFixed(2)}.` : ''
+  const priceText = fee ? `Price: ${formatCatalogPrice(fee)}.` : ''
   const stockText = stockCount !== null ? `Current stock: ${stockCount} available before new sales are recorded.` : ''
   const skuText = draft.sku.trim() ? `SKU / code: ${draft.sku.trim()}.` : ''
   const expiryText = draft.expiryDate ? `Expiry date: ${draft.expiryDate}.` : ''
@@ -385,7 +386,8 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     description: typeof data.description === 'string' && data.description.trim() ? cleanSavedDescription(data.description) : null,
     sku: itemType === 'product' && typeof data.sku === 'string' && data.sku.trim() ? data.sku.trim() : null,
     barcode: itemType === 'product' && typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : null,
-    price: cleanNumber(data.price),
+    price: data.price == null ? null : cleanNumber(data.price),
+    prices: readCatalogPrices(data),
     costPrice: itemType === 'product' ? cleanNumber(data.costPrice) : null,
     stockCount: itemType === 'product' ? cleanNumber(data.stockCount) : null,
     reorderPoint: itemType === 'product' ? cleanNumber(data.reorderPoint ?? data.reorderLevel) : null,
@@ -438,9 +440,10 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const behavesLikeService = draft.itemType !== 'product'
   const name = titleCase(draft.name)
   const category = normalizeCategory(draft.category, draft.itemType)
-  const price = cleanNumber(draft.price)
+  const prices = normalizeCatalogPrices(draft.prices, true)
+  // Legacy POS/payment readers are GHS-only. Never relabel another currency as cedis.
+  const price = prices.find(row => row.currencyCode === 'GHS')?.amount ?? null
   if (!name) throw new Error('Name is required.')
-  if (price === null) throw new Error('Price is required.')
   if (isService && !category) throw new Error('Service category is required.')
   if (isService && !['book_now', 'request_quote'].includes(draft.serviceKind === 'quote_request' ? 'request_quote' : 'book_now')) {
     throw new Error('Service sales mode is required.')
@@ -484,6 +487,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
     description: description || null,
     price,
     currency,
+    prices,
     costPrice: behavesLikeService ? null : cleanNumber(draft.costPrice),
     sku: behavesLikeService ? null : draft.sku.trim() || null,
     barcode: behavesLikeService ? null : draft.sku.trim() || null,
@@ -665,7 +669,7 @@ export default function ProductsServiceFirst() {
       itemType,
       category: normalizeCategory(item.category, itemType),
       subcategory: item.subcategory ?? '',
-      price: typeof item.price === 'number' ? String(item.price) : '',
+      prices: readCatalogPrices(item).length ? readCatalogPrices(item).map(price => ({ ...price, amount: String(price.amount) })) : [emptyPrice()],
       costPrice: itemType === 'product' && typeof item.costPrice === 'number' ? String(item.costPrice) : '',
       description: item.description ?? '',
       sku: itemType === 'product' ? item.sku ?? item.barcode ?? '' : '',
@@ -856,10 +860,7 @@ export default function ProductsServiceFirst() {
               existingCategories={categoryOptions}
             />
 
-            <div className="field">
-              <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
-              <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
-            </div>
+            <CatalogPricesEditor prices={draft.prices} onChange={prices => setDraft(current => ({ ...current, prices }))} />
 
             {!behavesLikeService ? (
               <>
@@ -1034,7 +1035,7 @@ export default function ProductsServiceFirst() {
                     </div>
                     <div className="products-page__list-meta">
                       <span className="products-page__meta-label">Price</span>
-                      <span>{formatMoney(item.price)}</span>
+                      <span>{readCatalogPrices(item).map(price => `${price.currencyCode} ${price.amount.toLocaleString()}`).join(' · ') || '—'}</span>
                     </div>
                   </header>
 

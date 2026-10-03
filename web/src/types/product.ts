@@ -1,3 +1,4 @@
+import type { CatalogPrice } from '../../../shared/catalogPrices'
 export type ItemType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
 
 export type Product = {
@@ -9,6 +10,7 @@ export type Product = {
   sku: string | null
   barcode: string | null
   price: number | null
+  prices?: CatalogPrice[]
   costPrice?: number | null
   stockCount: number | null
   reorderPoint: number | null

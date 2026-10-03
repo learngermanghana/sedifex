@@ -22,7 +22,8 @@
     "backfill-public-catalog": "node scripts/backfillPublicProducts.js",
     "backfill-product-normalization": "node scripts/backfillProductNormalization.js",
     "backfill-customer-identity": "node scripts/backfillCustomerIdentity.js",
-    "backfill-reporting-aggregates": "node scripts/backfillReportingAggregates.js"
+    "backfill-reporting-aggregates": "node scripts/backfillReportingAggregates.js",
+    "test:catalog-prices": "node test/catalogPrices.test.js && node test/integrationProductsPrices.test.js"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",

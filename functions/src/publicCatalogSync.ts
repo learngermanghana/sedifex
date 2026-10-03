@@ -1,3 +1,4 @@
+import { catalogPriceFields } from './catalogPrices'
 import * as functions from 'firebase-functions/v1'
 import { admin, defaultDb as db } from './firestore'
 import { resolvePublicationTimestampCandidate } from './catalogPublication'
@@ -269,6 +270,7 @@ function publicPayload(
     description: text(data.description),
     category,
     price: typeof data.price === 'number' ? data.price : null,
+    ...catalogPriceFields(data),
     imageUrl: text(data.imageUrl),
     imageUrls: toArray(data.imageUrls),
     imageAlt: text(data.imageAlt),

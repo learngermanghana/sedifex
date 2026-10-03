@@ -1,3 +1,4 @@
+import type { CatalogPrice } from './catalogPrices'
 export type IntegrationContractVersion = '2026-05-12'
 
 export interface IntegrationProduct {
@@ -9,6 +10,9 @@ export interface IntegrationProduct {
   category: string | null
   description: string | null
   price: number | null
+  prices?: CatalogPrice[]
+  pricesByCurrency?: Record<string, number>
+  availableCurrencies?: string[]
   stockCount: number | null
   itemType: 'product' | 'service' | 'course'
   imageUrl: string | null
@@ -23,7 +27,7 @@ export interface IntegrationProduct {
   isWebsiteVisible?: boolean | null
   categoryKey?: string | null
   categoryName?: string | null
-  currency?: 'GHS' | null
+  currency?: string | null
   serviceKind?: string | null
   duration?: string | null
   branch?: string | null

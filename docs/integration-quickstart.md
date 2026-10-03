@@ -1,5 +1,7 @@
 # Sedifex Integration Quickstart (Next.js + WordPress)
 
+For manual GHS/USD/GBP/EUR/NGN/ZAR and custom currency prices, see [Manual currency prices and website mapping](manual-currency-prices.md). The catalogue now includes `prices`, `pricesByCurrency` and `availableCurrencies`.
+
 Use this guide to auto-load products from Sedifex into either:
 
 - a **WordPress** site, or

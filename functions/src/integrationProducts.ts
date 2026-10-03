@@ -1,3 +1,4 @@
+import { catalogPriceFields, type CatalogPrice } from './catalogPrices'
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
@@ -23,8 +24,12 @@ type IntegrationProductItem = {
   name: string
   category?: string | null
   description?: string | null
-  price: number
-  priceMinor: number
+  price: number | null
+  priceMinor: number | null
+  currency: string
+  prices: CatalogPrice[]
+  pricesByCurrency: Record<string, number>
+  availableCurrencies: string[]
   stockCount?: number | null
   itemType: 'product' | 'service' | 'course'
   type: CatalogType
@@ -152,7 +157,7 @@ function getPriceMinor(record: Record<string, unknown>) {
       ?? record.fee,
   )
   if (majorValue !== null) return Math.max(0, Math.round(majorValue * 100))
-  return 0
+  return null
 }
 
 function getStockCount(record: Record<string, unknown>) {
@@ -192,7 +197,10 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
 
   const type = normalizeType(record.type ?? record.item_type ?? record.itemType ?? record.listingType, fallbackType)
   const itemType = itemTypeFromCatalogType(type)
-  const priceMinor = getPriceMinor(record)
+  const storedPriceMinor = getPriceMinor(record)
+  const catalogFields = catalogPriceFields({ ...record, price: record.price ?? (storedPriceMinor === null ? null : storedPriceMinor / 100) })
+  const legacyPrice = Array.isArray(record.prices) ? catalogFields.prices.find(price => price.currencyCode === 'GHS') : null
+  const priceMinor = Array.isArray(record.prices) ? (legacyPrice ? Math.round(legacyPrice.amount * 100) : null) : storedPriceMinor
   const imageUrls = getImageUrls(record)
   const order = numberValue(record.order)
   const brand = cleanIntegrationText(record.brand ?? record.manufacturerName ?? record.manufacturer ?? record.vendor, 180)
@@ -204,8 +212,10 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
     name,
     category: cleanIntegrationText(record.category, 180) || null,
     description: cleanIntegrationText(record.description, 1200) || null,
-    price: priceMinor / 100,
+    price: priceMinor === null ? null : priceMinor / 100,
     priceMinor,
+    currency: Array.isArray(record.prices) ? 'GHS' : cleanIntegrationText(record.currency, 20).toUpperCase() || 'GHS',
+    ...catalogFields,
     stockCount: getStockCount(record),
     itemType,
     type,

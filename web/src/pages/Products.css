@@ -795,3 +795,12 @@
 .products-page__list-field .category-select {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
+
+/* Compact manual currency prices. */
+.catalog-prices { grid-column: 1 / -1; min-width: 0; border: 1px solid var(--border, #dbe2ea); border-radius: 10px; padding: 1rem; }
+.catalog-prices legend { padding: 0 .35rem; font-weight: 600; }
+.catalog-prices__row { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-bottom: .75rem; }
+.catalog-prices__row > .field { flex: 1 1 180px; min-width: 0; }
+.catalog-prices__custom { display: flex; flex-wrap: wrap; gap: .75rem; width: 100%; }
+.catalog-prices__custom label { display: grid; gap: .35rem; flex: 1 1 140px; min-width: 0; }
+.catalog-prices input, .catalog-prices select { width: 100%; box-sizing: border-box; }

@@ -1,5 +1,7 @@
 # Sedifex Canonical Integration Contract
 
+For manual GHS/USD/GBP/EUR/NGN/ZAR and custom currency prices, see [Manual currency prices and website mapping](manual-currency-prices.md). The catalogue now includes `prices`, `pricesByCurrency` and `availableCurrencies`.
+
 This is the authoritative integration contract for all Sedifex partner-facing endpoints and webhooks.
 
 All integration documentation must link to this page and must not redefine contract semantics independently.
