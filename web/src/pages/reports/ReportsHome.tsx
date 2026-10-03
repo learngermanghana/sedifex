@@ -10,12 +10,12 @@ type ReportGroup = { title: string; reports: ReportItem[] }
 
 const reportGroups: ReportGroup[] = [
   { title: 'Business data', reports: [
-    { title: 'Sales & Cash Report', href: '/reports/sales-cash', description: 'Main business activity: POS, online, bookings, and manual cash records.', badge: 'Main' },
+    { title: 'Website and In App Sales', href: '/reports/sales-cash', description: 'Combined website and in-app sales activity, including Sell/POS, bookings, and manual cash records.', badge: 'Main' },
     { title: 'Settlement Report', href: '/reports/settlement', description: 'Paystack/Sedifex settlements, commission, split status, and merchant net.', badge: 'Finance' },
     { title: 'Inventory Report', href: '/reports/inventory', description: 'Products, services, stock levels, low-stock alerts, and value history.', badge: 'Stock' },
   ] },
   { title: 'Sales details', reports: [
-    { title: 'POS Sales Report', href: '/reports/pos-sales', description: 'Detailed internal sales from the Sell/POS workflow.', badge: 'POS' },
+    { title: 'In App Sales', href: '/reports/pos-sales', description: 'Detailed sales recorded inside Sedifex through the Sell/POS workflow.', badge: 'POS' },
     { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from connected websites and public storefront pages.', badge: 'Online' },
     { title: 'Bookings Report', href: '/reports/bookings', description: 'Service bookings, appointment status, payment status, and exports.', badge: 'Bookings' },
   ] },
