@@ -503,6 +503,7 @@ function problemId(item: QueueItem, kind: ProblemKind) {
 }
 
 async function recordProblem(item: QueueItem, booking: BookingContext, kind: ProblemKind, reason = '') {
+  if (kind === 'sender_not_configured') return
   const label = stageLabel(item.stage)
   const customer = customerName(booking.data) || 'the client'
   const id = problemId(item, kind)
