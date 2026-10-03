@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { getUsdGhsRates } from './currencyRates'
 
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL', { default: '' })
@@ -724,6 +725,7 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
 
     const responseItems: Array<Record<string, unknown>> = []
     let subtotal = 0
+    const currencyRates = await getUsdGhsRates({ refreshIfMissing: true })
 
     for (const rawItem of items) {
       const item = rawItem && typeof rawItem === 'object' ? rawItem as CheckoutPreviewItem : {}
@@ -743,12 +745,27 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         return
       }
 
-      const unitPrice = getItemPriceMinor(resolved.item)
-      if (unitPrice === null) {
+      const listedUnitPriceMinor = getItemPriceMinor(resolved.item)
+      if (listedUnitPriceMinor === null) {
         res.status(400).json({ error: 'checkout-item-price-missing', item_id: itemId, storeId })
         return
       }
 
+      const listedCurrency = (clean(resolved.item.currency, 20) || 'GHS').toUpperCase()
+      if (listedCurrency !== 'GHS' && listedCurrency !== 'USD') {
+        res.status(400).json({
+          error: 'unsupported-currency',
+          item_id: itemId,
+          storeId,
+          currency: listedCurrency,
+          message: 'Sedifex checkout currently supports item prices in GHS or USD only.',
+        })
+        return
+      }
+
+      const unitPrice = listedCurrency === 'USD'
+        ? Math.round((listedUnitPriceMinor / 100) * currencyRates.usdToGhs * 100)
+        : listedUnitPriceMinor
       const lineTotal = unitPrice * qty
       subtotal += lineTotal
 
@@ -758,6 +775,10 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         qty,
         unit_price: unitPrice,
         line_total: lineTotal,
+        currency: 'GHS',
+        listed_unit_price: listedUnitPriceMinor,
+        listed_currency: listedCurrency,
+        exchange_rate_usd_to_ghs: listedCurrency === 'USD' ? currencyRates.usdToGhs : null,
         type: resolved.type,
       })
     }
@@ -765,6 +786,8 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
     const payload = {
       pricing_version: '2026-05-12-v1',
       currency: 'GHS',
+      exchange_rate_usd_to_ghs: currencyRates.usdToGhs,
+      exchange_rate_updated_at: currencyRates.fetchedAt,
       subtotal,
       tax_total: 0,
       delivery_fee: 0,
