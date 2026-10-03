@@ -317,7 +317,7 @@ export default function CompactBusinessDashboard() {
 
   const availableWidgetIds = useMemo(() => {
     const ids: WidgetId[] = ['needs-attention', 'staff-activity']
-    if (industry === 'shop' || enabledModules.has('sell') || enabledModules.has('marketplace-orders')) ids.push('todays-sales')
+    if (industry === 'shop' || enabledModules.has('sell')) ids.push('todays-sales')
     if (enabledModules.has('bookings') || enabledModules.has('upcoming-events') || enabledModules.has('events')) ids.push('upcoming')
     if (enabledModules.has('invoices')) ids.push('outstanding-invoices')
     if (enabledModules.has('products')) ids.push('low-stock')
@@ -488,7 +488,7 @@ export default function CompactBusinessDashboard() {
     }
     return [
       { id: 'sales-today', label: "Today's sales", value: formatMoney(todaySalesTotal), hint: `${todaySales.length} POS sale${todaySales.length === 1 ? '' : 's'}` },
-      { id: 'orders-today', label: 'Orders today', value: String(todayOrders.length), hint: 'Website and marketplace orders' },
+      { id: 'orders-today', label: 'Orders today', value: String(todayOrders.length), hint: 'Connected website orders' },
       { id: 'low-stock', label: 'Low stock', value: String(lowStockItems.length), hint: 'Products needing attention' },
       { id: 'payments-due', label: 'Customer balance', value: formatMoney(customerOutstandingBalance), hint: customerBalanceHint },
     ]

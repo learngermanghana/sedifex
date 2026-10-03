@@ -23,7 +23,6 @@ type AgentItem = {
   stockCount: number | null
   imageUrl: string | null
   isPublished: boolean
-  isMarketplaceVisible: boolean
 }
 
 const STORE_ID_FIELDS = ['storeId', 'store_id', 'workspaceId', 'businessId'] as const
@@ -147,7 +146,6 @@ function normalizeItem(id: string, data: Record<string, unknown>): AgentItem {
     stockCount,
     imageUrl: imageUrl || null,
     isPublished: data.isPublished === true || data.status === 'published',
-    isMarketplaceVisible: data.isMarketplaceVisible === true,
   }
 }
 
@@ -438,7 +436,7 @@ export default function AskSedifexAgent({ enabled }: { enabled: boolean }) {
                           {isSelected ? <span className="ask-sedifex__selected-badge">Selected</span> : null}
                         </span>
                         <span className="ask-sedifex__item-meta">{formatPrice(item.price)} · {item.category}</span>
-                        <span className="ask-sedifex__item-note">{item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}{item.isMarketplaceVisible ? ' · Marketplace visible' : ''}</span>
+                        <span className="ask-sedifex__item-note">{item.itemType === 'product' ? `Stock: ${item.stockCount ?? 'not set'}` : titleCase(item.itemType)}</span>
                       </span>
                     </button>
                   )

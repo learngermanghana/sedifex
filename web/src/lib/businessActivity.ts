@@ -175,7 +175,7 @@ function buildRow(id: string, data: Record<string, unknown>, type: BusinessActiv
     canonicalOrderStatus: normalizeOrderStatus(orderStatus, paymentStatus),
     settlementScope,
     sourceChannel,
-    sourceLabel: asText(data.sourceLabel ?? data.source_label ?? metadata.sourceLabel, sourceChannel === 'quick_pay_cash' ? 'Store Cash / Manual' : sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Sedifex Market' : sourceChannel),
+    sourceLabel: asText(data.sourceLabel ?? data.source_label ?? metadata.sourceLabel, sourceChannel === 'quick_pay_cash' ? 'Store Cash / Manual' : sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Retired online channel' : sourceChannel),
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.saleDate ?? data.updatedAt),
     updatedAt: toDate(data.updatedAt),
     storeOnly,

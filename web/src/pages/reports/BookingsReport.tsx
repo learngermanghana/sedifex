@@ -42,7 +42,7 @@ type SummaryCard = { label: string; value: string | number; helper: string; tone
 
 function sourceLabel(sourceChannel: string) {
   if (sourceChannel === 'client_website') return 'Client website'
-  if (sourceChannel === 'sedifex_market') return 'Sedifex Market'
+  if (sourceChannel === 'sedifex_market') return 'Retired online channel'
   if (sourceChannel === 'sedifex_custom_page') return 'Sedifex public page'
   if (sourceChannel === 'manual_admin') return 'Manual/admin'
   return sourceChannel.replace(/_/g, ' ')
@@ -195,10 +195,10 @@ export default function BookingsReport() {
   useEffect(() => {
     if (!storeId) { setRootBookings([]); setStoreBookings([]); setSelectedIds([]); setDeletingIds([]); return undefined }
     const unsubRoot = onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => {
-      setRootBookings(snapshot.docs.map(docSnap => mapBooking(docSnap.id, docSnap.data() as Record<string, unknown>, 'root')))
+      setRootBookings(snapshot.docs.map(docSnap => mapBooking(docSnap.id, docSnap.data() as Record<string, unknown>, 'root')).filter(row => row.sourceChannel !== 'sedifex_market'))
     })
     const unsubStore = onSnapshot(collection(db, 'stores', storeId, 'integrationBookings'), snapshot => {
-      setStoreBookings(snapshot.docs.map(docSnap => mapBooking(docSnap.id, docSnap.data() as Record<string, unknown>, 'store')))
+      setStoreBookings(snapshot.docs.map(docSnap => mapBooking(docSnap.id, docSnap.data() as Record<string, unknown>, 'store')).filter(row => row.sourceChannel !== 'sedifex_market'))
     })
     return () => { unsubRoot(); unsubStore() }
   }, [storeId])
@@ -307,7 +307,7 @@ export default function BookingsReport() {
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <label className="block text-sm font-semibold text-slate-700">Date range<select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3" value={range} onChange={event => setRange(event.target.value)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="month">This month</option><option value="last_month">Last month</option><option value="all">All time</option></select></label>
-        <label className="block text-sm font-semibold text-slate-700">Source<select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3" value={source} onChange={event => setSource(event.target.value)}><option value="all">All sources</option><option value="sedifex_market">Sedifex Market</option><option value="client_website">Client website</option><option value="sedifex_custom_page">Sedifex public page</option><option value="manual_admin">Manual/admin</option></select></label>
+        <label className="block text-sm font-semibold text-slate-700">Source<select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3" value={source} onChange={event => setSource(event.target.value)}><option value="all">All sources</option><option value="client_website">Client website</option><option value="sedifex_custom_page">Sedifex public page</option><option value="manual_admin">Manual/admin</option></select></label>
         <label className="block text-sm font-semibold text-slate-700">Status<select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="paid">Paid</option><option value="direct_confirmed">Direct payment — confirmed</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option></select></label>
         <label className="block text-sm font-semibold text-slate-700">Sync state<select className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3" value={sync} onChange={event => setSync(event.target.value)}><option value="all">All sync states</option><option value="pending">Sync pending</option><option value="synced">Synced</option><option value="not_ready">Not ready / not configured</option></select></label>
       </div>

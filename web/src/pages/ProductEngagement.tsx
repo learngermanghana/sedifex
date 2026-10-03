@@ -198,7 +198,7 @@ export default function ProductEngagement() {
         <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Cross-platform engagement</p>
         <h2 style={{ color: '#4338CA', margin: 0 }}>Product Engagement</h2>
         <p style={{ color: '#475569', margin: '8px 0 0' }}>
-          Moderate product comments coming from Sedifex Market and connected merchant websites. Approved public comments can appear across platforms that use the shared engagement API.
+          Moderate product comments coming from connected merchant websites. Approved public comments can appear across platforms that use the shared engagement API.
         </p>
       </div>
 

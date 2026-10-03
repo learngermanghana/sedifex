@@ -4,7 +4,6 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import App from './App'
 import ShellLayout from './layout/ShellLayout'
 import Dashboard from './pages/Dashboard'
-import MarketplaceOrders from './pages/MarketplaceOrdersV2'
 import DashboardHub from './pages/DashboardHub'
 import Products from './pages/ProductsWorkspace'
 import Sell from './pages/Sell'
@@ -151,8 +150,7 @@ const router = createBrowserRouter([
       { path: 'bookings/availability', element: <Navigate to="/upcoming-events" replace /> },
       { path: 'upcoming-events', element: <BookingsAvailability /> },
       { path: 'bookings/:bookingId', element: <BookingEditor /> },
-      { path: 'online-orders', element: <MarketplaceOrders /> },
-      { path: 'marketplace-orders', element: <MarketplaceOrders /> },
+      { path: 'online-orders', element: <Navigate to="/dashboard" replace /> },
       { path: 'product-engagement', element: <Navigate to="/dashboard" replace /> },
       { path: 'student-registration', element: <StudentRegistration /> },
       { path: 'volunteers', element: <VolunteerApplications /> },

@@ -86,7 +86,7 @@ const normalizePaymentStatus = (value: unknown) => {
 
 const normalizeSource = (raw: unknown) => {
   const value = typeof raw === "string" ? raw.toLowerCase() : "";
-  if (value.includes("market")) return "Sedifex Market";
+  if (value.includes("market")) return "Retired online channel";
   if (value.includes("website")) return "Website";
   if (value.includes("manual")) return "Manual";
   return "Website";

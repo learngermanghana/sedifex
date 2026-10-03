@@ -30,7 +30,6 @@ type SlotRecord = {
   depositAmount?: number
   location?: string
   description?: string
-  marketplaceEnabled: boolean
   scheduleStatus: ScheduleStatus
   startAt: Date | null
   endAt: Date | null
@@ -122,7 +121,6 @@ export default function BookingsAvailability() {
   const [depositAmount, setDepositAmount] = useState('')
   const [location, setLocation] = useState('')
   const [description, setDescription] = useState('')
-  const [marketplaceEnabled, setMarketplaceEnabled] = useState(true)
   const [imageUrl, setImageUrl] = useState('')
   const [imageAlt, setImageAlt] = useState('')
   const [autoLoadedImageItemId, setAutoLoadedImageItemId] = useState('')
@@ -168,7 +166,6 @@ export default function BookingsAvailability() {
     setDepositAmount('')
     setLocation('')
     setDescription('')
-    setMarketplaceEnabled(true)
     setImageUrl('')
     setImageAlt('')
     setAutoLoadedImageItemId('')
@@ -240,7 +237,6 @@ export default function BookingsAvailability() {
         depositAmount: typeof data.depositAmount === 'number' ? data.depositAmount : undefined,
         location: typeof data.location === 'string' ? data.location : undefined,
         description: typeof data.description === 'string' ? data.description : undefined,
-        marketplaceEnabled: typeof data.marketplaceEnabled === 'boolean' ? data.marketplaceEnabled : true,
         imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : typeof attributes.imageUrl === 'string' ? attributes.imageUrl : undefined,
         imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : typeof attributes.imageAlt === 'string' ? attributes.imageAlt : undefined,
       } as SlotRecord
@@ -315,7 +311,6 @@ export default function BookingsAvailability() {
     setDepositAmount(typeof slot.depositAmount === 'number' ? String(slot.depositAmount) : '')
     setLocation(slot.location || '')
     setDescription(slot.description || '')
-    setMarketplaceEnabled(slot.marketplaceEnabled)
     setImageUrl(slot.imageUrl || '')
     setImageAlt(slot.imageAlt || '')
     setAutoLoadedImageItemId('')
@@ -377,7 +372,6 @@ export default function BookingsAvailability() {
         depositAmount: depositAmount.trim() ? Number(depositAmount) : null,
         location: location.trim() || null,
         description: description.trim() || null,
-        marketplaceEnabled,
         isPublic: true,
         visibleOnWebsite: true,
         imageUrl: resolvedImageUrl || null,
@@ -407,7 +401,7 @@ export default function BookingsAvailability() {
     } finally {
       setSaving(false)
     }
-  }, [capacity, depositAmount, description, editingSlotId, endAt, eventDate, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, marketplaceEnabled, price, registrationMode, resetForm, saving, scheduleStatus, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
+  }, [capacity, depositAmount, description, editingSlotId, endAt, eventDate, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, price, registrationMode, resetForm, saving, scheduleStatus, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -459,7 +453,6 @@ export default function BookingsAvailability() {
           <label><span>Deposit amount (optional)</span><input type="number" min={0} step="0.01" value={depositAmount} onChange={event => setDepositAmount(event.target.value)} /></label>
           <label><span>Location (optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>
           <label><span>Description (optional)</span><input value={description} onChange={event => setDescription(event.target.value)} /></label>
-          <label><span>Marketplace enabled</span><select value={marketplaceEnabled ? 'yes' : 'no'} onChange={event => setMarketplaceEnabled(event.target.value === 'yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>
           <div className="availability-photo-picker"><span>Photo upload</span><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => { const nextFile = event.target.files?.[0] ?? null; setPhotoFile(nextFile); setPhotoStatus(nextFile ? 'selected' : 'idle'); setInfoMessage(nextFile ? 'Photo selected. It will upload when you save the event.' : null) }} /><div className="availability-photo-actions"><button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={saving || photoStatus === 'uploading'}>{photoFile ? 'Change photo' : 'Upload photo'}</button>{photoFile && <button type="button" className="btn btn-secondary" onClick={() => { setPhotoFile(null); setPhotoStatus('idle'); setInfoMessage(null); if (fileInputRef.current) fileInputRef.current.value = '' }} disabled={saving || photoStatus === 'uploading'}>Remove photo</button>}</div><p className="availability-photo-name">{photoStatus === 'uploading' ? 'Uploading photo…' : photoFile ? `Selected: ${photoFile.name}` : imageUrl.trim() ? 'Using image from selected item or image URL.' : 'No file selected yet.'}</p>{previewUrl && <SafeFirebaseImage className="availability-photo-preview" src={previewUrl} alt="Selected upload preview" />}{!previewUrl && imageUrl.trim() && <SafeFirebaseImage className="availability-photo-preview" src={imageUrl.trim()} alt={imageAlt.trim() || selectedService?.name || 'Event image preview'} />}</div>
           <label><span>Or image URL</span><input value={imageUrl} onChange={event => { setImageUrl(event.target.value); setAutoLoadedImageItemId('') }} placeholder="https://..." /></label>
           <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short photo description" /></label>

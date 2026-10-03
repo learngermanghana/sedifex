@@ -45,7 +45,6 @@ export type Product = {
   courseMode?: string | null
   isPublished?: boolean | null
   status?: 'draft' | 'published' | null
-  isMarketplaceVisible?: boolean | null
   isWebsiteVisible?: boolean | null
   categoryKey?: string | null
   categoryName?: string | null

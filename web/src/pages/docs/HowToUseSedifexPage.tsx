@@ -14,7 +14,7 @@ export default function HowToUseSedifexPage() {
           choose a business type, then tick only the pages that should appear in the sidebar.
         </p>
         <ul>
-          <li><strong>Daily work:</strong> Dashboard, Reports, Items, Sell, Marketplace Orders, Customers, and Bookings.</li>
+          <li><strong>Daily work:</strong> Dashboard, Reports, Items, Sell, Customers, and Bookings.</li>
           <li><strong>Documents, payments & expenses:</strong> Quick Pay, Invoices, Receipts, Expenses, Settlement, Donor management, and Funds ledger.</li>
           <li><strong>Bookings, registration & cases:</strong> Upcoming events, Student registration, Volunteers, and Support requests.</li>
           <li><strong>Website & marketing:</strong> Integrations, Website Builder, Blog, SMS, and Bulk email.</li>
@@ -24,7 +24,7 @@ export default function HowToUseSedifexPage() {
       <section>
         <h2>Pick your workspace type</h2>
         <ul>
-          <li><strong>Retail / Shop:</strong> Items, Sell, Marketplace Orders, Quick Pay, Customers, Bookings, Website Builder, and Reports.</li>
+          <li><strong>Retail / Shop:</strong> Items, Sell, Quick Pay, Customers, Bookings, Website Builder, and Reports.</li>
           <li><strong>Travel:</strong> Booking, Customers, Upcoming events, Online Orders, Trip promos, Trip gallery, and Contact links.</li>
           <li><strong>NGO:</strong> Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, and Petty expenses.</li>
           <li><strong>School:</strong> Students, Classes, Upcoming classes, Student registration, Registrations & Orders, Admissions promo, and School gallery.</li>
@@ -34,12 +34,12 @@ export default function HowToUseSedifexPage() {
       <section>
         <h2>Core navigation by role</h2>
         <p>
-          <strong>Owner</strong>: Dashboard, Reports, Items, Sell, Marketplace Orders, Quick Pay, invoices,
+          <strong>Owner</strong>: Dashboard, Reports, Items, Sell, Quick Pay, invoices,
           receipts, expenses, customers or industry aliases, bookings, upcoming events, settlement,
           integrations, Blog, Website Builder, SMS, Bulk email, Donor management, Funds ledger, and Account.
         </p>
         <p>
-          <strong>Staff</strong>: Reports, Sell, Marketplace Orders, Quick Pay, invoices, receipts, expenses,
+          <strong>Staff</strong>: Reports, Sell, Quick Pay, invoices, receipts, expenses,
           customers or industry aliases, bookings, upcoming events, Blog, Website Builder sections, Donor
           management, and Funds ledger where enabled.
         </p>
@@ -59,7 +59,7 @@ export default function HowToUseSedifexPage() {
         <ol>
           <li>Confirm workspace, billing, staff access, public profile, and navigation in <strong>Account</strong>.</li>
           <li>Load catalog records in <strong>Items</strong> and use <strong>Ask Sedifex</strong> for item search, edit prep, and image upload.</li>
-          <li>Use <strong>Sell</strong>, <strong>Quick Pay</strong>, <strong>Invoices</strong>, <strong>Receipts</strong>, and <strong>Marketplace Orders</strong> for sales and payments.</li>
+          <li>Use <strong>Sell</strong>, <strong>Quick Pay</strong>, <strong>Invoices</strong>, <strong>Receipts</strong> for sales and payments.</li>
           <li>Use <strong>Bookings</strong>, <strong>Upcoming events</strong>, registrations, volunteers, or support requests for operational intake.</li>
           <li>Build the public site in <strong>Website Builder</strong> and connect APIs, checkout, gallery, and email from <strong>Integrations</strong>.</li>
         </ol>
