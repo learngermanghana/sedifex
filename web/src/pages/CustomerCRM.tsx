@@ -962,8 +962,18 @@ export default function CustomerCRM() {
                 </div>
                 <div className="customer-crm__profile-actions">
                   <Link to={`/sell?customerId=${encodeURIComponent(selectedCustomer.id)}`}>Start sale</Link>
-                  <Link to="/invoices">Create invoice</Link>
-                  <Link to="/bookings/new">Add booking</Link>
+                  <Link
+                    to="/invoices"
+                    state={{ customer: { name: customerName(selectedCustomer), phone: selectedCustomer.phone || '', email: selectedCustomer.email || '', address: '' } }}
+                  >
+                    Create invoice
+                  </Link>
+                  <Link
+                    to="/bookings/new"
+                    state={{ customer: { name: customerName(selectedCustomer), phone: selectedCustomer.phone || '', email: selectedCustomer.email || '' } }}
+                  >
+                    Add booking
+                  </Link>
                   <button type="button" onClick={() => setActiveTab('messages')}>Message</button>
                   <Link className="customer-crm__secondary" to={`/customers/manage?edit=${encodeURIComponent(selectedCustomer.id)}`}>Edit</Link>
                 </div>
