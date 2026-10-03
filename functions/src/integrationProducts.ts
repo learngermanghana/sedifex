@@ -25,6 +25,7 @@ type IntegrationProductItem = {
   description?: string | null
   price: number
   priceMinor: number
+  currency: string
   stockCount?: number | null
   itemType: 'product' | 'service' | 'course'
   type: CatalogType
@@ -206,6 +207,7 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
     description: cleanIntegrationText(record.description, 1200) || null,
     price: priceMinor / 100,
     priceMinor,
+    currency: cleanIntegrationText(record.currency, 12).toUpperCase() || 'GHS',
     stockCount: getStockCount(record),
     itemType,
     type,
