@@ -3,6 +3,7 @@
 .reports-toolbar{display:flex;justify-content:flex-end}
 .reports-search{max-width:340px;width:100%}
 .reports-section-title{margin-bottom:.75rem}
+.reports-section:first-of-type .reports-row{background:#fff;border-color:#cbd5e1}
 .reports-list{display:flex;flex-direction:column;gap:.65rem}
 .reports-row{display:flex;justify-content:space-between;gap:.9rem;border:1px solid #e2e8f0;border-radius:14px;padding:.8rem;background:#f8fafc}
 .reports-row-main{display:flex;flex-direction:column;gap:.35rem}
