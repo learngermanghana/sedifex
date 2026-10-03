@@ -26,7 +26,6 @@ export interface IntegrationProduct {
   currency?: string | null
   priceGhs?: number | null
   priceUsd?: number | null
-  exchangeRateUsdToGhs?: number | null
   exchangeRateUpdatedAt?: string | null
   serviceKind?: string | null
   duration?: string | null
@@ -143,7 +142,6 @@ export interface IntegrationProductsResponse {
   storeId: string
   products: IntegrationProduct[]
   currencyConversion?: {
-    usdToGhs: number
     updatedAt: string
     refreshCadence: 'weekly_monday'
     provider: string
