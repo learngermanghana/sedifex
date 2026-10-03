@@ -672,6 +672,8 @@ export default function CustomerCRM() {
         {crmData.bookings.map(row => {
           const bookingId = firstText(row.data, ['bookingId', 'booking_id']) || (row.source?.includes('order') ? '' : row.id)
           const serviceName = firstText(row.data, ['serviceName', 'booking.serviceName', 'metadata.serviceName']) || 'Service booking'
+          const bookingStatus = firstText(row.data, ['bookingStatus', 'status'])
+          const paymentStatus = firstText(row.data, ['paymentStatus', 'payment.status'])
           return (
             <article className="customer-crm__record" key={`${row.source}-${row.id}`}>
               <div>
@@ -683,8 +685,8 @@ export default function CustomerCRM() {
                 <span>{firstText(row.data, ['bookingDate', 'date', 'booking.preferredDate']) || formatDate(readPath(row.data, 'createdAt'))}</span>
               </div>
               <div className="customer-crm__record-statuses">
-                <StatusBadge status={firstText(row.data, ['bookingStatus', 'status'])} kind="booking" />
-                <StatusBadge status={firstText(row.data, ['paymentStatus', 'payment.status'])} kind="payment" />
+                {bookingStatus ? <StatusBadge status={bookingStatus} kind="booking" /> : <span>Not recorded</span>}
+                {paymentStatus ? <StatusBadge status={paymentStatus} kind="payment" /> : <span>Payment not recorded</span>}
               </div>
             </article>
           )
@@ -698,12 +700,15 @@ export default function CustomerCRM() {
     if (!crmData.invoices.length) return <EmptySection>No invoices have been linked to this customer.</EmptySection>
     return (
       <div className="customer-crm__records">
-        {crmData.invoices.map(row => (
-          <article className="customer-crm__record" key={row.id}>
-            <div><Link className="customer-crm__record-link" to="/invoices">{firstText(row.data, ['invoiceNumber']) || row.id}</Link><span>{formatMoney(firstNumber(row.data, ['total']))}</span></div>
-            <div className="customer-crm__record-statuses"><StatusBadge status={firstText(row.data, ['status']) || 'pending'} /><span>Due {firstText(row.data, ['dueDate']) || 'not set'}</span></div>
-          </article>
-        ))}
+        {crmData.invoices.map(row => {
+          const invoiceStatus = firstText(row.data, ['status'])
+          return (
+            <article className="customer-crm__record" key={row.id}>
+              <div><Link className="customer-crm__record-link" to="/invoices">{firstText(row.data, ['invoiceNumber']) || row.id}</Link><span>{formatMoney(firstNumber(row.data, ['total']))}</span></div>
+              <div className="customer-crm__record-statuses">{invoiceStatus ? <StatusBadge status={invoiceStatus} /> : <span>Draft</span>}<span>Due {firstText(row.data, ['dueDate']) || 'not set'}</span></div>
+            </article>
+          )
+        })}
         <Link className="customer-crm__section-link" to="/invoices">Open invoices</Link>
       </div>
     )
