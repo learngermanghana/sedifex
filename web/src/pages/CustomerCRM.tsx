@@ -670,13 +670,16 @@ export default function CustomerCRM() {
     return (
       <div className="customer-crm__records">
         {crmData.bookings.map(row => {
-          const bookingId = firstText(row.data, ['bookingId', 'booking_id']) || row.id
+          const bookingId = firstText(row.data, ['bookingId', 'booking_id']) || (row.source?.includes('order') ? '' : row.id)
+          const serviceName = firstText(row.data, ['serviceName', 'booking.serviceName', 'metadata.serviceName']) || 'Service booking'
           return (
             <article className="customer-crm__record" key={`${row.source}-${row.id}`}>
               <div>
-                <Link className="customer-crm__record-link" to={`/bookings/${encodeURIComponent(bookingId)}`}>
-                  {firstText(row.data, ['serviceName', 'booking.serviceName', 'metadata.serviceName']) || 'Service booking'}
-                </Link>
+                {bookingId ? (
+                  <Link className="customer-crm__record-link" to={`/bookings/${encodeURIComponent(bookingId)}`}>{serviceName}</Link>
+                ) : (
+                  <strong>{serviceName}</strong>
+                )}
                 <span>{firstText(row.data, ['bookingDate', 'date', 'booking.preferredDate']) || formatDate(readPath(row.data, 'createdAt'))}</span>
               </div>
               <div className="customer-crm__record-statuses">
