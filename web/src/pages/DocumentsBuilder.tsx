@@ -438,12 +438,17 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
 
           <div className="documents-generator__actions">
             {mode === 'invoice' ? <button type="button" className="button button--primary" disabled={saving} onClick={() => void saveInvoice()}>{saving ? 'Saving…' : 'Save invoice'}</button> : <button type="button" className="button button--primary" disabled={saving} onClick={() => void saveReceipt()}>{saving ? 'Saving…' : 'Save receipt'}</button>}
-            <button type="button" className="button button--ghost" onClick={printPreview}>Print {mode}</button>
-            <button type="button" className="button button--ghost" onClick={generatePdf}>Download as PDF</button>
-            {mode === 'invoice' ? <button type="button" className="button button--ghost" disabled={saving} onClick={() => void markPaid()}>Mark as paid</button> : null}
-            {mode === 'invoice' ? <button type="button" className="button button--ghost" disabled={saving} onClick={() => void createReceiptFromPaidInvoice()}>Create receipt from paid invoice</button> : null}
+            <details className="documents-generator__more">
+              <summary className="button button--ghost">More</summary>
+              <div className="documents-generator__more-panel">
+                <button type="button" onClick={printPreview}>Print {mode}</button>
+                <button type="button" onClick={generatePdf}>Prepare PDF</button>
+                {mode === 'invoice' ? <button type="button" disabled={saving} onClick={() => void markPaid()}>Mark as paid</button> : null}
+                {mode === 'invoice' ? <button type="button" disabled={saving} onClick={() => void createReceiptFromPaidInvoice()}>Create receipt from paid invoice</button> : null}
+                {generated ? <a href={generated.url} download={generated.fileName}>Download {generated.fileName}</a> : null}
+              </div>
+            </details>
           </div>
-          {generated ? <a className="button button--ghost" href={generated.url} download={generated.fileName}>Download {generated.fileName}</a> : null}
           {message ? <p className="status status--success">{message}</p> : null}
           {error ? <p className="status status--error" role="alert">{error}</p> : null}
         </div>
