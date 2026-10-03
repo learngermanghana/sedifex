@@ -334,6 +334,8 @@ function createInviteId(): string {
   return Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14)
 }
 
+const CUSTOMER_FILTER_KEY_PREFIX = 'sedifex-customer-filters-'
+
 function normalizeColorInput(value: string): string {
   const trimmed = value.trim()
   if (!trimmed) return '#4f46e5'
@@ -369,6 +371,7 @@ export default function Customers() {
   const [quickFilter, setQuickFilter] = useState<
     'all' | 'recent' | 'noPurchases' | 'highValue' | 'untagged' | 'hasDebt'
   >('all')
+  const filterStoreRef = useRef<string | null>(null)
   const [messageChannel, setMessageChannel] = useState<MessageChannel | null>(null)
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
@@ -391,6 +394,42 @@ export default function Customers() {
     if (!intakeLink) return null
     return `${intakeLink}/qr`
   }, [intakeLink])
+
+  useEffect(() => {
+    if (!activeStoreId) {
+      filterStoreRef.current = null
+      return
+    }
+    if (filterStoreRef.current !== activeStoreId) {
+      filterStoreRef.current = activeStoreId
+      try {
+        const stored = JSON.parse(localStorage.getItem(`${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`) || '{}') as {
+          searchTerm?: unknown
+          quickFilter?: unknown
+          tagFilter?: unknown
+        }
+        const allowedQuickFilters = ['all', 'recent', 'noPurchases', 'highValue', 'untagged', 'hasDebt']
+        setSearchTerm(typeof stored.searchTerm === 'string' ? stored.searchTerm : '')
+        setQuickFilter(
+          typeof stored.quickFilter === 'string' && allowedQuickFilters.includes(stored.quickFilter)
+            ? stored.quickFilter as typeof quickFilter
+            : 'all',
+        )
+        setTagFilter(typeof stored.tagFilter === 'string' && stored.tagFilter ? stored.tagFilter : null)
+      } catch (storageError) {
+        console.warn('[customers] Unable to load filter preferences', storageError)
+      }
+      return
+    }
+    try {
+      localStorage.setItem(
+        `${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`,
+        JSON.stringify({ searchTerm, quickFilter, tagFilter }),
+      )
+    } catch (storageError) {
+      console.warn('[customers] Unable to save filter preferences', storageError)
+    }
+  }, [activeStoreId, quickFilter, searchTerm, tagFilter])
 
   useEffect(() => {
     const mode = searchParams.get('mode')

@@ -1,5 +1,6 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -59,6 +60,7 @@ function getDocumentIdFromRef(path: string) {
 
 export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
   const { storeId } = useActiveStore()
+  const location = useLocation()
   const [storeSnapshot, setStoreSnapshot] = useState<BusinessStoreSnapshot>(EMPTY_STORE)
   const [customer, setCustomer] = useState<DocumentCustomer>({ name: '', phone: '', email: '', address: '' })
   const [items, setItems] = useState<ItemRow[]>([createItemRow()])
@@ -91,6 +93,19 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
   useEffect(() => () => {
     if (generated?.url) URL.revokeObjectURL(generated.url)
   }, [generated])
+
+  useEffect(() => {
+    if (mode !== 'invoice') return
+    const state = location.state as { customer?: Partial<DocumentCustomer> } | null
+    if (!state?.customer) return
+    setCustomer(previous => ({
+      ...previous,
+      name: typeof state.customer?.name === 'string' ? state.customer.name : previous.name,
+      phone: typeof state.customer?.phone === 'string' ? state.customer.phone : previous.phone,
+      email: typeof state.customer?.email === 'string' ? state.customer.email : previous.email,
+      address: typeof state.customer?.address === 'string' ? state.customer.address : previous.address,
+    }))
+  }, [location.state, mode])
 
   useEffect(() => {
     let cancelled = false

@@ -568,3 +568,103 @@
     padding: 18px;
   }
 }
+
+
+.compact-dashboard__attention-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  background: #fffaf5;
+}
+
+.compact-dashboard__attention-strip.is-clear {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.compact-dashboard__attention-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.compact-dashboard__attention-heading span {
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.compact-dashboard__attention-heading strong {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #9a3412;
+  color: #fff;
+  font-size: 12px;
+}
+
+.compact-dashboard__attention-strip.is-clear .compact-dashboard__attention-heading span {
+  color: #047857;
+}
+
+.compact-dashboard__attention-strip.is-clear .compact-dashboard__attention-heading strong {
+  background: #047857;
+}
+
+.compact-dashboard__attention-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compact-dashboard__attention-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff;
+  color: #7c2d12;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compact-dashboard__attention-links a:hover,
+.compact-dashboard__attention-links a:focus-visible {
+  border-color: #fb923c;
+  box-shadow: 0 4px 12px rgba(124, 45, 18, .08);
+}
+
+.compact-dashboard__attention-strip > p {
+  margin: 0;
+  color: #047857;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .compact-dashboard__attention-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .compact-dashboard__attention-links {
+    width: 100%;
+  }
+
+  .compact-dashboard__attention-links a {
+    flex: 1 1 160px;
+  }
+}

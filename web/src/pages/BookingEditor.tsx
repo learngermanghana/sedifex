@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../firebase'
@@ -285,6 +285,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 export default function BookingEditor() {
   const { storeId } = useActiveStore()
   const { bookingId = 'new' } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const isCreateMode = bookingId === 'new'
   const [form, setForm] = useState<BookingFormState>(DEFAULT_FORM)
@@ -299,6 +300,18 @@ export default function BookingEditor() {
   const [portalDecisionNote, setPortalDecisionNote] = useState('')
   const [reviewingPortalRequest, setReviewingPortalRequest] = useState(false)
   const { publish } = useToast()
+
+  useEffect(() => {
+    if (!isCreateMode) return
+    const state = location.state as { customer?: { name?: unknown; phone?: unknown; email?: unknown } } | null
+    if (!state?.customer) return
+    setForm(previous => ({
+      ...previous,
+      fullName: typeof state.customer?.name === 'string' ? state.customer.name : previous.fullName,
+      phone: typeof state.customer?.phone === 'string' ? state.customer.phone : previous.phone,
+      email: typeof state.customer?.email === 'string' ? state.customer.email : previous.email,
+    }))
+  }, [isCreateMode, location.state])
 
   useEffect(() => {
     if (!storeId || isCreateMode) {

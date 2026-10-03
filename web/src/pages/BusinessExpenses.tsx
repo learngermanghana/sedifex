@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, type Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -16,12 +16,35 @@ const paymentSourceLabels: Record<PaymentSource, string> = { bank: 'Bank account
 const reimbursementLabels: Record<ReimbursementStatus, string> = { not_applicable: 'Not applicable', not_reimbursed: 'Not reimbursed', partly_reimbursed: 'Partly reimbursed', reimbursed: 'Reimbursed' }
 const money = (value: number, currency = 'GHS') => `${currency} ${Number(value || 0).toFixed(2)}`
 const parseAmount = (value: string) => { const parsed = Number(value); return Number.isFinite(parsed) && parsed >= 0 ? parsed : null }
+const EXPENSE_FILTER_KEY_PREFIX = 'sedifex-expense-filters-'
 
 function sourceTone(source: PaymentSource) { if (source === 'bank' || source === 'mobile_money') return { background: '#DBEAFE', color: '#1D4ED8' }; if (source === 'petty_cash' || source === 'store_cash') return { background: '#FEF3C7', color: '#92400E' }; if (source === 'owner_staff_personal') return { background: '#FCE7F3', color: '#BE185D' }; if (source === 'fund_ledger') return { background: '#DCFCE7', color: '#166534' }; return { background: '#E2E8F0', color: '#334155' } }
 function statusTone(status: ReimbursementStatus) { if (status === 'reimbursed') return { background: '#DCFCE7', color: '#166534' }; if (status === 'partly_reimbursed') return { background: '#FEF3C7', color: '#92400E' }; if (status === 'not_reimbursed') return { background: '#FEE2E2', color: '#991B1B' }; return { background: '#E2E8F0', color: '#334155' } }
 
 export default function BusinessExpenses() {
- const { storeId } = useActiveStore(); const user = useAuthUser(); const [searchParams, setSearchParams] = useSearchParams(); const [expenses, setExpenses] = useState<ExpenseRecord[]>([]); const [form, setForm] = useState<ExpenseForm>(initialForm); const [editingId, setEditingId] = useState(''); const [isFormOpen, setIsFormOpen] = useState(searchParams.get('mode') === 'add'); const [saving, setSaving] = useState(false); const [search, setSearch] = useState(''); const [sourceFilter, setSourceFilter] = useState<'all' | PaymentSource>('all'); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null)
+ const { storeId } = useActiveStore(); const user = useAuthUser(); const [searchParams, setSearchParams] = useSearchParams(); const [expenses, setExpenses] = useState<ExpenseRecord[]>([]); const [form, setForm] = useState<ExpenseForm>(initialForm); const [editingId, setEditingId] = useState(''); const [isFormOpen, setIsFormOpen] = useState(searchParams.get('mode') === 'add'); const [saving, setSaving] = useState(false); const [search, setSearch] = useState(''); const [sourceFilter, setSourceFilter] = useState<'all' | PaymentSource>('all'); const filterStoreRef = useRef<string | null>(null); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null)
+ useEffect(() => {
+   if (!storeId) {
+     filterStoreRef.current = null
+     return
+   }
+   if (filterStoreRef.current !== storeId) {
+     filterStoreRef.current = storeId
+     try {
+       const stored = JSON.parse(localStorage.getItem(`${EXPENSE_FILTER_KEY_PREFIX}${storeId}`) || '{}') as { search?: unknown; sourceFilter?: unknown }
+       setSearch(typeof stored.search === 'string' ? stored.search : '')
+       setSourceFilter(typeof stored.sourceFilter === 'string' && (stored.sourceFilter === 'all' || stored.sourceFilter in paymentSourceLabels) ? stored.sourceFilter as 'all' | PaymentSource : 'all')
+     } catch (storageError) {
+       console.warn('[expenses] Unable to load filter preferences', storageError)
+     }
+     return
+   }
+   try {
+     localStorage.setItem(`${EXPENSE_FILTER_KEY_PREFIX}${storeId}`, JSON.stringify({ search, sourceFilter }))
+   } catch (storageError) {
+     console.warn('[expenses] Unable to save filter preferences', storageError)
+   }
+ }, [search, sourceFilter, storeId])
  useEffect(() => { if (!storeId) { setExpenses([]); return undefined }; const expensesQuery = query(collection(db, 'expenses'), where('storeId', '==', storeId), orderBy('expenseDate', 'desc'), orderBy('createdAt', 'desc')); const unsubscribe = onSnapshot(expensesQuery, snapshot => { setExpenses(snapshot.docs.map(docSnap => { const data = docSnap.data() as Record<string, unknown>; const source = typeof data.paymentSource === 'string' && data.paymentSource in paymentSourceLabels ? data.paymentSource as PaymentSource : 'other'; const reimbursementStatus = typeof data.reimbursementStatus === 'string' && data.reimbursementStatus in reimbursementLabels ? data.reimbursementStatus as ReimbursementStatus : 'not_applicable'; return { id: docSnap.id, storeId: typeof data.storeId === 'string' ? data.storeId : '', title: typeof data.title === 'string' ? data.title : '', category: typeof data.category === 'string' ? data.category : '', amount: Number(data.amount) || 0, expenseDate: typeof data.expenseDate === 'string' ? data.expenseDate : '', paymentSource: source, payerName: typeof data.payerName === 'string' ? data.payerName : '', reimbursementStatus, reimbursedAmount: Number(data.reimbursedAmount) || 0, notes: typeof data.notes === 'string' ? data.notes : '', receiptUrl: typeof data.receiptUrl === 'string' ? data.receiptUrl : '', createdAt: data.createdAt as Timestamp | string | null, updatedAt: data.updatedAt as Timestamp | string | null } })) }, err => { console.error('[expenses] snapshot failed', err); setError('Unable to load expenses. If this is the first time, deploy Firestore indexes/rules and try again.') }); return () => unsubscribe() }, [storeId])
  const filteredExpenses = useMemo(() => { const term = search.trim().toLowerCase(); return expenses.filter(expense => sourceFilter === 'all' || expense.paymentSource === sourceFilter).filter(expense => !term || [expense.title, expense.category, expense.payerName, expense.notes, paymentSourceLabels[expense.paymentSource], reimbursementLabels[expense.reimbursementStatus]].join(' ').toLowerCase().includes(term)) }, [expenses, search, sourceFilter])
  const totals = useMemo(() => ({ total: filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0), pettyCash: filteredExpenses.filter(expense => expense.paymentSource === 'petty_cash').reduce((sum, expense) => sum + expense.amount, 0), storeCash: filteredExpenses.filter(expense => expense.paymentSource === 'store_cash').reduce((sum, expense) => sum + expense.amount, 0), reimbursementDue: filteredExpenses.filter(expense => expense.paymentSource === 'owner_staff_personal').reduce((sum, expense) => sum + Math.max(expense.amount - expense.reimbursedAmount, 0), 0) }), [filteredExpenses])

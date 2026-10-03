@@ -13,6 +13,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import CustomerPortalShareCard from '../components/CustomerPortalShareCard'
+import StatusBadge from '../components/StatusBadge'
 import './CustomerCRM.css'
 import './CustomerCRM.mobile.css'
 
@@ -668,12 +669,26 @@ export default function CustomerCRM() {
     if (!crmData.bookings.length) return <EmptySection>No bookings have been linked to this customer.</EmptySection>
     return (
       <div className="customer-crm__records">
-        {crmData.bookings.map(row => (
-          <article className="customer-crm__record" key={`${row.source}-${row.id}`}>
-            <div><strong>{firstText(row.data, ['serviceName', 'booking.serviceName', 'metadata.serviceName']) || 'Service booking'}</strong><span>{firstText(row.data, ['bookingDate', 'date', 'booking.preferredDate']) || formatDate(readPath(row.data, 'createdAt'))}</span></div>
-            <div><span>{statusText(firstText(row.data, ['bookingStatus', 'status']))}</span><span>{statusText(firstText(row.data, ['paymentStatus', 'payment.status']), 'Payment not recorded')}</span></div>
-          </article>
-        ))}
+        {crmData.bookings.map(row => {
+          const bookingId = firstText(row.data, ['bookingId', 'booking_id']) || (row.source?.includes('order') ? '' : row.id)
+          const serviceName = firstText(row.data, ['serviceName', 'booking.serviceName', 'metadata.serviceName']) || 'Service booking'
+          return (
+            <article className="customer-crm__record" key={`${row.source}-${row.id}`}>
+              <div>
+                {bookingId ? (
+                  <Link className="customer-crm__record-link" to={`/bookings/${encodeURIComponent(bookingId)}`}>{serviceName}</Link>
+                ) : (
+                  <strong>{serviceName}</strong>
+                )}
+                <span>{firstText(row.data, ['bookingDate', 'date', 'booking.preferredDate']) || formatDate(readPath(row.data, 'createdAt'))}</span>
+              </div>
+              <div className="customer-crm__record-statuses">
+                <StatusBadge status={firstText(row.data, ['bookingStatus', 'status'])} kind="booking" />
+                <StatusBadge status={firstText(row.data, ['paymentStatus', 'payment.status'])} kind="payment" />
+              </div>
+            </article>
+          )
+        })}
         <Link className="customer-crm__section-link" to="/bookings">Open all bookings</Link>
       </div>
     )
@@ -685,8 +700,8 @@ export default function CustomerCRM() {
       <div className="customer-crm__records">
         {crmData.invoices.map(row => (
           <article className="customer-crm__record" key={row.id}>
-            <div><strong>{firstText(row.data, ['invoiceNumber']) || row.id}</strong><span>{formatMoney(firstNumber(row.data, ['total']))}</span></div>
-            <div><span>{statusText(firstText(row.data, ['status']), 'Draft')}</span><span>Due {firstText(row.data, ['dueDate']) || 'not set'}</span></div>
+            <div><Link className="customer-crm__record-link" to="/invoices">{firstText(row.data, ['invoiceNumber']) || row.id}</Link><span>{formatMoney(firstNumber(row.data, ['total']))}</span></div>
+            <div className="customer-crm__record-statuses"><StatusBadge status={firstText(row.data, ['status']) || 'pending'} /><span>Due {firstText(row.data, ['dueDate']) || 'not set'}</span></div>
           </article>
         ))}
         <Link className="customer-crm__section-link" to="/invoices">Open invoices</Link>
@@ -950,8 +965,18 @@ export default function CustomerCRM() {
                 </div>
                 <div className="customer-crm__profile-actions">
                   <Link to={`/sell?customerId=${encodeURIComponent(selectedCustomer.id)}`}>Start sale</Link>
-                  <Link to="/invoices">Create invoice</Link>
-                  <Link to="/bookings/new">Add booking</Link>
+                  <Link
+                    to="/invoices"
+                    state={{ customer: { name: customerName(selectedCustomer), phone: selectedCustomer.phone || '', email: selectedCustomer.email || '', address: '' } }}
+                  >
+                    Create invoice
+                  </Link>
+                  <Link
+                    to="/bookings/new"
+                    state={{ customer: { name: customerName(selectedCustomer), phone: selectedCustomer.phone || '', email: selectedCustomer.email || '' } }}
+                  >
+                    Add booking
+                  </Link>
                   <button type="button" onClick={() => setActiveTab('messages')}>Message</button>
                   <Link className="customer-crm__secondary" to={`/customers/manage?edit=${encodeURIComponent(selectedCustomer.id)}`}>Edit</Link>
                 </div>

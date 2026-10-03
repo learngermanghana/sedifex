@@ -49,3 +49,22 @@
 .bookings-page .btn-danger { border-color: #fecaca; background: #fee2e2; color: #991b1b; }
 .bookings-page .btn-danger:hover:not(:disabled) { background: #fecaca; }
 .bookings-page .btn:disabled { cursor: not-allowed; opacity: 0.55; }
+
+
+.bookings-page__customer-link {
+  color: #1d4ed8;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.bookings-page__customer-link:hover,
+.bookings-page__customer-link:focus-visible {
+  text-decoration: underline;
+}
+
+.bookings-card__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import { useStorePreferences } from '../../hooks/useStorePreferences'
@@ -7,6 +7,8 @@ import './reportsHome.css'
 
 type ReportItem = { title: string; href: string; description: string; badge: string; inline?: boolean }
 type ReportGroup = { title: string; reports: ReportItem[] }
+
+const REPORT_SEARCH_KEY_PREFIX = 'sedifex-report-search-'
 
 const REPORTS = {
   allSales: { title: 'Website and In App Sales', href: '/reports/sales-cash', description: 'All sales activity from Sedifex and connected websites.', badge: 'Main' },
@@ -69,6 +71,28 @@ export default function ReportsHome() {
   const { storeId } = useActiveStore()
   const { preferences } = useStorePreferences(storeId)
   const [search, setSearch] = useState('')
+  const searchStoreRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!storeId) {
+      searchStoreRef.current = null
+      return
+    }
+    if (searchStoreRef.current !== storeId) {
+      searchStoreRef.current = storeId
+      try {
+        setSearch(localStorage.getItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`) || '')
+      } catch (storageError) {
+        console.warn('[reports] Unable to load search preference', storageError)
+      }
+      return
+    }
+    try {
+      localStorage.setItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`, search)
+    } catch (storageError) {
+      console.warn('[reports] Unable to save search preference', storageError)
+    }
+  }, [search, storeId])
+
   const visibleGroups = useMemo(
     () => reportGroupsForIndustry(preferences.navigation.industry),
     [preferences.navigation.industry],

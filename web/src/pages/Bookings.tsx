@@ -11,6 +11,7 @@ import {
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
 import { useActiveStore } from "../hooks/useActiveStore";
+import StatusBadge from "../components/StatusBadge";
 import "./Bookings.css";
 
 type BookingRecord = {
@@ -27,6 +28,7 @@ type BookingRecord = {
   bookingStatus: string;
   syncStatus: string;
   paymentStatus: string;
+  customerId: string | null;
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
@@ -91,25 +93,6 @@ const normalizeSource = (raw: unknown) => {
   if (value.includes("manual")) return "Manual";
   return "Website";
 };
-
-const statusLabel = (status: string) =>
-  ({
-    pending_approval: "Needs approval",
-    pending: "Needs approval",
-    confirmed: "Confirmed",
-    completed: "Completed",
-    cancelled: "Cancelled",
-    deleted: "Cancelled",
-    manual_review: "Needs approval",
-  })[status] ?? "Needs approval";
-
-const paymentLabel = (status: string) =>
-  ({
-    payment_pending: "Payment pending",
-    pending: "Payment pending",
-    manual_review: "Payment review",
-    paid: "Paid",
-  })[status] ?? "Payment pending";
 
 const normalizePaymentClassifierValue = (value: string | null) =>
   (value || "")
@@ -306,6 +289,10 @@ export default function Bookings() {
             : normalizePaymentStatus(
                 data.paymentStatus ?? data.payment_status ?? payment.status,
               ),
+        customerId:
+          pickString(data, ["customerId"]) ??
+          pickString(customer, ["id", "customerId"]) ??
+          pickString(metadata, ["customerId"]),
         customerName:
           pickString(data, ["customerName", "name"]) ??
           pickString(customer, ["name"]),
@@ -787,7 +774,13 @@ export default function Bookings() {
                         ) : null}
                       </td>
                       <td>
-                        <strong>{b.customerName || "Customer"}</strong>
+                        {b.customerId ? (
+                          <Link className="bookings-page__customer-link" to={`/customers/${encodeURIComponent(b.customerId)}`}>
+                            {b.customerName || "Customer"}
+                          </Link>
+                        ) : (
+                          <strong>{b.customerName || "Customer"}</strong>
+                        )}
                         <small>
                           {b.customerPhone || b.customerEmail || "No contact"}
                         </small>
@@ -809,15 +802,11 @@ export default function Bookings() {
                       </td>
                       <td>
                         <strong>{b.paymentAmount || "—"}</strong>
-                        <small>{paymentLabel(b.paymentStatus)}</small>
+                        <StatusBadge status={b.paymentStatus} kind="payment" />
                         <small>{b.paymentMethod || b.paymentCollectionMode || "Method not set"}</small>
                       </td>
                       <td>
-                        <span
-                          className={`bookings-page__status bookings-page__status--${b.bookingStatus}`}
-                        >
-                          {statusLabel(b.bookingStatus)}
-                        </span>
+                        <StatusBadge status={b.bookingStatus} kind="booking" />
                         <small>
                           {b.paymentStatus === "paid" &&
                           b.bookingStatus !== "confirmed"
@@ -862,12 +851,17 @@ export default function Bookings() {
                 <article key={`${b.id}-card`} className="bookings-card">
                   <h3>{b.serviceName}</h3>
                   <p>
-                    {b.customerName || "Customer"} •{" "}
+                    {b.customerId ? (
+                      <Link className="bookings-page__customer-link" to={`/customers/${encodeURIComponent(b.customerId)}`}>
+                        {b.customerName || "Customer"}
+                      </Link>
+                    ) : (b.customerName || "Customer")} •{" "}
                     {b.bookingDate || "Date not set"} {b.bookingTime || ""}
                   </p>
-                  <p>
-                    {statusLabel(b.status)} • {paymentLabel(b.paymentStatus)}
-                  </p>
+                  <div className="bookings-card__statuses">
+                    <StatusBadge status={b.bookingStatus || b.status} kind="booking" />
+                    <StatusBadge status={b.paymentStatus} kind="payment" />
+                  </div>
                   <label className="bookings-card__select">
                     <input
                       type="checkbox"

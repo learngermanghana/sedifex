@@ -934,3 +934,29 @@
     justify-content: flex-start;
   }
 }
+
+
+.customer-crm__record-link {
+  color: #1d4ed8;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.customer-crm__record-link:hover,
+.customer-crm__record-link:focus-visible {
+  text-decoration: underline;
+}
+
+.customer-crm__record-statuses {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .customer-crm__record-statuses {
+    justify-content: flex-start;
+  }
+}
