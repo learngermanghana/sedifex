@@ -515,9 +515,6 @@ async function recordProblem(item: QueueItem, booking: BookingContext, kind: Pro
   if (kind === 'insufficient_credits') {
     title = 'SMS not sent - insufficient credits'
     message = `${label} SMS to ${customer} could not be sent because the store does not have enough SMS credits.`
-  } else if (kind === 'sender_not_configured') {
-    title = 'SMS not sent - sender not configured'
-    message = `${label} SMS to ${customer} is blocked because the Hubtel sender is not approved or configured.`
   } else if (kind === 'unknown') {
     title = 'SMS delivery needs review'
     message = `${label} SMS to ${customer} may have been accepted by Hubtel, but Sedifex could not safely confirm finalization.${reason ? ` ${reason}` : ''}`
