@@ -480,6 +480,154 @@ function deriveCheckoutDetails(body: CheckoutBody) {
   }
 }
 
+type AuthoritativePricingLine = {
+  itemId: string
+  name: string | null
+  itemType: string
+  quantity: number
+  listedUnitAmount: number
+  listedCurrency: 'GHS' | 'USD'
+  listedLineAmount: number
+  paymentLineAmountGhs: number
+}
+
+function itemIsCheckoutAvailable(record: Record<string, unknown>) {
+  if (record.isWebsiteVisible === false) return false
+  if (record.isPublished === false) return false
+  const status = clean(record.status, 40).toLowerCase()
+  return !['draft', 'archived', 'deleted', 'removed', 'hidden', 'inactive'].includes(status)
+}
+
+function getCatalogPriceMajor(record: Record<string, unknown>) {
+  const direct = numberValue(record.price ?? record.sellingPrice ?? record.salePrice ?? record.amount ?? record.fee)
+  if (direct !== null && direct >= 0) return direct
+  const minor = numberValue(record.priceMinor ?? record.amountMinor)
+  if (minor !== null && minor >= 0) return minor / 100
+  return null
+}
+
+async function resolveAuthoritativeCatalogItem(storeId: string, itemId: string) {
+  const directRefs = [
+    defaultDb.collection('stores').doc(storeId).collection('products').doc(itemId),
+    defaultDb.collection('stores').doc(storeId).collection('services').doc(itemId),
+    defaultDb.collection('stores').doc(storeId).collection('courses').doc(itemId),
+    defaultDb.collection('products').doc(itemId),
+    defaultDb.collection('services').doc(itemId),
+    defaultDb.collection('courses').doc(itemId),
+    defaultDb.collection('publicListings').doc(itemId),
+  ]
+
+  for (const ref of directRefs) {
+    const snap = await ref.get()
+    if (!snap.exists) continue
+    const record = (snap.data() ?? {}) as Record<string, unknown>
+    const recordStoreId = clean(record.storeId, 180)
+    if (recordStoreId && recordStoreId !== storeId) continue
+    if (!itemIsCheckoutAvailable(record)) return { unavailable: true as const, item: record }
+    return { unavailable: false as const, item: record }
+  }
+
+  const queryCollections = ['publicListings', 'v1IntegrationProducts']
+  const queryFields = ['id', 'productId', 'sourceProductId']
+  for (const collectionName of queryCollections) {
+    for (const field of queryFields) {
+      const snap = await defaultDb
+        .collection(collectionName)
+        .where(field, '==', itemId)
+        .where('storeId', '==', storeId)
+        .limit(1)
+        .get()
+      if (snap.empty) continue
+      const record = (snap.docs[0].data() ?? {}) as Record<string, unknown>
+      if (!itemIsCheckoutAvailable(record)) return { unavailable: true as const, item: record }
+      return { unavailable: false as const, item: record }
+    }
+  }
+
+  return null
+}
+
+function checkoutItemRequests(body: CheckoutBody) {
+  const rawItems = Array.isArray(body.items) ? body.items.map(getRecord) : []
+  if (rawItems.length) {
+    return rawItems.map((item) => ({
+      itemId: clean(item.item_id ?? item.itemId ?? item.productId ?? item.serviceId ?? item.id, 220),
+      quantity: Math.max(1, Math.round(numberValue(item.qty ?? item.quantity) ?? 1)),
+      hintedType: normalizeItemType(item.itemType ?? item.item_type ?? item.type) || '',
+    }))
+  }
+
+  const itemId = clean(
+    body.item_id ?? body.itemId ?? body.productId ?? body.product_id ?? body.serviceId ?? body.service_id,
+    220,
+  )
+  if (!itemId) return []
+  return [{
+    itemId,
+    quantity: Math.max(1, Math.round(numberValue(body.qty ?? body.quantity) ?? 1)),
+    hintedType: normalizeItemType(body.itemType ?? body.item_type) || '',
+  }]
+}
+
+async function resolveAuthoritativePricing(body: CheckoutBody, storeId: string) {
+  const requestedItems = checkoutItemRequests(body).filter(item => item.itemId)
+  if (!requestedItems.length) return null
+
+  const rates = await getUsdGhsRates({ refreshIfMissing: true })
+  const lines: AuthoritativePricingLine[] = []
+
+  for (const requested of requestedItems) {
+    const resolved = await resolveAuthoritativeCatalogItem(storeId, requested.itemId)
+    if (!resolved) return null
+    if (resolved.unavailable) {
+      throw new Error(`Item ${requested.itemId} is not available for website checkout.`)
+    }
+
+    const price = getCatalogPriceMajor(resolved.item)
+    if (price === null || price < 0) {
+      throw new Error(`Item ${requested.itemId} does not have a valid Sedifex price.`)
+    }
+
+    const listedCurrencyRaw = (clean(resolved.item.currency, 20) || 'GHS').toUpperCase()
+    if (listedCurrencyRaw !== 'GHS' && listedCurrencyRaw !== 'USD') {
+      throw new Error(`Item ${requested.itemId} uses an unsupported currency.`)
+    }
+    const listedCurrency = listedCurrencyRaw as 'GHS' | 'USD'
+    const listedLineAmount = roundMoney(price * requested.quantity)
+    const paymentLineAmountGhs = listedCurrency === 'USD'
+      ? roundMoney(listedLineAmount * rates.usdToGhs)
+      : listedLineAmount
+
+    lines.push({
+      itemId: requested.itemId,
+      name: firstText([resolved.item.name, resolved.item.title, resolved.item.productName, resolved.item.serviceName]) || null,
+      itemType: normalizeItemType(resolved.item.itemType ?? resolved.item.item_type ?? resolved.item.type) || requested.hintedType || 'product',
+      quantity: requested.quantity,
+      listedUnitAmount: price,
+      listedCurrency,
+      listedLineAmount,
+      paymentLineAmountGhs,
+    })
+  }
+
+  const currencies = Array.from(new Set(lines.map(line => line.listedCurrency)))
+  const homogeneousCurrency = currencies.length === 1 ? currencies[0] : null
+  const listedAmount = homogeneousCurrency
+    ? roundMoney(lines.reduce((sum, line) => sum + line.listedLineAmount, 0))
+    : null
+  const paymentAmountGhs = roundMoney(lines.reduce((sum, line) => sum + line.paymentLineAmountGhs, 0))
+
+  return {
+    lines,
+    listedAmount,
+    listedCurrency: homogeneousCurrency ?? 'MIXED',
+    paymentAmountGhs,
+    exchangeRateUpdatedAt: rates.fetchedAt,
+    exchangeRateUsdToGhs: rates.usdToGhs,
+    priceSource: 'sedifex_catalog' as const,
+  }
+}
+
 async function initializePaystack(payload: Record<string, unknown>) {
   const key = PAYSTACK_SECRET_KEY.value()?.trim() || process.env.PAYSTACK_SECRET_KEY?.trim() || ''
   if (!key) throw new Error('Paystack secret is not configured')
@@ -518,10 +666,10 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const body = (req.body ?? {}) as CheckoutBody
     const storeId = getStoreId(body)
     const customer = getCustomer(body)
-    const amountMajor = getAmountMajor(body)
+    const clientAmountMajor = getAmountMajor(body)
     const bookingId = getBookingId(body)
     const reference = clean(body.payment_reference ?? body.reference, 220) || clean(body.client_order_id ?? body.clientOrderId, 220) || bookingId || `${storeId}_${Date.now()}`
-    const listedCurrency = (clean(body.currency, 20) || 'GHS').toUpperCase()
+    const clientListedCurrency = (clean(body.currency, 20) || 'GHS').toUpperCase()
     const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
     const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
@@ -539,11 +687,20 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       res.status(400).json({ error: 'customer-email-required' })
       return
     }
-    if (!amountMajor || amountMajor <= 0) {
+
+    const authoritativePricing = await resolveAuthoritativePricing(body, storeId)
+    const amountMajor = authoritativePricing?.listedAmount ?? clientAmountMajor
+    const listedCurrency = authoritativePricing?.listedCurrency ?? clientListedCurrency
+    const paymentAmountMajor = authoritativePricing?.paymentAmountGhs
+      ?? (listedCurrency === 'USD'
+        ? roundMoney((amountMajor ?? 0) * (await getUsdGhsRates({ refreshIfMissing: true })).usdToGhs)
+        : roundMoney(amountMajor ?? 0))
+
+    if (!paymentAmountMajor || paymentAmountMajor <= 0) {
       res.status(400).json({ error: 'amount-required' })
       return
     }
-    if (listedCurrency !== 'GHS' && listedCurrency !== 'USD') {
+    if (!authoritativePricing && listedCurrency !== 'GHS' && listedCurrency !== 'USD') {
       res.status(400).json({
         error: 'unsupported-currency',
         message: 'Sedifex checkout currently supports item prices in GHS or USD only.',
@@ -551,14 +708,13 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       return
     }
 
-    const currencyRates = listedCurrency === 'USD'
+    const currencyRates = listedCurrency === 'USD' && !authoritativePricing
       ? await getUsdGhsRates({ refreshIfMissing: true })
       : null
-    const paymentAmountMajor = listedCurrency === 'USD'
-      ? roundMoney(amountMajor * currencyRates!.usdToGhs)
-      : roundMoney(amountMajor)
-    const transactionChargeMinor = listedCurrency === 'USD' && listedTransactionChargeMinor
-      ? Math.round((listedTransactionChargeMinor / 100) * currencyRates!.usdToGhs * 100)
+    const auditExchangeRateUsdToGhs = authoritativePricing?.exchangeRateUsdToGhs ?? auditExchangeRateUsdToGhs
+    const auditExchangeRateUpdatedAt = authoritativePricing?.exchangeRateUpdatedAt ?? auditExchangeRateUpdatedAt
+    const transactionChargeMinor = listedCurrency === 'USD' && listedTransactionChargeMinor && auditExchangeRateUsdToGhs
+      ? Math.round((listedTransactionChargeMinor / 100) * auditExchangeRateUsdToGhs * 100)
       : listedTransactionChargeMinor
     const currency = 'GHS'
     const baseTotalMinor = Math.round(paymentAmountMajor * 100)
@@ -590,12 +746,16 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
+      priceSource: authoritativePricing?.priceSource ?? 'client_amount',
+      authoritativeItems: authoritativePricing?.lines ?? null,
+      clientSubmittedAmount: clientAmountMajor,
+      clientSubmittedCurrency: clientListedCurrency,
       listedAmount: amountMajor,
       listedCurrency,
       paymentAmountGhs: paymentAmountMajor,
       paymentCurrency: 'GHS',
-      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
-      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
+      exchangeRateUsdToGhs: auditExchangeRateUsdToGhs,
+      exchangeRateUpdatedAt: auditExchangeRateUpdatedAt,
     }
     const { exchangeRateUsdToGhs: _internalExchangeRate, ...publicPricingSnapshot } = pricingSnapshot
     void _internalExchangeRate
@@ -608,6 +768,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       source: paymentRouting.source,
       splitEnabled: Boolean(subaccount),
       splitDisabledReason: subaccount ? null : paymentRouting.splitDisabledReason,
+      priceSource: authoritativePricing?.priceSource ?? 'client_amount',
     }
     const paystackSplitSnapshot = subaccount ? {
       enabled: true,
@@ -661,12 +822,16 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       processingFeeMinor,
       customerTotalMinor,
       sedifexCommissionMinor,
+      priceSource: authoritativePricing?.priceSource ?? 'client_amount',
+      authoritativeItems: authoritativePricing?.lines ?? null,
+      clientSubmittedAmount: clientAmountMajor,
+      clientSubmittedCurrency: clientListedCurrency,
       listedAmount: amountMajor,
       listedCurrency,
       paymentAmountGhs: paymentAmountMajor,
       paymentCurrency: 'GHS',
-      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
-      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
+      exchangeRateUsdToGhs: auditExchangeRateUsdToGhs,
+      exchangeRateUpdatedAt: auditExchangeRateUpdatedAt,
       customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
@@ -761,12 +926,16 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       sedifexCommissionMinor,
       sedifex_commission_minor: sedifexCommissionMinor,
       currency,
+      priceSource: authoritativePricing?.priceSource ?? 'client_amount',
+      authoritativeItems: authoritativePricing?.lines ?? null,
+      clientSubmittedAmount: clientAmountMajor,
+      clientSubmittedCurrency: clientListedCurrency,
       listedAmount: amountMajor,
       listedCurrency,
       paymentAmountGhs: paymentAmountMajor,
       paymentCurrency: 'GHS',
-      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
-      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
+      exchangeRateUsdToGhs: auditExchangeRateUsdToGhs,
+      exchangeRateUpdatedAt: auditExchangeRateUpdatedAt,
       itemName: details.itemName || details.productName || details.serviceName || null,
       productName: details.productName || null,
       serviceName: details.serviceName || null,
@@ -845,11 +1014,12 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       recordType: details.recordType,
       orderType: details.recordType,
       pricingSnapshot: publicPricingSnapshot,
+      priceSource: authoritativePricing?.priceSource ?? 'client_amount',
       listedAmount: amountMajor,
       listedCurrency,
       paymentAmountGhs: paymentAmountMajor,
       paymentCurrency: 'GHS',
-      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
+      exchangeRateUpdatedAt: auditExchangeRateUpdatedAt,
       paystackSplit: paystackSplitSnapshot,
     })
   } catch (error) {
