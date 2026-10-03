@@ -804,6 +804,34 @@
   align-items: center;
 }
 
+.products-page__currency-conversion {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.products-page__currency-conversion--error {
+  font-weight: 600;
+}
+
+.products-page__currency-source {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.products-page__currency-source a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.products-page__currency-equivalent {
+  display: block;
+  margin-top: 2px;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
 @media (max-width: 640px) {
   .products-page__price-row {
     grid-template-columns: 1fr;
