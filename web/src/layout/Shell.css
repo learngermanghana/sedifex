@@ -336,6 +336,75 @@ body.shell--menu-open {
   min-width: 0;
 }
 
+.shell__create-menu {
+  position: relative;
+}
+
+.shell__create-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.shell__create-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.shell__create-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  display: grid;
+  min-width: 190px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 46px -24px rgba(15, 23, 42, .5);
+}
+
+.shell__create-menu-label {
+  padding: 6px 8px 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.shell__create-menu-link {
+  border-radius: 9px;
+  padding: 9px 10px;
+  color: #0f172a;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.shell__create-menu-link:hover,
+.shell__create-menu-link:focus-visible {
+  background: #f1f5f9;
+}
+
+@media (max-width: 960px) {
+  .shell__create-menu {
+    width: 100%;
+  }
+
+  .shell__create-menu > summary {
+    width: 100%;
+  }
+
+  .shell__create-menu-panel {
+    position: static;
+    margin-top: 6px;
+    box-shadow: none;
+    min-width: 0;
+  }
+}
+
 .shell__store-switcher {
   display: inline-flex;
   align-items: center;
