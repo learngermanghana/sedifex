@@ -628,7 +628,7 @@ export default function Bookings() {
             </p>
           </div>
           <div className="bookings-page__header-actions">
-            <Link to="/bookings/new" className="btn btn-primary">+ Add booking</Link>
+            <Link to="/bookings/new" className="button button--primary">+ Add booking</Link>
             <Link to="/reports/bookings" className="btn btn-secondary">Open report</Link>
           </div>
         </header>
@@ -709,7 +709,7 @@ export default function Bookings() {
               {activeTab === "needs_attention" ? "Nothing needs attention" : activeTab === "confirmed" ? "No confirmed bookings yet" : "No bookings yet"}
             </h3>
             <p>{activeTab === "needs_attention" ? "Bookings needing review or confirmation will appear here." : "New bookings will appear here when they are created."}</p>
-            {activeTab === "all" ? <Link to="/bookings/new" className="btn btn-primary">+ Add booking</Link> : null}
+            {activeTab === "all" ? <Link to="/bookings/new" className="button button--primary">+ Add booking</Link> : null}
           </div>
         ) : (
           <div className="bookings-table-wrap">
