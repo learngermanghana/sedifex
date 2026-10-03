@@ -8,25 +8,51 @@ import './reportsHome.css'
 type ReportItem = { title: string; href: string; description: string; badge: string; inline?: boolean }
 type ReportGroup = { title: string; reports: ReportItem[] }
 
-const reportGroups: ReportGroup[] = [
-  { title: 'Business data', reports: [
-    { title: 'Website and In App Sales', href: '/reports/sales-cash', description: 'Combined website and in-app sales activity, including Sell/POS, bookings, and manual cash records.', badge: 'Main' },
-    { title: 'Settlement Report', href: '/reports/settlement', description: 'Paystack/Sedifex settlements, commission, split status, and merchant net.', badge: 'Finance' },
-    { title: 'Inventory Report', href: '/reports/inventory', description: 'Products, services, stock levels, low-stock alerts, and value history.', badge: 'Stock' },
-  ] },
-  { title: 'Sales details', reports: [
-    { title: 'In App Sales', href: '/reports/pos-sales', description: 'Detailed sales recorded inside Sedifex through the Sell/POS workflow.', badge: 'POS' },
-    { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from connected websites and public storefront pages.', badge: 'Online' },
-    { title: 'Bookings Report', href: '/reports/bookings', description: 'Service bookings, appointment status, payment status, and exports.', badge: 'Bookings' },
-  ] },
-  { title: 'School data', reports: [{ title: 'Student Registrations', href: '/reports/student-registrations', description: 'Admissions, enquiries, program interest, and payment progress.', badge: 'School' }] },
-  { title: 'NGO data', reports: [
-    { title: 'Donors Report', href: '/reports/donors', description: 'Donor profiles, giving totals, and engagement history.', badge: 'Donors' },
-    { title: 'Funds Report', href: '/reports/funds', description: 'Fund ledger inflows, outflows, and balance tracking.', badge: 'Funds' },
-    { title: 'Volunteers Report', href: '/reports/volunteers', description: 'Volunteer applications, skills, availability, and follow-up status.', badge: 'NGO' },
-  ] },
-  { title: 'Content data', reports: [{ title: 'Blog Report', href: '/reports/blog', description: 'Published and draft post history with export-ready records.', badge: 'Content' }] },
-]
+const REPORTS = {
+  allSales: { title: 'Website and In App Sales', href: '/reports/sales-cash', description: 'All sales activity from Sedifex and connected websites.', badge: 'Main' },
+  settlement: { title: 'Settlement Report', href: '/reports/settlement', description: 'Paystack/Sedifex settlements, commission, split status, and merchant net.', badge: 'Finance' },
+  inventory: { title: 'Inventory Report', href: '/reports/inventory', description: 'Products, services, stock levels, low-stock alerts, and value history.', badge: 'Stock' },
+  posSales: { title: 'In App Sales', href: '/reports/pos-sales', description: 'Sales recorded directly inside Sedifex through Sell/POS.', badge: 'POS' },
+  websiteSales: { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from connected websites and public storefront pages.', badge: 'Online' },
+  bookings: { title: 'Bookings Report', href: '/reports/bookings', description: 'Service bookings, appointment status, payment status, and exports.', badge: 'Bookings' },
+  students: { title: 'Student Registrations', href: '/reports/student-registrations', description: 'Admissions, enquiries, program interest, and payment progress.', badge: 'School' },
+  donors: { title: 'Donors Report', href: '/reports/donors', description: 'Donor profiles, giving totals, and engagement history.', badge: 'Donors' },
+  funds: { title: 'Funds Report', href: '/reports/funds', description: 'Fund ledger inflows, outflows, and balance tracking.', badge: 'Funds' },
+  volunteers: { title: 'Volunteers Report', href: '/reports/volunteers', description: 'Volunteer applications, skills, availability, and follow-up status.', badge: 'NGO' },
+  blog: { title: 'Blog Report', href: '/reports/blog', description: 'Published and draft post history with export-ready records.', badge: 'Content' },
+} satisfies Record<string, ReportItem>
+
+function reportGroupsForIndustry(industry: string): ReportGroup[] {
+  if (industry === 'shop') {
+    return [
+      { title: 'Essentials', reports: [REPORTS.allSales, REPORTS.settlement, REPORTS.inventory] },
+      { title: 'More reports', reports: [REPORTS.posSales, REPORTS.websiteSales, REPORTS.blog] },
+    ]
+  }
+  if (industry === 'school') {
+    return [
+      { title: 'Essentials', reports: [REPORTS.allSales, REPORTS.settlement, REPORTS.students] },
+      { title: 'More reports', reports: [REPORTS.bookings, REPORTS.posSales, REPORTS.websiteSales, REPORTS.blog] },
+    ]
+  }
+  if (industry === 'ngo') {
+    return [
+      { title: 'Essentials', reports: [REPORTS.allSales, REPORTS.settlement, REPORTS.donors] },
+      { title: 'More reports', reports: [REPORTS.funds, REPORTS.volunteers, REPORTS.bookings, REPORTS.blog] },
+    ]
+  }
+  if (industry === 'event') {
+    return [
+      eventReportGroup,
+      { title: 'Money', reports: [REPORTS.allSales, REPORTS.settlement] },
+      { title: 'More reports', reports: [REPORTS.websiteSales, REPORTS.posSales] },
+    ]
+  }
+  return [
+    { title: 'Essentials', reports: [REPORTS.allSales, REPORTS.settlement, REPORTS.bookings] },
+    { title: 'More reports', reports: [REPORTS.websiteSales, REPORTS.posSales, REPORTS.blog] },
+  ]
+}
 
 const eventReportGroup: ReportGroup = {
   title: 'Event planning',
@@ -42,9 +68,11 @@ const eventReportGroup: ReportGroup = {
 export default function ReportsHome() {
   const { storeId } = useActiveStore()
   const { preferences } = useStorePreferences(storeId)
-  const isEventBusiness = preferences.navigation.industry === 'event'
   const [search, setSearch] = useState('')
-  const visibleGroups = useMemo(() => isEventBusiness ? [eventReportGroup, ...reportGroups] : reportGroups, [isEventBusiness])
+  const visibleGroups = useMemo(
+    () => reportGroupsForIndustry(preferences.navigation.industry),
+    [preferences.navigation.industry],
+  )
   const filteredGroups = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return visibleGroups
@@ -57,7 +85,7 @@ export default function ReportsHome() {
     <div className="workspace-page reports-directory-page">
       <section className="reports-directory-header">
         <h1>Reports & data history</h1>
-        <p className="workspace-muted">Open historical data, filter records, and download reports. Use Dashboard for current business metrics.</p>
+        <p className="workspace-muted">Start with the reports most useful for this workspace. Search when you need something more specific.</p>
       </section>
       <section className="reports-toolbar">
         <input className="reports-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search reports..." />
@@ -86,7 +114,7 @@ export default function ReportsHome() {
         </section>
       ))}
 
-      {isEventBusiness ? <EventPortfolioReport /> : null}
+      {preferences.navigation.industry === 'event' ? <EventPortfolioReport /> : null}
     </div>
   )
 }
