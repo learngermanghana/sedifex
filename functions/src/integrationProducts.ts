@@ -29,7 +29,6 @@ type IntegrationProductItem = {
   currency: string
   priceGhs?: number | null
   priceUsd?: number | null
-  exchangeRateUsdToGhs?: number | null
   exchangeRateUpdatedAt?: string | null
   stockCount?: number | null
   itemType: 'product' | 'service' | 'course'
@@ -254,7 +253,6 @@ function withCurrencyConversion(item: IntegrationProductItem, rates: CurrencyRat
       ...item,
       priceGhs: null,
       priceUsd: null,
-      exchangeRateUsdToGhs: null,
       exchangeRateUpdatedAt: null,
     }
   }
@@ -264,7 +262,6 @@ function withCurrencyConversion(item: IntegrationProductItem, rates: CurrencyRat
     ...item,
     priceGhs: roundMoney(converted.priceGhs),
     priceUsd: roundMoney(converted.priceUsd),
-    exchangeRateUsdToGhs: rates.usdToGhs,
     exchangeRateUpdatedAt: rates.fetchedAt,
   }
 }
@@ -379,7 +376,6 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res):
       publicServices,
       count: products.length,
       currencyConversion: {
-        usdToGhs: rates.usdToGhs,
         updatedAt: rates.fetchedAt,
         refreshCadence: rates.refreshCadence,
         provider: rates.provider,
