@@ -113,3 +113,80 @@
     width: 100%;
   }
 }
+
+
+.website-builder-page__tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.website-builder-page__tab {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #475569;
+  padding: 9px 13px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.website-builder-page__tab.is-active {
+  background: #0f172a;
+  color: #fff;
+}
+
+.website-builder-page__overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.website-builder-page__overview-card {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+  color: #0f172a;
+  font: inherit;
+  cursor: pointer;
+}
+
+.website-builder-page__overview-card:hover,
+.website-builder-page__overview-card:focus-visible {
+  border-color: #94a3b8;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .08);
+}
+
+.website-builder-page__overview-card span {
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.website-builder-page__overview-card .website-builder-page__overview-action {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .website-builder-page__overview {
+    grid-template-columns: 1fr;
+  }
+
+  .website-builder-page__tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .website-builder-page__tab {
+    white-space: nowrap;
+  }
+}
