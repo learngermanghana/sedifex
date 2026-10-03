@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { getUsdGhsRates } from './currencyRates'
 
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL', { default: '' })
@@ -28,6 +29,10 @@ type ResolvedPaymentRouting = {
 
 function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function getRecord(value: unknown): Record<string, unknown> {
@@ -516,7 +521,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const amountMajor = getAmountMajor(body)
     const bookingId = getBookingId(body)
     const reference = clean(body.payment_reference ?? body.reference, 220) || clean(body.client_order_id ?? body.clientOrderId, 220) || bookingId || `${storeId}_${Date.now()}`
-    const currency = clean(body.currency, 20) || 'GHS'
+    const listedCurrency = (clean(body.currency, 20) || 'GHS').toUpperCase()
     const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
     const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
@@ -538,8 +543,22 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       res.status(400).json({ error: 'amount-required' })
       return
     }
+    if (listedCurrency !== 'GHS' && listedCurrency !== 'USD') {
+      res.status(400).json({
+        error: 'unsupported-currency',
+        message: 'Sedifex checkout currently supports item prices in GHS or USD only.',
+      })
+      return
+    }
 
-    const baseTotalMinor = Math.round(amountMajor * 100)
+    const currencyRates = listedCurrency === 'USD'
+      ? await getUsdGhsRates({ refreshIfMissing: true })
+      : null
+    const paymentAmountMajor = listedCurrency === 'USD'
+      ? roundMoney(amountMajor * currencyRates!.usdToGhs)
+      : roundMoney(amountMajor)
+    const currency = 'GHS'
+    const baseTotalMinor = Math.round(paymentAmountMajor * 100)
     const bodyRouting = routingFromBody(body)
     const firestoreRouting = (quickPayCheckout || websiteCommerceCheckout) && !bodyRouting
       ? await loadPaymentRoutingFromFirestore(storeId)
@@ -565,9 +584,21 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       processingFeeMinor,
       customerTotalMinor,
       sedifexCommissionMinor,
+      listedAmount: amountMajor,
+      listedCurrency,
+      paymentAmountGhs: paymentAmountMajor,
+      paymentCurrency: 'GHS',
+      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
+      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
       customerPaysProcessingFee,
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
+      listedAmount: amountMajor,
+      listedCurrency,
+      paymentAmountGhs: paymentAmountMajor,
+      paymentCurrency: 'GHS',
+      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
+      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
     }
     const paymentRoutingSnapshot = {
       paystackSubaccountCode: paymentRouting.paystackSubaccountCode || null,
@@ -577,6 +608,12 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       source: paymentRouting.source,
       splitEnabled: Boolean(subaccount),
       splitDisabledReason: subaccount ? null : paymentRouting.splitDisabledReason,
+      listedAmount: amountMajor,
+      listedCurrency,
+      paymentAmountGhs: paymentAmountMajor,
+      paymentCurrency: 'GHS',
+      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
+      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
     }
     const paystackSplitSnapshot = subaccount ? {
       enabled: true,
@@ -724,6 +761,12 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       sedifexCommissionMinor,
       sedifex_commission_minor: sedifexCommissionMinor,
       currency,
+      listedAmount: amountMajor,
+      listedCurrency,
+      paymentAmountGhs: paymentAmountMajor,
+      paymentCurrency: 'GHS',
+      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
+      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
       itemName: details.itemName || details.productName || details.serviceName || null,
       productName: details.productName || null,
       serviceName: details.serviceName || null,
@@ -802,6 +845,12 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       recordType: details.recordType,
       orderType: details.recordType,
       pricingSnapshot,
+      listedAmount: amountMajor,
+      listedCurrency,
+      paymentAmountGhs: paymentAmountMajor,
+      paymentCurrency: 'GHS',
+      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
+      exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
       paystackSplit: paystackSplitSnapshot,
     })
   } catch (error) {
