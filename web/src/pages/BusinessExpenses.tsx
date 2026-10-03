@@ -22,25 +22,43 @@ function sourceTone(source: PaymentSource) { if (source === 'bank' || source ===
 function statusTone(status: ReimbursementStatus) { if (status === 'reimbursed') return { background: '#DCFCE7', color: '#166534' }; if (status === 'partly_reimbursed') return { background: '#FEF3C7', color: '#92400E' }; if (status === 'not_reimbursed') return { background: '#FEE2E2', color: '#991B1B' }; return { background: '#E2E8F0', color: '#334155' } }
 
 export default function BusinessExpenses() {
- const { storeId } = useActiveStore(); const user = useAuthUser(); const [searchParams, setSearchParams] = useSearchParams(); const [expenses, setExpenses] = useState<ExpenseRecord[]>([]); const [form, setForm] = useState<ExpenseForm>(initialForm); const [editingId, setEditingId] = useState(''); const [isFormOpen, setIsFormOpen] = useState(searchParams.get('mode') === 'add'); const [saving, setSaving] = useState(false); const [search, setSearch] = useState(''); const [sourceFilter, setSourceFilter] = useState<'all' | PaymentSource>('all'); const filterStoreRef = useRef<string | null>(null); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null)
+ const { storeId } = useActiveStore(); const user = useAuthUser(); const [searchParams, setSearchParams] = useSearchParams(); const [expenses, setExpenses] = useState<ExpenseRecord[]>([]); const [form, setForm] = useState<ExpenseForm>(initialForm); const [editingId, setEditingId] = useState(''); const [isFormOpen, setIsFormOpen] = useState(searchParams.get('mode') === 'add'); const [saving, setSaving] = useState(false); const [search, setSearch] = useState(''); const [sourceFilter, setSourceFilter] = useState<'all' | PaymentSource>('all'); const filterHydrationRef = useRef<{ storeId: string; value: { search: string; sourceFilter: 'all' | PaymentSource }; pending: boolean } | null>(null); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null)
  useEffect(() => {
    if (!storeId) {
-     filterStoreRef.current = null
+     filterHydrationRef.current = null
      return
    }
-   if (filterStoreRef.current !== storeId) {
-     filterStoreRef.current = storeId
-     try {
-       const stored = JSON.parse(localStorage.getItem(`${EXPENSE_FILTER_KEY_PREFIX}${storeId}`) || '{}') as { search?: unknown; sourceFilter?: unknown }
-       setSearch(typeof stored.search === 'string' ? stored.search : '')
-       setSourceFilter(typeof stored.sourceFilter === 'string' && (stored.sourceFilter === 'all' || stored.sourceFilter in paymentSourceLabels) ? stored.sourceFilter as 'all' | PaymentSource : 'all')
-     } catch (storageError) {
-       console.warn('[expenses] Unable to load filter preferences', storageError)
-     }
+   let restoredSearch = ''
+   let restoredSourceFilter: 'all' | PaymentSource = 'all'
+   try {
+     const stored = JSON.parse(localStorage.getItem(`${EXPENSE_FILTER_KEY_PREFIX}${storeId}`) || '{}') as { search?: unknown; sourceFilter?: unknown }
+     restoredSearch = typeof stored.search === 'string' ? stored.search : ''
+     restoredSourceFilter = typeof stored.sourceFilter === 'string' && (stored.sourceFilter === 'all' || stored.sourceFilter in paymentSourceLabels)
+       ? stored.sourceFilter as 'all' | PaymentSource
+       : 'all'
+   } catch (storageError) {
+     console.warn('[expenses] Unable to load filter preferences', storageError)
+   }
+   filterHydrationRef.current = {
+     storeId,
+     value: { search: restoredSearch, sourceFilter: restoredSourceFilter },
+     pending: true,
+   }
+   setSearch(restoredSearch)
+   setSourceFilter(restoredSourceFilter)
+ }, [storeId])
+
+ useEffect(() => {
+   if (!storeId) return
+   const hydration = filterHydrationRef.current
+   if (!hydration || hydration.storeId !== storeId) return
+   if (hydration.pending) {
+     if (search === hydration.value.search && sourceFilter === hydration.value.sourceFilter) hydration.pending = false
      return
    }
    try {
      localStorage.setItem(`${EXPENSE_FILTER_KEY_PREFIX}${storeId}`, JSON.stringify({ search, sourceFilter }))
+     hydration.value = { search, sourceFilter }
    } catch (storageError) {
      console.warn('[expenses] Unable to save filter preferences', storageError)
    }
