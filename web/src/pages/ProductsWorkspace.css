@@ -3,6 +3,28 @@
   gap: 1rem;
 }
 
+.products-workspace__notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
+.products-workspace__notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
 .products-workspace__nav {
   display: flex;
   flex-wrap: wrap;
