@@ -525,7 +525,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const callbackUrl = clean(body.returnUrl, 700) || APP_BASE_URL.value() || undefined
     const sourceChannel = clean(body.sourceChannel ?? body.source_channel, 80) || 'integration_checkout'
     const sourceLabel = clean(body.sourceLabel ?? body.source_label, 120) || 'Sedifex checkout'
-    const transactionChargeMinor = getTransactionChargeMinor(body)
+    const listedTransactionChargeMinor = getTransactionChargeMinor(body)
     const details = deriveCheckoutDetails(body)
     const quickPayCheckout = isQuickPayCheckout(body, details.metadata, sourceChannel)
     const websiteCommerceCheckout = isWebsiteCommerceCheckout(quickPayCheckout, details)
@@ -557,6 +557,9 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const paymentAmountMajor = listedCurrency === 'USD'
       ? roundMoney(amountMajor * currencyRates!.usdToGhs)
       : roundMoney(amountMajor)
+    const transactionChargeMinor = listedCurrency === 'USD' && listedTransactionChargeMinor
+      ? Math.round((listedTransactionChargeMinor / 100) * currencyRates!.usdToGhs * 100)
+      : listedTransactionChargeMinor
     const currency = 'GHS'
     const baseTotalMinor = Math.round(paymentAmountMajor * 100)
     const bodyRouting = routingFromBody(body)
