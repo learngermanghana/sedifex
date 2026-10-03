@@ -23,7 +23,7 @@ export type ProductReadModel = {
   isWebsiteVisible?: boolean | null
   categoryKey?: string | null
   categoryName?: string | null
-  currency?: 'GHS' | null
+  currency?: string | null
   storeName?: string | null
   serviceKind?: string | null
   duration?: string | null

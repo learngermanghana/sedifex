@@ -268,8 +268,8 @@ export default function SalesCashReport() {
 
   function exportPdf() {
     exportReportPdf({
-      title: 'Sales & Cash report',
-      subtitle: 'Business activity from POS, online orders, bookings, and store-only manual cash entries.',
+      title: 'Website and In App Sales',
+      subtitle: 'Combined website and in-app sales activity, including Sell/POS, bookings, and store-only manual cash entries.',
       summary: [
         { label: 'Records', value: totals.records },
         { label: 'Total activity', value: formatMoney(totals.totalValue, totals.currency) },
@@ -294,9 +294,9 @@ export default function SalesCashReport() {
   return (
     <div className="workspace-page">
       <section className="workspace-card">
-        <p className="workspace-eyebrow">Reports / Sales & Cash</p>
-        <h1>Sales & Cash Report</h1>
-        <p className="workspace-muted">This is the main business activity report. It includes POS sales, online orders, service bookings, and store-only cash/manual records.</p>
+        <p className="workspace-eyebrow">Reports / Website and In App Sales</p>
+        <h1>Website and In App Sales</h1>
+        <p className="workspace-muted">This combined report includes website orders and sales recorded inside Sedifex through Sell/POS, service bookings, and store-only cash/manual records.</p>
       </section>
 
       <section className="workspace-grid workspace-grid--four">

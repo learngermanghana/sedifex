@@ -270,7 +270,7 @@ Use:
 
 If a mistake is found before checkout, change the quantity or remove the item in **Sell** before selecting **Record sale**. After a sale has been recorded:
 
-1. A workspace owner opens **Reports → POS Sales Report**.
+1. A workspace owner opens **Reports → In App Sales**.
 2. Find the incorrect receipt and select **Void sale**.
 3. Enter a clear reason and confirm the action. Sedifex preserves the original sale for audit history and restores inventory with reversing ledger entries.
 4. Complete any customer refund separately through the original cash, card, or Mobile Money channel.

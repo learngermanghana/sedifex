@@ -34,6 +34,7 @@ type Draft = {
   category: string
   subcategory: string
   price: string
+  currency: string
   costPrice: string
   description: string
   sku: string
@@ -65,7 +66,6 @@ type Draft = {
   Agreement: string
   courseMode: CourseMode
   classTimes: string
-  isPublished: boolean
   isWebsiteVisible: boolean
 }
 
@@ -75,6 +75,16 @@ type SalesMode = 'buy_now' | 'book_now' | 'register' | 'request_quote'
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
+const COMMON_CURRENCIES = [
+  { code: 'GHS', label: 'GHS — Ghana cedi' },
+  { code: 'USD', label: 'USD — US dollar' },
+  { code: 'GBP', label: 'GBP — British pound' },
+  { code: 'EUR', label: 'EUR — Euro' },
+  { code: 'ZAR', label: 'ZAR — South African rand' },
+  { code: 'NGN', label: 'NGN — Nigerian naira' },
+  { code: 'KES', label: 'KES — Kenyan shilling' },
+] as const
+const COMMON_CURRENCY_CODES = COMMON_CURRENCIES.map(option => option.code)
 
 const blankDraft: Draft = {
   name: '',
@@ -82,6 +92,7 @@ const blankDraft: Draft = {
   category: PRODUCT_CATEGORY,
   subcategory: '',
   price: '',
+  currency: 'GHS',
   costPrice: '',
   description: '',
   sku: '',
@@ -113,7 +124,6 @@ const blankDraft: Draft = {
   Agreement: '',
   courseMode: 'in_person',
   classTimes: '',
-  isPublished: false,
   isWebsiteVisible: false,
 }
 
@@ -149,8 +159,8 @@ function formatDateInput(value: Date | null | undefined) {
   return value ? value.toISOString().slice(0, 10) : ''
 }
 
-function formatMoney(value: number | null | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? `GHS ${value.toFixed(2)}` : '—'
+function formatMoney(value: number | null | undefined, currency = 'GHS') {
+  return typeof value === 'number' && Number.isFinite(value) ? `${currency || 'GHS'} ${value.toFixed(2)}` : '—'
 }
 
 function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
@@ -201,7 +211,7 @@ function buildAiDescriptionPrompt(draft: Draft): string {
     itemType: draft.itemType,
     category: normalizeCategory(draft.category, draft.itemType),
     price: cleanNumber(draft.price),
-    currency: 'GHS',
+    currency: draft.currency.trim().toUpperCase() || 'GHS',
     sku: draft.sku.trim() || null,
     openingStock: cleanNumber(draft.openingStock),
     expiryDate: draft.expiryDate || null,
@@ -456,11 +466,10 @@ function buildSavePayload(draft: Draft, storeId: string) {
     : 'buy_now'
   const trimmedImageUrl = draft.imageUrl.trim()
   const imageUrls = trimmedImageUrl ? [trimmedImageUrl] : []
-  const currency = 'GHS'
+  const currency = draft.currency.trim().toUpperCase()
+  if (!currency) throw new Error('Currency is required.')
   const categoryName = category
   const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
-  const isPublished = draft.isPublished === true
-  const status: 'draft' | 'published' = isPublished ? 'published' : 'draft'
   const description = cleanSavedDescription(draft.description)
   const brand = behavesLikeService ? null : draft.brand.trim() || null
 
@@ -477,7 +486,7 @@ function buildSavePayload(draft: Draft, storeId: string) {
     subcategory: draft.subcategory.trim() || null,
     categoryKey,
     categoryName,
-    status,
+    status: 'published',
     description: description || null,
     price,
     currency,
@@ -516,7 +525,8 @@ function buildSavePayload(draft: Draft, storeId: string) {
     imageUrl: trimmedImageUrl || null,
     imageUrls,
     imageAlt: draft.imageAlt.trim() || name,
-    isPublished,
+    isPublished: true,
+    publishedAt: serverTimestamp(),
     isWebsiteVisible: draft.isWebsiteVisible,
     featuredRank: null,
     rankingScore: null,
@@ -661,6 +671,7 @@ export default function ProductsServiceFirst() {
       category: normalizeCategory(item.category, itemType),
       subcategory: item.subcategory ?? '',
       price: typeof item.price === 'number' ? String(item.price) : '',
+      currency: item.currency?.trim().toUpperCase() || 'GHS',
       costPrice: itemType === 'product' && typeof item.costPrice === 'number' ? String(item.costPrice) : '',
       description: item.description ?? '',
       sku: itemType === 'product' ? item.sku ?? item.barcode ?? '' : '',
@@ -692,7 +703,6 @@ export default function ProductsServiceFirst() {
       Agreement: item.Agreement ?? '',
       courseMode: ((item as any).courseMode as CourseMode) ?? 'in_person',
       classTimes: item.preferredTimes ?? (typeof (item as any).classTimes === 'string' ? (item as any).classTimes : ''),
-      isPublished: (item as any).isPublished !== false,
       isWebsiteVisible: (item as any).isWebsiteVisible !== false,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -731,52 +741,19 @@ export default function ProductsServiceFirst() {
         }
       }
       const imageUploadPending = draft.imageUrl.startsWith('data:image/')
-      const draftPayload = {
-        ...payload,
-        status: 'draft',
-        isPublished: false,
-      }
-      const publishPayload = payload.isPublished
-        ? {
-            ...payload,
-            status: 'published',
-            publishedAt: serverTimestamp(),
-          }
-        : null
 
       if (editingId) {
         const itemRef = doc(db, 'products', editingId)
-        await withTimeout(updateDoc(itemRef, draftPayload), 20_000, 'Save timed out. Please check your internet and try again.')
-        if (publishPayload) {
-          try {
-            await withTimeout(updateDoc(itemRef, publishPayload), 20_000, 'Publish timed out. Please try again.')
-            setMessage(imageUploadPending ? 'Item saved. Image upload is pending — you can retry later.' : 'Item saved successfully.')
-          } catch (_publishError) {
-            setMessage('Draft saved but publishing was incomplete.')
-            setError('Draft saved but publishing was incomplete.')
-          }
-        } else {
-          setMessage(imageUploadPending ? 'Draft saved. Image upload is pending — you can retry later.' : 'Draft saved successfully.')
-        }
+        await withTimeout(updateDoc(itemRef, payload), 20_000, 'Save timed out. Please check your internet and try again.')
       } else {
         const itemRef = doc(collection(db, 'products'))
         await withTimeout(setDoc(itemRef, {
-          ...draftPayload,
+          ...payload,
           createdAt: serverTimestamp(),
           sortOrder: items.length + 1,
         }), 20_000, 'Save timed out. Please check your internet and try again.')
-        if (publishPayload) {
-          try {
-            await withTimeout(updateDoc(itemRef, publishPayload), 20_000, 'Publish timed out. Please try again.')
-            setMessage(imageUploadPending ? 'Item saved. Image upload is pending — you can retry later.' : 'Item saved successfully.')
-          } catch (_publishError) {
-            setMessage('Draft saved but publishing was incomplete.')
-            setError('Draft saved but publishing was incomplete.')
-          }
-        } else {
-          setMessage(imageUploadPending ? 'Draft saved. Image upload is pending — you can retry later.' : 'Draft saved successfully.')
-        }
       }
+      setMessage(imageUploadPending ? 'Item saved. Image upload is pending — you can retry later.' : 'Item saved successfully.')
       if (imageUploadPending) {
         setError('Image upload failed or is incomplete. Item was still saved; retry upload later.')
       }
@@ -852,7 +829,29 @@ export default function ProductsServiceFirst() {
 
             <div className="field">
               <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
-              <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
+              <div className="products-page__price-row">
+                <select
+                  aria-label="Currency"
+                  value={COMMON_CURRENCY_CODES.includes(draft.currency as (typeof COMMON_CURRENCY_CODES)[number]) ? draft.currency : 'CUSTOM'}
+                  onChange={event => {
+                    const value = event.target.value
+                    setDraft(current => ({ ...current, currency: value === 'CUSTOM' ? '' : value }))
+                  }}
+                >
+                  {COMMON_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}
+                  <option value="CUSTOM">Custom currency</option>
+                </select>
+                <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
+              </div>
+              {!COMMON_CURRENCY_CODES.includes(draft.currency as (typeof COMMON_CURRENCY_CODES)[number]) ? (
+                <input
+                  aria-label="Custom currency code"
+                  value={draft.currency}
+                  onChange={event => setDraft(current => ({ ...current, currency: event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) }))}
+                  placeholder="Currency code, e.g. CAD"
+                  required
+                />
+              ) : null}
             </div>
 
             {!behavesLikeService ? (
@@ -989,7 +988,6 @@ export default function ProductsServiceFirst() {
               </div>
             ) : null}
             <div className="products-page__visibility-grid">
-              <label className="checkbox"><input type="checkbox" checked={draft.isPublished} onChange={event => setDraft(current => ({ ...current, isPublished: event.target.checked }))} /><span>Publish item</span></label>
               <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on your website</span></label>
             </div>
             <div className="products-page__list-actions">
@@ -1021,12 +1019,11 @@ export default function ProductsServiceFirst() {
                     <div className="products-page__list-title">
                       <h4>{item.name}</h4>
                       <span className="products-page__badge products-page__badge--muted">{formatItemType(item.itemType)}</span>
-                      <span className={`products-page__badge ${(item as any).isPublished === false ? 'products-page__badge--draft' : 'products-page__badge--published'}`}>{(item as any).isPublished === false ? 'Draft' : 'Published'}</span>
                       <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
                     </div>
                     <div className="products-page__list-meta">
                       <span className="products-page__meta-label">Price</span>
-                      <span>{formatMoney(item.price)}</span>
+                      <span>{formatMoney(item.price, item.currency || 'GHS')}</span>
                     </div>
                   </header>
 
