@@ -597,6 +597,9 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
       exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
     }
+    const { exchangeRateUsdToGhs: _internalExchangeRate, ...publicPricingSnapshot } = pricingSnapshot
+    void _internalExchangeRate
+
     const paymentRoutingSnapshot = {
       paystackSubaccountCode: paymentRouting.paystackSubaccountCode || null,
       percentageCharge: commissionPercent,
@@ -691,7 +694,7 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
         payment_provider: 'sandbox',
         recordType: details.recordType,
         orderType: details.recordType,
-        pricingSnapshot,
+        pricingSnapshot: publicPricingSnapshot,
         paymentRouting: paymentRoutingSnapshot,
         paystackSplit: paystackSplitSnapshot,
         message: 'Sandbox checkout validated successfully. No Paystack transaction was initialized and no Sedifex order was saved.',
@@ -841,12 +844,11 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       order_status: 'pending_payment',
       recordType: details.recordType,
       orderType: details.recordType,
-      pricingSnapshot,
+      pricingSnapshot: publicPricingSnapshot,
       listedAmount: amountMajor,
       listedCurrency,
       paymentAmountGhs: paymentAmountMajor,
       paymentCurrency: 'GHS',
-      exchangeRateUsdToGhs: currencyRates?.usdToGhs ?? null,
       exchangeRateUpdatedAt: currencyRates?.fetchedAt ?? null,
       paystackSplit: paystackSplitSnapshot,
     })
