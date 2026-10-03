@@ -103,7 +103,7 @@ Full URL example:
 https://us-central1-sedifex-web.cloudfunctions.net/v1IntegrationProducts?storeId=<storeId>
 ```
 
-Use this endpoint when a client website needs to show Sedifex products or services. Product records include `brand` (with `manufacturerName` kept as a backward-compatible alias), so websites can build brand pages that group products by the same label.
+Use this endpoint when a client website needs to show Sedifex products or services. Product records include `brand` (with `manufacturerName` kept as a backward-compatible alias), so websites can build brand pages that group products by the same label. Item pricing is limited to GHS or USD. Sedifex keeps the merchant-entered `price`/`currency` as the source price and also returns derived `priceGhs` and `priceUsd` values using the cached weekly conversion rate.
 
 ### PowerShell test
 
@@ -141,6 +141,10 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
       "description": "Service description",
       "price": 600,
       "priceMinor": 60000,
+      "currency": "GHS",
+      "priceGhs": 600,
+      "priceUsd": 48.78,
+      "exchangeRateUpdatedAt": "2026-10-05T06:00:00.000Z",
       "stockCount": null,
       "itemType": "service",
       "type": "SERVICE",
@@ -151,9 +155,17 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
     }
   ],
   "publicProducts": [],
-  "publicServices": []
+  "publicServices": [],
+  "currencyConversion": {
+    "updatedAt": "2026-10-05T06:00:00.000Z",
+    "refreshCadence": "weekly_monday",
+    "provider": "ExchangeRate-API",
+    "providerUrl": "https://www.exchangerate-api.com"
+  }
 }
 ```
+
+Connected websites can display the merchant's original `price`/`currency`, or choose `priceGhs` / `priceUsd` for a converted display. The raw exchange rate remains internal to Sedifex. If you display the derived conversion, keep the provider attribution available from `currencyConversion.provider` / `providerUrl`.
 
 For service pages, filter by either:
 
