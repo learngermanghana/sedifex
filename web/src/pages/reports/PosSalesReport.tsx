@@ -276,9 +276,9 @@ export default function PosSalesReport() {
   return (
     <div className="workspace-page pos-sales-report">
       <section className="workspace-card">
-        <p className="workspace-eyebrow">Reports / POS sales</p>
-        <h1>Sales history</h1>
-        <p className="workspace-muted">Track daily performance, filter sales by date, and review every transaction.</p>
+        <p className="workspace-eyebrow">Reports / In App Sales</p>
+        <h1>In App Sales</h1>
+        <p className="workspace-muted">Review sales recorded inside Sedifex through the Sell/POS workflow, filter by date, and inspect each transaction.</p>
       </section>
       <section className="workspace-grid workspace-grid--four">
         <article className="workspace-card"><strong>{formatMoney(dashboardMetrics.today.revenue)}</strong><span>Sales today · {dashboardMetrics.today.count} transaction{dashboardMetrics.today.count === 1 ? '' : 's'}</span></article>
