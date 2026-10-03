@@ -167,6 +167,8 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
 
 Connected websites can display the merchant's original `price`/`currency`, or choose `priceGhs` / `priceUsd` for a converted display. The raw exchange rate remains internal to Sedifex. If you display the derived conversion, keep the provider attribution available from `currencyConversion.provider` / `providerUrl`.
 
+For payment, connected websites should send the Sedifex item/service ID. Sedifex resolves the current catalog price and currency again during checkout. Existing sites may keep sending their current `amount` and `currency` fields, but those values no longer override a successfully resolved Sedifex item. This means changing an item's pricing from GHS to USD in Sedifex does not require the connected website to maintain its own Paystack currency conversion.
+
 For service pages, filter by either:
 
 ```ts
