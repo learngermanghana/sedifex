@@ -14,7 +14,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -343,6 +343,8 @@ function normalizeColorInput(value: string): string {
 export default function Customers() {
   const { storeId: activeStoreId } = useActiveStore()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const openedEditIdRef = useRef<string | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -370,7 +372,9 @@ export default function Customers() {
   const [messageChannel, setMessageChannel] = useState<MessageChannel | null>(null)
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<CustomerTab>('view')
+  const [activeTab, setActiveTab] = useState<CustomerTab>(
+    searchParams.get('mode') === 'add' ? 'add' : searchParams.get('mode') === 'invite' ? 'invite' : 'view',
+  )
   const [inviteId, setInviteId] = useState<string | null>(null)
   const [inviteStatus, setInviteStatus] = useState<'active' | 'revoked'>('active')
   const [inviteHeadline, setInviteHeadline] = useState('Hello, kindly scan to join our customer list.')
@@ -387,6 +391,31 @@ export default function Customers() {
     if (!intakeLink) return null
     return `${intakeLink}/qr`
   }, [intakeLink])
+
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    if (mode === 'add') {
+      resetForm()
+      setActiveTab('add')
+      return
+    }
+    if (mode === 'invite') {
+      setActiveTab('invite')
+      return
+    }
+    if (!searchParams.get('edit')) {
+      setActiveTab('view')
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId || openedEditIdRef.current === editId || customers.length === 0) return
+    const customer = customers.find(item => item.id === editId)
+    if (!customer) return
+    openedEditIdRef.current = editId
+    beginEdit(customer)
+  }, [customers, searchParams])
   useEffect(() => {
     return () => {
       if (messageTimeoutRef.current) {
@@ -991,10 +1020,14 @@ export default function Customers() {
           updatePayload.debt = null
         }
         await updateDoc(doc(db, 'customers', editingCustomerId), updatePayload)
-        setSelectedCustomerId(editingCustomerId)
+        const savedCustomerId = editingCustomerId
+        setSelectedCustomerId(savedCustomerId)
         showSuccess('Customer updated successfully.')
+        resetForm()
+        navigate(`/customers/${encodeURIComponent(savedCustomerId)}`)
+        return
       } else {
-        await addDoc(collection(db, 'customers'), {
+        const createdCustomer = await addDoc(collection(db, 'customers'), {
           name: trimmedName,
           storeId: activeStoreId,
           ...(normalizedPhone ? { phone: normalizedPhone } : {}),
@@ -1009,8 +1042,10 @@ export default function Customers() {
           updatedAt: serverTimestamp(),
         })
         showSuccess('Customer saved successfully.')
+        resetForm()
+        navigate(`/customers/${encodeURIComponent(createdCustomer.id)}`)
+        return
       }
-      resetForm()
     } catch (err) {
       console.error('[customers] Unable to save customer', err)
       setError('We could not save this customer. Please try again.')
@@ -1379,51 +1414,53 @@ export default function Customers() {
 
   return (
     <div className="page customers-page">
-      <header className="page__header">
+      <header className="page__header customers-page__header">
         <div>
-          <h2 className="page__title">Customers</h2>
-          <p className="page__subtitle">
-            Keep a tidy record of your regulars and speed up checkout on the sales floor.
-          </p>
+          <Link to="/customers" className="customers-page__back-link">← Customer CRM</Link>
+          <h2 className="page__title">Manage customers</h2>
+          <p className="page__subtitle">Search, add, edit, import, or invite customers from one place.</p>
         </div>
-        <span className="customers-page__badge" aria-live="polite">
-          {customers.length} saved • {totalShown} shown
-        </span>
+        <div className="customers-page__header-actions">
+          <span className="customers-page__badge" aria-live="polite">
+            {customers.length} saved • {totalShown} shown
+          </span>
+          <button
+            type="button"
+            className="button button--primary"
+            onClick={() => {
+              resetForm()
+              openedEditIdRef.current = null
+              setSearchParams({ mode: 'add' })
+              setActiveTab('add')
+            }}
+          >
+            + Add customer
+          </button>
+          <details className="customers-page__more-menu">
+            <summary className="button button--ghost">More</summary>
+            <div className="customers-page__more-panel">
+              <button type="button" onClick={() => { setSearchParams({ mode: 'invite' }); setActiveTab('invite') }}>Invite link & QR</button>
+              <button type="button" onClick={exportToCsv} disabled={!customers.length}>Export CSV</button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>{isImporting ? 'Importing…' : 'Import CSV'}</button>
+            </div>
+          </details>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={handleCsvImport}
+          />
+        </div>
       </header>
 
       <div className="customers-page__grid">
-        <div className="customers-page__tabs" role="tablist" aria-label="Customer sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'view'}
-            className={`button button--small ${activeTab === 'view' ? 'button--primary' : 'button--ghost'}`}
-            onClick={() => setActiveTab('view')}
-          >
-            View all customers
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'add'}
-            className={`button button--small ${activeTab === 'add' ? 'button--primary' : 'button--ghost'}`}
-            onClick={() => setActiveTab('add')}
-          >
-            Add new customer
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'invite'}
-            className={`button button--small ${activeTab === 'invite' ? 'button--primary' : 'button--ghost'}`}
-            onClick={() => setActiveTab('invite')}
-          >
-            Invite link & QR
-          </button>
-        </div>
 
         {activeTab === 'invite' ? (
           <section className="card" aria-label="Customer invite link">
+            <div className="customers-page__panel-nav">
+              <button type="button" className="button button--ghost button--small" onClick={() => { setSearchParams({}); setActiveTab('view') }}>← Customer list</button>
+            </div>
             <div className="customers-page__section-header">
               <h3 className="card__title">Public customer intake</h3>
               <p className="card__subtitle">
@@ -1577,6 +1614,9 @@ export default function Customers() {
 
         {activeTab === 'add' ? (
           <section className="card" aria-label="Add a customer">
+          <div className="customers-page__panel-nav">
+            <button type="button" className="button button--ghost button--small" onClick={() => { resetForm(); openedEditIdRef.current = null; setSearchParams({}); setActiveTab('view') }}>← Customer list</button>
+          </div>
           <div className="customers-page__section-header">
             <h3 className="card__title">{editingCustomerId ? 'Update customer' : 'New customer'}</h3>
             <p className="card__subtitle">
@@ -1700,16 +1740,19 @@ export default function Customers() {
               <button type="submit" className="button button--primary" disabled={isFormDisabled}>
                 {editingCustomerId ? 'Save changes' : 'Save customer'}
               </button>
-              {editingCustomerId && (
-                <button
-                  type="button"
-                  className="button button--outline"
-                  onClick={resetForm}
-                  disabled={isFormDisabled}
-                >
-                  Cancel edit
-                </button>
-              )}
+              <button
+                type="button"
+                className="button button--outline"
+                onClick={() => {
+                  resetForm()
+                  openedEditIdRef.current = null
+                  setSearchParams({})
+                  setActiveTab('view')
+                }}
+                disabled={isFormDisabled}
+              >
+                Cancel
+              </button>
             </div>
 
             <p className="field__hint">
@@ -1739,31 +1782,7 @@ export default function Customers() {
                 onChange={event => setSearchTerm(event.target.value)}
               />
             </div>
-            <div className="customers-page__tool-buttons">
-              <button
-                type="button"
-                className="button button--secondary button--small"
-                onClick={exportToCsv}
-                disabled={!customers.length}
-              >
-                Export CSV
-              </button>
-              <button
-                type="button"
-                className="button button--outline button--small"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isImporting}
-              >
-                {isImporting ? 'Importing…' : 'Import CSV'}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                style={{ display: 'none' }}
-                onChange={handleCsvImport}
-              />
-            </div>
+
           </div>
 
           <div className="customers-page__filters" role="group" aria-label="Quick filters">
@@ -1888,6 +1907,8 @@ export default function Customers() {
                             className="button button--outline button--small"
                             onClick={event => {
                               event.stopPropagation()
+                              openedEditIdRef.current = customer.id
+                              setSearchParams({ edit: customer.id })
                               beginEdit(customer)
                             }}
                             disabled={isFormDisabled && editingCustomerId !== customer.id}
