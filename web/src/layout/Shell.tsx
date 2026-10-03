@@ -189,7 +189,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
     const remaining = filteredNavItems.filter(item => !assigned.has(item.id))
     if (remaining.length > 0) {
-      groups.push({ id: 'manage', label: 'Manage', itemIds: [], items: remaining } as (typeof groups)[number])
+      const manageGroup = groups.find(group => group.id === 'manage')
+      if (manageGroup) {
+        manageGroup.items.push(...remaining)
+      } else {
+        groups.push({ id: 'manage', label: 'Manage', itemIds: [], items: remaining } as (typeof groups)[number])
+      }
     }
     return groups
   }, [filteredNavItems])
