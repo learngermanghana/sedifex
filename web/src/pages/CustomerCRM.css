@@ -861,3 +861,76 @@
     gap: 3px;
   }
 }
+
+
+.customer-crm__profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.customer-crm__profile-actions a,
+.customer-crm__profile-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+  padding: 7px 10px;
+  text-decoration: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.customer-crm__profile-actions a:first-child {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+}
+
+.customer-crm__profile-actions a:hover,
+.customer-crm__profile-actions button:hover {
+  transform: translateY(-1px);
+}
+
+.customer-crm__finance-hint {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-crm__welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.customer-crm__welcome-actions a {
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: #eef2ff;
+  color: #3730a3;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .customer-crm__profile-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .customer-crm__profile-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

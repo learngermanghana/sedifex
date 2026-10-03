@@ -1,5 +1,5 @@
 .business-expenses-page { display: flex; flex-direction: column; gap: 1.25rem; }
-.business-expenses-header,.expense-summary-card,.expense-rule-card,.expense-form-card,.expense-history-card{background:#fff;border:1px solid #cbd5e1;border-radius:18px;padding:1rem 1.1rem;color:#0f172a}
+.business-expenses-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;background:#fff;border:1px solid #cbd5e1;border-radius:18px;padding:1rem 1.1rem;color:#0f172a}.business-expenses-header>div{min-width:0}.business-expenses-header .expense-primary-button{white-space:nowrap}.expense-summary-card,.expense-rule-card,.expense-form-card,.expense-history-card{background:#fff;border:1px solid #cbd5e1;border-radius:18px;padding:1rem 1.1rem;color:#0f172a}
 .expense-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.85rem}
 .expense-summary-card strong{font-size:1.3rem;display:block}.expense-summary-card span{color:#475569;font-size:.92rem}
 .expense-rule-card{border-left:5px solid #4f46e5}
@@ -13,4 +13,4 @@
 .expense-empty-state{text-align:center;color:#64748b;padding:1rem 0}
 .expense-chip{display:inline-flex;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900}
 @media (max-width:1024px){.expense-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.expense-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:720px){.expense-summary-grid,.expense-form-grid,.expense-filter-row{grid-template-columns:1fr}}
+@media (max-width:720px){.business-expenses-header{flex-direction:column}.business-expenses-header .expense-primary-button{width:100%}.expense-summary-grid,.expense-form-grid,.expense-filter-row{grid-template-columns:1fr}}

@@ -867,12 +867,7 @@ export default function CustomerCRM() {
                 <div><dt>Debt due date</dt><dd>{formatDate(selectedCustomer?.debt?.dueDate)}</dd></div>
                 <div><dt>Last reminder</dt><dd>{formatDate(selectedCustomer?.debt?.lastReminderAt, true)}</dd></div>
               </dl>
-              <div className="customer-crm__quick-links">
-                <Link to={`/sell?customerId=${encodeURIComponent(selectedCustomer?.id || '')}`}>Start sale</Link>
-                <Link to="/invoices">Create invoice</Link>
-                <Link to="/bookings/new">Add booking</Link>
-                <button type="button" onClick={() => setActiveTab('messages')}>Message customer</button>
-              </div>
+              <p className="customer-crm__finance-hint">Use the actions beside the customer name to start the next workflow without leaving this profile.</p>
             </aside>
           </div>
         )
@@ -888,8 +883,8 @@ export default function CustomerCRM() {
           <p>One profile across POS sales, bookings, invoices, event projects, payments, courses, messages, notes, and documents.</p>
         </div>
         <div className="customer-crm__hero-actions">
-          <Link className="customer-crm__secondary" to="/customers/manage">Manage customer list</Link>
-          <Link className="customer-crm__primary" to="/customers/manage">Add customer</Link>
+          <Link className="customer-crm__secondary" to="/customers/manage">Manage customers</Link>
+          <Link className="customer-crm__primary" to="/customers/manage?mode=add">+ Add customer</Link>
         </div>
       </header>
 
@@ -936,7 +931,10 @@ export default function CustomerCRM() {
               <span>Customer 360°</span>
               <h2>{customerId ? 'Customer not found' : 'Select a customer'}</h2>
               <p>{customerId ? 'This customer may have been removed or belongs to another workspace.' : 'Choose a customer from the directory to open their unified profile and activity across Sedifex.'}</p>
-              <Link to="/customers/manage">Open customer management</Link>
+              <div className="customer-crm__welcome-actions">
+                <Link to="/customers/manage?mode=add">+ Add customer</Link>
+                <Link to="/customers/manage">Manage customer list</Link>
+              </div>
             </div>
           ) : (
             <>
@@ -950,7 +948,13 @@ export default function CustomerCRM() {
                     {selectedCustomer.tags?.length ? <div className="customer-crm__tags">{selectedCustomer.tags.map(tag => <span key={tag}>#{tag}</span>)}</div> : null}
                   </div>
                 </div>
-                <Link className="customer-crm__secondary" to="/customers/manage">Edit customer</Link>
+                <div className="customer-crm__profile-actions">
+                  <Link to={`/sell?customerId=${encodeURIComponent(selectedCustomer.id)}`}>Start sale</Link>
+                  <Link to="/invoices">Create invoice</Link>
+                  <Link to="/bookings/new">Add booking</Link>
+                  <button type="button" onClick={() => setActiveTab('messages')}>Message</button>
+                  <Link className="customer-crm__secondary" to={`/customers/manage?edit=${encodeURIComponent(selectedCustomer.id)}`}>Edit</Link>
+                </div>
               </div>
 
               {storeId ? (
