@@ -588,7 +588,7 @@ export default function ProductsServiceFirst({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(openEditorInitially)
   const [search, setSearch] = useState('')
-  const searchStoreRef = useRef<string | null>(null)
+  const searchHydrationRef = useRef<{ storeId: string; value: string; pending: boolean } | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -633,20 +633,30 @@ export default function ProductsServiceFirst({
 
   useEffect(() => {
     if (!storeId) {
-      searchStoreRef.current = null
+      searchHydrationRef.current = null
       return
     }
-    if (searchStoreRef.current !== storeId) {
-      searchStoreRef.current = storeId
-      try {
-        setSearch(localStorage.getItem(`${PRODUCT_SEARCH_KEY_PREFIX}${storeId}`) || '')
-      } catch (storageError) {
-        console.warn('[products] Unable to load search preference', storageError)
-      }
+    let restored = ''
+    try {
+      restored = localStorage.getItem(`${PRODUCT_SEARCH_KEY_PREFIX}${storeId}`) || ''
+    } catch (storageError) {
+      console.warn('[products] Unable to load search preference', storageError)
+    }
+    searchHydrationRef.current = { storeId, value: restored, pending: true }
+    setSearch(restored)
+  }, [storeId])
+
+  useEffect(() => {
+    if (!storeId) return
+    const hydration = searchHydrationRef.current
+    if (!hydration || hydration.storeId !== storeId) return
+    if (hydration.pending) {
+      if (search === hydration.value) hydration.pending = false
       return
     }
     try {
       localStorage.setItem(`${PRODUCT_SEARCH_KEY_PREFIX}${storeId}`, search)
+      hydration.value = search
     } catch (storageError) {
       console.warn('[products] Unable to save search preference', storageError)
     }
