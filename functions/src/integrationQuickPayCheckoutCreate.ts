@@ -714,8 +714,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     const currencyRates = listedCurrency === 'USD' && !authoritativePricing
       ? await getUsdGhsRates({ refreshIfMissing: true })
       : null
-    const auditExchangeRateUsdToGhs = authoritativePricing?.exchangeRateUsdToGhs ?? auditExchangeRateUsdToGhs
-    const auditExchangeRateUpdatedAt = authoritativePricing?.exchangeRateUpdatedAt ?? auditExchangeRateUpdatedAt
+    const auditExchangeRateUsdToGhs = authoritativePricing?.exchangeRateUsdToGhs ?? currencyRates?.usdToGhs ?? null
+    const auditExchangeRateUpdatedAt = authoritativePricing?.exchangeRateUpdatedAt ?? currencyRates?.fetchedAt ?? null
     const transactionChargeMinor = listedCurrency === 'USD' && listedTransactionChargeMinor && auditExchangeRateUsdToGhs
       ? Math.round((listedTransactionChargeMinor / 100) * auditExchangeRateUsdToGhs * 100)
       : listedTransactionChargeMinor
@@ -974,7 +974,6 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
         recordType: details.recordType,
       },
       items: authoritativeOrderItems ?? details.enrichedItems,
-      authoritativeItems: authoritativePricing?.lines ?? null,
       pricingSnapshot,
       pricing_snapshot: pricingSnapshot,
       clientPricingSnapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
