@@ -455,9 +455,30 @@ export default function CompactBusinessDashboard() {
   })
 
   const activeEvents = events.filter(item => !['completed', 'cancelled'].includes(normalizeStatus(item.status))).length
+  const bookingAttentionCount = bookings.filter(item =>
+    ['pending', 'pending_approval', 'manual_review'].includes(normalizeStatus(item.bookingStatus ?? item.status)),
+  ).length
   const attentionCount = lowStockItems.length + overdueInvoices.length + overdueCustomerDebts.length
-    + bookings.filter(item => ['pending', 'pending_approval', 'manual_review'].includes(normalizeStatus(item.bookingStatus ?? item.status))).length
+    + bookingAttentionCount
     + pendingClientTasks
+
+  const attentionSignals = [
+    enabledModules.has('bookings') && bookingAttentionCount > 0
+      ? { id: 'bookings', count: bookingAttentionCount, label: `booking${bookingAttentionCount === 1 ? '' : 's'} need review`, to: '/bookings' }
+      : null,
+    enabledModules.has('invoices') && overdueInvoices.length > 0
+      ? { id: 'invoices', count: overdueInvoices.length, label: `overdue invoice${overdueInvoices.length === 1 ? '' : 's'}`, to: '/invoices' }
+      : null,
+    enabledModules.has('products') && lowStockItems.length > 0
+      ? { id: 'stock', count: lowStockItems.length, label: `low-stock item${lowStockItems.length === 1 ? '' : 's'}`, to: '/products' }
+      : null,
+    enabledModules.has('customers') && overdueCustomerDebts.length > 0
+      ? { id: 'balances', count: overdueCustomerDebts.length, label: `overdue customer balance${overdueCustomerDebts.length === 1 ? '' : 's'}`, to: '/customers' }
+      : null,
+    (industry === 'event' || enabledModules.has('events')) && pendingClientTasks > 0
+      ? { id: 'event-tasks', count: pendingClientTasks, label: `open event task${pendingClientTasks === 1 ? '' : 's'}`, to: '/event-planning' }
+      : null,
+  ].filter((item): item is { id: string; count: number; label: string; to: string } => Boolean(item))
 
   const customerBalanceHint = `${customerDebtRows.length} customer${customerDebtRows.length === 1 ? '' : 's'} owing`
 
@@ -699,6 +720,25 @@ export default function CompactBusinessDashboard() {
       </header>
 
       {layoutMessage && !isCustomizing ? <p className={`compact-dashboard__message${layoutMessage.startsWith('Unable') ? ' is-error' : ''}`}>{layoutMessage}</p> : null}
+
+      <section className={`compact-dashboard__attention-strip${attentionSignals.length ? '' : ' is-clear'}`} aria-label="Needs attention">
+        <div className="compact-dashboard__attention-heading">
+          <span>Needs attention</span>
+          <strong>{attentionCount}</strong>
+        </div>
+        {attentionSignals.length ? (
+          <div className="compact-dashboard__attention-links">
+            {attentionSignals.map(signal => (
+              <Link key={signal.id} to={signal.to}>
+                <strong>{signal.count}</strong>
+                <span>{signal.label}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p>Nothing urgent needs attention right now.</p>
+        )}
+      </section>
 
       <section className="compact-dashboard__kpis" aria-label="Business summary">
         {topKpis.map(kpi => (
