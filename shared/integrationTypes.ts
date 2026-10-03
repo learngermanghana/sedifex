@@ -23,7 +23,7 @@ export interface IntegrationProduct {
   isWebsiteVisible?: boolean | null
   categoryKey?: string | null
   categoryName?: string | null
-  currency?: 'GHS' | null
+  currency?: string | null
   serviceKind?: string | null
   duration?: string | null
   branch?: string | null
