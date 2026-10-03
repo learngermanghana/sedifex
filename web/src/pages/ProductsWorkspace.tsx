@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import ProductsServiceFirst from './ProductsServiceFirst'
 import './ProductsWorkspace.css'
 
@@ -30,8 +30,18 @@ function toggleDescriptionField(target: EventTarget | null) {
 
 export default function ProductsWorkspace() {
   const location = useLocation()
+  const navigate = useNavigate()
   const rootRef = useRef<HTMLDivElement>(null)
+  const [notice, setNotice] = useState('')
   const isAddPage = location.pathname === '/products/new'
+
+  useEffect(() => {
+    const state = location.state as { productsNotice?: unknown } | null
+    if (typeof state?.productsNotice === 'string' && state.productsNotice.trim()) {
+      setNotice(state.productsNotice.trim())
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.pathname, location.state, navigate])
 
   useEffect(() => {
     if (isAddPage) return
@@ -54,6 +64,13 @@ export default function ProductsWorkspace() {
         if (toggleDescriptionField(event.target)) event.preventDefault()
       }}
     >
+      {notice ? (
+        <div className="products-workspace__notice" role="status">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice('')} aria-label="Dismiss message">×</button>
+        </div>
+      ) : null}
+
       <nav className="products-workspace__nav" aria-label="Products navigation">
         <Link
           to="/products"
@@ -74,6 +91,14 @@ export default function ProductsWorkspace() {
       <ProductsServiceFirst
         key={isAddPage ? 'products-add' : 'products-list'}
         openEditorInitially={isAddPage}
+        onEditorClose={isAddPage
+          ? result => {
+              navigate('/products', {
+                replace: true,
+                state: result.saved && result.message ? { productsNotice: result.message } : null,
+              })
+            }
+          : undefined}
       />
     </div>
   )
