@@ -1,3 +1,4 @@
+import { readCatalogPrices, formatCatalogPrice, type CatalogPrice } from '../../../shared/catalogPrices'
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -64,6 +65,7 @@ type PublicItem = {
   id: string;
   name: string;
   price: number;
+  prices?: CatalogPrice[];
   type: "PRODUCT" | "SERVICE" | "COURSE" | "BOOKING";
   description: string;
   imageUrl: string;
@@ -165,6 +167,7 @@ function mapItem(
     name,
     type,
     price: getPrice(source),
+    prices: readCatalogPrices({ ...source, price: source.price ?? getPrice(source) }),
     description: clean(source.description ?? source.shortDescription, 260),
     imageUrl: clean(
       source.imageUrl ??
@@ -1349,6 +1352,7 @@ function ItemCard({
   quickPayUrl: string;
   itemCheckoutUrl: string;
 }) {
+  const { slug = "" } = useParams();
   const actionLabel =
     item.type === "PRODUCT"
       ? "Buy now"
@@ -1383,14 +1387,16 @@ function ItemCard({
         ) : null}
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <strong>{item.price > 0 ? money(item.price) : "Enquire"}</strong>
+          <div aria-label="Prices">
+            {item.prices?.length ? item.prices.map(price => <div key={price.currencyCode}><strong>{formatCatalogPrice(price)}</strong> <small>{price.currencyCode}</small></div>) : <strong>{item.price > 0 ? money(item.price) : "Enquire"}</strong>}
+          </div>
 
           <div className="flex flex-wrap justify-end gap-2">
             <a
               className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white no-underline"
-              href={itemCheckoutUrl}
+              href={item.prices && !item.prices.some(price => price.currencyCode === 'GHS') ? pagePath(slug, 'contact') : itemCheckoutUrl}
             >
-              {actionLabel}
+              {item.prices && !item.prices.some(price => price.currencyCode === 'GHS') ? 'Enquire' : actionLabel}
             </a>
 
             <a

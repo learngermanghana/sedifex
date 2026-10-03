@@ -419,6 +419,20 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
         </div>
       )}
 
+      {(tab === 'website' || tab === 'api') && (
+        <div className="account-overview__website-sync">
+          <h2>Website prices by currency</h2>
+          <p>Add prices under Products → Add item or Edit. Your website receives every saved currency automatically from the products/services endpoint.</p>
+          <p>Map the cedi field to <code>pricesByCurrency.GHS</code>, the dollar field to <code>pricesByCurrency.USD</code>, or use a custom currency code. Use <code>prices</code> for currency names and symbols, and <code>availableCurrencies</code> for a selector.</p>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{`const selected = product.prices.find(p => p.currencyCode === selectedCurrency);
+const label = selected
+  ? selected.symbol + ' ' + selected.amount.toLocaleString()
+  : 'Price unavailable in this currency';`}</pre>
+          <p>No conversion is performed. Prices are display values in whole currency units. Payment support is configured separately; the current checkout preview uses GHS.</p>
+          <button type="button" className="button button--secondary" onClick={() => copy(endpoint('/v1IntegrationProducts'), 'Currency prices endpoint')}>Copy prices endpoint</button>
+        </div>
+      )}
+
       {tab === 'booking' && (
         <div className="account-overview__website-sync">
           <h2>Booking sheet sync</h2>

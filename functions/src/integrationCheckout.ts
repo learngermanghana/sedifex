@@ -1,3 +1,4 @@
+import { readCatalogPrices } from './catalogPrices'
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
@@ -632,6 +633,11 @@ function normalizeCheckoutItemType(value: unknown) {
 }
 
 function getItemPriceMinor(record: Record<string, unknown>) {
+  if (Array.isArray(record.prices)) {
+    const price = readCatalogPrices(record).find(row => row.currencyCode === 'GHS')
+    return price ? Math.round(price.amount * 100) : null
+  }
+  if (record.currency && String(record.currency).toUpperCase() !== 'GHS') return null
   const minor = numberValue(record.priceMinor ?? record.amountMinor)
   if (minor !== null && minor >= 0) return Math.round(minor)
 
@@ -711,6 +717,11 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         apiKeyHint: redactApiKey(requestApiKey),
         hasAuthorizationHeader: Boolean(clean(req.get('authorization'), 1000)),
       })
+      return
+    }
+
+    if (body.currency && clean(body.currency, 20).toUpperCase() !== 'GHS') {
+      res.status(400).json({ error: 'unsupported-checkout-currency', message: 'This checkout preview supports GHS. Other catalogue prices are for website display.' })
       return
     }
 

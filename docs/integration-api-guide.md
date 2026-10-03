@@ -1,5 +1,7 @@
 # Sedifex Integration API Guide
 
+For manual GHS/USD/GBP/EUR/NGN/ZAR and custom currency prices, see [Manual currency prices and website mapping](manual-currency-prices.md). The catalogue now includes `prices`, `pricesByCurrency` and `availableCurrencies`.
+
 This guide explains how a partner website connects to Sedifex for **products/services**, **bookings**, and **website builder public content** such as hero slides and social/contact profile data.
 
 The most important rule is simple:

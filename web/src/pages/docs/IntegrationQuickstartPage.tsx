@@ -17,7 +17,7 @@ export default function IntegrationQuickstartPage() {
           </li>
           <li>
             Integration flow with API key auth via{" "}
-            <code>GET /integrationProducts?storeId=&lt;storeId&gt;</code>.
+            <code>GET /v1IntegrationProducts?storeId=&lt;storeId&gt;</code>.
           </li>
           <li>
             Companion endpoints for promotions, promo galleries, customers, top
@@ -40,6 +40,23 @@ export default function IntegrationQuickstartPage() {
             recommendations.
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2>Manual prices in multiple currencies</h2>
+        <p>Products, services and courses can have a separate manually entered price in GHS, USD, GBP, EUR, NGN, ZAR or a custom currency. No exchange rates or conversion are applied.</p>
+        <p>Fetch <code>/v1IntegrationProducts?storeId=&lt;storeId&gt;</code> from your server with your Website API key. Each item includes <code>prices</code> (name, code, symbol and amount), <code>pricesByCurrency</code> and <code>availableCurrencies</code>.</p>
+        <pre><code>{`// Website field mapping
+product.pricesByCurrency.GHS // 500
+product.pricesByCurrency.USD // 40
+
+// Dropdown options come from product.availableCurrencies.
+const price = product.prices.find(p => p.currencyCode === selectedCurrency);
+const label = price
+  ? price.symbol + ' ' + price.amount.toLocaleString()
+  : 'Price unavailable in this currency';`}</code></pre>
+        <p>Map by code, never by symbol. A missing price is unavailable, not zero. Custom codes work the same way and their saved symbol should be used for display. Keep API keys on the server.</p>
+        <p>The legacy <code>price</code> and <code>priceMinor</code> fields retain GHS compatibility for newly saved multi-price items; they are null when no GHS price is entered. Existing records without a prices array retain their recorded currency, defaulting to GHS. The GHS checkout preview requires a GHS price. Displaying another currency does not enable payment collection in that currency.</p>
       </section>
 
       <section>
