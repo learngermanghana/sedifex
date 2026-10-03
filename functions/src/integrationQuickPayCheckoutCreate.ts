@@ -573,7 +573,7 @@ async function resolveAuthoritativePricing(body: CheckoutBody, storeId: string) 
   const requestedItems = checkoutItemRequests(body).filter(item => item.itemId)
   if (!requestedItems.length) return null
 
-  const rates = await getUsdGhsRates({ refreshIfMissing: true })
+  let rates: Awaited<ReturnType<typeof getUsdGhsRates>> | null = null
   const lines: AuthoritativePricingLine[] = []
 
   for (const requested of requestedItems) {
@@ -594,8 +594,11 @@ async function resolveAuthoritativePricing(body: CheckoutBody, storeId: string) 
     }
     const listedCurrency = listedCurrencyRaw as 'GHS' | 'USD'
     const listedLineAmount = roundMoney(price * requested.quantity)
+    if (listedCurrency === 'USD' && !rates) {
+      rates = await getUsdGhsRates({ refreshIfMissing: true })
+    }
     const paymentLineAmountGhs = listedCurrency === 'USD'
-      ? roundMoney(listedLineAmount * rates.usdToGhs)
+      ? roundMoney(listedLineAmount * rates!.usdToGhs)
       : listedLineAmount
 
     lines.push({
@@ -622,8 +625,8 @@ async function resolveAuthoritativePricing(body: CheckoutBody, storeId: string) 
     listedAmount,
     listedCurrency: homogeneousCurrency ?? 'MIXED',
     paymentAmountGhs,
-    exchangeRateUpdatedAt: rates.fetchedAt,
-    exchangeRateUsdToGhs: rates.usdToGhs,
+    exchangeRateUpdatedAt: rates?.fetchedAt ?? null,
+    exchangeRateUsdToGhs: rates?.usdToGhs ?? null,
     priceSource: 'sedifex_catalog' as const,
   }
 }
@@ -840,7 +843,6 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       customerTotalMinor,
       sedifexCommissionMinor,
       priceSource: authoritativePricing?.priceSource ?? 'client_amount',
-      authoritativeItems: authoritativePricing?.lines ?? null,
       clientSubmittedAmount: clientAmountMajor,
       clientSubmittedCurrency: clientListedCurrency,
       listedAmount: amountMajor,
