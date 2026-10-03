@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions/v1";
 import { defaultDb } from "./firestore";
 import { admin } from "./firestore";
+import { convertListedPrice, getUsdGhsRates, type CurrencyRates } from "./currencyRates";
 
 type CatalogType = "PRODUCT" | "SERVICE" | "COURSE" | "BOOKING";
 
@@ -10,6 +11,10 @@ type CatalogItem = {
   type: CatalogType;
   price: number;
   priceMinor: number;
+  currency: string;
+  priceGhs?: number | null;
+  priceUsd?: number | null;
+  exchangeRateUpdatedAt?: string | null;
   description?: string | null;
   imageUrl?: string | null;
   category?: string | null;
@@ -138,6 +143,7 @@ function normalizeDoc(
     type,
     priceMinor,
     price: priceMinor / 100,
+    currency: cleanText(record.currency, 12).toUpperCase() || "GHS",
     description: cleanText(record.description, 500) || null,
     imageUrl:
       cleanText(
@@ -148,6 +154,23 @@ function normalizeDoc(
         2000,
       ) || null,
     category: cleanText(record.category, 180) || null,
+  };
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function withCurrencyConversion(item: CatalogItem, rates: CurrencyRates): CatalogItem {
+  if (item.currency !== "GHS" && item.currency !== "USD") {
+    return { ...item, priceGhs: null, priceUsd: null, exchangeRateUpdatedAt: null };
+  }
+  const converted = convertListedPrice(item.price, item.currency, rates);
+  return {
+    ...item,
+    priceGhs: roundMoney(converted.priceGhs),
+    priceUsd: roundMoney(converted.priceUsd),
+    exchangeRateUpdatedAt: rates.fetchedAt,
   };
 }
 
@@ -230,6 +253,7 @@ function normalizeAvailabilitySlot(
     type: "BOOKING",
     priceMinor,
     price: priceMinor / 100,
+    currency: cleanText(record.currency, 12).toUpperCase() || "GHS",
     description:
       [
         cleanText(record.description, 320),
@@ -480,6 +504,7 @@ export const publicQuickPayCatalog = functions.https.onRequest(
       availabilitySlots,
       publicListings,
       v1IntegrationProducts,
+      currencyRates,
     ] = await Promise.all([
       fetchCollectionItems(`stores/${storeId}/products`, "PRODUCT"),
       fetchCollectionItems(`stores/${storeId}/services`, "SERVICE"),
@@ -490,6 +515,7 @@ export const publicQuickPayCatalog = functions.https.onRequest(
       ),
       fetchQueryItems("publicListings", storeId, "PRODUCT"),
       fetchQueryItems("v1IntegrationProducts", storeId, "PRODUCT"),
+      getUsdGhsRates({ refreshIfMissing: true }),
     ]);
 
     const items = [
@@ -501,6 +527,7 @@ export const publicQuickPayCatalog = functions.https.onRequest(
       ...v1IntegrationProducts,
     ]
       .filter((item) => includesQuery(item, query))
+      .map((item) => withCurrencyConversion(item, currencyRates))
       .slice(0, MAX_RETURN_ITEMS);
 
     res.status(200).json({
@@ -508,6 +535,12 @@ export const publicQuickPayCatalog = functions.https.onRequest(
       storeId,
       count: items.length,
       items,
+      currencyConversion: {
+        updatedAt: currencyRates.fetchedAt,
+        refreshCadence: currencyRates.refreshCadence,
+        provider: currencyRates.provider,
+        providerUrl: currencyRates.providerUrl,
+      },
     });
   },
 );

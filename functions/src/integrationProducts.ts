@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { convertListedPrice, getUsdGhsRates, type CurrencyRates } from './currencyRates'
 import {
   cleanIntegrationText,
   isIntegrationRequestAuthorized,
@@ -26,6 +27,9 @@ type IntegrationProductItem = {
   price: number
   priceMinor: number
   currency: string
+  priceGhs?: number | null
+  priceUsd?: number | null
+  exchangeRateUpdatedAt?: string | null
   stockCount?: number | null
   itemType: 'product' | 'service' | 'course'
   type: CatalogType
@@ -239,6 +243,29 @@ async function fetchQueryItems(collection: string, storeId: string, fallbackType
     .filter((item): item is IntegrationProductItem => item !== null)
 }
 
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+function withCurrencyConversion(item: IntegrationProductItem, rates: CurrencyRates): IntegrationProductItem {
+  if (item.currency !== 'GHS' && item.currency !== 'USD') {
+    return {
+      ...item,
+      priceGhs: null,
+      priceUsd: null,
+      exchangeRateUpdatedAt: null,
+    }
+  }
+
+  const converted = convertListedPrice(item.price, item.currency, rates)
+  return {
+    ...item,
+    priceGhs: roundMoney(converted.priceGhs),
+    priceUsd: roundMoney(converted.priceUsd),
+    exchangeRateUpdatedAt: rates.fetchedAt,
+  }
+}
+
 function dedupeItems(items: IntegrationProductItem[]) {
   const seen = new Set<string>()
   const output: IntegrationProductItem[] = []
@@ -333,7 +360,11 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res):
   }
 
   try {
-    const products = await getStoreItems(storeId)
+    const [rawProducts, rates] = await Promise.all([
+      getStoreItems(storeId),
+      getUsdGhsRates({ refreshIfMissing: true }),
+    ])
+    const products = rawProducts.map(item => withCurrencyConversion(item, rates))
     const publicProducts = products.filter(item => item.itemType === 'product' || item.itemType === 'course')
     const publicServices = products.filter(item => item.itemType === 'service')
 
@@ -344,6 +375,12 @@ export const v1IntegrationProducts = functions.https.onRequest(async (req, res):
       publicProducts,
       publicServices,
       count: products.length,
+      currencyConversion: {
+        updatedAt: rates.fetchedAt,
+        refreshCadence: rates.refreshCadence,
+        provider: rates.provider,
+        providerUrl: rates.providerUrl,
+      },
       updatedAt: admin.firestore.Timestamp.now().toDate().toISOString(),
     })
   } catch (error) {

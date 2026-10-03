@@ -94,6 +94,7 @@ export function StoreSmsNotificationCenter() {
           .map(notificationDoc => {
             const data = notificationDoc.data() as Record<string, unknown>
             if (text(data.category) !== 'booking_sms') return null
+            if (text(data.kind) === 'sender_not_configured' || text(data.title).toLowerCase().includes('sender not configured')) return null
             const severityRaw = text(data.severity)
             const severity: StoreSmsNotification['severity'] =
               severityRaw === 'error' || severityRaw === 'warning' || severityRaw === 'success'
@@ -117,6 +118,7 @@ export function StoreSmsNotificationCenter() {
           if (change.type !== 'added') continue
           const data = change.doc.data() as Record<string, unknown>
           if (text(data.category) !== 'booking_sms' || data.unread === false) continue
+          if (text(data.kind) === 'sender_not_configured' || text(data.title).toLowerCase().includes('sender not configured')) continue
           const createdAt = millis(data.createdAt)
           const isLive = initializedRef.current || Boolean(createdAt && createdAt >= mountedAtRef.current - 3000)
           if (!isLive || toastIdsRef.current.has(change.doc.id)) continue

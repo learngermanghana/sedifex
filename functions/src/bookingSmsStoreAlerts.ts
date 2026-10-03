@@ -295,6 +295,7 @@ async function recordStoreAlert(args: {
   provider?: string
   providerMessageId?: string
 }) {
+  if (args.kind === 'sender_not_configured') return
   const appointmentDate = args.appointmentDate || bookingDate(args.booking)
   const id = alertId(args.bookingId, args.stage, args.kind, appointmentDate)
   const copy = alertCopy(args.kind, args.stage, args.booking, args.reason)

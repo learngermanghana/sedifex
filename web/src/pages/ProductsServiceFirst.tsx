@@ -13,10 +13,11 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import './Products.css'
 import { requestAiAdvisor } from '../api/aiAdvisor'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
-import { db } from '../firebase'
+import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import type { ItemType, Product } from '../types/product'
@@ -75,16 +76,20 @@ type SalesMode = 'buy_now' | 'book_now' | 'register' | 'request_quote'
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
-const COMMON_CURRENCIES = [
+const PRICE_CURRENCIES = [
   { code: 'GHS', label: 'GHS — Ghana cedi' },
   { code: 'USD', label: 'USD — US dollar' },
-  { code: 'GBP', label: 'GBP — British pound' },
-  { code: 'EUR', label: 'EUR — Euro' },
-  { code: 'ZAR', label: 'ZAR — South African rand' },
-  { code: 'NGN', label: 'NGN — Nigerian naira' },
-  { code: 'KES', label: 'KES — Kenyan shilling' },
 ] as const
-const COMMON_CURRENCY_CODES = COMMON_CURRENCIES.map(option => option.code)
+
+type CurrencyRateState = {
+  usdToGhs: number
+  ghsToUsd: number
+  provider: string
+  providerUrl: string
+  providerUpdatedAt: string | null
+  fetchedAt: string
+  refreshCadence: 'weekly_monday'
+}
 
 const blankDraft: Draft = {
   name: '',
@@ -161,6 +166,14 @@ function formatDateInput(value: Date | null | undefined) {
 
 function formatMoney(value: number | null | undefined, currency = 'GHS') {
   return typeof value === 'number' && Number.isFinite(value) ? `${currency || 'GHS'} ${value.toFixed(2)}` : '—'
+}
+
+function convertPrice(value: number | null | undefined, currency: string | null | undefined, rates: CurrencyRateState | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !rates) return null
+  const normalizedCurrency = (currency || 'GHS').trim().toUpperCase()
+  if (normalizedCurrency === 'GHS') return { value: value * rates.ghsToUsd, currency: 'USD' }
+  if (normalizedCurrency === 'USD') return { value: value * rates.usdToGhs, currency: 'GHS' }
+  return null
 }
 
 function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
@@ -321,7 +334,7 @@ function generateItemDescription(draft: Draft): string {
     const mode = draft.courseMode === 'online' ? 'online' : draft.courseMode === 'hybrid' ? 'in online and in-person formats' : 'in person'
     const classTimes = draft.preferredTimes.trim() || draft.classTimes.trim()
     const fee = cleanNumber(draft.price)
-    const feeText = fee !== null ? `Course fee: GHS ${fee.toFixed(2)}.` : ''
+    const feeText = fee !== null ? `Course fee: ${draft.currency || 'GHS'} ${fee.toFixed(2)}.` : ''
     const intro = `${itemName} is a ${level} ${category.toLowerCase()} programme designed for learners who want practical guidance, steady progress, and skills they can apply with confidence.`
     const details = `Classes are offered ${mode}${(draft.branch.trim() || locationText) ? ` at ${draft.branch.trim() || locationText}` : ''}${classTimes ? `, with sessions scheduled ${classTimes}` : ''}${duration ? `, over ${duration}` : ''}.`
     const benefits = ['- Learn through a structured programme that is easy to understand and follow.', '- Build confidence with lessons focused on practical progress, not only theory.', '- Register through the store and keep payment or enquiry records in one place.']
@@ -341,7 +354,7 @@ function generateItemDescription(draft: Draft): string {
   const stockCount = cleanNumber(draft.openingStock)
   const angle = getProductDescriptionAngle(itemName, category)
   const categoryPhrase = category === PRODUCT_CATEGORY ? 'product' : `${category.toLowerCase()} item`
-  const priceText = fee !== null ? `Price: GHS ${fee.toFixed(2)}.` : ''
+  const priceText = fee !== null ? `Price: ${draft.currency || 'GHS'} ${fee.toFixed(2)}.` : ''
   const stockText = stockCount !== null ? `Current stock: ${stockCount} available before new sales are recorded.` : ''
   const skuText = draft.sku.trim() ? `SKU / code: ${draft.sku.trim()}.` : ''
   const expiryText = draft.expiryDate ? `Expiry date: ${draft.expiryDate}.` : ''
@@ -439,7 +452,7 @@ function getProductSortTime(product: Product): number {
   return toDate(product.updatedAt)?.getTime() ?? toDate(product.createdAt)?.getTime() ?? 0
 }
 
-function buildSavePayload(draft: Draft, storeId: string) {
+function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateState | null) {
   const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
   const isCourse = draft.itemType === 'course'
   const behavesLikeService = draft.itemType !== 'product'
@@ -467,7 +480,10 @@ function buildSavePayload(draft: Draft, storeId: string) {
   const trimmedImageUrl = draft.imageUrl.trim()
   const imageUrls = trimmedImageUrl ? [trimmedImageUrl] : []
   const currency = draft.currency.trim().toUpperCase()
-  if (!currency) throw new Error('Currency is required.')
+  if (currency !== 'GHS' && currency !== 'USD') throw new Error('Choose GHS or USD for the item price.')
+  if (currency === 'USD' && !rates) throw new Error('The USD/GHS conversion rate is still loading. Try again in a moment.')
+  const priceGhs = currency === 'GHS' ? price : rates ? price * rates.usdToGhs : null
+  const priceUsd = currency === 'USD' ? price : rates ? price * rates.ghsToUsd : null
   const categoryName = category
   const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
   const description = cleanSavedDescription(draft.description)
@@ -490,6 +506,10 @@ function buildSavePayload(draft: Draft, storeId: string) {
     description: description || null,
     price,
     currency,
+    priceGhs: priceGhs === null ? null : Math.round(priceGhs * 100) / 100,
+    priceUsd: priceUsd === null ? null : Math.round(priceUsd * 100) / 100,
+    exchangeRateUsdToGhs: rates?.usdToGhs ?? null,
+    exchangeRateUpdatedAt: rates?.fetchedAt ?? null,
     costPrice: behavesLikeService ? null : cleanNumber(draft.costPrice),
     sku: behavesLikeService ? null : draft.sku.trim() || null,
     barcode: behavesLikeService ? null : draft.sku.trim() || null,
@@ -563,6 +583,8 @@ export default function ProductsServiceFirst() {
   const [imageUploadState, setImageUploadState] = useState<'idle' | 'uploading' | 'success' | 'failed'>('idle')
   const [imageStatusMessage, setImageStatusMessage] = useState('')
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
+  const [currencyRates, setCurrencyRates] = useState<CurrencyRateState | null>(null)
+  const [currencyRateError, setCurrencyRateError] = useState('')
 
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
@@ -570,6 +592,32 @@ export default function ProductsServiceFirst() {
   const isCourse = draft.itemType === 'course'
   const behavesLikeService = draft.itemType !== 'product'
   const categoryOptions = useMemo(() => Array.from(new Set([...ITEM_CATEGORIES, ...items.map(item => normalizeCategory(item.category, item.itemType))])), [items])
+  const draftPriceNumber = cleanNumber(draft.price)
+  const draftConvertedPrice = useMemo(
+    () => convertPrice(draftPriceNumber, draft.currency, currencyRates),
+    [draft.currency, draftPriceNumber, currencyRates],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    const loadRates = async () => {
+      try {
+        const callable = httpsCallable<Record<string, never>, CurrencyRateState>(functions, 'getCurrencyRates')
+        const response = await callable({})
+        if (cancelled) return
+        setCurrencyRates(response.data)
+        setCurrencyRateError('')
+      } catch (rateError) {
+        if (cancelled) return
+        console.warn('[products] Unable to load currency rate', rateError)
+        setCurrencyRateError('Currency conversion is temporarily unavailable.')
+      }
+    }
+    void loadRates()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!storeId) {
@@ -671,7 +719,7 @@ export default function ProductsServiceFirst() {
       category: normalizeCategory(item.category, itemType),
       subcategory: item.subcategory ?? '',
       price: typeof item.price === 'number' ? String(item.price) : '',
-      currency: item.currency?.trim().toUpperCase() || 'GHS',
+      currency: item.currency?.trim().toUpperCase() === 'USD' ? 'USD' : 'GHS',
       costPrice: itemType === 'product' && typeof item.costPrice === 'number' ? String(item.costPrice) : '',
       description: item.description ?? '',
       sku: itemType === 'product' ? item.sku ?? item.barcode ?? '' : '',
@@ -715,7 +763,7 @@ export default function ProductsServiceFirst() {
     setMessage('')
     setError('')
     try {
-      const payload = buildSavePayload(draft as any, storeId)
+      const payload = buildSavePayload(draft as any, storeId, currencyRates)
       if (!editingId) {
         const possibleDuplicate = items.find(item => {
           const existingStoreId = typeof (item as Product & { storeId?: unknown }).storeId === 'string'
@@ -832,25 +880,27 @@ export default function ProductsServiceFirst() {
               <div className="products-page__price-row">
                 <select
                   aria-label="Currency"
-                  value={COMMON_CURRENCY_CODES.includes(draft.currency as (typeof COMMON_CURRENCY_CODES)[number]) ? draft.currency : 'CUSTOM'}
-                  onChange={event => {
-                    const value = event.target.value
-                    setDraft(current => ({ ...current, currency: value === 'CUSTOM' ? '' : value }))
-                  }}
+                  value={draft.currency === 'USD' ? 'USD' : 'GHS'}
+                  onChange={event => setDraft(current => ({ ...current, currency: event.target.value === 'USD' ? 'USD' : 'GHS' }))}
                 >
-                  {COMMON_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}
-                  <option value="CUSTOM">Custom currency</option>
+                  {PRICE_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}
                 </select>
                 <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
               </div>
-              {!COMMON_CURRENCY_CODES.includes(draft.currency as (typeof COMMON_CURRENCY_CODES)[number]) ? (
-                <input
-                  aria-label="Custom currency code"
-                  value={draft.currency}
-                  onChange={event => setDraft(current => ({ ...current, currency: event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) }))}
-                  placeholder="Currency code, e.g. CAD"
-                  required
-                />
+              {draftConvertedPrice ? (
+                <p className="products-page__currency-conversion">
+                  ≈ {formatMoney(draftConvertedPrice.value, draftConvertedPrice.currency)}
+                  {currencyRates ? ` · Weekly rate: 1 USD = GHS ${currencyRates.usdToGhs.toFixed(4)}` : ''}
+                </p>
+              ) : currencyRateError ? (
+                <p className="products-page__currency-conversion products-page__currency-conversion--error">{currencyRateError}</p>
+              ) : (
+                <p className="products-page__currency-conversion">Loading weekly USD/GHS conversion…</p>
+              )}
+              {currencyRates ? (
+                <p className="products-page__currency-source">
+                  Rate refreshed weekly on Monday. <a href={currencyRates.providerUrl} target="_blank" rel="noreferrer">Rates by Exchange Rate API</a>
+                </p>
               ) : null}
             </div>
 
@@ -1024,6 +1074,11 @@ export default function ProductsServiceFirst() {
                     <div className="products-page__list-meta">
                       <span className="products-page__meta-label">Price</span>
                       <span>{formatMoney(item.price, item.currency || 'GHS')}</span>
+                      {convertPrice(item.price, item.currency, currencyRates) ? (
+                        <small className="products-page__currency-equivalent">
+                          ≈ {formatMoney(convertPrice(item.price, item.currency, currencyRates)!.value, convertPrice(item.price, item.currency, currencyRates)!.currency)}
+                        </small>
+                      ) : null}
                     </div>
                   </header>
 
@@ -1036,8 +1091,8 @@ export default function ProductsServiceFirst() {
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Branch</label><p className="products-page__list-value">{item.branch || '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Preferred times</label><p className="products-page__list-value">{item.preferredTimes || '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Start date</label><p className="products-page__list-value">{item.startDate ? item.startDate.toLocaleDateString() : '—'}</p></div> : null}
-                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Registration fee</label><p className="products-page__list-value">{formatMoney(item.registrationFee)}</p></div> : null}
-                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Full fee</label><p className="products-page__list-value">{formatMoney(item.fullFee ?? item.price)}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Registration fee</label><p className="products-page__list-value">{formatMoney(item.registrationFee, item.currency || 'GHS')}</p></div> : null}
+                        {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Full fee</label><p className="products-page__list-value">{formatMoney(item.fullFee ?? item.price, item.currency || 'GHS')}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Capacity</label><p className="products-page__list-value">{item.capacity ?? '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Certificate</label><p className="products-page__list-value">{item.certificateIncluded ? 'Included' : '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Requirements</label><p className="products-page__list-value">{item.requirements || '—'}</p></div> : null}

@@ -24,6 +24,9 @@ export interface IntegrationProduct {
   categoryKey?: string | null
   categoryName?: string | null
   currency?: string | null
+  priceGhs?: number | null
+  priceUsd?: number | null
+  exchangeRateUpdatedAt?: string | null
   serviceKind?: string | null
   duration?: string | null
   branch?: string | null
@@ -138,6 +141,12 @@ export interface IntegrationSocialSettingsResponse {
 export interface IntegrationProductsResponse {
   storeId: string
   products: IntegrationProduct[]
+  currencyConversion?: {
+    updatedAt: string
+    refreshCadence: 'weekly_monday'
+    provider: string
+    providerUrl?: string
+  }
   publicProducts?: IntegrationProduct[]
   publicServices?: IntegrationProduct[]
 }

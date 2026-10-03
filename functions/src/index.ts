@@ -75,6 +75,7 @@ export { approveEventProgram, publishEventProgram } from './eventProgramApproval
 export { syncEventPlanningCustomer } from './eventCustomerSync'
 export { auditEventPlanningWrite } from './eventAudit'
 export { v1IntegrationProducts } from './integrationProducts'
+export { getCurrencyRates, refreshWeeklyCurrencyRates } from './currencyRates'
 export { v1IntegrationSocialSettings } from './integrationSocialSettings'
 export { v1IntegrationStudentRegistrations } from './integrationStudentRegistrations'
 export { publicQuickPayCatalog, publicQuickPayStores, syncQuickPayStoreIndex } from './quickPay'

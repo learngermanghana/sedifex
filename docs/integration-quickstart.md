@@ -17,6 +17,10 @@ After setup, Website A can fetch and render:
 - `category`
 - `description`
 - `price`
+- `currency` (`GHS` or `USD`)
+- `priceGhs` (weekly converted value)
+- `priceUsd` (weekly converted value)
+- `exchangeRateUpdatedAt`
 - `stockCount`
 - `itemType`
 - `imageUrl` (primary image)
@@ -353,6 +357,10 @@ type Product = {
   category?: string | null
   description?: string | null
   price: number
+  currency?: 'GHS' | 'USD'
+  priceGhs?: number | null
+  priceUsd?: number | null
+  exchangeRateUpdatedAt?: string | null
   stockCount?: number
   imageUrl?: string | null
   imageUrls?: string[]

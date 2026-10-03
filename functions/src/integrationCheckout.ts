@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
+import { getUsdGhsRates } from './currencyRates'
 
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL', { default: '' })
@@ -644,8 +645,10 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
   const directRefs = [
     defaultDb.collection('stores').doc(storeId).collection('products').doc(itemId),
     defaultDb.collection('stores').doc(storeId).collection('services').doc(itemId),
+    defaultDb.collection('stores').doc(storeId).collection('courses').doc(itemId),
     defaultDb.collection('products').doc(itemId),
     defaultDb.collection('services').doc(itemId),
+    defaultDb.collection('courses').doc(itemId),
     defaultDb.collection('publicListings').doc(itemId),
   ]
 
@@ -653,6 +656,11 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
     const snap = await ref.get()
     if (!snap.exists) continue
     const data = (snap.data() ?? {}) as Record<string, unknown>
+    const recordStoreId = clean(data.storeId, 180)
+    if (recordStoreId && recordStoreId !== storeId) continue
+    if (data.isWebsiteVisible === false || data.isPublished === false) continue
+    const status = clean(data.status, 40).toLowerCase()
+    if (['draft', 'archived', 'deleted', 'removed', 'hidden', 'inactive'].includes(status)) continue
     return {
       item: data,
       type: normalizeCheckoutItemType(data.type ?? data.item_type ?? hintedType ?? (ref.parent.id.toUpperCase().includes('SERVICE') ? 'SERVICE' : 'PRODUCT')),
@@ -672,6 +680,9 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
         .get()
       if (snap.empty) continue
       const data = (snap.docs[0].data() ?? {}) as Record<string, unknown>
+      if (data.isWebsiteVisible === false || data.isPublished === false) continue
+      const status = clean(data.status, 40).toLowerCase()
+      if (['draft', 'archived', 'deleted', 'removed', 'hidden', 'inactive'].includes(status)) continue
       return {
         item: data,
         type: normalizeCheckoutItemType(data.type ?? data.item_type ?? hintedType),
@@ -724,6 +735,7 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
 
     const responseItems: Array<Record<string, unknown>> = []
     let subtotal = 0
+    const currencyRates = await getUsdGhsRates({ refreshIfMissing: true })
 
     for (const rawItem of items) {
       const item = rawItem && typeof rawItem === 'object' ? rawItem as CheckoutPreviewItem : {}
@@ -743,12 +755,27 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         return
       }
 
-      const unitPrice = getItemPriceMinor(resolved.item)
-      if (unitPrice === null) {
+      const listedUnitPriceMinor = getItemPriceMinor(resolved.item)
+      if (listedUnitPriceMinor === null) {
         res.status(400).json({ error: 'checkout-item-price-missing', item_id: itemId, storeId })
         return
       }
 
+      const listedCurrency = (clean(resolved.item.currency, 20) || 'GHS').toUpperCase()
+      if (listedCurrency !== 'GHS' && listedCurrency !== 'USD') {
+        res.status(400).json({
+          error: 'unsupported-currency',
+          item_id: itemId,
+          storeId,
+          currency: listedCurrency,
+          message: 'Sedifex checkout currently supports item prices in GHS or USD only.',
+        })
+        return
+      }
+
+      const unitPrice = listedCurrency === 'USD'
+        ? Math.round((listedUnitPriceMinor / 100) * currencyRates.usdToGhs * 100)
+        : listedUnitPriceMinor
       const lineTotal = unitPrice * qty
       subtotal += lineTotal
 
@@ -758,6 +785,9 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         qty,
         unit_price: unitPrice,
         line_total: lineTotal,
+        currency: 'GHS',
+        listed_unit_price: listedUnitPriceMinor,
+        listed_currency: listedCurrency,
         type: resolved.type,
       })
     }
@@ -765,6 +795,13 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
     const payload = {
       pricing_version: '2026-05-12-v1',
       currency: 'GHS',
+      exchange_rate_updated_at: currencyRates.fetchedAt,
+      currency_conversion: {
+        updatedAt: currencyRates.fetchedAt,
+        refreshCadence: currencyRates.refreshCadence,
+        provider: currencyRates.provider,
+        providerUrl: currencyRates.providerUrl,
+      },
       subtotal,
       tax_total: 0,
       delivery_fee: 0,

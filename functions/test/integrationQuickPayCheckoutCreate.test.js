@@ -55,6 +55,17 @@ Module._load = function patchedLoad(request, parent, isMain) {
         HttpsError,
       },
       logger: { info: () => {}, warn: () => {}, error: () => {} },
+      pubsub: {
+        schedule: () => ({
+          timeZone: () => ({
+            onRun: fn => {
+              const handler = (...args) => fn(...args)
+              handler.run = fn
+              return handler
+            },
+          }),
+        }),
+      },
     }
   }
 
@@ -258,6 +269,52 @@ async function runWebsiteCommerceAutomaticCommissionTest() {
   }
 }
 
+async function runAuthoritativeCatalogPriceTest() {
+  currentDefaultDb = new MockFirestore({
+    'stores/catalog-store': { name: 'Catalog store' },
+    'products/item-1': {
+      storeId: 'catalog-store',
+      name: 'Authoritative item',
+      itemType: 'product',
+      price: 500,
+      currency: 'GHS',
+      status: 'published',
+      isPublished: true,
+      isWebsiteVisible: true,
+    },
+  })
+  process.env.PAYSTACK_SECRET_KEY = 'test_secret'
+  paystackPayloads = []
+
+  const { integrationCheckoutCreate } = loadQuickPayModule()
+  const state = await post(integrationCheckoutCreate, {
+    storeId: 'catalog-store',
+    reference: 'authoritative_catalog_price',
+    amount: 1,
+    currency: 'GHS',
+    customer: { email: 'buyer@example.com' },
+    sourceChannel: 'integration_checkout',
+    accountingType: 'product',
+    itemType: 'product',
+    items: [{ item_id: 'item-1', name: 'Browser supplied name', price: 1, qty: 1 }],
+  })
+
+  assert.strictEqual(state.statusCode, 200)
+  assert.strictEqual(paystackPayloads.length, 1)
+  const payload = paystackPayloads[0]
+  assert.strictEqual(payload.metadata.baseTotalMinor, 50000)
+  assert.strictEqual(payload.metadata.priceSource, 'sedifex_catalog')
+  assert.strictEqual(payload.metadata.clientSubmittedAmount, 1)
+
+  const order = currentDefaultDb.getDoc('integrationOrders/authoritative_catalog_price')
+  assert.ok(order, 'Expected authoritative integration order to be stored')
+  assert.strictEqual(order.priceSource, 'sedifex_catalog')
+  assert.strictEqual(order.clientSubmittedAmount, 1)
+  assert.strictEqual(order.baseAmountMinor, 50000)
+  assert.strictEqual(order.items[0].price, 500)
+  assert.strictEqual(order.items[0].currency, 'GHS')
+}
+
 async function runMissingSubaccountTest() {
   currentDefaultDb = new MockFirestore({ 'stores/store-123': { name: 'No routing store' } })
   process.env.PAYSTACK_SECRET_KEY = 'test_secret'
@@ -364,6 +421,7 @@ async function runCashQuickPayNoProcessingFeeTest() {
 async function run() {
   await runQuickPayStoreRoutingTest()
   await runWebsiteCommerceAutomaticCommissionTest()
+  await runAuthoritativeCatalogPriceTest()
   await runMissingSubaccountTest()
   await runExternalBodySubaccountCompatibilityTest()
   await runSandboxCheckoutDoesNotPersistTest()

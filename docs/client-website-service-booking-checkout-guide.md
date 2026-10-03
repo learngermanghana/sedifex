@@ -253,6 +253,10 @@ When `slotId` is provided, Sedifex resolves the slot's `serviceId`/`serviceName`
 
 ### Step 3: Create hosted checkout
 
+For saved Sedifex products/services/courses, the item or service ID is now the authoritative pricing key. Keep sending the ID in `items[].item_id` (or `itemId`, `productId`, or `serviceId`). Sedifex resolves the current saved price and currency before Paystack checkout. A browser-submitted `amount`, `price`, or `currency` cannot override the current Sedifex catalog price when the ID resolves successfully.
+
+This is backward compatible: older integrations that already send an amount continue to work. If they also send a valid Sedifex item ID, the Sedifex price takes precedence automatically. Websites do not need to calculate USD/GHS conversion themselves.
+
 Endpoint:
 
 ```http
@@ -436,12 +440,23 @@ if (!Number.isFinite(servicePrice) || servicePrice <= 0) {
 }
 ```
 
-4. Reuse the same `servicePrice` in both requests:
-   - booking payload: `paymentAmount: servicePrice`
-   - checkout payload: `amount: servicePrice`, `items[0].unitPrice: servicePrice`, `items[0].price: servicePrice`
-5. Never trust a client-edited amount from browser form inputs. Resolve price from Sedifex service data in the website backend before creating booking/checkout.
+4. Keep sending the Sedifex service/item ID in checkout. Existing integrations may continue sending `amount`, `items[0].unitPrice`, and `items[0].price` for compatibility, but Sedifex re-resolves the saved item and treats its current price/currency as authoritative.
+5. Do not implement your own USD/GHS payment conversion on the client website. Use the catalog's `price`, `currency`, `priceGhs`, and `priceUsd` for display; Sedifex converts USD-priced items to GHS for Paystack.
+6. Never trust a client-edited amount from browser form inputs. Sedifex validates the catalog price again during checkout.
 
-Quick backend check before opening checkout:
+For new integrations, the minimal pricing information needed at checkout is the Sedifex item ID plus quantity. Customer and return URL fields still apply. Example:
+
+```json
+{
+  "storeId": "store_123",
+  "customer": { "email": "ada@example.com" },
+  "items": [
+    { "item_id": "svc_001", "qty": 1 }
+  ]
+}
+```
+
+Quick backend check before opening checkout (legacy amount-based integrations):
 
 ```ts
 if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
