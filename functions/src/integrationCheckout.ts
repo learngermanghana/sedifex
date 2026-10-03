@@ -645,8 +645,10 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
   const directRefs = [
     defaultDb.collection('stores').doc(storeId).collection('products').doc(itemId),
     defaultDb.collection('stores').doc(storeId).collection('services').doc(itemId),
+    defaultDb.collection('stores').doc(storeId).collection('courses').doc(itemId),
     defaultDb.collection('products').doc(itemId),
     defaultDb.collection('services').doc(itemId),
+    defaultDb.collection('courses').doc(itemId),
     defaultDb.collection('publicListings').doc(itemId),
   ]
 
@@ -654,6 +656,11 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
     const snap = await ref.get()
     if (!snap.exists) continue
     const data = (snap.data() ?? {}) as Record<string, unknown>
+    const recordStoreId = clean(data.storeId, 180)
+    if (recordStoreId && recordStoreId !== storeId) continue
+    if (data.isWebsiteVisible === false || data.isPublished === false) continue
+    const status = clean(data.status, 40).toLowerCase()
+    if (['draft', 'archived', 'deleted', 'removed', 'hidden', 'inactive'].includes(status)) continue
     return {
       item: data,
       type: normalizeCheckoutItemType(data.type ?? data.item_type ?? hintedType ?? (ref.parent.id.toUpperCase().includes('SERVICE') ? 'SERVICE' : 'PRODUCT')),
@@ -673,6 +680,9 @@ async function resolveCatalogItem(storeId: string, itemId: string, hintedType: s
         .get()
       if (snap.empty) continue
       const data = (snap.docs[0].data() ?? {}) as Record<string, unknown>
+      if (data.isWebsiteVisible === false || data.isPublished === false) continue
+      const status = clean(data.status, 40).toLowerCase()
+      if (['draft', 'archived', 'deleted', 'removed', 'hidden', 'inactive'].includes(status)) continue
       return {
         item: data,
         type: normalizeCheckoutItemType(data.type ?? data.item_type ?? hintedType),
