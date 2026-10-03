@@ -871,3 +871,45 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.products-page__advanced {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.products-page__advanced > summary {
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+  color: #0f172a;
+}
+
+.products-page__advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.products-page__advanced > summary span {
+  font-weight: 800;
+}
+
+.products-page__advanced > summary small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.products-page__advanced[open] > summary {
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.products-page__advanced-fields {
+  display: grid;
+  gap: 16px;
+  padding: 14px;
+}
