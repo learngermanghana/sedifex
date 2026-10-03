@@ -74,7 +74,7 @@ function itemTypeLabel(type: OrderRow['itemType']) {
 
 function sourceLabel(sourceChannel: string) {
   if (sourceChannel === 'client_website') return 'Client Website'
-  if (sourceChannel === 'sedifex_market') return 'Sedifex Market'
+  if (sourceChannel === 'sedifex_market') return 'Retired online channel'
   if (sourceChannel === 'sedifex_custom_page') return 'Sedifex Public Page'
   return sourceChannel.replace(/_/g, ' ')
 }
@@ -164,7 +164,7 @@ export default function WebsiteSalesReport() {
       return undefined
     }
     const unsubscribe = onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId)), snapshot => {
-      setOrders(snapshot.docs.map(docSnap => mapOrder(docSnap.id, docSnap.data() as Record<string, unknown>)).sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)))
+      setOrders(snapshot.docs.map(docSnap => mapOrder(docSnap.id, docSnap.data() as Record<string, unknown>)).filter(order => order.sourceChannel !== 'sedifex_market').sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)))
     })
     return unsubscribe
   }, [storeId])
@@ -182,7 +182,6 @@ export default function WebsiteSalesReport() {
     count: filtered.length,
     revenue: filtered.reduce((sum, order) => sum + order.amount, 0),
     website: filtered.filter(order => order.sourceChannel === 'client_website').length,
-    market: filtered.filter(order => order.sourceChannel === 'sedifex_market').length,
     publicPage: filtered.filter(order => order.sourceChannel === 'sedifex_custom_page').length,
     paid: filtered.filter(order => isPaidLike(order.paymentStatus)).length,
     pending: filtered.filter(order => order.paymentStatus.toLowerCase().includes('pending')).length,
@@ -191,7 +190,6 @@ export default function WebsiteSalesReport() {
     products: filtered.filter(order => order.itemType === 'product').length,
     services: filtered.filter(order => order.itemType === 'service' || order.itemType === 'course').length,
     websiteValue: filtered.filter(order => order.sourceChannel === 'client_website').reduce((sum, order) => sum + order.amount, 0),
-    marketValue: filtered.filter(order => order.sourceChannel === 'sedifex_market').reduce((sum, order) => sum + order.amount, 0),
     publicValue: filtered.filter(order => order.sourceChannel === 'sedifex_custom_page').reduce((sum, order) => sum + order.amount, 0),
     currency: filtered[0]?.currency ?? 'GHS',
   }), [filtered])
@@ -227,7 +225,7 @@ export default function WebsiteSalesReport() {
   function exportPdf() {
     exportReportPdf({
       title: 'Website sales report',
-      subtitle: 'Online and website sales from Sedifex Market, client websites, and public pages.',
+      subtitle: 'Online sales from connected client websites and public pages.',
       summary: [
         { label: 'Orders', value: totals.count },
         { label: 'Order value', value: formatMoney(totals.revenue, totals.currency) },
@@ -257,7 +255,7 @@ export default function WebsiteSalesReport() {
       <section className="workspace-card">
         <p className="workspace-eyebrow">Reports / Website sales</p>
         <h1>Online and website sales report</h1>
-        <p className="workspace-muted">Detailed sales from Sedifex Market, client websites, public pages, online payment, manual payment, and pay on delivery.</p>
+        <p className="workspace-muted">Detailed sales from connected client websites and public pages, including online payment, manual payment, and pay on delivery.</p>
       </section>
       <section className="workspace-grid workspace-grid--four">
         <article className="workspace-card"><strong>{totals.count}</strong><span>Orders</span></article>
@@ -267,7 +265,6 @@ export default function WebsiteSalesReport() {
         <article className="workspace-card"><strong>{totals.services}</strong><span>Services / courses</span></article>
       </section>
       <section className="workspace-grid workspace-grid--three">
-        <article className="workspace-card"><strong>{formatMoney(totals.marketValue, totals.currency)}</strong><span>Sedifex Market · {totals.market} orders</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.websiteValue, totals.currency)}</strong><span>Client website · {totals.website} orders</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.publicValue, totals.currency)}</strong><span>Public page · {totals.publicPage} orders</span></article>
       </section>
@@ -292,7 +289,6 @@ export default function WebsiteSalesReport() {
           <select value={channel} onChange={event => setChannel(event.target.value)}>
             <option value="all">All sources</option>
             <option value="client_website">Client website</option>
-            <option value="sedifex_market">Sedifex Market</option>
             <option value="sedifex_custom_page">Sedifex public page</option>
           </select>
           <select value={itemType} onChange={event => setItemType(event.target.value)}>

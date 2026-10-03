@@ -54,14 +54,14 @@ const PLANS: PlanOption[] = [
     productLimit: 'Unlimited products/services under fair use',
     workspaceRule: 'Extra workspace: GHS 49/month',
     badge: 'Most popular',
-    description: 'For daily sales, inventory, receipts, bookings, Quick Pay, and Sedifex Market sync.',
+    description: 'For daily sales, inventory, receipts, bookings, and Quick Pay.',
     includes: [
       'Inventory / items',
       'POS selling',
       'Customers and bookings',
       'Basic reports',
       'Basic website builder',
-      'Sedifex Market sales sync',
+      'Connected public business page',
       'Branded text messaging with purchased credits',
     ],
     limits: ['No custom domain', 'No Products API or Bookings API', 'Very large imports may need review'],
@@ -76,14 +76,14 @@ const PLANS: PlanOption[] = [
     productLimit: 'Unlimited products/services under fair use',
     workspaceRule: 'Extra workspace: GHS 99/month',
     badge: 'Best for online growth',
-    description: 'For businesses that want a real website connected to Sedifex and Sedifex Market.',
+    description: 'For businesses that want a real website connected to Sedifex.',
     includes: [
       'Full website builder',
       'Website template library',
       'Custom domain setup',
       'SEO settings',
       'Products API and Bookings API',
-      'Website + marketplace sales reports',
+      'Website sales reports',
       'Branded text messaging with purchased credits',
     ],
     limits: ['Advanced custom integrations may require setup fee', 'Very high API usage may need review'],
@@ -350,7 +350,7 @@ export const AccountBillingSection: React.FC<Props> = ({
                 </button>
               ) : (
                 <p className="account-overview__hint" style={{ marginTop: 16 }}>
-                  Free plan. Upgrade when you need marketplace sync, a full website, or growth tools.
+                  Free plan. Upgrade when you need a full website or growth tools.
                 </p>
               )}
             </article>

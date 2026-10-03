@@ -38,6 +38,19 @@ describe('resolveNavigation', () => {
     expect(enabled.map(item => item.id)).toContain('automations')
   })
 
+  it('does not restore the retired marketplace page from saved workspace settings', () => {
+    const items = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: {
+        industry: 'shop',
+        labelPolicy: 'shared',
+        enabledModules: ['dashboard', 'products', 'sell', 'marketplace-orders'],
+      },
+    })
+
+    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'account'])
+  })
+
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
     const items = resolveNavigation({
       role: 'staff',
@@ -108,7 +121,6 @@ describe('resolveNavigation', () => {
       'dashboard',
       'products',
       'sell',
-      'marketplace-orders',
       'invoices',
       'receipts',
       'customers',

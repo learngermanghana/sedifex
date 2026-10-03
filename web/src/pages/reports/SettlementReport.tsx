@@ -178,7 +178,7 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference, id),
     bookingId: asText(data.booking_id ?? data.bookingId, collectionName === 'integrationBookings' ? id : ''),
     sourceChannel,
-    sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Sedifex Market' : 'Sedifex Public Page'),
+    sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Retired online channel' : 'Sedifex Public Page'),
     customerName: asText(customer.name ?? customer.email, 'Customer'),
     grossAmount: reportFields.amountReceived,
     baseAmount: Math.min(readBaseAmount(data), reportFields.amountReceived || readBaseAmount(data)),
@@ -225,10 +225,10 @@ export default function SettlementReport() {
       return undefined
     }
     const unsubOrders = onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId)), snapshot => {
-      setOrders(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)))
+      setOrders(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)).filter(row => row.sourceChannel !== 'sedifex_market'))
     })
     const unsubBookings = onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => {
-      setBookings(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)))
+      setBookings(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)).filter(row => row.sourceChannel !== 'sedifex_market'))
     })
     return () => { unsubOrders(); unsubBookings() }
   }, [storeId])
@@ -356,7 +356,6 @@ export default function SettlementReport() {
           </select>
           <select value={source} onChange={event => setSource(event.target.value)}>
             <option value="all">All sources</option>
-            <option value="sedifex_market">Sedifex Market</option>
             <option value="client_website">Client website</option>
             <option value="sedifex_custom_page">Sedifex public page</option>
           </select>

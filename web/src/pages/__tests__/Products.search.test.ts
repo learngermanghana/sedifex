@@ -28,7 +28,6 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     imageAlt: null,
     isPublished: false,
     status: 'draft',
-    isMarketplaceVisible: false,
     isWebsiteVisible: false,
     ...overrides,
   }

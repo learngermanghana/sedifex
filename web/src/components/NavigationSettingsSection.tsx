@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, NAV_ITEMS, type Industry } from '../config/navigation'
 import type { StorePreferences } from '../hooks/useStorePreferences'
-import MarketplaceCatalogSyncCard from './MarketplaceCatalogSyncCard'
 
 type Props = {
   preferences: StorePreferences['navigation']
@@ -26,7 +25,7 @@ const INDUSTRY_OPTIONS: Array<{ value: Industry; label: string }> = [
 ]
 
 const PAGE_GROUPS: PageGroup[] = [
-  { title: 'Daily work', ids: ['dashboard', 'reports', 'products', 'sell', 'marketplace-orders', 'customers', 'bookings'] },
+  { title: 'Daily work', ids: ['dashboard', 'reports', 'products', 'sell', 'customers', 'bookings'] },
   { title: 'Documents, payments & expenses', ids: ['quick-pay', 'invoices', 'receipts', 'expenses', 'settlement', 'donor-management', 'funds-ledger'] },
   { title: 'Bookings, registration & cases', ids: ['upcoming-events', 'student-registration', 'volunteers', 'support-requests'] },
   { title: 'Website & marketing', ids: ['integrations', 'automations', 'website-builder', 'blog', 'bulk-messaging', 'bulk-email'] },
@@ -159,8 +158,6 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
         Sedifex starts with recommended pages for your selected business type. Tick more pages whenever you need them, or remove optional pages to keep the sidebar focused.
       </p>
     </div>
-
-    <MarketplaceCatalogSyncCard canSync={canEdit} />
 
     <div className="account-overview__form-grid">
       <label><span>Business type</span>

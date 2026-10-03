@@ -22,7 +22,7 @@ type ProfileField = readonly [string, string, string?]
 type MediaUploadKey = 'logoUrl' | 'coverImageUrl' | 'socialShareImage'
 
 const identityFields: ProfileField[] = [
-  ['displayName', 'Business / store name', 'Used as the public business name on websites and marketplace pages.'],
+  ['displayName', 'Business / store name', 'Used as the public business name on websites and public pages.'],
   ['tagline', 'Short tagline', 'A short line for website hero sections, social previews, and public profile cards.'],
   ['businessDescription', 'Business description', 'Used by About sections, public pages, and SEO generators.'],
   ['openingHours', 'Opening hours', 'Example: Mon - Sat, 9:00 AM - 6:00 PM'],
@@ -360,7 +360,7 @@ export default function SocialLinksSettings() {
     setMessage('')
     try {
       await persistPublicProfile(profile)
-      publish({ message: 'Public profile saved and shared with Sedifex Market and public pages.', tone: 'success' })
+      publish({ message: 'Public profile saved and shared with your website and public pages.', tone: 'success' })
       setIsEditing(false)
     } catch (saveError) {
       console.error('[social-links] save failed', saveError)
@@ -472,7 +472,7 @@ export default function SocialLinksSettings() {
 
           <section className="account-overview__card" onClick={beginEditing}>
             <h2>Contact details</h2>
-            <p className="account-overview__subtitle">Used for website contact sections, booking forms, public pages, marketplace listings, and WhatsApp actions.</p>
+            <p className="account-overview__subtitle">Used for website contact sections, booking forms, public pages, and WhatsApp actions.</p>
             <div className="account-overview__form-grid">
               {contactFields.map(renderField)}
             </div>
@@ -480,7 +480,7 @@ export default function SocialLinksSettings() {
 
           <section className="account-overview__card" onClick={beginEditing}>
             <h2>Social media links</h2>
-            <p className="account-overview__subtitle">These links are shared with your public profile, website contact areas, and marketplace listings.</p>
+            <p className="account-overview__subtitle">These links are shared with your public profile and website contact areas.</p>
             <div className="account-overview__form-grid">
               {socialFields.map(renderField)}
             </div>

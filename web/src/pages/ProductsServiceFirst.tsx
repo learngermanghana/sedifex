@@ -66,7 +66,6 @@ type Draft = {
   courseMode: CourseMode
   classTimes: string
   isPublished: boolean
-  isMarketplaceVisible: boolean
   isWebsiteVisible: boolean
 }
 
@@ -115,7 +114,6 @@ const blankDraft: Draft = {
   courseMode: 'in_person',
   classTimes: '',
   isPublished: false,
-  isMarketplaceVisible: false,
   isWebsiteVisible: false,
 }
 
@@ -401,7 +399,6 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : name,
     isPublished: data.isPublished === true,
     status: data.status === 'published' ? 'published' : 'draft',
-    isMarketplaceVisible: data.isMarketplaceVisible === true,
     isWebsiteVisible: data.isWebsiteVisible === true,
     storeId: cleanText(data.storeId),
     storeName: cleanText(data.storeName),
@@ -520,7 +517,6 @@ function buildSavePayload(draft: Draft, storeId: string) {
     imageUrls,
     imageAlt: draft.imageAlt.trim() || name,
     isPublished,
-    isMarketplaceVisible: draft.isMarketplaceVisible,
     isWebsiteVisible: draft.isWebsiteVisible,
     featuredRank: null,
     rankingScore: null,
@@ -649,7 +645,6 @@ export default function ProductsServiceFirst() {
       itemType: current.itemType,
       category: normalizeCategory('', current.itemType),
       serviceKind: current.itemType === 'service' ? current.serviceKind : 'consultation',
-      isMarketplaceVisible: current.isMarketplaceVisible,
       isWebsiteVisible: current.isWebsiteVisible,
     }))
     setError('')
@@ -698,7 +693,6 @@ export default function ProductsServiceFirst() {
       courseMode: ((item as any).courseMode as CourseMode) ?? 'in_person',
       classTimes: item.preferredTimes ?? (typeof (item as any).classTimes === 'string' ? (item as any).classTimes : ''),
       isPublished: (item as any).isPublished !== false,
-      isMarketplaceVisible: (item as any).isMarketplaceVisible === true,
       isWebsiteVisible: (item as any).isWebsiteVisible !== false,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -996,7 +990,6 @@ export default function ProductsServiceFirst() {
             ) : null}
             <div className="products-page__visibility-grid">
               <label className="checkbox"><input type="checkbox" checked={draft.isPublished} onChange={event => setDraft(current => ({ ...current, isPublished: event.target.checked }))} /><span>Publish item</span></label>
-              <label className="checkbox"><input type="checkbox" checked={draft.isMarketplaceVisible} onChange={event => setDraft(current => ({ ...current, isMarketplaceVisible: event.target.checked }))} /><span>Show on SedifexMarket</span></label>
               <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on your website</span></label>
             </div>
             <div className="products-page__list-actions">
@@ -1029,7 +1022,6 @@ export default function ProductsServiceFirst() {
                       <h4>{item.name}</h4>
                       <span className="products-page__badge products-page__badge--muted">{formatItemType(item.itemType)}</span>
                       <span className={`products-page__badge ${(item as any).isPublished === false ? 'products-page__badge--draft' : 'products-page__badge--published'}`}>{(item as any).isPublished === false ? 'Draft' : 'Published'}</span>
-                      {(item as any).isMarketplaceVisible ? <span className="products-page__badge products-page__badge--market">Marketplace Visible</span> : null}
                       <span className="products-page__list-value">{normalizeCategory(item.category, item.itemType)}</span>
                     </div>
                     <div className="products-page__list-meta">

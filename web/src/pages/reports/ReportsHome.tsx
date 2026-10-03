@@ -12,12 +12,11 @@ const reportGroups: ReportGroup[] = [
   { title: 'Business data', reports: [
     { title: 'Sales & Cash Report', href: '/reports/sales-cash', description: 'Main business activity: POS, online, bookings, and manual cash records.', badge: 'Main' },
     { title: 'Settlement Report', href: '/reports/settlement', description: 'Paystack/Sedifex settlements, commission, split status, and merchant net.', badge: 'Finance' },
-    { title: 'Marketplace Orders', href: '/marketplace-orders', description: 'Order operations, delivery status, and customer follow-up records.', badge: 'Orders' },
     { title: 'Inventory Report', href: '/reports/inventory', description: 'Products, services, stock levels, low-stock alerts, and value history.', badge: 'Stock' },
   ] },
   { title: 'Sales details', reports: [
     { title: 'POS Sales Report', href: '/reports/pos-sales', description: 'Detailed internal sales from the Sell/POS workflow.', badge: 'POS' },
-    { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from Sedifex Market and public storefront pages.', badge: 'Online' },
+    { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from connected websites and public storefront pages.', badge: 'Online' },
     { title: 'Bookings Report', href: '/reports/bookings', description: 'Service bookings, appointment status, payment status, and exports.', badge: 'Bookings' },
   ] },
   { title: 'School data', reports: [{ title: 'Student Registrations', href: '/reports/student-registrations', description: 'Admissions, enquiries, program interest, and payment progress.', badge: 'School' }] },
@@ -58,7 +57,7 @@ export default function ReportsHome() {
     <div className="workspace-page reports-directory-page">
       <section className="reports-directory-header">
         <h1>Reports & data history</h1>
-        <p className="workspace-muted">Open historical data, filter records, and download reports. Use Dashboard for metrics and Marketplace Orders for order follow-up.</p>
+        <p className="workspace-muted">Open historical data, filter records, and download reports. Use Dashboard for current business metrics.</p>
       </section>
       <section className="reports-toolbar">
         <input className="reports-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search reports..." />
