@@ -71,7 +71,10 @@ export default function ProductsWorkspace() {
         </Link>
       </nav>
 
-      <ProductsServiceFirst key={isAddPage ? 'products-add' : 'products-list'} />
+      <ProductsServiceFirst
+        key={isAddPage ? 'products-add' : 'products-list'}
+        openEditorInitially={isAddPage}
+      />
     </div>
   )
 }
