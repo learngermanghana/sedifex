@@ -468,3 +468,38 @@
   border-radius: .5rem;
 }
 .account-overview__error-text { color: #b00020; }
+
+.account-overview__settings-directory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.account-overview__settings-card {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+  color: #0f172a;
+  font: inherit;
+  cursor: pointer;
+}
+
+.account-overview__settings-card:hover,
+.account-overview__settings-card:focus-visible {
+  border-color: #94a3b8;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .07);
+}
+
+.account-overview__settings-card.is-current {
+  background: #f8fafc;
+}
+
+.account-overview__settings-card span {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
