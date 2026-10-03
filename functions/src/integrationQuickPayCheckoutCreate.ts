@@ -747,7 +747,6 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       automaticSedifexCommission,
       merchantPaysCommission: sedifexCommissionMinor > 0,
       priceSource: authoritativePricing?.priceSource ?? 'client_amount',
-      authoritativeItems: authoritativePricing?.lines ?? null,
       clientSubmittedAmount: clientAmountMajor,
       clientSubmittedCurrency: clientListedCurrency,
       listedAmount: amountMajor,
@@ -796,6 +795,24 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
       merchantPaysCommission: false,
       splitDisabledReason: paymentRouting.splitDisabledReason,
     }
+
+    const authoritativeOrderItems = authoritativePricing
+      ? authoritativePricing.lines.map(line => ({
+          item_id: line.itemId,
+          itemId: line.itemId,
+          name: line.name,
+          itemName: line.name,
+          itemType: line.itemType,
+          item_type: line.itemType,
+          qty: line.quantity,
+          quantity: line.quantity,
+          price: line.listedUnitAmount,
+          unitPrice: line.listedUnitAmount,
+          currency: line.listedCurrency,
+          lineTotal: line.listedLineAmount,
+          paymentLineAmountGhs: line.paymentLineAmountGhs,
+        }))
+      : null
 
     const storedMetadata = {
       ...details.metadata,
@@ -954,7 +971,8 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
         accountingType: details.accountingType,
         recordType: details.recordType,
       },
-      items: details.enrichedItems,
+      items: authoritativeOrderItems ?? details.enrichedItems,
+      authoritativeItems: authoritativePricing?.lines ?? null,
       pricingSnapshot,
       pricing_snapshot: pricingSnapshot,
       clientPricingSnapshot: body.pricing_snapshot ?? body.pricingSnapshot ?? null,
