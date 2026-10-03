@@ -572,9 +572,13 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 
 type ProductsServiceFirstProps = {
   openEditorInitially?: boolean
+  onEditorClose?: (result: { saved: boolean; message?: string }) => void
 }
 
-export default function ProductsServiceFirst({ openEditorInitially = false }: ProductsServiceFirstProps) {
+export default function ProductsServiceFirst({
+  openEditorInitially = false,
+  onEditorClose,
+}: ProductsServiceFirstProps) {
   const { storeId } = useActiveStore()
   const { memberships } = useMemberships()
   const [items, setItems] = useState<Product[]>([])
@@ -808,11 +812,15 @@ export default function ProductsServiceFirst({ openEditorInitially = false }: Pr
           sortOrder: items.length + 1,
         }), 20_000, 'Save timed out. Please check your internet and try again.')
       }
-      setMessage(imageUploadPending ? 'Item saved. Image upload is pending — you can retry later.' : 'Item saved successfully.')
+      const savedMessage = imageUploadPending
+        ? 'Item saved. Image upload is pending — you can retry later.'
+        : 'Item saved successfully.'
+      setMessage(savedMessage)
       if (imageUploadPending) {
         setError('Image upload failed or is incomplete. Item was still saved; retry upload later.')
       }
       resetForm()
+      onEditorClose?.({ saved: true, message: savedMessage })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save item. Please check the details and try again.')
     } finally {
@@ -1063,7 +1071,16 @@ export default function ProductsServiceFirst({ openEditorInitially = false }: Pr
             </div>
             <div className="products-page__list-actions">
               <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
-              <button type="button" className="button button--ghost" onClick={resetForm}>Cancel</button>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => {
+                  resetForm()
+                  onEditorClose?.({ saved: false })
+                }}
+              >
+                Cancel
+              </button>
             </div>
           </form>
         </section>
