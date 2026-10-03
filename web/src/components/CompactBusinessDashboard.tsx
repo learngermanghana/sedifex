@@ -478,7 +478,7 @@ export default function CompactBusinessDashboard() {
     (industry === 'event' || enabledModules.has('events')) && pendingClientTasks > 0
       ? { id: 'event-tasks', count: pendingClientTasks, label: `open event task${pendingClientTasks === 1 ? '' : 's'}`, to: '/event-planning' }
       : null,
-  ].filter((item): item is { id: string; count: number; label: string; to: string } => Boolean(item))
+  ].filter(Boolean) as Array<{ id: string; count: number; label: string; to: string }>
   const attentionSignalCount = attentionSignals.reduce((sum, item) => sum + item.count, 0)
 
   const customerBalanceHint = `${customerDebtRows.length} customer${customerDebtRows.length === 1 ? '' : 's'} owing`
