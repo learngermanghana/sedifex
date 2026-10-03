@@ -53,7 +53,7 @@ const CREATE_ACTIONS = [
   { id: 'customers', label: 'Customer', target: '/customers/manage?mode=add' },
   { id: 'bookings', label: 'Booking', target: '/bookings/new' },
   { id: 'invoices', label: 'Invoice', target: '/invoices' },
-  { id: 'expenses', label: 'Expense', target: '/expenses' },
+  { id: 'expenses', label: 'Expense', target: '/expenses?mode=add' },
   { id: 'sell', label: 'Sale', target: '/sell' },
 ] as const
 
