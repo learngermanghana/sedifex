@@ -570,13 +570,17 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
   }
 }
 
-export default function ProductsServiceFirst() {
+type ProductsServiceFirstProps = {
+  openEditorInitially?: boolean
+}
+
+export default function ProductsServiceFirst({ openEditorInitially = false }: ProductsServiceFirstProps) {
   const { storeId } = useActiveStore()
   const { memberships } = useMemberships()
   const [items, setItems] = useState<Product[]>([])
   const [draft, setDraft] = useState<Draft>(blankDraft)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [isEditorOpen, setIsEditorOpen] = useState(openEditorInitially)
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
