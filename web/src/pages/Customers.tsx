@@ -371,7 +371,11 @@ export default function Customers() {
   const [quickFilter, setQuickFilter] = useState<
     'all' | 'recent' | 'noPurchases' | 'highValue' | 'untagged' | 'hasDebt'
   >('all')
-  const filterStoreRef = useRef<string | null>(null)
+  const filterHydrationRef = useRef<{
+    storeId: string
+    value: { searchTerm: string; quickFilter: typeof quickFilter; tagFilter: string | null }
+    pending: boolean
+  } | null>(null)
   const [messageChannel, setMessageChannel] = useState<MessageChannel | null>(null)
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
@@ -397,28 +401,47 @@ export default function Customers() {
 
   useEffect(() => {
     if (!activeStoreId) {
-      filterStoreRef.current = null
+      filterHydrationRef.current = null
       return
     }
-    if (filterStoreRef.current !== activeStoreId) {
-      filterStoreRef.current = activeStoreId
-      try {
-        const stored = JSON.parse(localStorage.getItem(`${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`) || '{}') as {
-          searchTerm?: unknown
-          quickFilter?: unknown
-          tagFilter?: unknown
-        }
-        const allowedQuickFilters = ['all', 'recent', 'noPurchases', 'highValue', 'untagged', 'hasDebt']
-        setSearchTerm(typeof stored.searchTerm === 'string' ? stored.searchTerm : '')
-        setQuickFilter(
-          typeof stored.quickFilter === 'string' && allowedQuickFilters.includes(stored.quickFilter)
-            ? stored.quickFilter as typeof quickFilter
-            : 'all',
-        )
-        setTagFilter(typeof stored.tagFilter === 'string' && stored.tagFilter ? stored.tagFilter : null)
-      } catch (storageError) {
-        console.warn('[customers] Unable to load filter preferences', storageError)
+    let restoredSearchTerm = ''
+    let restoredQuickFilter: typeof quickFilter = 'all'
+    let restoredTagFilter: string | null = null
+    try {
+      const stored = JSON.parse(localStorage.getItem(`${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`) || '{}') as {
+        searchTerm?: unknown
+        quickFilter?: unknown
+        tagFilter?: unknown
       }
+      const allowedQuickFilters = ['all', 'recent', 'noPurchases', 'highValue', 'untagged', 'hasDebt']
+      restoredSearchTerm = typeof stored.searchTerm === 'string' ? stored.searchTerm : ''
+      restoredQuickFilter = typeof stored.quickFilter === 'string' && allowedQuickFilters.includes(stored.quickFilter)
+        ? stored.quickFilter as typeof quickFilter
+        : 'all'
+      restoredTagFilter = typeof stored.tagFilter === 'string' && stored.tagFilter ? stored.tagFilter : null
+    } catch (storageError) {
+      console.warn('[customers] Unable to load filter preferences', storageError)
+    }
+    filterHydrationRef.current = {
+      storeId: activeStoreId,
+      value: { searchTerm: restoredSearchTerm, quickFilter: restoredQuickFilter, tagFilter: restoredTagFilter },
+      pending: true,
+    }
+    setSearchTerm(restoredSearchTerm)
+    setQuickFilter(restoredQuickFilter)
+    setTagFilter(restoredTagFilter)
+  }, [activeStoreId])
+
+  useEffect(() => {
+    if (!activeStoreId) return
+    const hydration = filterHydrationRef.current
+    if (!hydration || hydration.storeId !== activeStoreId) return
+    if (hydration.pending) {
+      if (
+        searchTerm === hydration.value.searchTerm
+        && quickFilter === hydration.value.quickFilter
+        && tagFilter === hydration.value.tagFilter
+      ) hydration.pending = false
       return
     }
     try {
@@ -426,6 +449,7 @@ export default function Customers() {
         `${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`,
         JSON.stringify({ searchTerm, quickFilter, tagFilter }),
       )
+      hydration.value = { searchTerm, quickFilter, tagFilter }
     } catch (storageError) {
       console.warn('[customers] Unable to save filter preferences', storageError)
     }

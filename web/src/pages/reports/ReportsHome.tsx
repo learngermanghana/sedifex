@@ -71,23 +71,33 @@ export default function ReportsHome() {
   const { storeId } = useActiveStore()
   const { preferences } = useStorePreferences(storeId)
   const [search, setSearch] = useState('')
-  const searchStoreRef = useRef<string | null>(null)
+  const searchHydrationRef = useRef<{ storeId: string; value: string; pending: boolean } | null>(null)
   useEffect(() => {
     if (!storeId) {
-      searchStoreRef.current = null
+      searchHydrationRef.current = null
       return
     }
-    if (searchStoreRef.current !== storeId) {
-      searchStoreRef.current = storeId
-      try {
-        setSearch(localStorage.getItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`) || '')
-      } catch (storageError) {
-        console.warn('[reports] Unable to load search preference', storageError)
-      }
+    let restored = ''
+    try {
+      restored = localStorage.getItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`) || ''
+    } catch (storageError) {
+      console.warn('[reports] Unable to load search preference', storageError)
+    }
+    searchHydrationRef.current = { storeId, value: restored, pending: true }
+    setSearch(restored)
+  }, [storeId])
+
+  useEffect(() => {
+    if (!storeId) return
+    const hydration = searchHydrationRef.current
+    if (!hydration || hydration.storeId !== storeId) return
+    if (hydration.pending) {
+      if (search === hydration.value) hydration.pending = false
       return
     }
     try {
       localStorage.setItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`, search)
+      hydration.value = search
     } catch (storageError) {
       console.warn('[reports] Unable to save search preference', storageError)
     }

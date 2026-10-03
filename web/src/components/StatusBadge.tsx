@@ -18,6 +18,10 @@ export function statusBadgeLabel(value: unknown, kind: StatusBadgeKind = 'generi
   if (['completed', 'complete'].includes(status)) return 'Completed'
   if (['cancelled', 'canceled', 'deleted', 'void', 'voided', 'rejected'].includes(status)) return 'Cancelled'
 
+  if (kind === 'payment' && ['manual_review', 'awaiting_verification', 'review'].includes(status)) {
+    return 'Payment review'
+  }
+
   if (['pending_approval', 'manual_review', 'awaiting_verification', 'review', 'needs_approval'].includes(status)) {
     return 'Needs approval'
   }
