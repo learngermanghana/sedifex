@@ -100,14 +100,14 @@ const statusLabel = (status: string) =>
     completed: "Completed",
     cancelled: "Cancelled",
     deleted: "Cancelled",
-    manual_review: "Manual review",
-  })[status] ?? "Pending approval";
+    manual_review: "Needs approval",
+  })[status] ?? "Needs approval";
 
 const paymentLabel = (status: string) =>
   ({
     payment_pending: "Payment pending",
     pending: "Payment pending",
-    manual_review: "Manual review",
+    manual_review: "Payment review",
     paid: "Paid",
   })[status] ?? "Payment pending";
 
@@ -160,7 +160,9 @@ const isDirectPaymentBooking = (booking: BookingRecord) => {
   );
 };
 
-type BookingView = "paid_sedifex" | "direct_needs_approval";
+type BookingView = "needs_attention" | "confirmed" | "all";
+
+const BOOKING_VIEW_KEY_PREFIX = "sedifex-bookings-view-";
 
 export default function Bookings() {
   const { storeId } = useActiveStore();
@@ -170,7 +172,7 @@ export default function Bookings() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<BookingView>("paid_sedifex");
+  const [activeTab, setActiveTab] = useState<BookingView>("needs_attention");
 
   const hydrateBooking = useCallback(
     (
@@ -483,26 +485,51 @@ export default function Bookings() {
     void loadBookings();
   }, [loadBookings]);
 
+  useEffect(() => {
+    if (!storeId) return;
+    try {
+      const saved = localStorage.getItem(`${BOOKING_VIEW_KEY_PREFIX}${storeId}`);
+      if (saved === "needs_attention" || saved === "confirmed" || saved === "all") {
+        setActiveTab(saved);
+      }
+    } catch (error) {
+      console.warn("[bookings] Unable to load view preference", error);
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    if (!storeId) return;
+    try {
+      localStorage.setItem(`${BOOKING_VIEW_KEY_PREFIX}${storeId}`, activeTab);
+    } catch (error) {
+      console.warn("[bookings] Unable to save view preference", error);
+    }
+  }, [activeTab, storeId]);
+
+  const needsAttention = useCallback((booking: BookingRecord) => {
+    if (["cancelled", "deleted", "completed"].includes(booking.bookingStatus || booking.status)) return false;
+    const directPaymentNeedsReview =
+      isDirectPaymentBooking(booking) &&
+      ["pending", "payment_pending", "manual_review"].includes(booking.paymentStatus);
+    const paidNeedsConfirmation =
+      booking.paymentStatus === "paid" && booking.bookingStatus !== "confirmed";
+    return directPaymentNeedsReview || paidNeedsConfirmation || booking.bookingStatus === "pending_approval";
+  }, []);
+
   const summary = {
-    paidSedifex: bookings.filter((b) => b.paymentStatus === "paid" && !isDirectPaymentBooking(b)).length,
-    directNeedsApproval: bookings.filter((b) =>
-      isDirectPaymentBooking(b) &&
-      !["cancelled", "deleted"].includes(b.status) &&
-      ["pending", "payment_pending", "manual_review"].includes(b.paymentStatus),
-    ).length,
+    needsAttention: bookings.filter(needsAttention).length,
+    confirmed: bookings.filter((booking) => booking.bookingStatus === "confirmed").length,
+    all: bookings.filter((booking) => !["deleted"].includes(booking.status)).length,
   };
 
   const visible = useMemo(
     () =>
-      bookings.filter((b) => {
-        const isDirectPayment = isDirectPaymentBooking(b);
-        return activeTab === "paid_sedifex"
-          ? b.paymentStatus === "paid" && !isDirectPayment
-          : isDirectPayment &&
-            !["cancelled", "deleted"].includes(b.status) &&
-            ["pending", "payment_pending", "manual_review"].includes(b.paymentStatus);
+      bookings.filter((booking) => {
+        if (activeTab === "needs_attention") return needsAttention(booking);
+        if (activeTab === "confirmed") return booking.bookingStatus === "confirmed";
+        return !["deleted"].includes(booking.status);
       }),
-    [activeTab, bookings],
+    [activeTab, bookings, needsAttention],
   );
 
   const deleteBookingRecords = useCallback(
@@ -593,34 +620,47 @@ export default function Bookings() {
   return (
     <main className="page bookings-page">
       <section className="card stack gap-4 bookings-board">
-        <header className="stack gap-2">
-          <h1>Bookings</h1>
-          <p className="bookings-page__intro">
-            Manage active bookings, payments, confirmations, and follow-ups. Confirmed direct payments are kept in Reports.
-          </p>
+        <header className="bookings-page__header">
+          <div className="stack gap-2">
+            <h1>Bookings</h1>
+            <p className="bookings-page__intro">
+              Focus first on bookings that need confirmation or payment review.
+            </p>
+          </div>
+          <div className="bookings-page__header-actions">
+            <Link to="/bookings/new" className="button button--primary">+ Add booking</Link>
+            <Link to="/reports/bookings" className="btn btn-secondary">Open report</Link>
+          </div>
         </header>
 
-        <div className="bookings-page__tabs bookings-page__workflow-actions">
+        <div className="bookings-page__tabs" role="tablist" aria-label="Booking views">
           <button
             type="button"
-            className={`bookings-page__tab ${activeTab === "paid_sedifex" ? "is-active" : ""}`}
-            onClick={() => setActiveTab("paid_sedifex")}
+            role="tab"
+            aria-selected={activeTab === "needs_attention"}
+            className={`bookings-page__tab ${activeTab === "needs_attention" ? "is-active" : ""}`}
+            onClick={() => setActiveTab("needs_attention")}
           >
-            Paid through Sedifex ({summary.paidSedifex})
+            Needs attention ({summary.needsAttention})
           </button>
           <button
             type="button"
-            className={`bookings-page__tab ${activeTab === "direct_needs_approval" ? "is-active" : ""}`}
-            onClick={() => setActiveTab("direct_needs_approval")}
+            role="tab"
+            aria-selected={activeTab === "confirmed"}
+            className={`bookings-page__tab ${activeTab === "confirmed" ? "is-active" : ""}`}
+            onClick={() => setActiveTab("confirmed")}
           >
-            Paid manually — needs approval ({summary.directNeedsApproval})
+            Confirmed ({summary.confirmed})
           </button>
-          <Link to="/bookings/new" className="btn btn-secondary">
-            Add manually
-          </Link>
-          <Link to="/reports/bookings" className="btn btn-secondary">
-            Open report
-          </Link>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "all"}
+            className={`bookings-page__tab ${activeTab === "all" ? "is-active" : ""}`}
+            onClick={() => setActiveTab("all")}
+          >
+            All ({summary.all})
+          </button>
         </div>
 
         {!loading && !errorMessage ? (
@@ -663,6 +703,14 @@ export default function Bookings() {
           <p>Loading bookings…</p>
         ) : errorMessage ? (
           <p className="form__error">{errorMessage}</p>
+        ) : visible.length === 0 ? (
+          <div className="empty-state bookings-page__empty">
+            <h3 className="empty-state__title">
+              {activeTab === "needs_attention" ? "Nothing needs attention" : activeTab === "confirmed" ? "No confirmed bookings yet" : "No bookings yet"}
+            </h3>
+            <p>{activeTab === "needs_attention" ? "Bookings needing review or confirmation will appear here." : "New bookings will appear here when they are created."}</p>
+            {activeTab === "all" ? <Link to="/bookings/new" className="button button--primary">+ Add booking</Link> : null}
+          </div>
         ) : (
           <div className="bookings-table-wrap">
             <table className="table bookings-table">

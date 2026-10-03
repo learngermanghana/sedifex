@@ -576,6 +576,7 @@ export default function ProductsServiceFirst() {
   const [items, setItems] = useState<Product[]>([])
   const [draft, setDraft] = useState<Draft>(blankDraft)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -698,6 +699,7 @@ export default function ProductsServiceFirst() {
 
   function resetForm() {
     setEditingId(null)
+    setIsEditorOpen(false)
     setDraft(current => ({
       ...blankDraft,
       itemType: current.itemType,
@@ -713,6 +715,7 @@ export default function ProductsServiceFirst() {
   function editItem(item: Product) {
     const itemType: ItemFormType = item.itemType === 'course' || (item.itemType === 'service' && item.listingType === 'course') ? 'course' : item.itemType
     setEditingId(item.id)
+    setIsEditorOpen(true)
     setDraft({
       name: item.name,
       itemType,
@@ -831,11 +834,25 @@ export default function ProductsServiceFirst() {
       <header className="page__header products-page__header">
         <div>
           <h2 className="page__title">Items</h2>
-          <p className="page__subtitle">Manage products, services, and courses/programmes with the right fields for each type.</p>
+          <p className="page__subtitle">Manage products, services, and courses/programmes.</p>
         </div>
+        {canManage ? (
+          <button
+            type="button"
+            className="button button--primary products-page__primary-action"
+            onClick={() => {
+              resetForm()
+              setIsEditorOpen(true)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            + Add item
+          </button>
+        ) : null}
       </header>
 
       <div className="products-page__grid">
+        {isEditorOpen ? (
         <section className="card products-page__add-card">
           <h3 className="card__title">{editingId ? 'Edit item' : 'Add item'}</h3>
           <p className="card__subtitle">
@@ -1042,12 +1059,13 @@ export default function ProductsServiceFirst() {
             </div>
             <div className="products-page__list-actions">
               <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
-              {editingId ? <button type="button" className="button button--ghost" onClick={resetForm}>Cancel</button> : null}
+              <button type="button" className="button button--ghost" onClick={resetForm}>Cancel</button>
             </div>
           </form>
         </section>
+        ) : null}
 
-        <section className="card products-page__list-card">
+        <section className="card products-page__list-card products-page__list-card--main">
           <div className="products-page__list-header">
             <div className="field field--inline">
               <label className="field__label" htmlFor="items-search">Search</label>
@@ -1120,7 +1138,15 @@ export default function ProductsServiceFirst() {
                 </article>
               )
             })}
-            {visibleItems.length === 0 ? <div className="empty-state"><h3 className="empty-state__title">No items found</h3><p>Add a product or service to get started.</p></div> : null}
+            {visibleItems.length === 0 ? (
+              <div className="empty-state products-page__empty">
+                <h3 className="empty-state__title">{items.length === 0 ? 'No items yet' : 'No items match your search'}</h3>
+                <p>{items.length === 0 ? 'Add your first product, service, or course to get started.' : 'Try a different search term.'}</p>
+                {items.length === 0 && canManage ? (
+                  <button type="button" className="button button--primary" onClick={() => { resetForm(); setIsEditorOpen(true) }}>+ Add first item</button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

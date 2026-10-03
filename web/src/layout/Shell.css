@@ -186,6 +186,40 @@ body.shell--menu-open {
   border: 1px dashed #cbd5e1;
 }
 
+.shell__nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shell__nav-section + .shell__nav-section {
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.shell__nav-section-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  color: #64748b;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.shell__nav-section-links {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
 .shell__nav-item-group {
   display: inline-flex;
   align-items: center;

@@ -44,6 +44,32 @@ const CONTRACT_END_WARNING_DAYS = 14
 const DISMISS_KEY_PREFIX = 'sedifex-billing-dismissed-'
 const LAST_PATH_KEY_PREFIX = 'sedifex-last-path-'
 const NAV_COLLAPSED_KEY_PREFIX = 'sedifex-nav-collapsed-'
+const NAV_GROUPS_KEY_PREFIX = 'sedifex-nav-groups-'
+
+type NavGroupId = 'daily' | 'money' | 'website' | 'manage'
+
+const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = [
+  {
+    id: 'daily',
+    label: 'Daily',
+    itemIds: ['dashboard', 'products', 'sell', 'customers', 'students', 'bookings', 'events', 'upcoming-events', 'student-registration'],
+  },
+  {
+    id: 'money',
+    label: 'Money',
+    itemIds: ['reports', 'quick-pay', 'invoices', 'receipts', 'expenses', 'settlement'],
+  },
+  {
+    id: 'website',
+    label: 'Website',
+    itemIds: ['website-builder', 'integrations', 'blog', 'bulk-email', 'bulk-messaging', 'automations'],
+  },
+  {
+    id: 'manage',
+    label: 'Manage',
+    itemIds: ['donor-management', 'funds-ledger', 'volunteers', 'support-requests', 'account'],
+  },
+]
 
 function formatRequestCount(count: number) {
   if (count <= 0) return 'queued request'
@@ -100,6 +126,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [dismissedResumePath, setDismissedResumePath] = useState<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDesktopNavCollapsed, setIsDesktopNavCollapsed] = useState(false)
+  const [collapsedNavGroups, setCollapsedNavGroups] = useState<NavGroupId[]>([])
   const [workspaceNames, setWorkspaceNames] = useState<Record<string, string>>({})
   const shouldSkipInitialPathPersist = useRef(true)
 
@@ -151,6 +178,26 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (!normalizedQuery) return navItems
     return navItems.filter(item => item.label.toLowerCase().includes(normalizedQuery))
   }, [navItems, navSearchQuery])
+
+  const groupedNavItems = useMemo(() => {
+    const assigned = new Set<string>()
+    const groups = NAV_GROUPS.map(group => {
+      const items = filteredNavItems.filter(item => group.itemIds.includes(item.id))
+      items.forEach(item => assigned.add(item.id))
+      return { ...group, items }
+    }).filter(group => group.items.length > 0)
+
+    const remaining = filteredNavItems.filter(item => !assigned.has(item.id))
+    if (remaining.length > 0) {
+      const manageGroup = groups.find(group => group.id === 'manage')
+      if (manageGroup) {
+        manageGroup.items.push(...remaining)
+      } else {
+        groups.push({ id: 'manage', label: 'Manage', itemIds: [], items: remaining } as (typeof groups)[number])
+      }
+    }
+    return groups
+  }, [filteredNavItems])
 
   const billingNotice = useMemo<BillingNotice | null>(() => {
     if (!billing) return null
@@ -220,6 +267,27 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       console.warn('[shell] Unable to persist navigation collapsed preference', error)
     }
   }, [isDesktopNavCollapsed, user?.uid])
+
+  useEffect(() => {
+    const key = `${NAV_GROUPS_KEY_PREFIX}${user?.uid || 'guest'}`
+    try {
+      const stored = JSON.parse(localStorage.getItem(key) || '[]')
+      if (Array.isArray(stored)) {
+        setCollapsedNavGroups(stored.filter((value): value is NavGroupId => ['daily', 'money', 'website', 'manage'].includes(value)))
+      }
+    } catch (error) {
+      console.warn('[shell] Unable to load navigation group preference', error)
+    }
+  }, [user?.uid])
+
+  useEffect(() => {
+    const key = `${NAV_GROUPS_KEY_PREFIX}${user?.uid || 'guest'}`
+    try {
+      localStorage.setItem(key, JSON.stringify(collapsedNavGroups))
+    } catch (error) {
+      console.warn('[shell] Unable to persist navigation group preference', error)
+    }
+  }, [collapsedNavGroups, user?.uid])
 
   const todayStamp = useMemo(
     () => new Date().toISOString().slice(0, 10),
@@ -436,16 +504,43 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           />
         </label>
 
-        {filteredNavItems.map(item => (
-          <NavLink
-            key={item.id}
-            to={item.target}
-            end={item.end}
-            className={({ isActive }) => navLinkClass(isActive, Boolean(item.parentTarget))}
-          >
-            {item.label}
-          </NavLink>
-        ))}
+        {groupedNavItems.map(group => {
+          const isSearchActive = Boolean(navSearchQuery.trim())
+          const isCollapsed = !isSearchActive && collapsedNavGroups.includes(group.id)
+          return (
+            <section className="shell__nav-section" key={group.id}>
+              <button
+                type="button"
+                className="shell__nav-section-toggle"
+                aria-expanded={!isCollapsed}
+                onClick={() => {
+                  setCollapsedNavGroups(current =>
+                    current.includes(group.id)
+                      ? current.filter(id => id !== group.id)
+                      : [...current, group.id],
+                  )
+                }}
+              >
+                <span>{group.label}</span>
+                <span aria-hidden="true">{isCollapsed ? '+' : '−'}</span>
+              </button>
+              {!isCollapsed ? (
+                <div className="shell__nav-section-links">
+                  {group.items.map(item => (
+                    <NavLink
+                      key={item.id}
+                      to={item.target}
+                      end={item.end}
+                      className={({ isActive }) => navLinkClass(isActive, Boolean(item.parentTarget))}
+                    >
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          )
+        })}
 
         {filteredNavItems.length === 0 && (
           <p className="shell__nav-empty" role="status">

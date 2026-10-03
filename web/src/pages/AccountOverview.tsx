@@ -1894,7 +1894,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'workspace'}
             onClick={() => setActiveTab('workspace')}
           >
-            Account
+            Business details
           </button>
           <button
             type="button"
@@ -1902,7 +1902,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'navigation'}
             onClick={() => setActiveTab('navigation')}
           >
-            Navigation settings
+            Navigation
           </button>
           <button
             type="button"
@@ -1910,7 +1910,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'integrations'}
             onClick={() => setActiveTab('integrations')}
           >
-            Integration
+            Website integration
           </button>
           <button
             type="button"
@@ -1918,7 +1918,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'billing'}
             onClick={() => setActiveTab('billing')}
           >
-            Billing
+            Payments
           </button>
           <button
             type="button"
@@ -1926,7 +1926,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'team'}
             onClick={() => setActiveTab('team')}
           >
-            Team
+            Team & access
           </button>
           <button
             type="button"
@@ -1934,26 +1934,33 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'data-controls'}
             onClick={() => setActiveTab('data-controls')}
           >
-            Data
+            Data & privacy
           </button>
         </nav>
       )}
 
       {!isPromotionsView && activeTab === 'workspace' && (
         <section aria-labelledby="account-overview-quick-settings" className="account-overview__quick-settings">
-          <div className="account-overview__card account-overview__quick-settings-card">
-            <div>
-              <h2 id="account-overview-quick-settings">Navigation settings</h2>
-              <p className="account-overview__subtitle">
-                Choose which pages appear in the sidebar, update your business type, or show all available pages.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="button button--primary"
-              onClick={() => setActiveTab('navigation')}
-            >
-              Open navigation settings
+          <div className="account-overview__settings-directory">
+            <button type="button" className="account-overview__settings-card is-current" onClick={() => document.getElementById('store-profile')?.scrollIntoView({ behavior: 'smooth' })}>
+              <strong id="account-overview-quick-settings">Business details</strong>
+              <span>Name, contact details, address, and logo.</span>
+            </button>
+            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('navigation')}>
+              <strong>Navigation</strong>
+              <span>Choose the pages your team sees every day.</span>
+            </button>
+            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('billing')}>
+              <strong>Payments</strong>
+              <span>Billing plan, payment history, and settlement setup.</span>
+            </button>
+            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('integrations')}>
+              <strong>Website integration</strong>
+              <span>Website API, booking sync, email, and webhooks.</span>
+            </button>
+            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('team')}>
+              <strong>Team & access</strong>
+              <span>Members, roles, and workspace access.</span>
             </button>
           </div>
         </section>
