@@ -48,6 +48,15 @@ const NAV_GROUPS_KEY_PREFIX = 'sedifex-nav-groups-'
 
 type NavGroupId = 'daily' | 'money' | 'website' | 'manage'
 
+const CREATE_ACTIONS = [
+  { id: 'products', label: 'Item', target: '/products/new' },
+  { id: 'customers', label: 'Customer', target: '/customers/manage?mode=add' },
+  { id: 'bookings', label: 'Booking', target: '/bookings/new' },
+  { id: 'invoices', label: 'Invoice', target: '/invoices' },
+  { id: 'expenses', label: 'Expense', target: '/expenses' },
+  { id: 'sell', label: 'Sale', target: '/sell' },
+] as const
+
 const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = [
   {
     id: 'daily',
@@ -551,8 +560,25 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     </div>
   )
 
+  const availableCreateActions = CREATE_ACTIONS.filter(action =>
+    navItems.some(item => item.id === action.id),
+  )
+
   const controlsSection = (
     <div className="shell__controls">
+      {availableCreateActions.length > 0 ? (
+        <details className="shell__create-menu">
+          <summary className="button button--primary button--small">+ Create</summary>
+          <div className="shell__create-menu-panel">
+            <span className="shell__create-menu-label">Create new</span>
+            {availableCreateActions.map(action => (
+              <Link key={action.id} to={action.target} className="shell__create-menu-link">
+                {action.label}
+              </Link>
+            ))}
+          </div>
+        </details>
+      ) : null}
       <div
         className="shell__store-switcher"
         role="status"
