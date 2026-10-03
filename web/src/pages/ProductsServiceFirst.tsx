@@ -933,44 +933,10 @@ export default function ProductsServiceFirst({
               ) : null}
             </div>
 
-            <details className="products-page__advanced" defaultOpen={Boolean(editingId)}>
-              <summary>
-                <span>Advanced details</span>
-                <small>Stock, scheduling, course setup, and optional business fields</small>
-              </summary>
-              <div className="products-page__advanced-fields">
-            {!behavesLikeService ? (
-              <>
-                <div className="field">
-                  <label className="field__label" htmlFor="item-sku">SKU / Barcode</label>
-                  <input id="item-sku" value={draft.sku} onChange={event => updateDraft('sku', event.target.value)} />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="item-brand">Brand</label>
-                  <input id="item-brand" value={draft.brand} onChange={event => updateDraft('brand', event.target.value)} placeholder="e.g. Nike, Samsung, Local label" />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="item-cost">Cost price</label>
-                  <input id="item-cost" type="number" min="0" step="0.01" value={draft.costPrice} onChange={event => updateDraft('costPrice', event.target.value)} />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="item-stock">Opening / current stock</label>
-                  <input id="item-stock" type="number" min="0" step="1" value={draft.openingStock} onChange={event => updateDraft('openingStock', event.target.value)} />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="item-reorder">Reorder point</label>
-                  <input id="item-reorder" type="number" min="0" step="1" value={draft.reorderPoint} onChange={event => updateDraft('reorderPoint', event.target.value)} />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="item-expiry">Expiry date</label>
-                  <input id="item-expiry" type="date" value={draft.expiryDate} onChange={event => updateDraft('expiryDate', event.target.value)} />
-                </div>
-              </>
-            ) : null}
-
             {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="consultation">Consultation / appointment</option><option value="quote_request">Request quote</option></select></div> : null}
             {isService ? <div className="field"><label className="field__label" htmlFor="service-duration">Duration minutes</label><input id="service-duration" type="number" min="0" step="1" value={draft.durationMinutes} onChange={event => updateDraft('durationMinutes', event.target.value)} /></div> : null}
             {behavesLikeService && !isCourse ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+
             {isCourse ? (
               <>
                 <div className="field"><label className="field__label" htmlFor="course-branch">Branch</label><input id="course-branch" value={draft.branch} onChange={event => updateDraft('branch', event.target.value)} placeholder="e.g. Accra campus or Online" /></div>
@@ -980,16 +946,40 @@ export default function ProductsServiceFirst({
                 <div className="field"><label className="field__label" htmlFor="course-fullfee">Full fee</label><input id="course-fullfee" type="number" min="0" step="0.01" value={draft.fullFee} onChange={event => updateDraft('fullFee', event.target.value)} placeholder="Defaults to Fee when blank" /></div>
                 <div className="field"><label className="field__label" htmlFor="course-duration">Duration</label><input id="course-duration" value={draft.duration} onChange={event => updateDraft('duration', event.target.value)} placeholder="e.g. 8 weeks" /></div>
                 <div className="field"><label className="field__label" htmlFor="course-capacity">Capacity</label><input id="course-capacity" type="number" min="0" step="1" value={draft.capacity} onChange={event => updateDraft('capacity', event.target.value)} /></div>
-                <div className="field"><label className="field__label" htmlFor="course-requirements">Requirements</label><textarea id="course-requirements" rows={3} value={draft.requirements} onChange={event => updateDraft('requirements', event.target.value)} /></div>
-                <div className="field"><label className="field__label" htmlFor="course-starter-items">Starter items</label><textarea id="course-starter-items" rows={3} value={draft.starterItems} onChange={event => updateDraft('starterItems', event.target.value)} /></div>
-                <label className="checkbox"><input type="checkbox" checked={draft.certificateIncluded} onChange={event => updateDraft('certificateIncluded', event.target.checked ? 'true' : '')} /><span>Certificate included</span></label>
-                <div className="field"><label className="field__label" htmlFor="course-agreement">Agreement</label><textarea id="course-agreement" rows={3} value={draft.Agreement} onChange={event => updateDraft('Agreement', event.target.value)} /></div>
                 <div className="field"><label className="field__label" htmlFor="course-level">Course level</label><input id="course-level" value={draft.courseLevel} onChange={event => updateDraft('courseLevel', event.target.value)} /></div>
                 <div className="field"><label className="field__label" htmlFor="course-mode">Mode</label><select id="course-mode" value={draft.courseMode} onChange={event => updateDraft('courseMode', event.target.value)}><option value="online">Online</option><option value="in_person">In person</option><option value="hybrid">Hybrid</option></select></div>
               </>
             ) : null}
-              </div>
-            </details>
+
+            {(!behavesLikeService || isCourse) ? (
+              <details className="products-page__advanced" defaultOpen={Boolean(editingId)}>
+                <summary>
+                  <span>Advanced details</span>
+                  <small>{isCourse ? 'Requirements, starter items, certificate, and agreement' : 'SKU, stock, cost, reorder, and expiry details'}</small>
+                </summary>
+                <div className="products-page__advanced-fields">
+                  {!behavesLikeService ? (
+                    <>
+                      <div className="field"><label className="field__label" htmlFor="item-sku">SKU / Barcode</label><input id="item-sku" value={draft.sku} onChange={event => updateDraft('sku', event.target.value)} /></div>
+                      <div className="field"><label className="field__label" htmlFor="item-brand">Brand</label><input id="item-brand" value={draft.brand} onChange={event => updateDraft('brand', event.target.value)} placeholder="e.g. Nike, Samsung, Local label" /></div>
+                      <div className="field"><label className="field__label" htmlFor="item-cost">Cost price</label><input id="item-cost" type="number" min="0" step="0.01" value={draft.costPrice} onChange={event => updateDraft('costPrice', event.target.value)} /></div>
+                      <div className="field"><label className="field__label" htmlFor="item-stock">Opening / current stock</label><input id="item-stock" type="number" min="0" step="1" value={draft.openingStock} onChange={event => updateDraft('openingStock', event.target.value)} /></div>
+                      <div className="field"><label className="field__label" htmlFor="item-reorder">Reorder point</label><input id="item-reorder" type="number" min="0" step="1" value={draft.reorderPoint} onChange={event => updateDraft('reorderPoint', event.target.value)} /></div>
+                      <div className="field"><label className="field__label" htmlFor="item-expiry">Expiry date</label><input id="item-expiry" type="date" value={draft.expiryDate} onChange={event => updateDraft('expiryDate', event.target.value)} /></div>
+                    </>
+                  ) : null}
+                  {isCourse ? (
+                    <>
+                      <div className="field"><label className="field__label" htmlFor="course-requirements">Requirements</label><textarea id="course-requirements" rows={3} value={draft.requirements} onChange={event => updateDraft('requirements', event.target.value)} /></div>
+                      <div className="field"><label className="field__label" htmlFor="course-starter-items">Starter items</label><textarea id="course-starter-items" rows={3} value={draft.starterItems} onChange={event => updateDraft('starterItems', event.target.value)} /></div>
+                      <label className="checkbox"><input type="checkbox" checked={draft.certificateIncluded} onChange={event => updateDraft('certificateIncluded', event.target.checked ? 'true' : '')} /><span>Certificate included</span></label>
+                      <div className="field"><label className="field__label" htmlFor="course-agreement">Agreement</label><textarea id="course-agreement" rows={3} value={draft.Agreement} onChange={event => updateDraft('Agreement', event.target.value)} /></div>
+                    </>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
+
             <div className="field">
               <div className="products-page__label-row">
                 <label className="field__label" htmlFor="item-description">{behavesLikeService ? 'Description' : 'Product description'}</label>
