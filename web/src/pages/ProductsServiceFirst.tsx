@@ -34,6 +34,7 @@ type Draft = {
   category: string
   subcategory: string
   price: string
+  currency: string
   costPrice: string
   description: string
   sku: string
@@ -74,6 +75,16 @@ type SalesMode = 'buy_now' | 'book_now' | 'register' | 'request_quote'
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
+const COMMON_CURRENCIES = [
+  { code: 'GHS', label: 'GHS — Ghana cedi' },
+  { code: 'USD', label: 'USD — US dollar' },
+  { code: 'GBP', label: 'GBP — British pound' },
+  { code: 'EUR', label: 'EUR — Euro' },
+  { code: 'ZAR', label: 'ZAR — South African rand' },
+  { code: 'NGN', label: 'NGN — Nigerian naira' },
+  { code: 'KES', label: 'KES — Kenyan shilling' },
+] as const
+const COMMON_CURRENCY_CODES = COMMON_CURRENCIES.map(option => option.code)
 
 const blankDraft: Draft = {
   name: '',
@@ -81,6 +92,7 @@ const blankDraft: Draft = {
   category: PRODUCT_CATEGORY,
   subcategory: '',
   price: '',
+  currency: 'GHS',
   costPrice: '',
   description: '',
   sku: '',
@@ -147,8 +159,8 @@ function formatDateInput(value: Date | null | undefined) {
   return value ? value.toISOString().slice(0, 10) : ''
 }
 
-function formatMoney(value: number | null | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? `GHS ${value.toFixed(2)}` : '—'
+function formatMoney(value: number | null | undefined, currency = 'GHS') {
+  return typeof value === 'number' && Number.isFinite(value) ? `${currency || 'GHS'} ${value.toFixed(2)}` : '—'
 }
 
 function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
@@ -199,7 +211,7 @@ function buildAiDescriptionPrompt(draft: Draft): string {
     itemType: draft.itemType,
     category: normalizeCategory(draft.category, draft.itemType),
     price: cleanNumber(draft.price),
-    currency: 'GHS',
+    currency: draft.currency.trim().toUpperCase() || 'GHS',
     sku: draft.sku.trim() || null,
     openingStock: cleanNumber(draft.openingStock),
     expiryDate: draft.expiryDate || null,
@@ -454,7 +466,8 @@ function buildSavePayload(draft: Draft, storeId: string) {
     : 'buy_now'
   const trimmedImageUrl = draft.imageUrl.trim()
   const imageUrls = trimmedImageUrl ? [trimmedImageUrl] : []
-  const currency = 'GHS'
+  const currency = draft.currency.trim().toUpperCase()
+  if (!currency) throw new Error('Currency is required.')
   const categoryName = category
   const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
   const description = cleanSavedDescription(draft.description)
@@ -658,6 +671,7 @@ export default function ProductsServiceFirst() {
       category: normalizeCategory(item.category, itemType),
       subcategory: item.subcategory ?? '',
       price: typeof item.price === 'number' ? String(item.price) : '',
+      currency: item.currency?.trim().toUpperCase() || 'GHS',
       costPrice: itemType === 'product' && typeof item.costPrice === 'number' ? String(item.costPrice) : '',
       description: item.description ?? '',
       sku: itemType === 'product' ? item.sku ?? item.barcode ?? '' : '',
@@ -815,7 +829,29 @@ export default function ProductsServiceFirst() {
 
             <div className="field">
               <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
-              <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
+              <div className="products-page__price-row">
+                <select
+                  aria-label="Currency"
+                  value={COMMON_CURRENCY_CODES.includes(draft.currency as (typeof COMMON_CURRENCY_CODES)[number]) ? draft.currency : 'CUSTOM'}
+                  onChange={event => {
+                    const value = event.target.value
+                    setDraft(current => ({ ...current, currency: value === 'CUSTOM' ? '' : value }))
+                  }}
+                >
+                  {COMMON_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}
+                  <option value="CUSTOM">Custom currency</option>
+                </select>
+                <input id="item-price" type="number" min="0" step="0.01" value={draft.price} onChange={event => updateDraft('price', event.target.value)} required />
+              </div>
+              {!COMMON_CURRENCY_CODES.includes(draft.currency as (typeof COMMON_CURRENCY_CODES)[number]) ? (
+                <input
+                  aria-label="Custom currency code"
+                  value={draft.currency}
+                  onChange={event => setDraft(current => ({ ...current, currency: event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) }))}
+                  placeholder="Currency code, e.g. CAD"
+                  required
+                />
+              ) : null}
             </div>
 
             {!behavesLikeService ? (
@@ -987,7 +1023,7 @@ export default function ProductsServiceFirst() {
                     </div>
                     <div className="products-page__list-meta">
                       <span className="products-page__meta-label">Price</span>
-                      <span>{formatMoney(item.price)}</span>
+                      <span>{formatMoney(item.price, item.currency || 'GHS')}</span>
                     </div>
                   </header>
 
