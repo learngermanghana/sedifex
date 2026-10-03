@@ -479,6 +479,7 @@ export default function CompactBusinessDashboard() {
       ? { id: 'event-tasks', count: pendingClientTasks, label: `open event task${pendingClientTasks === 1 ? '' : 's'}`, to: '/event-planning' }
       : null,
   ].filter((item): item is { id: string; count: number; label: string; to: string } => Boolean(item))
+  const attentionSignalCount = attentionSignals.reduce((sum, item) => sum + item.count, 0)
 
   const customerBalanceHint = `${customerDebtRows.length} customer${customerDebtRows.length === 1 ? '' : 's'} owing`
 
@@ -724,7 +725,7 @@ export default function CompactBusinessDashboard() {
       <section className={`compact-dashboard__attention-strip${attentionSignals.length ? '' : ' is-clear'}`} aria-label="Needs attention">
         <div className="compact-dashboard__attention-heading">
           <span>Needs attention</span>
-          <strong>{attentionCount}</strong>
+          <strong>{attentionSignalCount}</strong>
         </div>
         {attentionSignals.length ? (
           <div className="compact-dashboard__attention-links">
