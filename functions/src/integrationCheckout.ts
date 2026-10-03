@@ -778,7 +778,6 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
         currency: 'GHS',
         listed_unit_price: listedUnitPriceMinor,
         listed_currency: listedCurrency,
-        exchange_rate_usd_to_ghs: listedCurrency === 'USD' ? currencyRates.usdToGhs : null,
         type: resolved.type,
       })
     }
@@ -786,8 +785,13 @@ export const integrationCheckoutPreview = functions.https.onRequest(async (req, 
     const payload = {
       pricing_version: '2026-05-12-v1',
       currency: 'GHS',
-      exchange_rate_usd_to_ghs: currencyRates.usdToGhs,
       exchange_rate_updated_at: currencyRates.fetchedAt,
+      currency_conversion: {
+        updatedAt: currencyRates.fetchedAt,
+        refreshCadence: currencyRates.refreshCadence,
+        provider: currencyRates.provider,
+        providerUrl: currencyRates.providerUrl,
+      },
       subtotal,
       tax_total: 0,
       delivery_fee: 0,
