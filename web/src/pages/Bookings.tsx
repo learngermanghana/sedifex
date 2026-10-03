@@ -100,14 +100,14 @@ const statusLabel = (status: string) =>
     completed: "Completed",
     cancelled: "Cancelled",
     deleted: "Cancelled",
-    manual_review: "Manual review",
-  })[status] ?? "Pending approval";
+    manual_review: "Needs approval",
+  })[status] ?? "Needs approval";
 
 const paymentLabel = (status: string) =>
   ({
     payment_pending: "Payment pending",
     pending: "Payment pending",
-    manual_review: "Manual review",
+    manual_review: "Payment review",
     paid: "Paid",
   })[status] ?? "Payment pending";
 
