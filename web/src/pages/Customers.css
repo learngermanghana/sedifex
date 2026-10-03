@@ -422,3 +422,115 @@
   background: #fff;
   cursor: pointer;
 }
+
+
+.customers-page__header {
+  align-items: flex-start;
+}
+
+.customers-page__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.customers-page__back-link {
+  display: inline-flex;
+  margin-bottom: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.customers-page__back-link:hover {
+  color: #312e81;
+}
+
+.customers-page__more-menu {
+  position: relative;
+}
+
+.customers-page__more-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.customers-page__more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.customers-page__more-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
+  display: grid;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 38px -20px rgba(15, 23, 42, .45);
+}
+
+.customers-page__more-panel button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 9px 10px;
+  color: #0f172a;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customers-page__more-panel button:hover:not(:disabled),
+.customers-page__more-panel button:focus-visible {
+  background: #f1f5f9;
+}
+
+.customers-page__more-panel button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.customers-page__panel-nav {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 720px) {
+  .customers-page__header {
+    align-items: stretch;
+  }
+
+  .customers-page__header-actions {
+    justify-content: stretch;
+  }
+
+  .customers-page__header-actions > .button,
+  .customers-page__header-actions > .customers-page__more-menu {
+    flex: 1 1 auto;
+  }
+
+  .customers-page__more-menu > summary {
+    width: 100%;
+  }
+
+  .customers-page__more-panel {
+    left: 0;
+    right: auto;
+    min-width: min(260px, 88vw);
+  }
+
+  .customers-page__badge {
+    width: 100%;
+  }
+}
