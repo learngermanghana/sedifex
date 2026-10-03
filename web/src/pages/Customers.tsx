@@ -410,7 +410,11 @@ export default function Customers() {
 
   useEffect(() => {
     const editId = searchParams.get('edit')
-    if (!editId || openedEditIdRef.current === editId || customers.length === 0) return
+    if (!editId) {
+      openedEditIdRef.current = null
+      return
+    }
+    if (openedEditIdRef.current === editId || customers.length === 0) return
     const customer = customers.find(item => item.id === editId)
     if (!customer) return
     openedEditIdRef.current = editId
