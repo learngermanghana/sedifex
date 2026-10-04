@@ -519,62 +519,87 @@
   color: #b91c1c;
 }
 
-/* -------- FORM + INPUTS (the boxes that looked faint) ---------- */
+/* -------- ITEM FORM + INPUTS ---------- */
 
 .products-page__form {
   display: grid;
-  gap: 16px;
-  max-width: 520px;
+  gap: 18px;
+  width: 100%;
+  max-width: 680px;
+  color-scheme: light;
 }
 
-.field {
+.products-page__form .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
-.field__label {
+.products-page__form .field__label {
   font-size: 14px;
-  font-weight: 500;
-  color: #111827;                      /* darker label */
+  font-weight: 600;
+  color: #0f172a;
 }
 
-.field input {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #9ca3af;           /* stronger border */
-  background-color: #f9fafb;           /* light grey background */
-  color: #111827;                      /* dark text */
-  font-size: 14px;
+.products-page__form .field input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.products-page__form .field select,
+.products-page__form .field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid #94a3b8;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #4338ca;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  opacity: 1;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
-.field textarea {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #9ca3af;
-  background-color: #f9fafb;
-  color: #111827;
-  font-size: 14px;
+.products-page__form .field textarea {
+  min-height: 104px;
   resize: vertical;
-  min-height: 92px;
 }
 
-.field input::placeholder {
-  color: #6b7280;                      /* mid-grey placeholder */
+.products-page__form .field input::placeholder,
+.products-page__form .field textarea::placeholder {
+  color: #64748b;
+  -webkit-text-fill-color: #64748b;
+  opacity: 1;
 }
 
-.field input:focus {
+.products-page__form .field input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+.products-page__form .field select:focus,
+.products-page__form .field textarea:focus {
   outline: none;
-  border-color: #2563eb;               /* blue focus border */
-  box-shadow: 0 0 0 1px #2563eb33;     /* soft focus ring */
-  background-color: #ffffff;           /* pure white when focused */
+  border-color: #4f46e5;
+  background: #ffffff;
+  color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
 }
 
-.field textarea:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 1px #2563eb33;
-  background-color: #ffffff;
+.products-page__form .field input:disabled,
+.products-page__form .field select:disabled,
+.products-page__form .field textarea:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  -webkit-text-fill-color: #64748b;
+  cursor: not-allowed;
+}
+
+.products-page__form .field input:-webkit-autofill,
+.products-page__form .field input:-webkit-autofill:hover,
+.products-page__form .field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #4338ca;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 9999s ease-out 0s;
 }
 
 .products-page__field-inline {
@@ -915,7 +940,7 @@
 
 .products-page__price-row {
   display: grid;
-  grid-template-columns: minmax(180px, 0.7fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(220px, 0.75fr) minmax(220px, 1fr);
   gap: 10px;
   align-items: center;
 }
