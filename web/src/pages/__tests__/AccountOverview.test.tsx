@@ -833,3 +833,4 @@ describe('AccountOverview', () => {
     expect(await screen.findByRole('button', { name: /copy website api token/i })).toBeInTheDocument()
     expect(screen.queryByText(/new integration key name/i)).not.toBeInTheDocument()
   })
+})
