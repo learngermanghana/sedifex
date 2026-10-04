@@ -395,7 +395,7 @@ export default function Customers() {
     return `${intakeLink}/qr`
   }, [intakeLink])
 
-  const { clearPreference: clearCustomerFilters } = useStorePreferenceSync({
+  const { clearPreference: clearCustomerFilters } = useStorePreferenceSync<{ searchTerm: string; quickFilter: typeof quickFilter; tagFilter: string | null }>({
     storeId: activeStoreId,
     keyPrefix: CUSTOMER_FILTER_KEY_PREFIX,
     value: { searchTerm, quickFilter, tagFilter },
