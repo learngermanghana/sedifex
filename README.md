@@ -331,3 +331,7 @@ Follow the flow below to connect Paystack as the card/mobile processor for Sedif
    - Confirm that `resolveStoreAccess` still returns billing metadata for new signups and that the UI gracefully handles both paid and trial workspaces with Paystack enabled.
 
 Documenting these steps keeps the integration consistent across environments and makes it easy to onboard additional stores with Paystack support.
+## Production deployment
+
+The web app deploys from the `main` branch to the Vercel project `sedifexbiz`.
+
