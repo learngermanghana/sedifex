@@ -289,21 +289,23 @@ body.shell--menu-open {
   justify-content: flex-start;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 12px;
+  border-radius: 10px;
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  color: #4338ca;
-  background-color: #eef2ff;
+  color: #334155;
+  background: transparent;
   border: 1px solid transparent;
   box-shadow: none;
-  transition: all 0.2s ease;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   line-height: 1.4;
 }
 
 .shell__nav-link:is(:hover, :focus-visible) {
-  border-color: rgba(67, 56, 202, 0.25);
-  box-shadow: 0 6px 18px rgba(67, 56, 202, 0.1);
+  color: #3730a3;
+  background: #eef2ff;
+  border-color: rgba(67, 56, 202, 0.16);
+  box-shadow: none;
 }
 
 .shell__nav-link.is-active {
