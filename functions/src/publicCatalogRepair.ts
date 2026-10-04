@@ -18,7 +18,7 @@ function text(value: unknown): string | null {
 function normalizedType(value: unknown): ListingType {
   const raw = text(value)?.toLowerCase()
   if (raw === 'course' || raw === 'programme' || raw === 'program') return 'course'
-  if (raw === 'service' || raw === 'booking' || raw === 'appointment') return 'service'
+  if (raw === 'service' || raw === 'booking' || raw === 'appointment' || raw === 'tour_package' || raw === 'tour' || raw === 'trip') return 'service'
   return 'product'
 }
 
