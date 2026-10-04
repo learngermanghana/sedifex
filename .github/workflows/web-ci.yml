@@ -54,7 +54,7 @@ jobs:
 
       - name: Test persisted preferences, status badges, and account settings
         run: |
-          npm exec vitest run src/hooks/useStorePreferenceSync.test.tsx src/components/StatusBadge.test.tsx src/utils/itemImages.test.ts
+          npm exec vitest run src/hooks/useStorePreferenceSync.test.tsx src/components/StatusBadge.test.tsx src/utils/itemImages.test.ts src/utils/itemCategories.test.ts
           npm exec -- vitest run src/pages/__tests__/AccountOverview.test.tsx -t "keeps account settings on one navigation layer"
         working-directory: web
 
