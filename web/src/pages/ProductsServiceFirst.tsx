@@ -631,12 +631,12 @@ export default function ProductsServiceFirst({
     }
   }, [])
 
-  const { clearPreference: clearSearchPreference } = useStorePreferenceSync({
+  const { clearPreference: clearSearchPreference } = useStorePreferenceSync<string>({
     storeId,
     keyPrefix: PRODUCT_SEARCH_KEY_PREFIX,
     value: search,
     defaultValue: '',
-    apply: setSearch,
+    apply: restored => setSearch(restored),
     serialize: current => current,
     deserialize: raw => raw,
     debugName: 'products',
