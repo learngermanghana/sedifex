@@ -1,5 +1,6 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addDoc,
   collection,
@@ -33,8 +34,9 @@ import {
   setItemCoverImage,
 } from '../utils/itemImages'
 
-type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
-type ServiceKind = 'consultation' | 'quote_request'
+type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'tour_package' | 'digital_item'
+type ServiceKind = 'consultation' | 'quote_request' | 'tour_package'
+type TourItineraryDay = { day: number; title: string; description: string }
 type CourseMode = 'online' | 'in_person' | 'hybrid'
 
 type Draft = {
@@ -55,6 +57,16 @@ type Draft = {
   imageAlt: string
   brand: string
   serviceKind: ServiceKind
+  destination: string
+  tourStyle: string
+  durationDays: string
+  durationNights: string
+  startingCity: string
+  endingCity: string
+  shortSummary: string
+  itinerary: TourItineraryDay[]
+  inclusions: string[]
+  exclusions: string[]
   durationMinutes: string
   location: string
   requiresDateTime: boolean
@@ -85,6 +97,7 @@ type SalesMode = 'buy_now' | 'book_now' | 'register' | 'request_quote'
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
+const TOUR_CATEGORY = 'Travel & Tours'
 const PRICE_CURRENCIES = [
   { code: 'GHS', label: 'GHS — Ghana cedi' },
   { code: 'USD', label: 'USD — US dollar' },
@@ -118,6 +131,16 @@ const blankDraft: Draft = {
   imageAlt: '',
   brand: '',
   serviceKind: 'consultation',
+  destination: '',
+  tourStyle: '',
+  durationDays: '',
+  durationNights: '',
+  startingCity: '',
+  endingCity: '',
+  shortSummary: '',
+  itinerary: [{ day: 1, title: '', description: '' }],
+  inclusions: [''],
+  exclusions: [''],
   durationMinutes: '',
   location: '',
   requiresDateTime: false,
@@ -190,6 +213,7 @@ function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
   const raw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
   if (!raw) {
     if (itemType === 'course') return EDUCATION_CATEGORY
+    if (itemType === 'tour_package') return TOUR_CATEGORY
     if (itemType === 'service' || itemType === 'made_to_order') return SERVICE_CATEGORY
     return PRODUCT_CATEGORY
   }
@@ -198,6 +222,7 @@ function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
 
 function formatItemType(itemType: ItemType) {
   if (itemType === 'made_to_order') return 'Booking'
+  if (itemType === 'tour_package') return 'Tour Package'
   if (itemType === 'digital_item') return 'Digital Item'
   return titleCase(itemType)
 }
@@ -238,7 +263,13 @@ function buildAiDescriptionPrompt(draft: Draft): string {
     sku: draft.sku.trim() || null,
     openingStock: cleanNumber(draft.openingStock),
     expiryDate: draft.expiryDate || null,
-    serviceKind: draft.itemType === 'service' ? draft.serviceKind : null,
+    serviceKind: draft.itemType === 'tour_package' ? 'tour_package' : draft.itemType === 'service' ? draft.serviceKind : null,
+    destination: draft.itemType === 'tour_package' ? draft.destination.trim() || null : null,
+    tourStyle: draft.itemType === 'tour_package' ? draft.tourStyle.trim() || null : null,
+    durationDays: draft.itemType === 'tour_package' ? cleanNumber(draft.durationDays) : null,
+    durationNights: draft.itemType === 'tour_package' ? cleanNumber(draft.durationNights) : null,
+    startingCity: draft.itemType === 'tour_package' ? draft.startingCity.trim() || null : null,
+    endingCity: draft.itemType === 'tour_package' ? draft.endingCity.trim() || null : null,
     durationMinutes: draft.itemType === 'service' ? cleanNumber(draft.durationMinutes) : null,
     location: draft.location.trim() || draft.branch.trim() || null,
     courseLevel: draft.itemType === 'course' ? draft.courseLevel.trim() || null : null,
