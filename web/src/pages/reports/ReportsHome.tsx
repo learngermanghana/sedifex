@@ -72,12 +72,12 @@ export default function ReportsHome() {
   const { storeId } = useActiveStore()
   const { preferences } = useStorePreferences(storeId)
   const [search, setSearch] = useState('')
-  const { clearPreference: clearSearchPreference } = useStorePreferenceSync({
+  const { clearPreference: clearSearchPreference } = useStorePreferenceSync<string>({
     storeId,
     keyPrefix: REPORT_SEARCH_KEY_PREFIX,
     value: search,
     defaultValue: '',
-    apply: setSearch,
+    apply: restored => setSearch(restored),
     serialize: current => current,
     deserialize: raw => raw,
     debugName: 'reports',
