@@ -24,7 +24,7 @@ function text(value: unknown): string | null {
 }
 
 function itemType(value: unknown): 'product' | 'service' | 'course' {
-  return value === 'course' ? 'course' : value === 'service' ? 'service' : 'product'
+  return value === 'course' ? 'course' : value === 'service' || value === 'tour_package' ? 'service' : 'product'
 }
 
 function normalizeCategoryText(value: unknown): string | null {
@@ -288,6 +288,19 @@ function publicPayload(
     publishedAt: resolvePublicationTimestampCandidate(data.publishedAt, data.createdAt, data.updatedAt),
     sourceUpdatedAt: data.updatedAt ?? null,
     serviceKind: text(data.serviceKind),
+    sourceItemType: text(data.itemType),
+    destination: text(data.destination),
+    tourStyle: text(data.tourStyle),
+    durationDays: numberOrNull(data.durationDays),
+    durationNights: numberOrNull(data.durationNights),
+    startingCity: text(data.startingCity),
+    endingCity: text(data.endingCity),
+    shortSummary: text(data.shortSummary),
+    itinerary: Array.isArray(data.itinerary) ? data.itinerary : [],
+    inclusions: toArray(data.inclusions),
+    exclusions: toArray(data.exclusions),
+    allowDepositPayment: boolOrNull(data.allowDepositPayment),
+    depositAmount: numberOrNull(data.depositAmount),
     duration: text(data.duration),
     branch: text(data.branch) ?? text(data.location),
     preferredTimes: text(data.preferredTimes) ?? text(data.classTimes),
