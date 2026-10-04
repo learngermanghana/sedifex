@@ -25,6 +25,13 @@ import type { ItemType, Product } from '../types/product'
 import { productMatchesSearch } from '../utils/productSearch'
 import { CategorySelect } from '../components/CategorySelect'
 import { ITEM_CATEGORIES } from '../utils/itemCategories'
+import {
+  MAX_ITEM_IMAGES,
+  moveItemImage,
+  normalizeItemImages,
+  removeItemImage,
+  setItemCoverImage,
+} from '../utils/itemImages'
 
 type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
 type ServiceKind = 'consultation' | 'quote_request'
@@ -44,6 +51,7 @@ type Draft = {
   reorderPoint: string
   expiryDate: string
   imageUrl: string
+  imageUrls: string[]
   imageAlt: string
   brand: string
   serviceKind: ServiceKind
@@ -106,6 +114,7 @@ const blankDraft: Draft = {
   reorderPoint: '',
   expiryDate: '',
   imageUrl: '',
+  imageUrls: [],
   imageAlt: '',
   brand: '',
   serviceKind: 'consultation',
@@ -397,7 +406,8 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
       : 'product'
   const itemFormType: ItemFormType = itemType === 'course' || (itemType === 'service' && data.listingType === 'course') ? 'course' : itemType
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
-  const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+  const imageUrls = normalizeItemImages(data.imageUrl, data.imageUrls)
+  const imageUrl = imageUrls[0] || null
   return {
     id,
     name,
@@ -419,7 +429,7 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     batchNumber: itemType === 'product' && typeof data.batchNumber === 'string' ? data.batchNumber : null,
     showOnReceipt: itemType === 'product' && data.showOnReceipt === true,
     imageUrl,
-    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls.filter((item): item is string => typeof item === 'string') : imageUrl ? [imageUrl] : [],
+    imageUrls,
     imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : name,
     isPublished: data.isPublished === true,
     status: data.status === 'published' ? 'published' : 'draft',
@@ -478,8 +488,8 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
       ? 'request_quote'
       : 'book_now'
     : 'buy_now'
-  const trimmedImageUrl = draft.imageUrl.trim()
-  const imageUrls = trimmedImageUrl ? [trimmedImageUrl] : []
+  const imageUrls = normalizeItemImages(draft.imageUrl, draft.imageUrls)
+  const trimmedImageUrl = imageUrls[0] || ''
   const currency = draft.currency.trim().toUpperCase()
   if (currency !== 'GHS' && currency !== 'USD') throw new Error('Choose GHS or USD for the item price.')
   if (currency === 'USD' && !rates) throw new Error('The USD/GHS conversion rate is still loading. Try again in a moment.')
@@ -609,6 +619,56 @@ export default function ProductsServiceFirst({
     () => convertPrice(draftPriceNumber, draft.currency, currencyRates),
     [draft.currency, draftPriceNumber, currencyRates],
   )
+  const galleryImages = useMemo(
+    () => normalizeItemImages(draft.imageUrl, draft.imageUrls),
+    [draft.imageUrl, draft.imageUrls],
+  )
+
+  function applyGalleryImages(images: string[]) {
+    const normalized = normalizeItemImages('', images)
+    setDraft(current => ({
+      ...current,
+      imageUrl: normalized[0] || '',
+      imageUrls: normalized,
+    }))
+  }
+
+  function appendGalleryImages(images: string[]) {
+    setDraft(current => {
+      const normalized = normalizeItemImages(current.imageUrl, [...current.imageUrls, ...images])
+      return {
+        ...current,
+        imageUrl: normalized[0] || '',
+        imageUrls: normalized,
+      }
+    })
+  }
+
+  function updateCoverImageUrl(value: string) {
+    setDraft(current => {
+      const previousCover = current.imageUrl.trim()
+      const remainingImages = normalizeItemImages('', current.imageUrls)
+        .filter(image => image !== previousCover)
+      const normalized = normalizeItemImages(value, remainingImages)
+      return {
+        ...current,
+        imageUrl: value,
+        imageUrls: normalized,
+      }
+    })
+  }
+
+  function setGalleryCover(imageUrl: string) {
+    applyGalleryImages(setItemCoverImage(galleryImages, imageUrl))
+  }
+
+  function removeGalleryImage(imageUrl: string) {
+    applyGalleryImages(removeItemImage(galleryImages, imageUrl))
+  }
+
+  function moveGalleryImage(imageUrl: string, direction: -1 | 1) {
+    applyGalleryImages(moveItemImage(galleryImages, imageUrl, direction))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -751,7 +811,8 @@ export default function ProductsServiceFirst({
       openingStock: itemType === 'product' && typeof item.stockCount === 'number' ? String(item.stockCount) : '',
       reorderPoint: itemType === 'product' && typeof item.reorderPoint === 'number' ? String(item.reorderPoint) : '',
       expiryDate: itemType === 'product' ? formatDateInput(item.expiryDate) : '',
-      imageUrl: item.imageUrl ?? '',
+      imageUrl: item.imageUrl ?? item.imageUrls?.[0] ?? '',
+      imageUrls: normalizeItemImages(item.imageUrl, item.imageUrls),
       imageAlt: item.imageAlt ?? item.name,
       brand: item.itemType === 'product' ? (item.brand ?? item.manufacturerName ?? '') : '',
       serviceKind: ((item as any).serviceKind === 'quote_request' ? 'quote_request' : 'consultation') as ServiceKind,
@@ -813,7 +874,7 @@ export default function ProductsServiceFirst({
           }
         }
       }
-      const imageUploadPending = draft.imageUrl.startsWith('data:image/')
+      const imageUploadPending = galleryImages.some(image => image.startsWith('data:image/'))
 
       if (editingId) {
         const itemRef = doc(db, 'products', editingId)
@@ -1027,62 +1088,155 @@ export default function ProductsServiceFirst({
               <p className="field__hint">Use Clean formatting to remove broken AI separators, empty dash lines, and messy markdown.</p>
             </div>
             <div className="field">
-              <label className="field__label" htmlFor="item-image">Image URL</label>
-              <input id="item-image" type="url" value={draft.imageUrl} onChange={event => updateDraft('imageUrl', event.target.value)} />
+              <label className="field__label" htmlFor="item-image">Cover image URL</label>
+              <input
+                id="item-image"
+                type="url"
+                value={draft.imageUrl}
+                onChange={event => updateCoverImageUrl(event.target.value)}
+                onBlur={() => {
+                  const normalized = normalizeItemImages(draft.imageUrl, draft.imageUrls)
+                  if (normalized.length > 0 && draft.imageUrl.trim() !== normalized[0]) applyGalleryImages(normalized)
+                }}
+                placeholder="https://..."
+              />
+              <p className="field__hint">The cover image appears first on connected websites and item cards.</p>
             </div>
             <div className="field">
-              <label className="field__label" htmlFor="item-image-file">Browse image</label>
+              <div className="products-page__label-row">
+                <label className="field__label" htmlFor="item-image-file">Photos</label>
+                <span className="products-page__image-count">{galleryImages.length}/{MAX_ITEM_IMAGES}</span>
+              </div>
               <input
                 id="item-image-file"
                 type="file"
                 accept="image/*"
+                multiple
+                disabled={imageUploadState === 'uploading'}
                 onChange={async event => {
-                  const file = event.target.files?.[0]
-                  if (!file) return
+                  const selectedFiles = Array.from(event.target.files ?? [])
+                  if (selectedFiles.length === 0) return
                   if (!storeId) {
                     setImageUploadState('failed')
-                    setImageStatusMessage('Select a store before uploading an image.')
+                    setImageStatusMessage('Select a store before uploading photos.')
                     event.target.value = ''
                     return
                   }
-                  if (!file.type.startsWith('image/')) {
+
+                  const invalidFile = selectedFiles.find(file => !file.type.startsWith('image/'))
+                  if (invalidFile) {
                     setImageUploadState('failed')
-                    setImageStatusMessage('Please choose a valid image file.')
+                    setImageStatusMessage('Please choose image files only.')
                     event.target.value = ''
                     return
                   }
+
+                  const remainingSlots = Math.max(0, MAX_ITEM_IMAGES - galleryImages.length)
+                  if (remainingSlots === 0) {
+                    setImageUploadState('failed')
+                    setImageStatusMessage(`You can add up to ${MAX_ITEM_IMAGES} photos per item.`)
+                    event.target.value = ''
+                    return
+                  }
+
+                  const filesToUpload = selectedFiles.slice(0, remainingSlots)
+                  const skippedCount = selectedFiles.length - filesToUpload.length
+                  const uploadedUrls: string[] = []
+                  const failedUploads: string[] = []
+
                   setImageUploadState('uploading')
-                  setImageStatusMessage('Uploading image...')
-                  try {
-                    const uploadedImageUrl = await uploadProductImage(file, { storagePath: `stores/${storeId}/products` })
-                    updateDraft('imageUrl', uploadedImageUrl)
-                    setImageUploadState('success')
-                    setImageStatusMessage('Image uploaded successfully.')
-                  } catch (uploadError) {
-                    const message = uploadError instanceof ProductImageUploadError
-                      ? uploadError.message
-                      : 'Image upload failed.'
-                    setImageUploadState('failed')
-                    setImageStatusMessage(message)
-                  } finally {
-                    event.target.value = ''
+                  setImageStatusMessage(`Uploading 1 of ${filesToUpload.length}…`)
+
+                  for (let index = 0; index < filesToUpload.length; index += 1) {
+                    const file = filesToUpload[index]
+                    setImageStatusMessage(`Uploading ${index + 1} of ${filesToUpload.length}…`)
+                    try {
+                      const uploadedImageUrl = await uploadProductImage(file, { storagePath: `stores/${storeId}/products` })
+                      uploadedUrls.push(uploadedImageUrl)
+                    } catch (uploadError) {
+                      console.error('[products] Image upload failed', uploadError)
+                      failedUploads.push(file.name)
+                    }
                   }
+
+                  if (uploadedUrls.length > 0) {
+                    appendGalleryImages(uploadedUrls)
+                  }
+
+                  if (failedUploads.length > 0) {
+                    setImageUploadState('failed')
+                    setImageStatusMessage(
+                      `${uploadedUrls.length} photo${uploadedUrls.length === 1 ? '' : 's'} uploaded. ${failedUploads.length} failed: ${failedUploads.join(', ')}.`,
+                    )
+                  } else {
+                    setImageUploadState('success')
+                    setImageStatusMessage(
+                      `${uploadedUrls.length} photo${uploadedUrls.length === 1 ? '' : 's'} uploaded successfully.${skippedCount > 0 ? ` ${skippedCount} skipped because the ${MAX_ITEM_IMAGES}-photo limit was reached.` : ''}`,
+                    )
+                  }
+
+                  event.target.value = ''
                 }}
               />
+              <p className="field__hint">Choose multiple photos at once. You can add up to {MAX_ITEM_IMAGES}, reorder them, or choose another cover.</p>
               {imageStatusMessage ? <p className={`products-page__upload-state products-page__upload-state--${imageUploadState}`}>{imageStatusMessage}</p> : null}
-              {draft.imageUrl.startsWith('data:image/') ? <p className="products-page__upload-warning">Image selected locally but not uploaded to cloud storage yet.</p> : null}
+              {galleryImages.some(image => image.startsWith('data:image/')) ? <p className="products-page__upload-warning">One or more photos are still local and have not been uploaded to cloud storage.</p> : null}
             </div>
-            {draft.imageUrl ? (
-              <div className="products-page__image-preview-box">
-                <SafeFirebaseImage className="products-page__image-preview" src={draft.imageUrl} alt={draft.imageAlt || draft.name || 'Preview'} />
-                <button type="button" className="button button--ghost" onClick={() => { updateDraft('imageUrl', ''); setImageUploadState('idle'); setImageStatusMessage('') }}>Remove image</button>
+            {galleryImages.length > 0 ? (
+              <div className="products-page__gallery-editor" aria-label="Item photos">
+                {galleryImages.map((imageUrl, index) => (
+                  <article className="products-page__gallery-item" key={imageUrl}>
+                    <div className="products-page__gallery-media">
+                      <SafeFirebaseImage
+                        className="products-page__gallery-image"
+                        src={imageUrl}
+                        alt={index === 0 ? (draft.imageAlt || draft.name || 'Cover image') : `${draft.name || 'Item'} photo ${index + 1}`}
+                      />
+                      {index === 0 ? <span className="products-page__gallery-cover-badge">Cover</span> : null}
+                    </div>
+                    <div className="products-page__gallery-actions">
+                      {index > 0 ? (
+                        <button type="button" className="button button--ghost button--small" onClick={() => setGalleryCover(imageUrl)}>
+                          Set as cover
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="button button--ghost button--small"
+                        onClick={() => moveGalleryImage(imageUrl, -1)}
+                        disabled={index === 0}
+                        aria-label={`Move photo ${index + 1} left`}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--ghost button--small"
+                        onClick={() => moveGalleryImage(imageUrl, 1)}
+                        disabled={index === galleryImages.length - 1}
+                        aria-label={`Move photo ${index + 1} right`}
+                      >
+                        →
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--ghost button--small"
+                        onClick={() => removeGalleryImage(imageUrl)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                ))}
               </div>
             ) : null}
             <div className="products-page__visibility-grid">
               <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on your website</span></label>
             </div>
             <div className="products-page__list-actions">
-              <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
+              <button type="submit" className="button button--primary" disabled={saving || imageUploadState === 'uploading' || !canManage}>
+                {imageUploadState === 'uploading' ? 'Uploading photos…' : saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}
+              </button>
               <button
                 type="button"
                 className="button button--ghost"
