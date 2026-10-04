@@ -8,7 +8,7 @@ const JSON_PREFIX = 'test-json-pref-'
 
 function StringPreferenceHarness({ storeId }: { storeId: string }) {
   const [value, setValue] = useState('')
-  const { clearPreference } = useStorePreferenceSync({
+  const { clearPreference } = useStorePreferenceSync<string>({
     storeId,
     keyPrefix: STRING_PREFIX,
     value,
@@ -31,7 +31,7 @@ function StringPreferenceHarness({ storeId }: { storeId: string }) {
 function JsonPreferenceHarness({ storeId }: { storeId: string }) {
   const [filters, setFilters] = useState({ search: '', source: 'all' })
 
-  useStorePreferenceSync({
+  useStorePreferenceSync<{ search: string; source: string }>({
     storeId,
     keyPrefix: JSON_PREFIX,
     value: filters,
