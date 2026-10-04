@@ -52,8 +52,8 @@ jobs:
           npm install --no-package-lock --no-audit --no-fund
         working-directory: web
 
-      - name: Test persisted preferences and status badges
-        run: npm exec vitest run src/hooks/useStorePreferenceSync.test.tsx src/components/StatusBadge.test.tsx
+      - name: Test persisted preferences, status badges, and account settings
+        run: npm exec vitest run src/hooks/useStorePreferenceSync.test.tsx src/components/StatusBadge.test.tsx src/pages/__tests__/AccountOverview.test.tsx
         working-directory: web
 
       - name: Test sales history regressions
