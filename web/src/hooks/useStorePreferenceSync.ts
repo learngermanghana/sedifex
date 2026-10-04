@@ -114,7 +114,7 @@ export function useStorePreferenceSync<T>({
       hydrationRef.current = {
         storageKey,
         serializedValue: resetSerialized,
-        pending: true,
+        pending: false,
       }
     } else {
       hydrationRef.current = null
