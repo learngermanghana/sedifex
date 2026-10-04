@@ -179,6 +179,27 @@ function cleanText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean)
+}
+
+function cleanItinerary(value: unknown): TourItineraryDay[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry, index) => {
+      const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+      return {
+        day: Math.max(1, Math.floor(Number(record.day) || index + 1)),
+        title: typeof record.title === 'string' ? record.title.trim() : '',
+        description: typeof record.description === 'string' ? record.description.trim() : '',
+      }
+    })
+    .filter(entry => entry.title || entry.description)
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
@@ -455,7 +476,7 @@ function improveDescription(text: string): string {
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
   const itemType: ItemType =
-    data.itemType === 'course' || data.itemType === 'service' || data.itemType === 'made_to_order' || data.itemType === 'digital_item'
+    data.itemType === 'course' || data.itemType === 'service' || data.itemType === 'made_to_order' || data.itemType === 'tour_package' || data.itemType === 'digital_item'
       ? data.itemType
       : 'product'
   const itemFormType: ItemFormType = itemType === 'course' || (itemType === 'service' && data.listingType === 'course') ? 'course' : itemType
@@ -493,6 +514,16 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     currency: cleanText(data.currency),
     listingType: cleanText(data.listingType) as Product['listingType'],
     serviceKind: cleanText(data.serviceKind),
+    destination: cleanText(data.destination),
+    tourStyle: cleanText(data.tourStyle),
+    durationDays: cleanNumber(data.durationDays),
+    durationNights: cleanNumber(data.durationNights),
+    startingCity: cleanText(data.startingCity),
+    endingCity: cleanText(data.endingCity),
+    shortSummary: cleanText(data.shortSummary),
+    itinerary: cleanItinerary(data.itinerary),
+    inclusions: cleanStringArray(data.inclusions),
+    exclusions: cleanStringArray(data.exclusions),
     duration: cleanText(data.duration),
     branch: cleanText(data.branch ?? data.location),
     preferredTimes: cleanText(data.preferredTimes ?? data.classTimes),
@@ -518,9 +549,10 @@ function getProductSortTime(product: Product): number {
 }
 
 function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateState | null) {
-  const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
+  const isTourPackage = draft.itemType === 'tour_package'
+  const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order' || isTourPackage
   const isCourse = draft.itemType === 'course'
-  const behavesLikeService = draft.itemType !== 'product'
+  const behavesLikeService = draft.itemType !== 'product' && draft.itemType !== 'digital_item'
   const name = titleCase(draft.name)
   const category = normalizeCategory(draft.category, draft.itemType)
   const price = cleanNumber(draft.price)
@@ -533,7 +565,7 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
   if (isCourse && !category) throw new Error('Course category is required.')
   if (isCourse && !draft.courseMode) throw new Error('Course enrollment mode is required.')
 
-  const serviceKind: ServiceKind = isCourse ? 'consultation' : draft.serviceKind
+  const serviceKind: ServiceKind = isTourPackage ? 'tour_package' : isCourse ? 'consultation' : draft.serviceKind
   const listingType: ListingType = isCourse ? 'course' : isService ? 'service' : 'product'
   const salesMode: SalesMode = isCourse
     ? 'register'
@@ -562,7 +594,7 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
     listingType,
     serviceKind: isCourse ? 'course_enrollment' : serviceKind,
     salesMode,
-    enrollmentMode: isCourse ? 'always_open' : null,
+    enrollmentMode: isCourse ? 'always_open' : isTourPackage ? 'scheduled' : null,
     category,
     subcategory: draft.subcategory.trim() || null,
     categoryKey,
@@ -581,8 +613,18 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
     stockCount: behavesLikeService ? null : cleanNumber(draft.openingStock),
     reorderPoint: behavesLikeService ? null : cleanNumber(draft.reorderPoint),
     expiryDate: behavesLikeService || !draft.expiryDate ? null : new Date(draft.expiryDate),
-    durationMinutes: isService ? cleanNumber(draft.durationMinutes) : null,
-    location: behavesLikeService ? (draft.branch.trim() || draft.location.trim() || null) : null,
+    durationMinutes: isService && !isTourPackage ? cleanNumber(draft.durationMinutes) : null,
+    destination: isTourPackage ? draft.destination.trim() || null : null,
+    tourStyle: isTourPackage ? draft.tourStyle.trim() || null : null,
+    durationDays: isTourPackage ? cleanNumber(draft.durationDays) : null,
+    durationNights: isTourPackage ? cleanNumber(draft.durationNights) : null,
+    startingCity: isTourPackage ? draft.startingCity.trim() || null : null,
+    endingCity: isTourPackage ? draft.endingCity.trim() || null : null,
+    shortSummary: isTourPackage ? draft.shortSummary.trim() || null : null,
+    itinerary: isTourPackage ? cleanItinerary(draft.itinerary) : [],
+    inclusions: isTourPackage ? cleanStringArray(draft.inclusions) : [],
+    exclusions: isTourPackage ? cleanStringArray(draft.exclusions) : [],
+    location: behavesLikeService && !isTourPackage ? (draft.branch.trim() || draft.location.trim() || null) : null,
     branch: isCourse ? draft.branch.trim() || null : null,
     requiresDateTime: isService ? draft.requiresDateTime : null,
     requiresNotes: isService ? draft.requiresNotes : null,
@@ -595,7 +637,7 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
     preferredTimes: isCourse ? draft.preferredTimes.trim() || null : null,
     startDate: isCourse && draft.startDate ? new Date(draft.startDate) : null,
     fullFee: isCourse ? cleanNumber(draft.fullFee) ?? price : null,
-    capacity: isCourse ? cleanNumber(draft.capacity) : null,
+    capacity: isCourse || isTourPackage ? cleanNumber(draft.capacity) : null,
     requirements: isCourse ? draft.requirements.trim() || null : null,
     starterItems: isCourse ? draft.starterItems.trim() || null : null,
     certificateIncluded: isCourse ? draft.certificateIncluded : null,
