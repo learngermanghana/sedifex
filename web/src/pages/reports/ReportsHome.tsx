@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useActiveStore } from '../../hooks/useActiveStore'
+import { useStorePreferenceSync } from '../../hooks/useStorePreferenceSync'
 import { useStorePreferences } from '../../hooks/useStorePreferences'
 import EventPortfolioReport from './EventPortfolioReport'
 import './reportsHome.css'
@@ -71,37 +72,16 @@ export default function ReportsHome() {
   const { storeId } = useActiveStore()
   const { preferences } = useStorePreferences(storeId)
   const [search, setSearch] = useState('')
-  const searchHydrationRef = useRef<{ storeId: string; value: string; pending: boolean } | null>(null)
-  useEffect(() => {
-    if (!storeId) {
-      searchHydrationRef.current = null
-      return
-    }
-    let restored = ''
-    try {
-      restored = localStorage.getItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`) || ''
-    } catch (storageError) {
-      console.warn('[reports] Unable to load search preference', storageError)
-    }
-    searchHydrationRef.current = { storeId, value: restored, pending: true }
-    setSearch(restored)
-  }, [storeId])
-
-  useEffect(() => {
-    if (!storeId) return
-    const hydration = searchHydrationRef.current
-    if (!hydration || hydration.storeId !== storeId) return
-    if (hydration.pending) {
-      if (search === hydration.value) hydration.pending = false
-      return
-    }
-    try {
-      localStorage.setItem(`${REPORT_SEARCH_KEY_PREFIX}${storeId}`, search)
-      hydration.value = search
-    } catch (storageError) {
-      console.warn('[reports] Unable to save search preference', storageError)
-    }
-  }, [search, storeId])
+  const { clearPreference: clearSearchPreference } = useStorePreferenceSync({
+    storeId,
+    keyPrefix: REPORT_SEARCH_KEY_PREFIX,
+    value: search,
+    defaultValue: '',
+    apply: setSearch,
+    serialize: current => current,
+    deserialize: raw => raw,
+    debugName: 'reports',
+  })
 
   const visibleGroups = useMemo(
     () => reportGroupsForIndustry(preferences.navigation.industry),
@@ -123,6 +103,7 @@ export default function ReportsHome() {
       </section>
       <section className="reports-toolbar">
         <input className="reports-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search reports..." />
+        {search ? <button type="button" className="button button--secondary" onClick={clearSearchPreference}>Clear search</button> : null}
       </section>
 
       {filteredGroups.length === 0 ? <section className="reports-section reports-empty-state">No reports match your search.</section> : null}
