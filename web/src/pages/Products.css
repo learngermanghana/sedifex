@@ -799,6 +799,82 @@
   border-radius: 8px;
 }
 
+.products-page__image-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.products-page__gallery-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.products-page__gallery-item {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.products-page__gallery-media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.products-page__gallery-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.products-page__gallery-cover-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.products-page__gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px;
+}
+
+.products-page__gallery-actions .button {
+  flex: 1 1 auto;
+}
+
+.products-page__gallery-actions .button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .products-page__upload-state { margin: 8px 0 0; font-size: 13px; }
 .products-page__upload-state--uploading { color: #1d4ed8; }
 .products-page__upload-state--success { color: #15803d; }
@@ -820,6 +896,11 @@
   .products-page__grid { gap: 16px; }
   .products-page__visibility-grid { grid-template-columns: 1fr; }
   .products-page__list-card__header { gap: 10px; }
+  .products-page__gallery-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
+  .products-page__gallery-editor { grid-template-columns: 1fr; }
 }
 
 .category-select {
