@@ -1,3 +1,11 @@
-.clean-account-overview .account-overview__tabs[aria-label="Account sections"] button:nth-of-type(2) {
-  display: none;
+.clean-account-overview {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+
+.clean-account-overview > .account-overview,
+.clean-account-overview > .account-overview__card {
+  width: 100%;
+  max-width: 1040px;
 }
