@@ -1,4 +1,4 @@
-export type ProductItemType = 'product' | 'service' | 'course' | 'made_to_order'
+export type ProductItemType = 'product' | 'service' | 'course' | 'made_to_order' | 'tour_package'
 
 export type ProductReadModel = {
   id: string
@@ -26,6 +26,16 @@ export type ProductReadModel = {
   currency?: string | null
   storeName?: string | null
   serviceKind?: string | null
+  destination?: string | null
+  tourStyle?: string | null
+  durationDays?: number | null
+  durationNights?: number | null
+  startingCity?: string | null
+  endingCity?: string | null
+  shortSummary?: string | null
+  itinerary?: Array<{ day: number; title: string; description: string }>
+  inclusions?: string[]
+  exclusions?: string[]
   duration?: string | null
   branch?: string | null
   preferredTimes?: string | null

@@ -18,7 +18,7 @@ function text(value: unknown): string | null {
 function normalizedType(value: unknown): ListingType {
   const raw = text(value)?.toLowerCase()
   if (raw === 'course' || raw === 'programme' || raw === 'program') return 'course'
-  if (raw === 'service' || raw === 'booking' || raw === 'appointment') return 'service'
+  if (raw === 'service' || raw === 'booking' || raw === 'appointment' || raw === 'tour_package' || raw === 'tour' || raw === 'trip') return 'service'
   return 'product'
 }
 
@@ -64,6 +64,7 @@ function normalizePublicCategory(data: ProductData, listingType: ListingType): s
 
   const hasBeautySignal = /beauty|makeup|cosmetology|hair|braid|bead|nail|spa|wig|millinery|fashion/.test(nameAndDescription)
   const hasTrainingSignal = /course|class|training|academy|school|workshop|certificate|certification|learn/.test(nameAndDescription)
+  const isTourPackage = text(data.itemType)?.toLowerCase() === 'tour_package' || text(data.serviceKind)?.toLowerCase() === 'tour_package'
 
   if (listingType === 'course') {
     if (hasBeautySignal || hasTrainingSignal) return 'Beauty Training'
@@ -71,6 +72,7 @@ function normalizePublicCategory(data: ProductData, listingType: ListingType): s
   }
 
   if (listingType === 'service') {
+    if (isTourPackage) return explicitCategory ? toTitleCase(explicitCategory) : 'Travel & Tours'
     if (hasBeautySignal || hasTrainingSignal) return hasTrainingSignal ? 'Beauty Training' : 'Beauty Services'
     return 'Professional Services'
   }
@@ -232,6 +234,19 @@ function publicPayload(productId: string, data: ProductData, store: StoreData, i
     isWebsiteVisible: data.isWebsiteVisible === true,
     salesMode: text(data.salesMode),
     serviceKind: text(data.serviceKind),
+    sourceItemType: text(data.itemType),
+    destination: text(data.destination),
+    tourStyle: text(data.tourStyle),
+    durationDays: numberOrNull(data.durationDays),
+    durationNights: numberOrNull(data.durationNights),
+    startingCity: text(data.startingCity),
+    endingCity: text(data.endingCity),
+    shortSummary: text(data.shortSummary),
+    itinerary: Array.isArray(data.itinerary) ? data.itinerary : [],
+    inclusions: toArray(data.inclusions),
+    exclusions: toArray(data.exclusions),
+    allowDepositPayment: boolOrNull(data.allowDepositPayment),
+    depositAmount: numberOrNull(data.depositAmount),
     duration: text(data.duration),
     branch: text(data.branch) ?? text(data.location),
     preferredTimes: text(data.preferredTimes) ?? text(data.classTimes),
@@ -314,7 +329,7 @@ export const repairStorePublicCatalog = functions.https.onCall(async (data: Repa
       sourceProductId: identity.sourceProductId,
       slug: identity.slug,
       listingType,
-      itemType: listingType,
+      itemType: text(product.itemType) ?? listingType,
       category,
       categoryKey: categorySlug(category),
       categoryName: category,

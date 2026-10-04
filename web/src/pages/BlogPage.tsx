@@ -333,7 +333,7 @@ export default function BlogPage() {
         return {
           id: docSnap.id,
           name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Untitled item',
-          itemType: data.itemType === 'course' ? 'course' : data.itemType === 'service' ? 'service' : 'product',
+          itemType: data.itemType === 'course' ? 'course' : data.itemType === 'service' || data.itemType === 'tour_package' ? 'service' : 'product',
           price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
           description: typeof data.description === 'string' && data.description.trim() ? data.description.trim() : null,
           imageUrl: getCatalogImageUrl(data),

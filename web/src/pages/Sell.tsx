@@ -183,7 +183,7 @@ function mapFirestoreProduct(id: string, data: any): Product {
     barcode: normalizeBarcode(barcodeSource) || null,
     price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
     taxRate: typeof data.taxRate === 'number' && Number.isFinite(data.taxRate) ? data.taxRate : null,
-    itemType: data.itemType === 'course' ? 'course' : data.itemType === 'service' ? 'service' : 'product',
+    itemType: data.itemType === 'course' ? 'course' : data.itemType === 'service' || data.itemType === 'tour_package' ? 'service' : 'product',
     manufacturerName:
       typeof data.manufacturerName === 'string' && data.manufacturerName.trim()
         ? data.manufacturerName.trim()

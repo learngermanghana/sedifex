@@ -995,3 +995,105 @@
   gap: 16px;
   padding: 14px;
 }
+
+.products-page__tour-section {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.products-page__tour-heading h4,
+.products-page__tour-builder h5 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.products-page__tour-heading p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.products-page__tour-grid,
+.products-page__tour-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.products-page__tour-builder {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.products-page__tour-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.products-page__itinerary-list {
+  display: grid;
+  gap: 10px;
+}
+
+.products-page__itinerary-row {
+  display: grid;
+  grid-template-columns: auto minmax(140px, .8fr) minmax(220px, 1.4fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.products-page__itinerary-day {
+  align-self: center;
+  min-width: 54px;
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.products-page__itinerary-description textarea {
+  min-height: 70px;
+}
+
+.products-page__tour-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.products-page__tour-list-row input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #9ca3af;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+}
+
+.products-page__tour-payment {
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 800px) {
+  .products-page__tour-grid,
+  .products-page__tour-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .products-page__itinerary-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+

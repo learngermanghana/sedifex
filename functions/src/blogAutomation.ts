@@ -62,7 +62,7 @@ function imageFromCatalogData(data: Record<string, unknown>): string | null {
 
 function itemFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot): CatalogItem {
   const data = doc.data() as Record<string, unknown>
-  const itemType: ItemType = data.itemType === 'service' ? 'service' : data.itemType === 'course' ? 'course' : 'product'
+  const itemType: ItemType = data.itemType === 'service' || data.itemType === 'tour_package' ? 'service' : data.itemType === 'course' ? 'course' : 'product'
   return {
     id: doc.id,
     name: text(data.name) ?? text(data.title) ?? 'Featured item',

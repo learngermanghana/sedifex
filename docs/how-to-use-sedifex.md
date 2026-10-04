@@ -178,6 +178,14 @@ Go to **Account → Navigation settings** and:
 3. Untick pages that are not needed in the sidebar.
 4. Save navigation settings.
 
+### Travel: add a tour package and departures
+
+For a reusable tour such as **Amazing Japan Tour**, create it once from **Items → Add item → Tour package**. Add the destination, days/nights, route, traveller capacity, itinerary, inclusions/exclusions, starting price, deposit settings, and photos. Keep **Show on your website** enabled when the connected website should display it.
+
+After saving the tour, use **Manage departures**. Sedifex opens **Upcoming events** with the tour preselected and treats the schedule as a **Trip**. Add each departure date separately so the package content is not duplicated. Each departure can carry its own capacity, price, deposit, location, and open/closed status.
+
+Connected websites should load the tour package from `/v1IntegrationProducts` and its departure dates from `/v1IntegrationAvailability`.
+
 ### Step 3: Add items and services
 
 Go to **Items** and add what the business offers:

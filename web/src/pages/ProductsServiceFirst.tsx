@@ -1,5 +1,6 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addDoc,
   collection,
@@ -33,8 +34,9 @@ import {
   setItemCoverImage,
 } from '../utils/itemImages'
 
-type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
-type ServiceKind = 'consultation' | 'quote_request'
+type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'tour_package' | 'digital_item'
+type ServiceKind = 'consultation' | 'quote_request' | 'tour_package'
+type TourItineraryDay = { day: number; title: string; description: string }
 type CourseMode = 'online' | 'in_person' | 'hybrid'
 
 type Draft = {
@@ -55,6 +57,16 @@ type Draft = {
   imageAlt: string
   brand: string
   serviceKind: ServiceKind
+  destination: string
+  tourStyle: string
+  durationDays: string
+  durationNights: string
+  startingCity: string
+  endingCity: string
+  shortSummary: string
+  itinerary: TourItineraryDay[]
+  inclusions: string[]
+  exclusions: string[]
   durationMinutes: string
   location: string
   requiresDateTime: boolean
@@ -85,6 +97,7 @@ type SalesMode = 'buy_now' | 'book_now' | 'register' | 'request_quote'
 const PRODUCT_CATEGORY = 'General Products'
 const SERVICE_CATEGORY = 'General Services'
 const EDUCATION_CATEGORY = 'Education'
+const TOUR_CATEGORY = 'Travel & Tours'
 const PRICE_CURRENCIES = [
   { code: 'GHS', label: 'GHS — Ghana cedi' },
   { code: 'USD', label: 'USD — US dollar' },
@@ -118,6 +131,16 @@ const blankDraft: Draft = {
   imageAlt: '',
   brand: '',
   serviceKind: 'consultation',
+  destination: '',
+  tourStyle: '',
+  durationDays: '',
+  durationNights: '',
+  startingCity: '',
+  endingCity: '',
+  shortSummary: '',
+  itinerary: [{ day: 1, title: '', description: '' }],
+  inclusions: [''],
+  exclusions: [''],
   durationMinutes: '',
   location: '',
   requiresDateTime: false,
@@ -156,6 +179,27 @@ function cleanText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean)
+}
+
+function cleanItinerary(value: unknown): TourItineraryDay[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry, index) => {
+      const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+      return {
+        day: Math.max(1, Math.floor(Number(record.day) || index + 1)),
+        title: typeof record.title === 'string' ? record.title.trim() : '',
+        description: typeof record.description === 'string' ? record.description.trim() : '',
+      }
+    })
+    .filter(entry => entry.title || entry.description)
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
@@ -190,6 +234,7 @@ function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
   const raw = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
   if (!raw) {
     if (itemType === 'course') return EDUCATION_CATEGORY
+    if (itemType === 'tour_package') return TOUR_CATEGORY
     if (itemType === 'service' || itemType === 'made_to_order') return SERVICE_CATEGORY
     return PRODUCT_CATEGORY
   }
@@ -198,6 +243,7 @@ function normalizeCategory(value: unknown, itemType: ItemType | ItemFormType) {
 
 function formatItemType(itemType: ItemType) {
   if (itemType === 'made_to_order') return 'Booking'
+  if (itemType === 'tour_package') return 'Tour Package'
   if (itemType === 'digital_item') return 'Digital Item'
   return titleCase(itemType)
 }
@@ -238,7 +284,13 @@ function buildAiDescriptionPrompt(draft: Draft): string {
     sku: draft.sku.trim() || null,
     openingStock: cleanNumber(draft.openingStock),
     expiryDate: draft.expiryDate || null,
-    serviceKind: draft.itemType === 'service' ? draft.serviceKind : null,
+    serviceKind: draft.itemType === 'tour_package' ? 'tour_package' : draft.itemType === 'service' ? draft.serviceKind : null,
+    destination: draft.itemType === 'tour_package' ? draft.destination.trim() || null : null,
+    tourStyle: draft.itemType === 'tour_package' ? draft.tourStyle.trim() || null : null,
+    durationDays: draft.itemType === 'tour_package' ? cleanNumber(draft.durationDays) : null,
+    durationNights: draft.itemType === 'tour_package' ? cleanNumber(draft.durationNights) : null,
+    startingCity: draft.itemType === 'tour_package' ? draft.startingCity.trim() || null : null,
+    endingCity: draft.itemType === 'tour_package' ? draft.endingCity.trim() || null : null,
     durationMinutes: draft.itemType === 'service' ? cleanNumber(draft.durationMinutes) : null,
     location: draft.location.trim() || draft.branch.trim() || null,
     courseLevel: draft.itemType === 'course' ? draft.courseLevel.trim() || null : null,
@@ -334,9 +386,32 @@ function getProductDescriptionAngle(itemName: string, category: string) {
 }
 
 function generateItemDescription(draft: Draft): string {
-  const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'service' ? 'This service' : 'This product')
+  const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'tour_package' ? 'This tour' : draft.itemType === 'service' ? 'This service' : 'This product')
   const category = normalizeCategory(draft.category, draft.itemType)
   const locationText = draft.location.trim()
+
+  if (draft.itemType === 'tour_package') {
+    const destination = draft.destination.trim() || 'the selected destination'
+    const durationDays = cleanNumber(draft.durationDays)
+    const durationNights = cleanNumber(draft.durationNights)
+    const route = [draft.startingCity.trim(), draft.endingCity.trim()].filter(Boolean).join(' to ')
+    const durationText = durationDays
+      ? `${durationDays} day${durationDays === 1 ? '' : 's'}${durationNights !== null ? ` / ${durationNights} night${durationNights === 1 ? '' : 's'}` : ''}`
+      : ''
+    const intro = draft.shortSummary.trim()
+      || `${itemName} is a curated tour package to ${destination}${durationText ? ` lasting ${durationText}` : ''}.`
+    const routeText = route ? `The journey runs from ${route}.` : ''
+    const styleText = draft.tourStyle.trim() ? `Tour style: ${draft.tourStyle.trim()}.` : ''
+    return cleanSavedDescription([
+      intro,
+      routeText,
+      styleText,
+      '- Review the itinerary, inclusions, and exclusions before choosing a departure.',
+      '- Select an available trip date and book the number of travellers you need.',
+      '- Deposit or full-payment options can be offered when enabled for this package.',
+      'Best for: travellers who want a clearly structured package with bookable departures.',
+    ].filter(Boolean).join('\n\n'))
+  }
 
   if (draft.itemType === 'course') {
     const level = draft.courseLevel.trim() || 'all levels'
@@ -401,7 +476,7 @@ function improveDescription(text: string): string {
 
 function normalizeProduct(id: string, data: Record<string, unknown>): Product {
   const itemType: ItemType =
-    data.itemType === 'course' || data.itemType === 'service' || data.itemType === 'made_to_order' || data.itemType === 'digital_item'
+    data.itemType === 'course' || data.itemType === 'service' || data.itemType === 'made_to_order' || data.itemType === 'tour_package' || data.itemType === 'digital_item'
       ? data.itemType
       : 'product'
   const itemFormType: ItemFormType = itemType === 'course' || (itemType === 'service' && data.listingType === 'course') ? 'course' : itemType
@@ -439,6 +514,16 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     currency: cleanText(data.currency),
     listingType: cleanText(data.listingType) as Product['listingType'],
     serviceKind: cleanText(data.serviceKind),
+    destination: cleanText(data.destination),
+    tourStyle: cleanText(data.tourStyle),
+    durationDays: cleanNumber(data.durationDays),
+    durationNights: cleanNumber(data.durationNights),
+    startingCity: cleanText(data.startingCity),
+    endingCity: cleanText(data.endingCity),
+    shortSummary: cleanText(data.shortSummary),
+    itinerary: cleanItinerary(data.itinerary),
+    inclusions: cleanStringArray(data.inclusions),
+    exclusions: cleanStringArray(data.exclusions),
     duration: cleanText(data.duration),
     branch: cleanText(data.branch ?? data.location),
     preferredTimes: cleanText(data.preferredTimes ?? data.classTimes),
@@ -464,22 +549,25 @@ function getProductSortTime(product: Product): number {
 }
 
 function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateState | null) {
-  const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
+  const isTourPackage = draft.itemType === 'tour_package'
+  const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order' || isTourPackage
   const isCourse = draft.itemType === 'course'
-  const behavesLikeService = draft.itemType !== 'product'
+  const behavesLikeService = draft.itemType !== 'product' && draft.itemType !== 'digital_item'
   const name = titleCase(draft.name)
   const category = normalizeCategory(draft.category, draft.itemType)
   const price = cleanNumber(draft.price)
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
   if (isService && !category) throw new Error('Service category is required.')
+  if (isTourPackage && !draft.destination.trim()) throw new Error('Destination is required for a tour package.')
+  if (isTourPackage && cleanNumber(draft.durationDays) === null) throw new Error('Enter the number of tour days.')
   if (isService && !['book_now', 'request_quote'].includes(draft.serviceKind === 'quote_request' ? 'request_quote' : 'book_now')) {
     throw new Error('Service sales mode is required.')
   }
   if (isCourse && !category) throw new Error('Course category is required.')
   if (isCourse && !draft.courseMode) throw new Error('Course enrollment mode is required.')
 
-  const serviceKind: ServiceKind = isCourse ? 'consultation' : draft.serviceKind
+  const serviceKind: ServiceKind = isTourPackage ? 'tour_package' : isCourse ? 'consultation' : draft.serviceKind
   const listingType: ListingType = isCourse ? 'course' : isService ? 'service' : 'product'
   const salesMode: SalesMode = isCourse
     ? 'register'
@@ -508,7 +596,7 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
     listingType,
     serviceKind: isCourse ? 'course_enrollment' : serviceKind,
     salesMode,
-    enrollmentMode: isCourse ? 'always_open' : null,
+    enrollmentMode: isCourse ? 'always_open' : isTourPackage ? 'scheduled' : null,
     category,
     subcategory: draft.subcategory.trim() || null,
     categoryKey,
@@ -527,8 +615,18 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
     stockCount: behavesLikeService ? null : cleanNumber(draft.openingStock),
     reorderPoint: behavesLikeService ? null : cleanNumber(draft.reorderPoint),
     expiryDate: behavesLikeService || !draft.expiryDate ? null : new Date(draft.expiryDate),
-    durationMinutes: isService ? cleanNumber(draft.durationMinutes) : null,
-    location: behavesLikeService ? (draft.branch.trim() || draft.location.trim() || null) : null,
+    durationMinutes: isService && !isTourPackage ? cleanNumber(draft.durationMinutes) : null,
+    destination: isTourPackage ? draft.destination.trim() || null : null,
+    tourStyle: isTourPackage ? draft.tourStyle.trim() || null : null,
+    durationDays: isTourPackage ? cleanNumber(draft.durationDays) : null,
+    durationNights: isTourPackage ? cleanNumber(draft.durationNights) : null,
+    startingCity: isTourPackage ? draft.startingCity.trim() || null : null,
+    endingCity: isTourPackage ? draft.endingCity.trim() || null : null,
+    shortSummary: isTourPackage ? draft.shortSummary.trim() || null : null,
+    itinerary: isTourPackage ? cleanItinerary(draft.itinerary) : [],
+    inclusions: isTourPackage ? cleanStringArray(draft.inclusions) : [],
+    exclusions: isTourPackage ? cleanStringArray(draft.exclusions) : [],
+    location: behavesLikeService && !isTourPackage ? (draft.branch.trim() || draft.location.trim() || null) : null,
     branch: isCourse ? draft.branch.trim() || null : null,
     requiresDateTime: isService ? draft.requiresDateTime : null,
     requiresNotes: isService ? draft.requiresNotes : null,
@@ -541,7 +639,7 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
     preferredTimes: isCourse ? draft.preferredTimes.trim() || null : null,
     startDate: isCourse && draft.startDate ? new Date(draft.startDate) : null,
     fullFee: isCourse ? cleanNumber(draft.fullFee) ?? price : null,
-    capacity: isCourse ? cleanNumber(draft.capacity) : null,
+    capacity: isCourse || isTourPackage ? cleanNumber(draft.capacity) : null,
     requirements: isCourse ? draft.requirements.trim() || null : null,
     starterItems: isCourse ? draft.starterItems.trim() || null : null,
     certificateIncluded: isCourse ? draft.certificateIncluded : null,
@@ -610,9 +708,10 @@ export default function ProductsServiceFirst({
 
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
+  const isTourPackage = draft.itemType === 'tour_package'
   const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
   const isCourse = draft.itemType === 'course'
-  const behavesLikeService = draft.itemType !== 'product'
+  const behavesLikeService = isService || isCourse || isTourPackage
   const categoryOptions = useMemo(() => Array.from(new Set([...ITEM_CATEGORIES, ...items.map(item => normalizeCategory(item.category, item.itemType))])), [items])
   const draftPriceNumber = cleanNumber(draft.price)
   const draftConvertedPrice = useMemo(
@@ -670,6 +769,47 @@ export default function ProductsServiceFirst({
     applyGalleryImages(moveItemImage(galleryImages, imageUrl, direction))
   }
 
+  function updateItineraryDay(index: number, field: 'title' | 'description', value: string) {
+    setDraft(current => ({
+      ...current,
+      itinerary: current.itinerary.map((day, dayIndex) => dayIndex === index ? { ...day, [field]: value } : day),
+    }))
+  }
+
+  function addItineraryDay() {
+    setDraft(current => ({
+      ...current,
+      itinerary: [...current.itinerary, { day: current.itinerary.length + 1, title: '', description: '' }],
+    }))
+  }
+
+  function removeItineraryDay(index: number) {
+    setDraft(current => {
+      const next = current.itinerary
+        .filter((_, dayIndex) => dayIndex !== index)
+        .map((day, dayIndex) => ({ ...day, day: dayIndex + 1 }))
+      return { ...current, itinerary: next.length ? next : [{ day: 1, title: '', description: '' }] }
+    })
+  }
+
+  function updateTourList(field: 'inclusions' | 'exclusions', index: number, value: string) {
+    setDraft(current => ({
+      ...current,
+      [field]: current[field].map((entry, entryIndex) => entryIndex === index ? value : entry),
+    }))
+  }
+
+  function addTourListEntry(field: 'inclusions' | 'exclusions') {
+    setDraft(current => ({ ...current, [field]: [...current[field], ''] }))
+  }
+
+  function removeTourListEntry(field: 'inclusions' | 'exclusions', index: number) {
+    setDraft(current => {
+      const next = current[field].filter((_, entryIndex) => entryIndex !== index)
+      return { ...current, [field]: next.length ? next : [''] }
+    })
+  }
+
   useEffect(() => {
     let cancelled = false
     const loadRates = async () => {
@@ -721,9 +861,10 @@ export default function ProductsServiceFirst({
       if (key === 'itemType') {
         const nextItemType = value as ItemFormType
         const currentCategory = normalizeCategory(current.category, current.itemType)
-        const shouldSwitchToProduct = nextItemType === 'product' && (currentCategory === SERVICE_CATEGORY || currentCategory === EDUCATION_CATEGORY)
-        const shouldSwitchToService = nextItemType === 'service' && (currentCategory === PRODUCT_CATEGORY || currentCategory === EDUCATION_CATEGORY)
-        const shouldSwitchToCourse = nextItemType === 'course' && (currentCategory === PRODUCT_CATEGORY || currentCategory === SERVICE_CATEGORY)
+        const shouldSwitchToProduct = nextItemType === 'product' && (currentCategory === SERVICE_CATEGORY || currentCategory === EDUCATION_CATEGORY || currentCategory === TOUR_CATEGORY)
+        const shouldSwitchToService = nextItemType === 'service' && (currentCategory === PRODUCT_CATEGORY || currentCategory === EDUCATION_CATEGORY || currentCategory === TOUR_CATEGORY)
+        const shouldSwitchToCourse = nextItemType === 'course' && (currentCategory === PRODUCT_CATEGORY || currentCategory === SERVICE_CATEGORY || currentCategory === TOUR_CATEGORY)
+        const shouldSwitchToTour = nextItemType === 'tour_package' && currentCategory !== TOUR_CATEGORY
         return {
           ...current,
           itemType: nextItemType,
@@ -734,6 +875,8 @@ export default function ProductsServiceFirst({
             ? SERVICE_CATEGORY
             : shouldSwitchToCourse
             ? EDUCATION_CATEGORY
+            : shouldSwitchToTour
+            ? TOUR_CATEGORY
             : normalizeCategory(current.category, nextItemType),
           sku: nextItemType === 'product' ? current.sku : '',
           openingStock: nextItemType === 'product' ? current.openingStock : '',
@@ -742,6 +885,7 @@ export default function ProductsServiceFirst({
           branch: nextItemType === 'course' ? current.branch || current.location : current.branch,
           preferredTimes: nextItemType === 'course' ? current.preferredTimes || current.classTimes : current.preferredTimes,
           costPrice: nextItemType === 'product' ? current.costPrice : '',
+          serviceKind: nextItemType === 'tour_package' ? 'tour_package' : nextItemType === 'service' ? (current.serviceKind === 'quote_request' ? 'quote_request' : 'consultation') : current.serviceKind,
         }
       }
       if (key === 'certificateIncluded') return { ...current, certificateIncluded: value === 'true' }
@@ -815,7 +959,21 @@ export default function ProductsServiceFirst({
       imageUrls: normalizeItemImages(item.imageUrl, item.imageUrls),
       imageAlt: item.imageAlt ?? item.name,
       brand: item.itemType === 'product' ? (item.brand ?? item.manufacturerName ?? '') : '',
-      serviceKind: ((item as any).serviceKind === 'quote_request' ? 'quote_request' : 'consultation') as ServiceKind,
+      serviceKind: (item.itemType === 'tour_package' || (item as any).serviceKind === 'tour_package'
+        ? 'tour_package'
+        : (item as any).serviceKind === 'quote_request'
+        ? 'quote_request'
+        : 'consultation') as ServiceKind,
+      destination: item.destination ?? '',
+      tourStyle: item.tourStyle ?? '',
+      durationDays: typeof item.durationDays === 'number' ? String(item.durationDays) : '',
+      durationNights: typeof item.durationNights === 'number' ? String(item.durationNights) : '',
+      startingCity: item.startingCity ?? '',
+      endingCity: item.endingCity ?? '',
+      shortSummary: item.shortSummary ?? '',
+      itinerary: item.itinerary?.length ? item.itinerary : [{ day: 1, title: '', description: '' }],
+      inclusions: item.inclusions?.length ? item.inclusions : [''],
+      exclusions: item.exclusions?.length ? item.exclusions : [''],
       durationMinutes: typeof (item as any).durationMinutes === 'number' ? String((item as any).durationMinutes) : '',
       location: typeof (item as any).location === 'string' ? (item as any).location : '',
       requiresDateTime: (item as any).requiresDateTime === true,
@@ -907,7 +1065,7 @@ export default function ProductsServiceFirst({
     if (!canManage) return
     if (!window.confirm(`Delete ${item.name}?`)) return
     await deleteDoc(doc(db, 'products', item.id))
-    setMessage(`${item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
+    setMessage(`${item.itemType === 'course' ? 'Course' : item.itemType === 'tour_package' ? 'Tour package' : item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
   }
 
   const visibleItems = useMemo(() => {
@@ -921,7 +1079,7 @@ export default function ProductsServiceFirst({
       <header className="page__header products-page__header">
         <div>
           <h2 className="page__title">Items</h2>
-          <p className="page__subtitle">Manage products, services, and courses/programmes.</p>
+          <p className="page__subtitle">Manage products, services, courses/programmes, and tour packages.</p>
         </div>
         {canManage ? (
           <button
@@ -945,6 +1103,8 @@ export default function ProductsServiceFirst({
           <p className="card__subtitle">
             {isCourse
               ? 'Course/programme mode is for always-open enrollments. Use Upcoming events to create specific batches/intakes for this course.'
+              : isTourPackage
+              ? 'Tour package mode keeps the itinerary, pricing, photos, and inclusions in one item. Use Tour departures to add specific travel dates.'
               : isService
               ? 'Service mode supports booking and quote requests. Stock fields are hidden.'
               : 'Product mode includes inventory fields like SKU, opening stock, reorder point, and expiry date.'}
@@ -961,12 +1121,13 @@ export default function ProductsServiceFirst({
                 <option value="service">Service</option>
                 <option value="made_to_order">Booking</option>
                 <option value="course">Course</option>
-                <option value="digital_item">Digital Item</option>
+                <option value="tour_package">Tour package</option>
+                {draft.itemType === 'digital_item' ? <option value="digital_item">Digital Item (legacy)</option> : null}
               </select>
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="item-name">{isCourse ? 'Course / programme name' : isService ? 'Service name' : 'Product name'}</label>
+              <label className="field__label" htmlFor="item-name">{isCourse ? 'Course / programme name' : isTourPackage ? 'Tour name' : isService ? 'Service name' : 'Product name'}</label>
               <input id="item-name" value={draft.name} onChange={event => updateDraft('name', event.target.value)} required />
             </div>
 
@@ -980,7 +1141,7 @@ export default function ProductsServiceFirst({
             />
 
             <div className="field">
-              <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
+              <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isTourPackage ? 'Starting price' : isService ? 'Price' : 'Selling price'}</label>
               <div className="products-page__price-row">
                 <select
                   aria-label="Currency"
@@ -1010,7 +1171,66 @@ export default function ProductsServiceFirst({
 
             {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="consultation">Consultation / appointment</option><option value="quote_request">Request quote</option></select></div> : null}
             {isService ? <div className="field"><label className="field__label" htmlFor="service-duration">Duration minutes</label><input id="service-duration" type="number" min="0" step="1" value={draft.durationMinutes} onChange={event => updateDraft('durationMinutes', event.target.value)} /></div> : null}
-            {behavesLikeService && !isCourse ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+            {isService ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+
+            {isTourPackage ? (
+              <section className="products-page__tour-section" aria-labelledby="tour-details-heading">
+                <div className="products-page__tour-heading">
+                  <div>
+                    <h4 id="tour-details-heading">Tour details</h4>
+                    <p>Describe the package once. Specific travel dates are managed separately as tour departures.</p>
+                  </div>
+                </div>
+
+                <div className="products-page__tour-grid">
+                  <div className="field"><label className="field__label" htmlFor="tour-destination">Destination</label><input id="tour-destination" value={draft.destination} onChange={event => updateDraft('destination', event.target.value)} placeholder="e.g. Japan" required /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-style">Tour style</label><input id="tour-style" value={draft.tourStyle} onChange={event => updateDraft('tourStyle', event.target.value)} placeholder="e.g. Leisure & Culture" /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-days">Duration days</label><input id="tour-days" type="number" min="1" step="1" value={draft.durationDays} onChange={event => updateDraft('durationDays', event.target.value)} required /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-nights">Duration nights</label><input id="tour-nights" type="number" min="0" step="1" value={draft.durationNights} onChange={event => updateDraft('durationNights', event.target.value)} /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-start-city">Starting city</label><input id="tour-start-city" value={draft.startingCity} onChange={event => updateDraft('startingCity', event.target.value)} placeholder="e.g. Tokyo" /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-end-city">Ending city</label><input id="tour-end-city" value={draft.endingCity} onChange={event => updateDraft('endingCity', event.target.value)} placeholder="e.g. Osaka" /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-capacity">Maximum travellers</label><input id="tour-capacity" type="number" min="1" step="1" value={draft.capacity} onChange={event => updateDraft('capacity', event.target.value)} placeholder="e.g. 20" /></div>
+                </div>
+
+                <div className="field">
+                  <label className="field__label" htmlFor="tour-summary">Short summary</label>
+                  <textarea id="tour-summary" rows={3} value={draft.shortSummary} onChange={event => updateDraft('shortSummary', event.target.value)} placeholder="A short website-friendly summary of the tour." />
+                </div>
+
+                <div className="products-page__tour-builder">
+                  <div className="products-page__tour-builder-header"><h5>Day-by-day itinerary</h5><button type="button" className="button button--ghost button--small" onClick={addItineraryDay}>+ Add day</button></div>
+                  <div className="products-page__itinerary-list">
+                    {draft.itinerary.map((day, index) => (
+                      <div className="products-page__itinerary-row" key={index}>
+                        <div className="products-page__itinerary-day">Day {index + 1}</div>
+                        <div className="field"><label className="field__label" htmlFor={`tour-day-${index}-title`}>Title</label><input id={`tour-day-${index}-title`} value={day.title} onChange={event => updateItineraryDay(index, 'title', event.target.value)} placeholder="e.g. Tokyo Arrival" /></div>
+                        <div className="field products-page__itinerary-description"><label className="field__label" htmlFor={`tour-day-${index}-description`}>Details</label><textarea id={`tour-day-${index}-description`} rows={2} value={day.description} onChange={event => updateItineraryDay(index, 'description', event.target.value)} placeholder="Airport transfer, hotel check-in, activities…" /></div>
+                        <button type="button" className="button button--ghost button--small" onClick={() => removeItineraryDay(index)} disabled={draft.itinerary.length === 1}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="products-page__tour-lists">
+                  {(['inclusions', 'exclusions'] as const).map(field => (
+                    <div className="products-page__tour-builder" key={field}>
+                      <div className="products-page__tour-builder-header"><h5>{field === 'inclusions' ? "What's included" : "What's not included"}</h5><button type="button" className="button button--ghost button--small" onClick={() => addTourListEntry(field)}>+ Add</button></div>
+                      {draft[field].map((entry, index) => (
+                        <div className="products-page__tour-list-row" key={index}>
+                          <input value={entry} onChange={event => updateTourList(field, index, event.target.value)} placeholder={field === 'inclusions' ? 'e.g. 5 nights accommodation' : 'e.g. International flights'} />
+                          <button type="button" className="button button--ghost button--small" onClick={() => removeTourListEntry(field, index)} disabled={draft[field].length === 1}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="products-page__tour-payment">
+                  <label className="checkbox"><input type="checkbox" checked={draft.allowDepositPayment} onChange={event => setDraft(current => ({ ...current, allowDepositPayment: event.target.checked }))} /><span>Allow deposit payment</span></label>
+                  {draft.allowDepositPayment ? <div className="field"><label className="field__label" htmlFor="tour-deposit">Deposit amount ({draft.currency})</label><input id="tour-deposit" type="number" min="0" step="0.01" value={draft.depositAmount} onChange={event => updateDraft('depositAmount', event.target.value)} /></div> : null}
+                </div>
+              </section>
+            ) : null}
 
             {isCourse ? (
               <>
@@ -1264,8 +1484,9 @@ export default function ProductsServiceFirst({
           <div className="products-page__list" aria-live="polite">
             {visibleItems.map(item => {
               const itemIsCourse = item.itemType === 'course' || item.listingType === 'course'
+              const itemIsTour = item.itemType === 'tour_package' || item.serviceKind === 'tour_package'
               const itemIsService = item.itemType === 'service' || item.itemType === 'made_to_order'
-              const itemIsServiceLike = item.itemType !== 'product'
+              const itemIsServiceLike = itemIsService || itemIsCourse || itemIsTour
               return (
                 <article key={item.id} className="products-page__list-card">
                   <header className="products-page__list-card__header">
@@ -1291,8 +1512,12 @@ export default function ProductsServiceFirst({
                   <div className="products-page__list-grid">
                     {itemIsServiceLike ? (
                       <>
-                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course category' : 'Service category'}</label><p className="products-page__list-value">{normalizeCategory(item.category, itemIsCourse ? 'course' : item.itemType)}</p></div>
-                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course item' : 'Booking / service item'}</label><p className="products-page__list-value">No stock tracking</p></div>
+                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course category' : itemIsTour ? 'Tour category' : 'Service category'}</label><p className="products-page__list-value">{normalizeCategory(item.category, itemIsCourse ? 'course' : itemIsTour ? 'tour_package' : item.itemType)}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course item' : itemIsTour ? 'Tour package' : 'Booking / service item'}</label><p className="products-page__list-value">{itemIsTour ? 'Uses tour departures · No stock tracking' : 'No stock tracking'}</p></div>
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Destination</label><p className="products-page__list-value">{item.destination || '—'}</p></div> : null}
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Duration</label><p className="products-page__list-value">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? '' : 's'}${typeof item.durationNights === 'number' ? ` / ${item.durationNights} night${item.durationNights === 1 ? '' : 's'}` : ''}` : '—'}</p></div> : null}
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Route</label><p className="products-page__list-value">{[item.startingCity, item.endingCity].filter(Boolean).join(' → ') || '—'}</p></div> : null}
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Maximum travellers</label><p className="products-page__list-value">{item.capacity ?? '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Duration</label><p className="products-page__list-value">{item.duration || '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Branch</label><p className="products-page__list-value">{item.branch || '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Preferred times</label><p className="products-page__list-value">{item.preferredTimes || '—'}</p></div> : null}
@@ -1320,6 +1545,7 @@ export default function ProductsServiceFirst({
                   </div>
 
                   <div className="products-page__list-actions">
+                    {itemIsTour ? <Link className="button button--primary" to={`/upcoming-events?serviceId=${encodeURIComponent(item.id)}&eventKind=trip`}>Manage departures</Link> : null}
                     {canManage ? <button type="button" className="button button--ghost" onClick={() => editItem(item)}>Edit</button> : null}
                     {canManage ? <button type="button" className="button button--danger" onClick={() => void deleteItem(item)}>Delete</button> : null}
                   </div>
@@ -1329,7 +1555,7 @@ export default function ProductsServiceFirst({
             {visibleItems.length === 0 ? (
               <div className="empty-state products-page__empty">
                 <h3 className="empty-state__title">{items.length === 0 ? 'No items yet' : 'No items match your search'}</h3>
-                <p>{items.length === 0 ? 'Add your first product, service, or course to get started.' : 'Try a different search term.'}</p>
+                <p>{items.length === 0 ? 'Add your first product, service, course, or tour package to get started.' : 'Try a different search term.'}</p>
                 {items.length === 0 && canManage ? (
                   <button type="button" className="button button--primary" onClick={() => { resetForm(); setIsEditorOpen(true) }}>+ Add first item</button>
                 ) : null}
