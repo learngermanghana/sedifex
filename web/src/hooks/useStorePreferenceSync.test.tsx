@@ -117,7 +117,10 @@ describe('useStorePreferenceSync', () => {
     await waitFor(() => expect(screen.getByTestId('value')).toHaveTextContent('saved search'))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
 
-    await waitFor(() => expect(screen.getByTestId('value')).toHaveTextContent(''))
+    await waitFor(() => expect(screen.getByTestId('value').textContent).toBe(''))
     expect(localStorage.getItem(`${STRING_PREFIX}store-a`)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+    await waitFor(() => expect(localStorage.getItem(`${STRING_PREFIX}store-a`)).toBe('changed'))
   })
 })
