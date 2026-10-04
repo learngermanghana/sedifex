@@ -278,7 +278,7 @@ function mapFirestoreProduct(id: string, data: Record<string, unknown>): Product
 
   const normalizedBarcode = normalizeBarcode(barcodeSource)
 
-  const itemType = data.itemType === 'service' ? 'service' : 'product'
+  const itemType = data.itemType === 'service' || data.itemType === 'tour_package' ? 'service' : 'product'
   const category = normalizeProductCategory(data.category)
 
   const expiryDate = toDate(data.expiryDate)
