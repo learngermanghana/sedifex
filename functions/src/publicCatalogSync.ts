@@ -65,6 +65,7 @@ function normalizePublicCategory(data: ProductData, normalizedItemType: 'product
 
   const hasBeautySignal = /beauty|makeup|cosmetology|hair|braid|bead|nail|spa|wig|millinery|fashion/.test(nameAndDescription)
   const hasTrainingSignal = /course|class|training|academy|school|workshop|certificate|certification|learn/.test(nameAndDescription)
+  const isTourPackage = text(data.itemType)?.toLowerCase() === 'tour_package' || text(data.serviceKind)?.toLowerCase() === 'tour_package'
 
   if (normalizedItemType === 'course') {
     if (hasBeautySignal || hasTrainingSignal) return 'Beauty Training'
@@ -72,6 +73,7 @@ function normalizePublicCategory(data: ProductData, normalizedItemType: 'product
   }
 
   if (normalizedItemType === 'service') {
+    if (isTourPackage) return explicitCategory ? toTitleCase(explicitCategory) : 'Travel & Tours'
     if (hasBeautySignal || hasTrainingSignal) return hasTrainingSignal ? 'Beauty Training' : 'Beauty Services'
     return 'Professional Services'
   }
