@@ -108,9 +108,15 @@
   font-weight: 700;
   line-height: 1;
   text-transform: capitalize;
+  background: #edf2ff;
+  color: #1d3a8a;
+  border: 1px solid #c7d2fe;
+}
+
+.account-overview__status[data-variant='active'] {
   background: #ecfdf5;
   color: #047857;
-  border: 1px solid #a7f3d0;
+  border-color: #a7f3d0;
 }
 
 .account-overview__status[data-variant='inactive'] {
