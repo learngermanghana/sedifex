@@ -49,7 +49,7 @@ const ITEM_OPTIONAL_HEADERS: HeaderSpec[] = [
   { key: 'barcode', description: 'Barcode for scanning (letters + digits are supported).' },
   { key: 'stock_count', description: 'Current stock quantity.' },
   { key: 'reorder_point', description: 'Restock alert level.' },
-  { key: 'item_type', description: 'product, service, course, or made_to_order.' },
+  { key: 'item_type', description: 'product, service, course, made_to_order, or tour_package.' },
   { key: 'tax_rate', description: 'Tax rate as 7.5 or 0.075.' },
   { key: 'expiry_date', description: 'Use YYYY-MM-DD.' },
   { key: 'manufacturer_name', description: 'Brand or manufacturer name.' },
@@ -450,6 +450,8 @@ export default function DataTransfer() {
         const itemType =
           data.itemType === 'service'
             ? 'service'
+            : data.itemType === 'tour_package'
+              ? 'tour_package'
             : data.itemType === 'course'
               ? 'course'
               : data.itemType === 'made_to_order'
@@ -700,6 +702,8 @@ export default function DataTransfer() {
         const itemType =
           rawItemType === 'service'
             ? 'service'
+            : rawItemType === 'tour_package'
+              ? 'tour_package'
             : rawItemType === 'course'
               ? 'course'
               : rawItemType === 'made_to_order'
@@ -758,10 +762,10 @@ export default function DataTransfer() {
           }
         }
 
-        setField(shouldSetSku, 'sku', itemType === 'service' ? null : sku || null)
+        setField(shouldSetSku, 'sku', (itemType === 'service' || itemType === 'tour_package') ? null : sku || null)
         setField(shouldSetCategory, 'category', category || null)
         setField(shouldSetDescription, 'description', description || null)
-        setField(shouldSetBarcode, 'barcode', itemType === 'service' ? null : barcode || null)
+        setField(shouldSetBarcode, 'barcode', (itemType === 'service' || itemType === 'tour_package') ? null : barcode || null)
         setField(shouldSetStockCount, 'stockCount', itemType === 'product' ? stockCount : null)
         setField(shouldSetReorderPoint, 'reorderPoint', itemType === 'product' ? reorderPoint : null)
         setField(shouldSetTaxRate, 'taxRate', taxRate)
@@ -769,17 +773,17 @@ export default function DataTransfer() {
         setField(
           shouldSetManufacturerName,
           'manufacturerName',
-          itemType === 'service' ? null : manufacturerName || null,
+          (itemType === 'service' || itemType === 'tour_package') ? null : manufacturerName || null,
         )
         setField(
           shouldSetProductionDate,
           'productionDate',
-          itemType === 'service' ? null : productionDate,
+          (itemType === 'service' || itemType === 'tour_package') ? null : productionDate,
         )
         setField(
           shouldSetBatchNumber,
           'batchNumber',
-          itemType === 'service' ? null : batchNumber || null,
+          (itemType === 'service' || itemType === 'tour_package') ? null : batchNumber || null,
         )
         setField(
           shouldSetShowOnReceipt,
