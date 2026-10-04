@@ -1,5 +1,6 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Timestamp, addDoc, collection, deleteDoc, doc, getDocs, limit, query, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -10,6 +11,16 @@ type ServiceRecord = {
   id: string
   name: string
   itemType?: 'product' | 'service' | 'course' | 'programme'
+  sourceItemType?: string | null
+  price?: number | null
+  currency?: string | null
+  capacity?: number | null
+  allowDepositPayment?: boolean
+  depositAmount?: number | null
+  destination?: string | null
+  startingCity?: string | null
+  endingCity?: string | null
+  shortSummary?: string | null
   imageUrl?: string | null
   imageAlt?: string | null
   source?: string
@@ -27,6 +38,7 @@ type SlotRecord = {
   eventKind: EventKind
   registrationMode: RegistrationMode
   price?: number
+  currency?: string
   depositAmount?: number
   location?: string
   description?: string
@@ -97,6 +109,9 @@ function slugify(value: string) {
 
 export default function BookingsAvailability() {
   const { storeId } = useActiveStore()
+  const [searchParams] = useSearchParams()
+  const requestedServiceId = searchParams.get('serviceId')?.trim() || ''
+  const requestedEventKind = searchParams.get('eventKind')?.trim().toLowerCase() || ''
   const [services, setServices] = useState<ServiceRecord[]>([])
   const [slots, setSlots] = useState<SlotRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,6 +133,7 @@ export default function BookingsAvailability() {
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('paid')
   const [linkedCourseId, setLinkedCourseId] = useState('')
   const [price, setPrice] = useState('')
+  const [currency, setCurrency] = useState('GHS')
   const [depositAmount, setDepositAmount] = useState('')
   const [location, setLocation] = useState('')
   const [description, setDescription] = useState('')
@@ -126,6 +142,7 @@ export default function BookingsAvailability() {
   const [autoLoadedImageItemId, setAutoLoadedImageItemId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const queryPrefillAppliedRef = useRef('')
 
   const serviceMap = useMemo(() => new Map(services.map(service => [service.id, service])), [services])
   const selectedService = serviceMap.get(serviceId)
@@ -136,6 +153,31 @@ export default function BookingsAvailability() {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    if (!requestedServiceId || editingSlotId || services.length === 0) return
+    if (queryPrefillAppliedRef.current === requestedServiceId) return
+    const requestedService = serviceMap.get(requestedServiceId)
+    if (!requestedService) return
+
+    setServiceMode('catalog')
+    setServiceId(requestedService.id)
+    if (requestedEventKind === 'trip' || requestedService.sourceItemType === 'tour_package') {
+      setEventKind('trip')
+      if (typeof requestedService.capacity === 'number' && requestedService.capacity > 0) setCapacity(String(requestedService.capacity))
+      if (typeof requestedService.price === 'number') setPrice(String(requestedService.price))
+      setCurrency(requestedService.currency === 'USD' ? 'USD' : 'GHS')
+      if (requestedService.allowDepositPayment && typeof requestedService.depositAmount === 'number') {
+        setRegistrationMode('deposit')
+        setDepositAmount(String(requestedService.depositAmount))
+      }
+      const route = [requestedService.startingCity, requestedService.endingCity].filter(Boolean).join(' → ')
+      setLocation(route || requestedService.destination || '')
+      setDescription(requestedService.shortSummary || '')
+      setInfoMessage('Tour selected. Add the departure date, confirm the capacity and price, then save.')
+    }
+    queryPrefillAppliedRef.current = requestedServiceId
+  }, [editingSlotId, requestedEventKind, requestedServiceId, serviceMap, services.length])
 
   useEffect(() => {
     if (editingSlotId) return
@@ -163,6 +205,7 @@ export default function BookingsAvailability() {
     setRegistrationMode('paid')
     setLinkedCourseId('')
     setPrice('')
+    setCurrency('GHS')
     setDepositAmount('')
     setLocation('')
     setDescription('')
@@ -182,7 +225,17 @@ export default function BookingsAvailability() {
       map.set(docId, {
         id: docId,
         name: nameCandidate.trim(),
-        itemType: data.itemType === 'course' ? 'course' : data.itemType === 'programme' ? 'programme' : data.itemType === 'service' ? 'service' : fallbackType,
+        itemType: data.itemType === 'course' ? 'course' : data.itemType === 'programme' ? 'programme' : data.itemType === 'service' || data.itemType === 'tour_package' ? 'service' : fallbackType,
+        sourceItemType: typeof data.itemType === 'string' ? data.itemType : null,
+        price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : null,
+        currency: typeof data.currency === 'string' && data.currency.trim() ? data.currency.trim().toUpperCase() : null,
+        capacity: typeof data.capacity === 'number' && Number.isFinite(data.capacity) ? data.capacity : null,
+        allowDepositPayment: data.allowDepositPayment === true,
+        depositAmount: typeof data.depositAmount === 'number' && Number.isFinite(data.depositAmount) ? data.depositAmount : null,
+        destination: typeof data.destination === 'string' ? data.destination : null,
+        startingCity: typeof data.startingCity === 'string' ? data.startingCity : null,
+        endingCity: typeof data.endingCity === 'string' ? data.endingCity : null,
+        shortSummary: typeof data.shortSummary === 'string' ? data.shortSummary : null,
         imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : null,
         imageAlt: typeof data.imageAlt === 'string' ? data.imageAlt : null,
         source,
@@ -234,6 +287,7 @@ export default function BookingsAvailability() {
         eventKind: (typeof data.eventKind === 'string' ? data.eventKind : 'event') as EventKind,
         registrationMode: (typeof data.registrationMode === 'string' ? data.registrationMode : 'paid') as RegistrationMode,
         price: typeof data.price === 'number' ? data.price : undefined,
+        currency: typeof data.currency === 'string' ? data.currency : undefined,
         depositAmount: typeof data.depositAmount === 'number' ? data.depositAmount : undefined,
         location: typeof data.location === 'string' ? data.location : undefined,
         description: typeof data.description === 'string' ? data.description : undefined,
@@ -308,6 +362,7 @@ export default function BookingsAvailability() {
     setRegistrationMode(slot.registrationMode || 'paid')
     setLinkedCourseId(slot.linkedCourseId || '')
     setPrice(typeof slot.price === 'number' ? String(slot.price) : '')
+    setCurrency(slot.currency?.trim().toUpperCase() === 'USD' ? 'USD' : 'GHS')
     setDepositAmount(typeof slot.depositAmount === 'number' ? String(slot.depositAmount) : '')
     setLocation(slot.location || '')
     setDescription(slot.description || '')
@@ -369,6 +424,7 @@ export default function BookingsAvailability() {
         registrationMode,
         linkedCourseId: linkedCourseId.trim() || null,
         price: price.trim() ? Number(price) : null,
+        currency,
         depositAmount: depositAmount.trim() ? Number(depositAmount) : null,
         location: location.trim() || null,
         description: description.trim() || null,
@@ -401,7 +457,7 @@ export default function BookingsAvailability() {
     } finally {
       setSaving(false)
     }
-  }, [capacity, depositAmount, description, editingSlotId, endAt, eventDate, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, price, registrationMode, resetForm, saving, scheduleStatus, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
+  }, [capacity, currency, depositAmount, description, editingSlotId, endAt, eventDate, eventKind, imageAlt, imageUrl, linkedCourseId, loadSlots, location, manualServiceName, price, registrationMode, resetForm, saving, scheduleStatus, selectedService, serviceId, serviceMap, serviceMode, startAt, storeId, timezone, uploadPhoto])
 
   const toggleStatus = useCallback(async (slot: SlotRecord) => {
     if (!storeId) return
@@ -450,6 +506,7 @@ export default function BookingsAvailability() {
           <label><span>Linked course ID (optional)</span><input value={linkedCourseId} onChange={event => setLinkedCourseId(event.target.value)} placeholder="e.g. german-b1-course" /></label>
           <label><span>Capacity / limit</span><input type="number" min={1} value={capacity} onChange={event => setCapacity(event.target.value)} required /></label>
           <label><span>Price (optional)</span><input type="number" min={0} step="0.01" value={price} onChange={event => setPrice(event.target.value)} /></label>
+          <label><span>Currency</span><select value={currency} onChange={event => setCurrency(event.target.value === 'USD' ? 'USD' : 'GHS')}><option value="GHS">GHS — Ghana cedi</option><option value="USD">USD — US dollar</option></select></label>
           <label><span>Deposit amount (optional)</span><input type="number" min={0} step="0.01" value={depositAmount} onChange={event => setDepositAmount(event.target.value)} /></label>
           <label><span>Location (optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>
           <label><span>Description (optional)</span><input value={description} onChange={event => setDescription(event.target.value)} /></label>
