@@ -208,6 +208,23 @@ describe('AccountOverview', () => {
     verifyBeforeUpdateEmailMock.mockResolvedValue(undefined)
   })
 
+  it('keeps account settings on one navigation layer and renders workspace status as a badge', async () => {
+    render(<AccountOverview />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(getDocMock).toHaveBeenCalledTimes(2))
+
+    expect(screen.getAllByRole('button', { name: /^navigation$/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^payments$/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^team & access$/i })).toHaveLength(1)
+
+    const status = await screen.findByText('Active')
+    expect(status).toHaveClass('account-overview__status')
+    expect(status).toHaveAttribute('data-variant', 'active')
+  })
+
   it('shows an edit control for owners when roster data is available', async () => {
     mockUseMemberships.mockReturnValue({
       memberships: [
