@@ -559,6 +559,8 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
   if (!name) throw new Error('Name is required.')
   if (price === null) throw new Error('Price is required.')
   if (isService && !category) throw new Error('Service category is required.')
+  if (isTourPackage && !draft.destination.trim()) throw new Error('Destination is required for a tour package.')
+  if (isTourPackage && cleanNumber(draft.durationDays) === null) throw new Error('Enter the number of tour days.')
   if (isService && !['book_now', 'request_quote'].includes(draft.serviceKind === 'quote_request' ? 'request_quote' : 'book_now')) {
     throw new Error('Service sales mode is required.')
   }
@@ -765,6 +767,47 @@ export default function ProductsServiceFirst({
 
   function moveGalleryImage(imageUrl: string, direction: -1 | 1) {
     applyGalleryImages(moveItemImage(galleryImages, imageUrl, direction))
+  }
+
+  function updateItineraryDay(index: number, field: 'title' | 'description', value: string) {
+    setDraft(current => ({
+      ...current,
+      itinerary: current.itinerary.map((day, dayIndex) => dayIndex === index ? { ...day, [field]: value } : day),
+    }))
+  }
+
+  function addItineraryDay() {
+    setDraft(current => ({
+      ...current,
+      itinerary: [...current.itinerary, { day: current.itinerary.length + 1, title: '', description: '' }],
+    }))
+  }
+
+  function removeItineraryDay(index: number) {
+    setDraft(current => {
+      const next = current.itinerary
+        .filter((_, dayIndex) => dayIndex !== index)
+        .map((day, dayIndex) => ({ ...day, day: dayIndex + 1 }))
+      return { ...current, itinerary: next.length ? next : [{ day: 1, title: '', description: '' }] }
+    })
+  }
+
+  function updateTourList(field: 'inclusions' | 'exclusions', index: number, value: string) {
+    setDraft(current => ({
+      ...current,
+      [field]: current[field].map((entry, entryIndex) => entryIndex === index ? value : entry),
+    }))
+  }
+
+  function addTourListEntry(field: 'inclusions' | 'exclusions') {
+    setDraft(current => ({ ...current, [field]: [...current[field], ''] }))
+  }
+
+  function removeTourListEntry(field: 'inclusions' | 'exclusions', index: number) {
+    setDraft(current => {
+      const next = current[field].filter((_, entryIndex) => entryIndex !== index)
+      return { ...current, [field]: next.length ? next : [''] }
+    })
   }
 
   useEffect(() => {
