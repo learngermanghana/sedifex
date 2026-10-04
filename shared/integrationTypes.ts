@@ -28,6 +28,22 @@ export interface IntegrationProduct {
   priceUsd?: number | null
   exchangeRateUpdatedAt?: string | null
   serviceKind?: string | null
+  sourceItemType?: string | null
+  tour?: {
+    destination: string | null
+    tourStyle: string | null
+    durationDays: number | null
+    durationNights: number | null
+    startingCity: string | null
+    endingCity: string | null
+    shortSummary: string | null
+    itinerary: Array<{ day: number; title: string; description: string }>
+    inclusions: string[]
+    exclusions: string[]
+    capacity: number | null
+    allowDepositPayment: boolean
+    depositAmount: number | null
+  } | null
   duration?: string | null
   branch?: string | null
   preferredTimes?: string | null
