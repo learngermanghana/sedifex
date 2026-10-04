@@ -706,9 +706,10 @@ export default function ProductsServiceFirst({
 
   const activeMembership = useMemo(() => memberships.find(member => member.storeId === storeId) ?? null, [memberships, storeId])
   const canManage = activeMembership?.role === 'owner'
+  const isTourPackage = draft.itemType === 'tour_package'
   const isService = draft.itemType === 'service' || draft.itemType === 'made_to_order'
   const isCourse = draft.itemType === 'course'
-  const behavesLikeService = draft.itemType !== 'product'
+  const behavesLikeService = isService || isCourse || isTourPackage
   const categoryOptions = useMemo(() => Array.from(new Set([...ITEM_CATEGORIES, ...items.map(item => normalizeCategory(item.category, item.itemType))])), [items])
   const draftPriceNumber = cleanNumber(draft.price)
   const draftConvertedPrice = useMemo(
@@ -817,9 +818,10 @@ export default function ProductsServiceFirst({
       if (key === 'itemType') {
         const nextItemType = value as ItemFormType
         const currentCategory = normalizeCategory(current.category, current.itemType)
-        const shouldSwitchToProduct = nextItemType === 'product' && (currentCategory === SERVICE_CATEGORY || currentCategory === EDUCATION_CATEGORY)
-        const shouldSwitchToService = nextItemType === 'service' && (currentCategory === PRODUCT_CATEGORY || currentCategory === EDUCATION_CATEGORY)
-        const shouldSwitchToCourse = nextItemType === 'course' && (currentCategory === PRODUCT_CATEGORY || currentCategory === SERVICE_CATEGORY)
+        const shouldSwitchToProduct = nextItemType === 'product' && (currentCategory === SERVICE_CATEGORY || currentCategory === EDUCATION_CATEGORY || currentCategory === TOUR_CATEGORY)
+        const shouldSwitchToService = nextItemType === 'service' && (currentCategory === PRODUCT_CATEGORY || currentCategory === EDUCATION_CATEGORY || currentCategory === TOUR_CATEGORY)
+        const shouldSwitchToCourse = nextItemType === 'course' && (currentCategory === PRODUCT_CATEGORY || currentCategory === SERVICE_CATEGORY || currentCategory === TOUR_CATEGORY)
+        const shouldSwitchToTour = nextItemType === 'tour_package' && currentCategory !== TOUR_CATEGORY
         return {
           ...current,
           itemType: nextItemType,
@@ -830,6 +832,8 @@ export default function ProductsServiceFirst({
             ? SERVICE_CATEGORY
             : shouldSwitchToCourse
             ? EDUCATION_CATEGORY
+            : shouldSwitchToTour
+            ? TOUR_CATEGORY
             : normalizeCategory(current.category, nextItemType),
           sku: nextItemType === 'product' ? current.sku : '',
           openingStock: nextItemType === 'product' ? current.openingStock : '',
@@ -838,6 +842,7 @@ export default function ProductsServiceFirst({
           branch: nextItemType === 'course' ? current.branch || current.location : current.branch,
           preferredTimes: nextItemType === 'course' ? current.preferredTimes || current.classTimes : current.preferredTimes,
           costPrice: nextItemType === 'product' ? current.costPrice : '',
+          serviceKind: nextItemType === 'tour_package' ? 'tour_package' : nextItemType === 'service' ? (current.serviceKind === 'quote_request' ? 'quote_request' : 'consultation') : current.serviceKind,
         }
       }
       if (key === 'certificateIncluded') return { ...current, certificateIncluded: value === 'true' }
@@ -911,7 +916,21 @@ export default function ProductsServiceFirst({
       imageUrls: normalizeItemImages(item.imageUrl, item.imageUrls),
       imageAlt: item.imageAlt ?? item.name,
       brand: item.itemType === 'product' ? (item.brand ?? item.manufacturerName ?? '') : '',
-      serviceKind: ((item as any).serviceKind === 'quote_request' ? 'quote_request' : 'consultation') as ServiceKind,
+      serviceKind: (item.itemType === 'tour_package' || (item as any).serviceKind === 'tour_package'
+        ? 'tour_package'
+        : (item as any).serviceKind === 'quote_request'
+        ? 'quote_request'
+        : 'consultation') as ServiceKind,
+      destination: item.destination ?? '',
+      tourStyle: item.tourStyle ?? '',
+      durationDays: typeof item.durationDays === 'number' ? String(item.durationDays) : '',
+      durationNights: typeof item.durationNights === 'number' ? String(item.durationNights) : '',
+      startingCity: item.startingCity ?? '',
+      endingCity: item.endingCity ?? '',
+      shortSummary: item.shortSummary ?? '',
+      itinerary: item.itinerary?.length ? item.itinerary : [{ day: 1, title: '', description: '' }],
+      inclusions: item.inclusions?.length ? item.inclusions : [''],
+      exclusions: item.exclusions?.length ? item.exclusions : [''],
       durationMinutes: typeof (item as any).durationMinutes === 'number' ? String((item as any).durationMinutes) : '',
       location: typeof (item as any).location === 'string' ? (item as any).location : '',
       requiresDateTime: (item as any).requiresDateTime === true,
