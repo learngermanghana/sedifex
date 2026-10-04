@@ -24,7 +24,7 @@ function statusTone(status: ReimbursementStatus) { if (status === 'reimbursed') 
 
 export default function BusinessExpenses() {
  const { storeId } = useActiveStore(); const user = useAuthUser(); const [searchParams, setSearchParams] = useSearchParams(); const [expenses, setExpenses] = useState<ExpenseRecord[]>([]); const [form, setForm] = useState<ExpenseForm>(initialForm); const [editingId, setEditingId] = useState(''); const [isFormOpen, setIsFormOpen] = useState(searchParams.get('mode') === 'add'); const [saving, setSaving] = useState(false); const [search, setSearch] = useState(''); const [sourceFilter, setSourceFilter] = useState<'all' | PaymentSource>('all'); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null)
- const { clearPreference: clearExpenseFilters } = useStorePreferenceSync({
+ const { clearPreference: clearExpenseFilters } = useStorePreferenceSync<{ search: string; sourceFilter: 'all' | PaymentSource }>({
    storeId,
    keyPrefix: EXPENSE_FILTER_KEY_PREFIX,
    value: { search, sourceFilter },
