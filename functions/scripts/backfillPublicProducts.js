@@ -123,7 +123,7 @@ function extractProductImageSet(data) {
 }
 
 function resolvePublicCatalogCollectionName(itemType) {
-  return itemType === 'service' ? 'publicServices' : 'publicProducts'
+  return itemType === 'service' || itemType === 'tour_package' ? 'publicServices' : 'publicProducts'
 }
 
 function hasPublishedAt(value) {
@@ -230,11 +230,26 @@ function toPublicProduct(productDoc, storeMetaByStoreId, existingDocData = null)
     batchNumber: toTrimmedStringOrNull(data.batchNumber),
     showOnReceipt: data.showOnReceipt === true,
     itemType:
-      data.itemType === 'service'
+      data.itemType === 'service' || data.itemType === 'tour_package'
         ? 'service'
         : data.itemType === 'made_to_order'
           ? 'made_to_order'
           : 'product',
+    sourceItemType: toTrimmedStringOrNull(data.itemType),
+    serviceKind: toTrimmedStringOrNull(data.serviceKind),
+    destination: toTrimmedStringOrNull(data.destination),
+    tourStyle: toTrimmedStringOrNull(data.tourStyle),
+    durationDays: typeof data.durationDays === 'number' ? data.durationDays : null,
+    durationNights: typeof data.durationNights === 'number' ? data.durationNights : null,
+    startingCity: toTrimmedStringOrNull(data.startingCity),
+    endingCity: toTrimmedStringOrNull(data.endingCity),
+    shortSummary: toTrimmedStringOrNull(data.shortSummary),
+    itinerary: Array.isArray(data.itinerary) ? data.itinerary : [],
+    inclusions: toTrimmedStringArray(data.inclusions),
+    exclusions: toTrimmedStringArray(data.exclusions),
+    capacity: typeof data.capacity === 'number' ? data.capacity : null,
+    allowDepositPayment: data.allowDepositPayment === true,
+    depositAmount: typeof data.depositAmount === 'number' ? data.depositAmount : null,
     isPublished: data.isPublished === true,
     ...extractProductImageSet(data),
     publishedAt: data.isPublished === true ? publication.updates.publishedAt : null,
