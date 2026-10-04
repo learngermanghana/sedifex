@@ -632,6 +632,17 @@ export default function ProductsServiceFirst({
     }))
   }
 
+  function appendGalleryImages(images: string[]) {
+    setDraft(current => {
+      const normalized = normalizeItemImages(current.imageUrl, [...current.imageUrls, ...images])
+      return {
+        ...current,
+        imageUrl: normalized[0] || '',
+        imageUrls: normalized,
+      }
+    })
+  }
+
   function updateCoverImageUrl(value: string) {
     setDraft(current => {
       const previousCover = current.imageUrl.trim()
@@ -1147,7 +1158,7 @@ export default function ProductsServiceFirst({
                   }
 
                   if (uploadedUrls.length > 0) {
-                    applyGalleryImages([...galleryImages, ...uploadedUrls])
+                    appendGalleryImages(uploadedUrls)
                   }
 
                   if (failedUploads.length > 0) {
