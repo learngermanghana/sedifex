@@ -25,6 +25,13 @@ import type { ItemType, Product } from '../types/product'
 import { productMatchesSearch } from '../utils/productSearch'
 import { CategorySelect } from '../components/CategorySelect'
 import { ITEM_CATEGORIES } from '../utils/itemCategories'
+import {
+  MAX_ITEM_IMAGES,
+  moveItemImage,
+  normalizeItemImages,
+  removeItemImage,
+  setItemCoverImage,
+} from '../utils/itemImages'
 
 type ItemFormType = 'product' | 'service' | 'made_to_order' | 'course' | 'digital_item'
 type ServiceKind = 'consultation' | 'quote_request'
@@ -44,6 +51,7 @@ type Draft = {
   reorderPoint: string
   expiryDate: string
   imageUrl: string
+  imageUrls: string[]
   imageAlt: string
   brand: string
   serviceKind: ServiceKind
@@ -106,6 +114,7 @@ const blankDraft: Draft = {
   reorderPoint: '',
   expiryDate: '',
   imageUrl: '',
+  imageUrls: [],
   imageAlt: '',
   brand: '',
   serviceKind: 'consultation',
@@ -478,8 +487,8 @@ function buildSavePayload(draft: Draft, storeId: string, rates: CurrencyRateStat
       ? 'request_quote'
       : 'book_now'
     : 'buy_now'
-  const trimmedImageUrl = draft.imageUrl.trim()
-  const imageUrls = trimmedImageUrl ? [trimmedImageUrl] : []
+  const imageUrls = normalizeItemImages(draft.imageUrl, draft.imageUrls)
+  const trimmedImageUrl = imageUrls[0] || ''
   const currency = draft.currency.trim().toUpperCase()
   if (currency !== 'GHS' && currency !== 'USD') throw new Error('Choose GHS or USD for the item price.')
   if (currency === 'USD' && !rates) throw new Error('The USD/GHS conversion rate is still loading. Try again in a moment.')
@@ -751,7 +760,8 @@ export default function ProductsServiceFirst({
       openingStock: itemType === 'product' && typeof item.stockCount === 'number' ? String(item.stockCount) : '',
       reorderPoint: itemType === 'product' && typeof item.reorderPoint === 'number' ? String(item.reorderPoint) : '',
       expiryDate: itemType === 'product' ? formatDateInput(item.expiryDate) : '',
-      imageUrl: item.imageUrl ?? '',
+      imageUrl: item.imageUrl ?? item.imageUrls?.[0] ?? '',
+      imageUrls: normalizeItemImages(item.imageUrl, item.imageUrls),
       imageAlt: item.imageAlt ?? item.name,
       brand: item.itemType === 'product' ? (item.brand ?? item.manufacturerName ?? '') : '',
       serviceKind: ((item as any).serviceKind === 'quote_request' ? 'quote_request' : 'consultation') as ServiceKind,
