@@ -1113,7 +1113,7 @@ export default function ProductsServiceFirst({
           {message ? <p className="products__message products__message--success">{message}</p> : null}
           {error ? <p className="products__message products__message--error">{error}</p> : null}
 
-          <form className="form products-page__form" onSubmit={saveItem}>
+          <form className="products-page__form" onSubmit={saveItem}>
             <div className="field">
               <label className="field__label" htmlFor="item-type">Item type</label>
               <select id="item-type" value={draft.itemType} onChange={event => updateDraft('itemType', event.target.value)}>
