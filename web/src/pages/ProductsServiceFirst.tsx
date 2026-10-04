@@ -1065,7 +1065,7 @@ export default function ProductsServiceFirst({
     if (!canManage) return
     if (!window.confirm(`Delete ${item.name}?`)) return
     await deleteDoc(doc(db, 'products', item.id))
-    setMessage(`${item.itemType === 'course' ? 'Course' : item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
+    setMessage(`${item.itemType === 'course' ? 'Course' : item.itemType === 'tour_package' ? 'Tour package' : item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
   }
 
   const visibleItems = useMemo(() => {
@@ -1484,8 +1484,9 @@ export default function ProductsServiceFirst({
           <div className="products-page__list" aria-live="polite">
             {visibleItems.map(item => {
               const itemIsCourse = item.itemType === 'course' || item.listingType === 'course'
+              const itemIsTour = item.itemType === 'tour_package' || item.serviceKind === 'tour_package'
               const itemIsService = item.itemType === 'service' || item.itemType === 'made_to_order'
-              const itemIsServiceLike = item.itemType !== 'product'
+              const itemIsServiceLike = itemIsService || itemIsCourse || itemIsTour
               return (
                 <article key={item.id} className="products-page__list-card">
                   <header className="products-page__list-card__header">
@@ -1511,8 +1512,12 @@ export default function ProductsServiceFirst({
                   <div className="products-page__list-grid">
                     {itemIsServiceLike ? (
                       <>
-                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course category' : 'Service category'}</label><p className="products-page__list-value">{normalizeCategory(item.category, itemIsCourse ? 'course' : item.itemType)}</p></div>
-                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course item' : 'Booking / service item'}</label><p className="products-page__list-value">No stock tracking</p></div>
+                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course category' : itemIsTour ? 'Tour category' : 'Service category'}</label><p className="products-page__list-value">{normalizeCategory(item.category, itemIsCourse ? 'course' : itemIsTour ? 'tour_package' : item.itemType)}</p></div>
+                        <div className="products-page__list-field"><label className="field__label">{itemIsCourse ? 'Course item' : itemIsTour ? 'Tour package' : 'Booking / service item'}</label><p className="products-page__list-value">{itemIsTour ? 'Uses tour departures · No stock tracking' : 'No stock tracking'}</p></div>
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Destination</label><p className="products-page__list-value">{item.destination || '—'}</p></div> : null}
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Duration</label><p className="products-page__list-value">{item.durationDays ? `${item.durationDays} day${item.durationDays === 1 ? '' : 's'}${typeof item.durationNights === 'number' ? ` / ${item.durationNights} night${item.durationNights === 1 ? '' : 's'}` : ''}` : '—'}</p></div> : null}
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Route</label><p className="products-page__list-value">{[item.startingCity, item.endingCity].filter(Boolean).join(' → ') || '—'}</p></div> : null}
+                        {itemIsTour ? <div className="products-page__list-field"><label className="field__label">Maximum travellers</label><p className="products-page__list-value">{item.capacity ?? '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Duration</label><p className="products-page__list-value">{item.duration || '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Branch</label><p className="products-page__list-value">{item.branch || '—'}</p></div> : null}
                         {itemIsCourse ? <div className="products-page__list-field"><label className="field__label">Preferred times</label><p className="products-page__list-value">{item.preferredTimes || '—'}</p></div> : null}
@@ -1540,6 +1545,7 @@ export default function ProductsServiceFirst({
                   </div>
 
                   <div className="products-page__list-actions">
+                    {itemIsTour ? <Link className="button button--primary" to={`/upcoming-events?serviceId=${encodeURIComponent(item.id)}&eventKind=trip`}>Manage departures</Link> : null}
                     {canManage ? <button type="button" className="button button--ghost" onClick={() => editItem(item)}>Edit</button> : null}
                     {canManage ? <button type="button" className="button button--danger" onClick={() => void deleteItem(item)}>Delete</button> : null}
                   </div>
@@ -1549,7 +1555,7 @@ export default function ProductsServiceFirst({
             {visibleItems.length === 0 ? (
               <div className="empty-state products-page__empty">
                 <h3 className="empty-state__title">{items.length === 0 ? 'No items yet' : 'No items match your search'}</h3>
-                <p>{items.length === 0 ? 'Add your first product, service, or course to get started.' : 'Try a different search term.'}</p>
+                <p>{items.length === 0 ? 'Add your first product, service, course, or tour package to get started.' : 'Try a different search term.'}</p>
                 {items.length === 0 && canManage ? (
                   <button type="button" className="button button--primary" onClick={() => { resetForm(); setIsEditorOpen(true) }}>+ Add first item</button>
                 ) : null}
