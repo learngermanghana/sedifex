@@ -1079,7 +1079,7 @@ export default function ProductsServiceFirst({
       <header className="page__header products-page__header">
         <div>
           <h2 className="page__title">Items</h2>
-          <p className="page__subtitle">Manage products, services, and courses/programmes.</p>
+          <p className="page__subtitle">Manage products, services, courses/programmes, and tour packages.</p>
         </div>
         {canManage ? (
           <button
@@ -1103,6 +1103,8 @@ export default function ProductsServiceFirst({
           <p className="card__subtitle">
             {isCourse
               ? 'Course/programme mode is for always-open enrollments. Use Upcoming events to create specific batches/intakes for this course.'
+              : isTourPackage
+              ? 'Tour package mode keeps the itinerary, pricing, photos, and inclusions in one item. Use Tour departures to add specific travel dates.'
               : isService
               ? 'Service mode supports booking and quote requests. Stock fields are hidden.'
               : 'Product mode includes inventory fields like SKU, opening stock, reorder point, and expiry date.'}
@@ -1119,12 +1121,13 @@ export default function ProductsServiceFirst({
                 <option value="service">Service</option>
                 <option value="made_to_order">Booking</option>
                 <option value="course">Course</option>
-                <option value="digital_item">Digital Item</option>
+                <option value="tour_package">Tour package</option>
+                {draft.itemType === 'digital_item' ? <option value="digital_item">Digital Item (legacy)</option> : null}
               </select>
             </div>
 
             <div className="field">
-              <label className="field__label" htmlFor="item-name">{isCourse ? 'Course / programme name' : isService ? 'Service name' : 'Product name'}</label>
+              <label className="field__label" htmlFor="item-name">{isCourse ? 'Course / programme name' : isTourPackage ? 'Tour name' : isService ? 'Service name' : 'Product name'}</label>
               <input id="item-name" value={draft.name} onChange={event => updateDraft('name', event.target.value)} required />
             </div>
 
@@ -1138,7 +1141,7 @@ export default function ProductsServiceFirst({
             />
 
             <div className="field">
-              <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isService ? 'Price' : 'Selling price'}</label>
+              <label className="field__label" htmlFor="item-price">{isCourse ? 'Fee' : isTourPackage ? 'Starting price' : isService ? 'Price' : 'Selling price'}</label>
               <div className="products-page__price-row">
                 <select
                   aria-label="Currency"
@@ -1168,7 +1171,66 @@ export default function ProductsServiceFirst({
 
             {isService ? <div className="field"><label className="field__label" htmlFor="service-kind">Service kind</label><select id="service-kind" value={draft.serviceKind} onChange={event => updateDraft('serviceKind', event.target.value)}><option value="consultation">Consultation / appointment</option><option value="quote_request">Request quote</option></select></div> : null}
             {isService ? <div className="field"><label className="field__label" htmlFor="service-duration">Duration minutes</label><input id="service-duration" type="number" min="0" step="1" value={draft.durationMinutes} onChange={event => updateDraft('durationMinutes', event.target.value)} /></div> : null}
-            {behavesLikeService && !isCourse ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+            {isService ? <div className="field"><label className="field__label" htmlFor="service-location">Branch / location</label><input id="service-location" value={draft.location} onChange={event => updateDraft('location', event.target.value)} /></div> : null}
+
+            {isTourPackage ? (
+              <section className="products-page__tour-section" aria-labelledby="tour-details-heading">
+                <div className="products-page__tour-heading">
+                  <div>
+                    <h4 id="tour-details-heading">Tour details</h4>
+                    <p>Describe the package once. Specific travel dates are managed separately as tour departures.</p>
+                  </div>
+                </div>
+
+                <div className="products-page__tour-grid">
+                  <div className="field"><label className="field__label" htmlFor="tour-destination">Destination</label><input id="tour-destination" value={draft.destination} onChange={event => updateDraft('destination', event.target.value)} placeholder="e.g. Japan" required /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-style">Tour style</label><input id="tour-style" value={draft.tourStyle} onChange={event => updateDraft('tourStyle', event.target.value)} placeholder="e.g. Leisure & Culture" /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-days">Duration days</label><input id="tour-days" type="number" min="1" step="1" value={draft.durationDays} onChange={event => updateDraft('durationDays', event.target.value)} required /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-nights">Duration nights</label><input id="tour-nights" type="number" min="0" step="1" value={draft.durationNights} onChange={event => updateDraft('durationNights', event.target.value)} /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-start-city">Starting city</label><input id="tour-start-city" value={draft.startingCity} onChange={event => updateDraft('startingCity', event.target.value)} placeholder="e.g. Tokyo" /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-end-city">Ending city</label><input id="tour-end-city" value={draft.endingCity} onChange={event => updateDraft('endingCity', event.target.value)} placeholder="e.g. Osaka" /></div>
+                  <div className="field"><label className="field__label" htmlFor="tour-capacity">Maximum travellers</label><input id="tour-capacity" type="number" min="1" step="1" value={draft.capacity} onChange={event => updateDraft('capacity', event.target.value)} placeholder="e.g. 20" /></div>
+                </div>
+
+                <div className="field">
+                  <label className="field__label" htmlFor="tour-summary">Short summary</label>
+                  <textarea id="tour-summary" rows={3} value={draft.shortSummary} onChange={event => updateDraft('shortSummary', event.target.value)} placeholder="A short website-friendly summary of the tour." />
+                </div>
+
+                <div className="products-page__tour-builder">
+                  <div className="products-page__tour-builder-header"><h5>Day-by-day itinerary</h5><button type="button" className="button button--ghost button--small" onClick={addItineraryDay}>+ Add day</button></div>
+                  <div className="products-page__itinerary-list">
+                    {draft.itinerary.map((day, index) => (
+                      <div className="products-page__itinerary-row" key={index}>
+                        <div className="products-page__itinerary-day">Day {index + 1}</div>
+                        <div className="field"><label className="field__label" htmlFor={`tour-day-${index}-title`}>Title</label><input id={`tour-day-${index}-title`} value={day.title} onChange={event => updateItineraryDay(index, 'title', event.target.value)} placeholder="e.g. Tokyo Arrival" /></div>
+                        <div className="field products-page__itinerary-description"><label className="field__label" htmlFor={`tour-day-${index}-description`}>Details</label><textarea id={`tour-day-${index}-description`} rows={2} value={day.description} onChange={event => updateItineraryDay(index, 'description', event.target.value)} placeholder="Airport transfer, hotel check-in, activities…" /></div>
+                        <button type="button" className="button button--ghost button--small" onClick={() => removeItineraryDay(index)} disabled={draft.itinerary.length === 1}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="products-page__tour-lists">
+                  {(['inclusions', 'exclusions'] as const).map(field => (
+                    <div className="products-page__tour-builder" key={field}>
+                      <div className="products-page__tour-builder-header"><h5>{field === 'inclusions' ? "What's included" : "What's not included"}</h5><button type="button" className="button button--ghost button--small" onClick={() => addTourListEntry(field)}>+ Add</button></div>
+                      {draft[field].map((entry, index) => (
+                        <div className="products-page__tour-list-row" key={index}>
+                          <input value={entry} onChange={event => updateTourList(field, index, event.target.value)} placeholder={field === 'inclusions' ? 'e.g. 5 nights accommodation' : 'e.g. International flights'} />
+                          <button type="button" className="button button--ghost button--small" onClick={() => removeTourListEntry(field, index)} disabled={draft[field].length === 1}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="products-page__tour-payment">
+                  <label className="checkbox"><input type="checkbox" checked={draft.allowDepositPayment} onChange={event => setDraft(current => ({ ...current, allowDepositPayment: event.target.checked }))} /><span>Allow deposit payment</span></label>
+                  {draft.allowDepositPayment ? <div className="field"><label className="field__label" htmlFor="tour-deposit">Deposit amount ({draft.currency})</label><input id="tour-deposit" type="number" min="0" step="0.01" value={draft.depositAmount} onChange={event => updateDraft('depositAmount', event.target.value)} /></div> : null}
+                </div>
+              </section>
+            ) : null}
 
             {isCourse ? (
               <>
