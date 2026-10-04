@@ -32,7 +32,7 @@ function firstItem(source: Record<string, unknown>): Record<string, unknown> {
 
 function normalizeItemType(value: unknown): 'product' | 'service' | 'course' | '' {
   const normalized = asText(value).toLowerCase().replace(/[\s_-]+/g, '_')
-  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking') return 'service'
+  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking' || normalized === 'tour_package' || normalized === 'tour' || normalized === 'trip') return 'service'
   if (normalized === 'course' || normalized === 'class' || normalized === 'training') return 'course'
   if (normalized === 'product' || normalized === 'product_order' || normalized === 'physical_product') return 'product'
   return ''
