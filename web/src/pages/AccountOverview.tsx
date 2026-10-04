@@ -1939,35 +1939,8 @@ export default function AccountOverview({
         </nav>
       )}
 
-      {!isPromotionsView && activeTab === 'workspace' && (
-        <section aria-labelledby="account-overview-quick-settings" className="account-overview__quick-settings">
-          <div className="account-overview__settings-directory">
-            <button type="button" className="account-overview__settings-card is-current" onClick={() => document.getElementById('store-profile')?.scrollIntoView({ behavior: 'smooth' })}>
-              <strong id="account-overview-quick-settings">Business details</strong>
-              <span>Name, contact details, address, and logo.</span>
-            </button>
-            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('navigation')}>
-              <strong>Navigation</strong>
-              <span>Choose the pages your team sees every day.</span>
-            </button>
-            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('billing')}>
-              <strong>Payments</strong>
-              <span>Billing plan, payment history, and settlement setup.</span>
-            </button>
-            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('integrations')}>
-              <strong>Website integration</strong>
-              <span>Website API, booking sync, email, and webhooks.</span>
-            </button>
-            <button type="button" className="account-overview__settings-card" onClick={() => setActiveTab('team')}>
-              <strong>Team & access</strong>
-              <span>Members, roles, and workspace access.</span>
-            </button>
-          </div>
-        </section>
-      )}
-
       {profile && !isPromotionsView && activeTab === 'workspace' && (
-        <section aria-labelledby="account-overview-profile" id="store-profile">
+        <section aria-labelledby="account-overview-profile" id="store-profile" className="account-overview__profile-card">
           <div className="account-overview__section-header">
             <h2 id="account-overview-profile">Store profile</h2>
 
@@ -1988,23 +1961,30 @@ export default function AccountOverview({
           </div>
 
           <dl className="account-overview__grid">
-            <div>
+            <div className="account-overview__grid-item">
               <dt>Workspace name</dt>
               <dd>{formatValue(profile.displayName ?? profile.name)}</dd>
             </div>
-            <div>
+            <div className="account-overview__grid-item">
               <dt>Email</dt>
               <dd>{formatValue(profile.email)}</dd>
             </div>
-            <div>
+            <div className="account-overview__grid-item">
               <dt>Phone</dt>
               <dd>{formatValue(profile.phone)}</dd>
             </div>
-            <div>
+            <div className="account-overview__grid-item">
               <dt>Status</dt>
-              <dd>{formatValue(profile.status)}</dd>
+              <dd>
+                <span
+                  className="account-overview__status"
+                  data-variant={(profile.status ?? 'active').trim().toLowerCase()}
+                >
+                  {formatStatus(profile.status)}
+                </span>
+              </dd>
             </div>
-            <div>
+            <div className="account-overview__grid-item account-overview__grid-item--wide">
               <dt>Address</dt>
               <dd>
                 {[
@@ -2019,11 +1999,11 @@ export default function AccountOverview({
                   .join(', ') || '—'}
               </dd>
             </div>
-            <div>
+            <div className="account-overview__grid-item">
               <dt>Created</dt>
               <dd>{formatTimestamp(profile.createdAt)}</dd>
             </div>
-            <div>
+            <div className="account-overview__grid-item">
               <dt>Updated</dt>
               <dd>{formatTimestamp(profile.updatedAt)}</dd>
             </div>
