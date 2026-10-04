@@ -30,6 +30,8 @@ const SHARED_STATUS_PRESENTATIONS: Record<string, StatusPresentation> = {
   needs_approval: { label: 'Needs approval', tone: 'warning' },
   pending: { label: 'Needs approval', tone: 'warning' },
   payment_pending: { label: 'Needs approval', tone: 'warning' },
+  partial: { label: 'Partial', tone: 'warning' },
+  unpaid: { label: 'Unpaid', tone: 'warning' },
 }
 
 function normalize(value: unknown): string {
