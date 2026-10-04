@@ -628,7 +628,7 @@ type CheckoutPreviewItem = {
 
 function normalizeCheckoutItemType(value: unknown) {
   const normalized = clean(value, 50).toUpperCase()
-  if (normalized === 'SERVICE' || normalized === 'COURSE') return 'SERVICE'
+  if (normalized === 'SERVICE' || normalized === 'COURSE' || normalized === 'TOUR_PACKAGE' || normalized === 'TOUR' || normalized === 'TRIP') return 'SERVICE'
   return 'PRODUCT'
 }
 
