@@ -8,7 +8,7 @@
 .expense-field-wide{grid-column:1/-1}
 .expense-actions{display:flex;gap:.65rem;flex-wrap:wrap;align-items:center}
 .expense-primary-button{background:#4f46e5;color:#fff;border-color:#4f46e5}
-.expense-filter-row{display:grid;grid-template-columns:2fr 1fr;gap:.8rem;margin-bottom:.85rem}
+.expense-filter-row{display:grid;grid-template-columns:2fr 1fr auto;gap:.8rem;margin-bottom:.85rem;align-items:end}
 .expense-table-wrap{overflow:auto}.expense-table{width:100%;border-collapse:collapse}.expense-table th,.expense-table td{padding:.65rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
 .expense-empty-state{text-align:center;color:#64748b;padding:1rem 0}
 .expense-chip{display:inline-flex;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900}
