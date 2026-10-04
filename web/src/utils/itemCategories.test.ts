@@ -6,12 +6,14 @@ describe('item categories', () => {
     expect(ITEM_CATEGORIES).toContain('Clothing & Fashion')
     expect(ITEM_CATEGORIES).toContain('Services')
     expect(ITEM_CATEGORIES).toContain('Courses & Training')
+    expect(ITEM_CATEGORIES).toContain('Travel & Tours')
     expect(ITEM_CATEGORIES).toContain('Digital Products')
     expect(ITEM_CATEGORIES).toContain('Other')
   })
 
   it('returns category-specific subcategories and safely handles custom categories', () => {
     expect(getCategorySubcategories('Food & Groceries')).toContain('Fresh Food')
+    expect(getCategorySubcategories('Travel & Tours')).toContain('Tour Packages')
     expect(getCategorySubcategories('My legacy custom category')).toEqual([])
   })
 })
