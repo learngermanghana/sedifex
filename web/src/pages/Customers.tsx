@@ -18,6 +18,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useStorePreferenceSync } from '../hooks/useStorePreferenceSync'
 import './Customers.css'
 import {
   CUSTOMER_CACHE_LIMIT,
@@ -371,11 +372,6 @@ export default function Customers() {
   const [quickFilter, setQuickFilter] = useState<
     'all' | 'recent' | 'noPurchases' | 'highValue' | 'untagged' | 'hasDebt'
   >('all')
-  const filterHydrationRef = useRef<{
-    storeId: string
-    value: { searchTerm: string; quickFilter: typeof quickFilter; tagFilter: string | null }
-    pending: boolean
-  } | null>(null)
   const [messageChannel, setMessageChannel] = useState<MessageChannel | null>(null)
   const [messageBody, setMessageBody] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
@@ -399,61 +395,35 @@ export default function Customers() {
     return `${intakeLink}/qr`
   }, [intakeLink])
 
-  useEffect(() => {
-    if (!activeStoreId) {
-      filterHydrationRef.current = null
-      return
-    }
-    let restoredSearchTerm = ''
-    let restoredQuickFilter: typeof quickFilter = 'all'
-    let restoredTagFilter: string | null = null
-    try {
-      const stored = JSON.parse(localStorage.getItem(`${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`) || '{}') as {
+  const { clearPreference: clearCustomerFilters } = useStorePreferenceSync<{ searchTerm: string; quickFilter: typeof quickFilter; tagFilter: string | null }>({
+    storeId: activeStoreId,
+    keyPrefix: CUSTOMER_FILTER_KEY_PREFIX,
+    value: { searchTerm, quickFilter, tagFilter },
+    defaultValue: { searchTerm: '', quickFilter: 'all' as const, tagFilter: null as string | null },
+    apply: restored => {
+      setSearchTerm(restored.searchTerm)
+      setQuickFilter(restored.quickFilter)
+      setTagFilter(restored.tagFilter)
+    },
+    serialize: JSON.stringify,
+    deserialize: raw => {
+      const stored = JSON.parse(raw) as {
         searchTerm?: unknown
         quickFilter?: unknown
         tagFilter?: unknown
       }
       const allowedQuickFilters = ['all', 'recent', 'noPurchases', 'highValue', 'untagged', 'hasDebt']
-      restoredSearchTerm = typeof stored.searchTerm === 'string' ? stored.searchTerm : ''
-      restoredQuickFilter = typeof stored.quickFilter === 'string' && allowedQuickFilters.includes(stored.quickFilter)
-        ? stored.quickFilter as typeof quickFilter
-        : 'all'
-      restoredTagFilter = typeof stored.tagFilter === 'string' && stored.tagFilter ? stored.tagFilter : null
-    } catch (storageError) {
-      console.warn('[customers] Unable to load filter preferences', storageError)
-    }
-    filterHydrationRef.current = {
-      storeId: activeStoreId,
-      value: { searchTerm: restoredSearchTerm, quickFilter: restoredQuickFilter, tagFilter: restoredTagFilter },
-      pending: true,
-    }
-    setSearchTerm(restoredSearchTerm)
-    setQuickFilter(restoredQuickFilter)
-    setTagFilter(restoredTagFilter)
-  }, [activeStoreId])
+      return {
+        searchTerm: typeof stored.searchTerm === 'string' ? stored.searchTerm : '',
+        quickFilter: typeof stored.quickFilter === 'string' && allowedQuickFilters.includes(stored.quickFilter)
+          ? stored.quickFilter as typeof quickFilter
+          : 'all',
+        tagFilter: typeof stored.tagFilter === 'string' && stored.tagFilter ? stored.tagFilter : null,
+      }
+    },
+    debugName: 'customers',
+  })
 
-  useEffect(() => {
-    if (!activeStoreId) return
-    const hydration = filterHydrationRef.current
-    if (!hydration || hydration.storeId !== activeStoreId) return
-    if (hydration.pending) {
-      if (
-        searchTerm === hydration.value.searchTerm
-        && quickFilter === hydration.value.quickFilter
-        && tagFilter === hydration.value.tagFilter
-      ) hydration.pending = false
-      return
-    }
-    try {
-      localStorage.setItem(
-        `${CUSTOMER_FILTER_KEY_PREFIX}${activeStoreId}`,
-        JSON.stringify({ searchTerm, quickFilter, tagFilter }),
-      )
-      hydration.value = { searchTerm, quickFilter, tagFilter }
-    } catch (storageError) {
-      console.warn('[customers] Unable to save filter preferences', storageError)
-    }
-  }, [activeStoreId, quickFilter, searchTerm, tagFilter])
 
   useEffect(() => {
     const mode = searchParams.get('mode')
@@ -1866,6 +1836,9 @@ export default function Customers() {
                   {filter.label}
                 </button>
               ))}
+              {searchTerm || quickFilter !== 'all' || tagFilter ? (
+                <button type="button" className="button button--outline button--small" onClick={clearCustomerFilters}>Clear filters</button>
+              ) : null}
             </div>
           </div>
 

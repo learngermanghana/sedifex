@@ -4,49 +4,74 @@ import './StatusBadge.css'
 type StatusBadgeKind = 'booking' | 'payment' | 'generic'
 type StatusTone = 'neutral' | 'warning' | 'success' | 'danger'
 
+type StatusPresentation = {
+  label: string
+  tone: StatusTone
+}
+
+const SHARED_STATUS_PRESENTATIONS: Record<string, StatusPresentation> = {
+  paid: { label: 'Paid', tone: 'success' },
+  success: { label: 'Paid', tone: 'success' },
+  settled: { label: 'Paid', tone: 'success' },
+  confirmed: { label: 'Confirmed', tone: 'success' },
+  approved: { label: 'Confirmed', tone: 'success' },
+  completed: { label: 'Completed', tone: 'success' },
+  complete: { label: 'Completed', tone: 'success' },
+  cancelled: { label: 'Cancelled', tone: 'danger' },
+  canceled: { label: 'Cancelled', tone: 'danger' },
+  deleted: { label: 'Cancelled', tone: 'danger' },
+  void: { label: 'Cancelled', tone: 'danger' },
+  voided: { label: 'Cancelled', tone: 'danger' },
+  rejected: { label: 'Cancelled', tone: 'danger' },
+  pending_approval: { label: 'Needs approval', tone: 'warning' },
+  manual_review: { label: 'Needs approval', tone: 'warning' },
+  awaiting_verification: { label: 'Needs approval', tone: 'warning' },
+  review: { label: 'Needs approval', tone: 'warning' },
+  needs_approval: { label: 'Needs approval', tone: 'warning' },
+  pending: { label: 'Needs approval', tone: 'warning' },
+  payment_pending: { label: 'Needs approval', tone: 'warning' },
+}
+
 function normalize(value: unknown): string {
   return typeof value === 'string'
     ? value.trim().toLowerCase().replace(/[\s-]+/g, '_')
     : ''
 }
 
-export function statusBadgeLabel(value: unknown, kind: StatusBadgeKind = 'generic'): string {
+export function statusBadgePresentation(value: unknown, kind: StatusBadgeKind = 'generic'): StatusPresentation {
   const status = normalize(value)
 
-  if (['paid', 'success', 'settled'].includes(status)) return 'Paid'
-  if (['confirmed', 'approved'].includes(status)) return 'Confirmed'
-  if (['completed', 'complete'].includes(status)) return 'Completed'
-  if (['cancelled', 'canceled', 'deleted', 'void', 'voided', 'rejected'].includes(status)) return 'Cancelled'
-
-  if (kind === 'payment' && ['manual_review', 'awaiting_verification', 'review'].includes(status)) {
-    return 'Payment review'
+  if (!status) {
+    return {
+      label: kind === 'payment' ? 'Payment not recorded' : 'Not recorded',
+      tone: 'neutral',
+    }
   }
 
-  if (['pending_approval', 'manual_review', 'awaiting_verification', 'review', 'needs_approval'].includes(status)) {
-    return 'Needs approval'
+  if (kind === 'payment') {
+    if (['manual_review', 'awaiting_verification', 'review'].includes(status)) {
+      return { label: 'Payment review', tone: 'warning' }
+    }
+    if (['pending', 'payment_pending', 'partial', 'unpaid'].includes(status)) {
+      return { label: 'Payment pending', tone: 'warning' }
+    }
   }
 
-  if (kind === 'payment' && ['pending', 'payment_pending', 'partial', 'unpaid'].includes(status)) {
-    return 'Payment pending'
-  }
+  const shared = SHARED_STATUS_PRESENTATIONS[status]
+  if (shared) return shared
 
-  if (['pending', 'payment_pending'].includes(status)) {
-    return kind === 'payment' ? 'Payment pending' : 'Needs approval'
+  return {
+    label: status.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
+    tone: kind === 'payment' ? 'warning' : 'neutral',
   }
-
-  if (!status) return kind === 'payment' ? 'Payment pending' : 'Needs approval'
-  return status.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
-function statusTone(value: unknown, kind: StatusBadgeKind): StatusTone {
-  const status = normalize(value)
-  if (['cancelled', 'canceled', 'deleted', 'void', 'voided', 'rejected'].includes(status)) return 'danger'
-  if (['paid', 'success', 'settled', 'confirmed', 'approved', 'completed', 'complete'].includes(status)) return 'success'
-  if (
-    ['pending', 'pending_approval', 'payment_pending', 'partial', 'unpaid', 'manual_review', 'awaiting_verification', 'review', 'needs_approval'].includes(status)
-    || !status
-  ) return 'warning'
-  return kind === 'payment' ? 'warning' : 'neutral'
+export function statusBadgeLabel(value: unknown, kind: StatusBadgeKind = 'generic'): string {
+  return statusBadgePresentation(value, kind).label
+}
+
+export function statusBadgeTone(value: unknown, kind: StatusBadgeKind = 'generic'): StatusTone {
+  return statusBadgePresentation(value, kind).tone
 }
 
 export default function StatusBadge({
@@ -58,10 +83,10 @@ export default function StatusBadge({
   kind?: StatusBadgeKind
   className?: string
 }) {
-  const tone = statusTone(status, kind)
+  const presentation = statusBadgePresentation(status, kind)
   return (
-    <span className={`status-badge status-badge--${tone}${className ? ` ${className}` : ''}`}>
-      {statusBadgeLabel(status, kind)}
+    <span className={`status-badge status-badge--${presentation.tone}${className ? ` ${className}` : ''}`}>
+      {presentation.label}
     </span>
   )
 }

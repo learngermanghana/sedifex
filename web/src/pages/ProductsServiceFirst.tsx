@@ -1,5 +1,5 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
   collection,
@@ -19,6 +19,7 @@ import { requestAiAdvisor } from '../api/aiAdvisor'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
+import { useStorePreferenceSync } from '../hooks/useStorePreferenceSync'
 import { useMemberships } from '../hooks/useMemberships'
 import type { ItemType, Product } from '../types/product'
 import { productMatchesSearch } from '../utils/productSearch'
@@ -588,7 +589,6 @@ export default function ProductsServiceFirst({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(openEditorInitially)
   const [search, setSearch] = useState('')
-  const searchHydrationRef = useRef<{ storeId: string; value: string; pending: boolean } | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -631,36 +631,16 @@ export default function ProductsServiceFirst({
     }
   }, [])
 
-  useEffect(() => {
-    if (!storeId) {
-      searchHydrationRef.current = null
-      return
-    }
-    let restored = ''
-    try {
-      restored = localStorage.getItem(`${PRODUCT_SEARCH_KEY_PREFIX}${storeId}`) || ''
-    } catch (storageError) {
-      console.warn('[products] Unable to load search preference', storageError)
-    }
-    searchHydrationRef.current = { storeId, value: restored, pending: true }
-    setSearch(restored)
-  }, [storeId])
-
-  useEffect(() => {
-    if (!storeId) return
-    const hydration = searchHydrationRef.current
-    if (!hydration || hydration.storeId !== storeId) return
-    if (hydration.pending) {
-      if (search === hydration.value) hydration.pending = false
-      return
-    }
-    try {
-      localStorage.setItem(`${PRODUCT_SEARCH_KEY_PREFIX}${storeId}`, search)
-      hydration.value = search
-    } catch (storageError) {
-      console.warn('[products] Unable to save search preference', storageError)
-    }
-  }, [search, storeId])
+  const { clearPreference: clearSearchPreference } = useStorePreferenceSync<string>({
+    storeId,
+    keyPrefix: PRODUCT_SEARCH_KEY_PREFIX,
+    value: search,
+    defaultValue: '',
+    apply: restored => setSearch(restored),
+    serialize: current => current,
+    deserialize: raw => raw,
+    debugName: 'products',
+  })
 
   useEffect(() => {
     if (!storeId) {
@@ -1124,6 +1104,7 @@ export default function ProductsServiceFirst({
               <label className="field__label" htmlFor="items-search">Search</label>
               <input id="items-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search products or services" />
             </div>
+            {search ? <button type="button" className="button button--ghost button--small" onClick={clearSearchPreference}>Clear search</button> : null}
           </div>
 
           <div className="products-page__list" aria-live="polite">
