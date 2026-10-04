@@ -181,6 +181,48 @@ or:
 item.type === 'SERVICE'
 ```
 
+### Tour packages
+
+A merchant creates a tour in **Items → Tour package**. Tour packages remain service-compatible in the integration contract so existing booking and checkout integrations do not need a new top-level catalog type.
+
+A tour package returned by `/v1IntegrationProducts` uses:
+
+```json
+{
+  "itemType": "service",
+  "type": "SERVICE",
+  "serviceKind": "tour_package",
+  "sourceItemType": "tour_package",
+  "tour": {
+    "destination": "Japan",
+    "tourStyle": "Leisure & Culture",
+    "durationDays": 6,
+    "durationNights": 5,
+    "startingCity": "Tokyo",
+    "endingCity": "Osaka",
+    "shortSummary": "Tokyo, Hakone, Kyoto and Osaka in one curated trip.",
+    "itinerary": [
+      { "day": 1, "title": "Tokyo Arrival", "description": "Airport transfer and hotel check-in." }
+    ],
+    "inclusions": ["5 nights accommodation"],
+    "exclusions": ["International flights"],
+    "capacity": 20,
+    "allowDepositPayment": true,
+    "depositAmount": 500
+  }
+}
+```
+
+Use `serviceKind === "tour_package"` or `sourceItemType === "tour_package"` to render a dedicated Tours experience on the connected website.
+
+The package record contains the reusable tour content. Specific departure dates are separate availability records. Fetch them with:
+
+```http
+GET /v1IntegrationAvailability?storeId=<storeId>&serviceId=<tourItemId>&from=<fromIso>&to=<toIso>
+```
+
+Tour departures use `eventKind: "trip"`. When a visitor selects a departure, submit its `slotId` with the booking so Sedifex can track seats against that departure.
+
 Public fallback:
 
 ```http
