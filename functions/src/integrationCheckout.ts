@@ -201,7 +201,7 @@ function getFirstText(record: Record<string, unknown>, keys: string[], max = 220
 
 function normalizeStoredItemType(value: unknown): 'product' | 'service' | 'course' | null {
   const normalized = clean(value, 50).toLowerCase().replace(/[\s_-]+/g, '_')
-  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking') return 'service'
+  if (normalized === 'service' || normalized === 'service_booking' || normalized === 'booking' || normalized === 'tour_package' || normalized === 'tour' || normalized === 'trip') return 'service'
   if (normalized === 'course' || normalized === 'class' || normalized === 'training') return 'course'
   if (normalized === 'product' || normalized === 'product_order' || normalized === 'physical_product') return 'product'
   return null
