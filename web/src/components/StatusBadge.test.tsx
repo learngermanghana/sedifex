@@ -23,6 +23,15 @@ describe('StatusBadge', () => {
     expect(statusBadgeTone('voided', 'generic')).toBe('danger')
   })
 
+  it('keeps unpaid and partial generic statuses visually actionable', () => {
+    expect(statusBadgeLabel('unpaid', 'generic')).toBe('Unpaid')
+    expect(statusBadgeTone('unpaid', 'generic')).toBe('warning')
+    expect(statusBadgeLabel('partial', 'generic')).toBe('Partial')
+    expect(statusBadgeTone('partial', 'generic')).toBe('warning')
+    expect(statusBadgeLabel('unpaid', 'payment')).toBe('Payment pending')
+    expect(statusBadgeLabel('partial', 'payment')).toBe('Payment pending')
+  })
+
   it('renders the centralized label and tone', () => {
     render(<StatusBadge status="awaiting_verification" kind="payment" />)
 
