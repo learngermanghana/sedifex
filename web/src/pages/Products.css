@@ -803,11 +803,6 @@
   font-size: 12px;
 }
 
-.products-page__form {
-  display: grid;
-  gap: 14px;
-}
-
 .products-page__image-preview-box {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
@@ -941,8 +936,18 @@
 .products-page__price-row {
   display: grid;
   grid-template-columns: minmax(220px, 0.75fr) minmax(220px, 1fr);
-  gap: 10px;
+  gap: 12px;
   align-items: center;
+}
+
+.products-page__price-row select {
+  font-weight: 600;
+}
+
+.products-page__price-row input[type='number'] {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .products-page__currency-conversion {
