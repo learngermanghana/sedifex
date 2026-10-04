@@ -365,9 +365,32 @@ function getProductDescriptionAngle(itemName: string, category: string) {
 }
 
 function generateItemDescription(draft: Draft): string {
-  const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'service' ? 'This service' : 'This product')
+  const itemName = titleCase(draft.name.trim()) || (draft.itemType === 'course' ? 'This course' : draft.itemType === 'tour_package' ? 'This tour' : draft.itemType === 'service' ? 'This service' : 'This product')
   const category = normalizeCategory(draft.category, draft.itemType)
   const locationText = draft.location.trim()
+
+  if (draft.itemType === 'tour_package') {
+    const destination = draft.destination.trim() || 'the selected destination'
+    const durationDays = cleanNumber(draft.durationDays)
+    const durationNights = cleanNumber(draft.durationNights)
+    const route = [draft.startingCity.trim(), draft.endingCity.trim()].filter(Boolean).join(' to ')
+    const durationText = durationDays
+      ? `${durationDays} day${durationDays === 1 ? '' : 's'}${durationNights !== null ? ` / ${durationNights} night${durationNights === 1 ? '' : 's'}` : ''}`
+      : ''
+    const intro = draft.shortSummary.trim()
+      || `${itemName} is a curated tour package to ${destination}${durationText ? ` lasting ${durationText}` : ''}.`
+    const routeText = route ? `The journey runs from ${route}.` : ''
+    const styleText = draft.tourStyle.trim() ? `Tour style: ${draft.tourStyle.trim()}.` : ''
+    return cleanSavedDescription([
+      intro,
+      routeText,
+      styleText,
+      '- Review the itinerary, inclusions, and exclusions before choosing a departure.',
+      '- Select an available trip date and book the number of travellers you need.',
+      '- Deposit or full-payment options can be offered when enabled for this package.',
+      'Best for: travellers who want a clearly structured package with bookable departures.',
+    ].filter(Boolean).join('\n\n'))
+  }
 
   if (draft.itemType === 'course') {
     const level = draft.courseLevel.trim() || 'all levels'
