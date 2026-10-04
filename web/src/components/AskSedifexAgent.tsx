@@ -126,7 +126,7 @@ function firstNumber(data: Record<string, unknown>, keys: string[]) {
 
 function normalizeItem(id: string, data: Record<string, unknown>): AgentItem {
   const rawItemType = firstString(data, ['itemType', 'listingType', 'type'], 'product').toLowerCase()
-  const itemType = rawItemType === 'service' ? 'service' : rawItemType === 'course' ? 'course' : 'product'
+  const itemType = rawItemType === 'service' || rawItemType === 'tour_package' ? 'service' : rawItemType === 'course' ? 'course' : 'product'
   const price = firstNumber(data, ['price', 'sellingPrice', 'salePrice', 'amount', 'fee'])
   const stockCount = firstNumber(data, ['stockCount', 'stock', 'quantity', 'openingStock', 'qty'])
   const name = firstString(data, ['name', 'productName', 'serviceName', 'courseName', 'title'], 'Untitled item')
