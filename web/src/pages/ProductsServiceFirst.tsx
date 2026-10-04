@@ -406,7 +406,8 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
       : 'product'
   const itemFormType: ItemFormType = itemType === 'course' || (itemType === 'service' && data.listingType === 'course') ? 'course' : itemType
   const name = typeof data.name === 'string' && data.name.trim() ? titleCase(data.name) : 'Untitled item'
-  const imageUrl = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl.trim() : null
+  const imageUrls = normalizeItemImages(data.imageUrl, data.imageUrls)
+  const imageUrl = imageUrls[0] || null
   return {
     id,
     name,
@@ -428,7 +429,7 @@ function normalizeProduct(id: string, data: Record<string, unknown>): Product {
     batchNumber: itemType === 'product' && typeof data.batchNumber === 'string' ? data.batchNumber : null,
     showOnReceipt: itemType === 'product' && data.showOnReceipt === true,
     imageUrl,
-    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls.filter((item): item is string => typeof item === 'string') : imageUrl ? [imageUrl] : [],
+    imageUrls,
     imageAlt: typeof data.imageAlt === 'string' && data.imageAlt.trim() ? data.imageAlt.trim() : name,
     isPublished: data.isPublished === true,
     status: data.status === 'published' ? 'published' : 'draft',
@@ -1111,6 +1112,7 @@ export default function ProductsServiceFirst({
                 type="file"
                 accept="image/*"
                 multiple
+                disabled={imageUploadState === 'uploading'}
                 onChange={async event => {
                   const selectedFiles = Array.from(event.target.files ?? [])
                   if (selectedFiles.length === 0) return
@@ -1232,7 +1234,9 @@ export default function ProductsServiceFirst({
               <label className="checkbox"><input type="checkbox" checked={draft.isWebsiteVisible} onChange={event => setDraft(current => ({ ...current, isWebsiteVisible: event.target.checked }))} /><span>Show on your website</span></label>
             </div>
             <div className="products-page__list-actions">
-              <button type="submit" className="button button--primary" disabled={saving || !canManage}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}</button>
+              <button type="submit" className="button button--primary" disabled={saving || imageUploadState === 'uploading' || !canManage}>
+                {imageUploadState === 'uploading' ? 'Uploading photos…' : saving ? 'Saving…' : editingId ? 'Save changes' : 'Add item'}
+              </button>
               <button
                 type="button"
                 className="button button--ghost"
