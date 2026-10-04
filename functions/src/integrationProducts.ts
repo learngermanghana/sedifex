@@ -38,6 +38,23 @@ type IntegrationProductItem = {
   imageAlt?: string | null
   brand?: string | null
   manufacturerName?: string | null
+  serviceKind?: string | null
+  sourceItemType?: string | null
+  tour?: {
+    destination: string | null
+    tourStyle: string | null
+    durationDays: number | null
+    durationNights: number | null
+    startingCity: string | null
+    endingCity: string | null
+    shortSummary: string | null
+    itinerary: Array<{ day: number; title: string; description: string }>
+    inclusions: string[]
+    exclusions: string[]
+    capacity: number | null
+    allowDepositPayment: boolean
+    depositAmount: number | null
+  } | null
   sortOrder?: number | null
   order?: number | null
   updatedAt?: string | null
@@ -126,8 +143,30 @@ function toDateIso(value: unknown) {
 
 function normalizeType(value: unknown, fallback: CatalogType): CatalogType {
   const text = cleanIntegrationText(value, 30).toUpperCase()
+  if (text === 'TOUR_PACKAGE' || text === 'TOUR' || text === 'TRIP') return 'SERVICE'
   if (text === 'PRODUCT' || text === 'SERVICE' || text === 'COURSE') return text
   return fallback
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => cleanIntegrationText(item, 600))
+    .filter(Boolean)
+}
+
+function itineraryValue(value: unknown): Array<{ day: number; title: string; description: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry, index) => {
+      const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+      return {
+        day: Math.max(1, Math.floor(numberValue(record.day) ?? index + 1)),
+        title: cleanIntegrationText(record.title, 220),
+        description: cleanIntegrationText(record.description, 1200),
+      }
+    })
+    .filter(entry => entry.title || entry.description)
 }
 
 function itemTypeFromCatalogType(type: CatalogType) {
@@ -195,8 +234,11 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
   const name = getName(record)
   if (!name) return null
 
+  const sourceItemType = cleanIntegrationText(record.itemType ?? record.item_type, 80).toLowerCase() || null
+  const serviceKind = cleanIntegrationText(record.serviceKind, 80).toLowerCase() || null
   const type = normalizeType(record.type ?? record.item_type ?? record.itemType ?? record.listingType, fallbackType)
   const itemType = itemTypeFromCatalogType(type)
+  const isTourPackage = sourceItemType === 'tour_package' || serviceKind === 'tour_package'
   const priceMinor = getPriceMinor(record)
   const imageUrls = getImageUrls(record)
   const order = numberValue(record.order)
@@ -220,6 +262,23 @@ function normalizeDoc(id: string, storeId: string, record: Record<string, unknow
     imageAlt: cleanIntegrationText(record.imageAlt ?? record.alt, 220) || name,
     brand: brand || null,
     manufacturerName: brand || null,
+    serviceKind: serviceKind || null,
+    sourceItemType,
+    tour: isTourPackage ? {
+      destination: cleanIntegrationText(record.destination, 220) || null,
+      tourStyle: cleanIntegrationText(record.tourStyle, 220) || null,
+      durationDays: numberValue(record.durationDays),
+      durationNights: numberValue(record.durationNights),
+      startingCity: cleanIntegrationText(record.startingCity, 220) || null,
+      endingCity: cleanIntegrationText(record.endingCity, 220) || null,
+      shortSummary: cleanIntegrationText(record.shortSummary, 800) || null,
+      itinerary: itineraryValue(record.itinerary),
+      inclusions: stringArray(record.inclusions),
+      exclusions: stringArray(record.exclusions),
+      capacity: numberValue(record.capacity),
+      allowDepositPayment: record.allowDepositPayment === true,
+      depositAmount: numberValue(record.depositAmount),
+    } : null,
     sortOrder: sortOrder === null ? null : sortOrder,
     order: order === null ? null : order,
     updatedAt: toDateIso(record.updatedAt ?? record.createdAt),
