@@ -25,6 +25,7 @@ export const ITEM_CATEGORIES = [
   "Gifts & Party Items",
   "Services",
   "Courses & Training",
+  "Travel & Tours",
   "Digital Products",
   "Other",
 ] as const;
@@ -186,6 +187,13 @@ export const ITEM_SUBCATEGORIES: Record<string, readonly string[]> = {
     "Beauty & Fashion",
     "Academic",
     "Creative Skills",
+  ],
+  "Travel & Tours": [
+    "Tour Packages",
+    "City Tours",
+    "Group Tours",
+    "Adventure Tours",
+    "Leisure & Culture",
   ],
   "Digital Products": [
     "E-books",
