@@ -354,7 +354,7 @@ async function loadPaymentRoutingFromFirestore(storeId: string): Promise<Resolve
 function normalizeItemType(value: unknown): NormalizedItemType | '' {
   const normalized = clean(value, 80).toLowerCase().replace(/[\s_-]+/g, '_')
   if (normalized === 'course' || normalized === 'class' || normalized === 'training') return 'course'
-  if (normalized === 'service' || normalized === 'booking' || normalized === 'service_booking' || normalized === 'service_purchase') return 'service'
+  if (normalized === 'service' || normalized === 'booking' || normalized === 'service_booking' || normalized === 'service_purchase' || normalized === 'tour_package' || normalized === 'tour' || normalized === 'trip') return 'service'
   if (normalized === 'product' || normalized === 'product_order' || normalized === 'physical_product') return 'product'
   return ''
 }
