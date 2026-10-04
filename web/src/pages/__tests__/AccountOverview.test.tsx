@@ -19,6 +19,19 @@ vi.mock('../../hooks/useMemberships', () => ({
   useMemberships: () => mockUseMemberships(),
 }))
 
+const mockUpdatePreferences = vi.fn()
+vi.mock('../../hooks/useStorePreferences', () => ({
+  useStorePreferences: () => ({
+    preferences: {
+      navigation: {
+        industry: 'shop',
+        enabledModules: ['account'],
+      },
+    },
+    updatePreferences: mockUpdatePreferences,
+  }),
+}))
+
 vi.mock('react-router-dom', () => ({
   Link: ({ children, ...props }: React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>) => (
     <a {...props}>{children}</a>
