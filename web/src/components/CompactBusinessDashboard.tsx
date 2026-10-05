@@ -15,6 +15,7 @@ type WidgetId =
   | 'outstanding-invoices'
   | 'low-stock'
   | 'payments-due'
+  | 'booking-payments'
   | 'pending-client-tasks'
   | 'recent-leads'
   | 'staff-activity'
@@ -57,6 +58,7 @@ const WIDGET_LABELS: Record<WidgetId, { label: string; description: string }> = 
   'outstanding-invoices': { label: 'Outstanding invoices', description: 'Invoices that still have an unpaid balance.' },
   'low-stock': { label: 'Low-stock products', description: 'Products at or below their reorder point.' },
   'payments-due': { label: 'Customer balances', description: 'Recorded customer balances and due dates from CRM.' },
+  'booking-payments': { label: 'Booking payments', description: 'Paid and unpaid client bookings that need payment follow-up.' },
   'pending-client-tasks': { label: 'Pending client tasks', description: 'Open event tasks and client actions.' },
   'recent-leads': { label: 'Recent leads', description: 'Newest lead or customer activity in CRM.' },
   'staff-activity': { label: 'Staff activity', description: 'Recent staff changes and team activity.' },
@@ -64,9 +66,9 @@ const WIDGET_LABELS: Record<WidgetId, { label: string; description: string }> = 
 
 const DEFAULT_WIDGETS_BY_INDUSTRY: Record<Industry, WidgetId[]> = {
   shop: ['needs-attention', 'todays-sales', 'low-stock', 'outstanding-invoices'],
-  travel: ['needs-attention', 'upcoming', 'payments-due', 'recent-leads'],
+  travel: ['needs-attention', 'upcoming', 'booking-payments', 'recent-leads'],
   ngo: ['needs-attention', 'recent-leads', 'payments-due', 'staff-activity'],
-  school: ['needs-attention', 'upcoming', 'outstanding-invoices', 'recent-leads'],
+  school: ['needs-attention', 'upcoming', 'booking-payments', 'recent-leads'],
   event: ['needs-attention', 'upcoming', 'payments-due', 'pending-client-tasks', 'recent-leads'],
 }
 
@@ -170,6 +172,21 @@ function bookingDate(record: RecordData) {
   return pickDate(record, ['startAt', 'scheduledAt', 'appointmentAt', 'createdAtServer', 'createdAt'])
 }
 
+function bookingPaymentStatus(record: RecordData) {
+  const payment = asRecord(record.payment)
+  return normalizeStatus(
+    record.paymentStatus
+      ?? record.payment_status
+      ?? payment.status
+      ?? payment.paymentStatus
+      ?? payment.payment_status,
+  ) || 'pending'
+}
+
+function isPaidPaymentStatus(status: string) {
+  return ['paid', 'success', 'confirmed', 'captured', 'completed', 'settled'].includes(status)
+}
+
 function eventDate(record: RecordData) {
   return pickDate(record, ['eventDate', 'date', 'startDate', 'startAt'])
     || toDate(pickText(record, ['eventDate', 'date', 'startDate']))
@@ -265,7 +282,6 @@ export default function CompactBusinessDashboard() {
   const enabledModules = useMemo(() => new Set(preferences.navigation.enabledModules), [preferences.navigation.enabledModules])
 
   const [sales, setSales] = useState<RecordData[]>([])
-  const [orders, setOrders] = useState<RecordData[]>([])
   const [bookings, setBookings] = useState<RecordData[]>([])
   const [products, setProducts] = useState<RecordData[]>([])
   const [customers, setCustomers] = useState<RecordData[]>([])
@@ -285,7 +301,6 @@ export default function CompactBusinessDashboard() {
   useEffect(() => {
     if (!storeId) {
       setSales([])
-      setOrders([])
       setBookings([])
       setProducts([])
       setCustomers([])
@@ -302,7 +317,6 @@ export default function CompactBusinessDashboard() {
     // recent activity only; that query is explicitly ordered before limiting.
     const unsubscribers = [
       onSnapshot(query(collection(db, 'sales'), where('storeId', '==', storeId)), snapshot => setSales(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setSales([])),
-      onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId)), snapshot => setOrders(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setOrders([])),
       onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => setBookings(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setBookings([])),
       onSnapshot(query(collection(db, 'products'), where('storeId', '==', storeId)), snapshot => setProducts(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setProducts([])),
       onSnapshot(query(collection(db, 'customers'), where('storeId', '==', storeId)), snapshot => setCustomers(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setCustomers([])),
@@ -319,6 +333,7 @@ export default function CompactBusinessDashboard() {
     const ids: WidgetId[] = ['needs-attention', 'staff-activity']
     if (industry === 'shop' || enabledModules.has('sell')) ids.push('todays-sales')
     if (enabledModules.has('bookings') || enabledModules.has('upcoming-events') || enabledModules.has('events')) ids.push('upcoming')
+    if (enabledModules.has('bookings')) ids.push('booking-payments')
     if (enabledModules.has('invoices')) ids.push('outstanding-invoices')
     if (enabledModules.has('products')) ids.push('low-stock')
     if (industry === 'event' || enabledModules.has('events')) ids.push('pending-client-tasks')
@@ -354,7 +369,6 @@ export default function CompactBusinessDashboard() {
   const today = startOfToday()
   const todaySales = sales.filter(item => normalizeStatus(item.status) !== 'voided' && isToday(saleDate(item)))
   const todaySalesTotal = todaySales.reduce((sum, item) => sum + saleAmount(item), 0)
-  const todayOrders = orders.filter(item => isToday(pickDate(item, ['createdAtServer', 'createdAt', 'updatedAt'])))
   const todayBookings = bookings.filter(item => isToday(pickDate(item, ['createdAtServer', 'createdAt', 'updatedAt'])))
 
   const lowStockItems = products
@@ -400,6 +414,28 @@ export default function CompactBusinessDashboard() {
 
   const customerOutstandingBalance = customerDebtRows.reduce((sum, item) => sum + item.balance, 0)
   const overdueCustomerDebts = customerDebtRows.filter(item => item.dueDate && item.dueDate < today)
+
+  const bookingPaymentRows = bookings
+    .map(item => {
+      const payment = asRecord(item.payment)
+      const status = bookingPaymentStatus(item)
+      const bookingStatus = normalizeStatus(item.bookingStatus ?? item.status)
+      const amount = pickNumber(item, ['amountReceived', 'paymentAmount', 'amountPaid', 'amount', 'total'], Number.NaN)
+      const nestedAmount = pickNumber(payment, ['amountReceived', 'amountPaid', 'amount', 'total'], 0)
+      return {
+        id: pickText(item, ['id'], pickText(item, ['reference', 'bookingId'], 'booking')),
+        customer: customerName(item),
+        service: pickText(item, ['serviceName', 'internalServiceName', 'itemName', 'productName'], 'Booking'),
+        status,
+        bookingStatus,
+        amount: Number.isFinite(amount) ? amount : nestedAmount,
+        to: `/bookings/${pickText(item, ['id'], '')}`,
+      }
+    })
+    .filter(item => !['cancelled', 'deleted'].includes(item.bookingStatus))
+
+  const paidBookingPayments = bookingPaymentRows.filter(item => isPaidPaymentStatus(item.status))
+  const bookingPaymentsNeedingFollowUp = bookingPaymentRows.filter(item => !isPaidPaymentStatus(item.status))
 
   const bookingEntries = bookings
     .map(item => ({
@@ -460,11 +496,15 @@ export default function CompactBusinessDashboard() {
   ).length
   const attentionCount = lowStockItems.length + overdueInvoices.length + overdueCustomerDebts.length
     + bookingAttentionCount
+    + bookingPaymentsNeedingFollowUp.length
     + pendingClientTasks
 
   const attentionSignals = [
     enabledModules.has('bookings') && bookingAttentionCount > 0
       ? { id: 'bookings', count: bookingAttentionCount, label: `booking${bookingAttentionCount === 1 ? '' : 's'} need review`, to: '/bookings' }
+      : null,
+    enabledModules.has('bookings') && bookingPaymentsNeedingFollowUp.length > 0
+      ? { id: 'booking-payments', count: bookingPaymentsNeedingFollowUp.length, label: `booking payment${bookingPaymentsNeedingFollowUp.length === 1 ? '' : 's'} need follow-up`, to: '/settlement' }
       : null,
     enabledModules.has('invoices') && overdueInvoices.length > 0
       ? { id: 'invoices', count: overdueInvoices.length, label: `overdue invoice${overdueInvoices.length === 1 ? '' : 's'}`, to: '/invoices' }
@@ -495,8 +535,8 @@ export default function CompactBusinessDashboard() {
     if (industry === 'travel' || industry === 'school') {
       return [
         { id: 'bookings-today', label: industry === 'school' ? 'Classes/bookings today' : 'Bookings today', value: String(todayBookings.length), hint: 'New booking records today' },
+        { id: 'payment-follow-up', label: 'Payment follow-up', value: String(bookingPaymentsNeedingFollowUp.length), hint: `${paidBookingPayments.length} booking payment${paidBookingPayments.length === 1 ? '' : 's'} confirmed` },
         { id: 'upcoming', label: 'Upcoming', value: String(bookingEntries.length), hint: industry === 'school' ? 'Future classes/bookings' : 'Future bookings' },
-        { id: 'payments-due', label: 'Customer balance', value: formatMoney(customerOutstandingBalance), hint: customerBalanceHint },
         { id: 'new-leads', label: industry === 'school' ? 'New contacts' : 'New leads', value: String(newLeadCount), hint: 'Added in the last 7 days' },
       ]
     }
@@ -510,9 +550,9 @@ export default function CompactBusinessDashboard() {
     }
     return [
       { id: 'sales-today', label: "Today's sales", value: formatMoney(todaySalesTotal), hint: `${todaySales.length} POS sale${todaySales.length === 1 ? '' : 's'}` },
-      { id: 'orders-today', label: 'Orders today', value: String(todayOrders.length), hint: 'Connected website orders' },
+      { id: 'open-invoices', label: 'Open invoices', value: String(outstandingInvoices.length), hint: outstandingBalance > 0 ? `${formatMoney(outstandingBalance)} outstanding` : 'No outstanding invoice balance' },
       { id: 'low-stock', label: 'Low stock', value: String(lowStockItems.length), hint: 'Products needing attention' },
-      { id: 'payments-due', label: 'Customer balance', value: formatMoney(customerOutstandingBalance), hint: customerBalanceHint },
+      { id: 'customers', label: 'Customers', value: String(customers.length), hint: 'Saved client records' },
     ]
   })()
 
@@ -521,6 +561,7 @@ export default function CompactBusinessDashboard() {
     ...overdueInvoices.slice(0, 2).map(item => ({ id: `invoice-${item.id}`, title: `${item.reference} is overdue`, meta: `${item.customer} · due ${formatCompactDate(item.dueDate)}`, value: item.balance > 0 ? formatMoney(item.balance) : undefined, to: '/invoices', tone: 'danger' as const })),
     ...lowStockItems.slice(0, 2).map(item => ({ id: `stock-${item.id}`, title: item.stock <= 0 ? `${item.name} is out of stock` : `${item.name} is running low`, meta: item.reorderPoint ? `Reorder point ${item.reorderPoint}` : 'Check inventory level', value: item.stock <= 0 ? 'Out' : `${item.stock} left`, to: '/products', tone: 'warning' as const })),
     ...bookings.filter(item => ['pending', 'pending_approval', 'manual_review'].includes(normalizeStatus(item.bookingStatus ?? item.status))).slice(0, 2).map(item => ({ id: `booking-${pickText(item, ['id'], Math.random().toString())}`, title: 'Booking needs confirmation', meta: customerName(item), to: '/bookings', tone: 'warning' as const })),
+    ...bookingPaymentsNeedingFollowUp.slice(0, 2).map(item => ({ id: `booking-payment-${item.id}`, title: `${item.customer} has a booking payment to review`, meta: `${item.service} · ${item.status.replace(/_/g, ' ')}`, value: item.amount > 0 ? formatMoney(item.amount) : undefined, to: item.to, tone: item.status.includes('fail') ? 'danger' as const : 'warning' as const })),
     ...clientTaskEntries.slice(0, 2).map(item => ({ id: `event-${item.id}`, title: `${item.title} has open tasks`, meta: `${item.customer} · ${item.openTasks} pending`, to: item.to, tone: 'warning' as const })),
   ].slice(0, 3)
 
@@ -573,6 +614,25 @@ export default function CompactBusinessDashboard() {
           linkLabel: 'Manage inventory',
           items: lowStockItems.slice(0, 3).map(item => ({ id: item.id, title: item.name, meta: item.reorderPoint ? `Reorder at ${item.reorderPoint}` : 'Reorder point not set', value: item.stock <= 0 ? 'Out' : `${item.stock} left`, to: '/products', tone: item.stock <= 0 ? 'danger' : 'warning' })),
           empty: 'No low-stock products.',
+        }
+      case 'booking-payments':
+        return {
+          id,
+          title: 'Booking payments',
+          eyebrow: 'Payments',
+          summary: String(bookingPaymentsNeedingFollowUp.length),
+          description: `${paidBookingPayments.length} confirmed · ${bookingPaymentsNeedingFollowUp.length} need follow-up.`,
+          to: '/settlement',
+          linkLabel: 'View payments',
+          items: bookingPaymentsNeedingFollowUp.slice(0, 3).map(item => ({
+            id: `booking-payment-${item.id}`,
+            title: item.customer,
+            meta: `${item.service} · ${item.status.replace(/_/g, ' ')}`,
+            value: item.amount > 0 ? formatMoney(item.amount) : 'Review',
+            to: item.to,
+            tone: item.status.includes('fail') ? 'danger' : 'warning',
+          })),
+          empty: 'All current booking payments are confirmed.',
         }
       case 'payments-due':
         return {
@@ -713,14 +773,22 @@ export default function CompactBusinessDashboard() {
     <main className="compact-dashboard">
       <header className="compact-dashboard__header">
         <div>
-          <p className="compact-dashboard__eyebrow">Business dashboard</p>
-          <h1>What needs your attention today?</h1>
-          <p>Four quick numbers at the top, then only the widgets this store chooses to keep.</p>
+          <p className="compact-dashboard__eyebrow">Sedifex admin</p>
+          <h1>Bookings, payments and clients at a glance</h1>
+          <p>Start with the work that needs attention, then move directly into bookings, payment activity, client records or business settings.</p>
         </div>
         <button type="button" className="button button--secondary" onClick={() => setIsCustomizing(true)}>Customize dashboard</button>
       </header>
 
       {layoutMessage && !isCustomizing ? <p className={`compact-dashboard__message${layoutMessage.startsWith('Unable') ? ' is-error' : ''}`}>{layoutMessage}</p> : null}
+
+      <nav className="compact-dashboard__quick-actions" aria-label="Admin shortcuts">
+        {enabledModules.has('bookings') ? <Link to="/bookings"><strong>Bookings</strong><span>Review client bookings</span></Link> : null}
+        {enabledModules.has('bookings') ? <Link to="/bookings/new"><strong>New booking</strong><span>Add a booking manually</span></Link> : null}
+        <Link to="/settlement"><strong>Payments</strong><span>Track payment activity</span></Link>
+        {enabledModules.has('customers') ? <Link to="/customers"><strong>Clients</strong><span>Open customer records</span></Link> : null}
+        <Link to="/account"><strong>Business account</strong><span>Profile, team and integrations</span></Link>
+      </nav>
 
       <section className={`compact-dashboard__attention-strip${attentionSignals.length ? '' : ' is-clear'}`} aria-label="Needs attention">
         <div className="compact-dashboard__attention-heading">
