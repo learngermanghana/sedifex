@@ -4,7 +4,7 @@ import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
-import { deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
+import { deriveReportPaymentFields } from '../../lib/bookingStatus'
 
 type OrderRow = {
   id: string
@@ -16,7 +16,6 @@ type OrderRow = {
   amount: number
   currency: string
   paymentStatus: string
-  orderStatus: string
   paymentCollectionMode: string
   itemName: string
   itemType: 'product' | 'service' | 'course' | 'manual'
@@ -74,7 +73,7 @@ function itemTypeLabel(type: OrderRow['itemType']) {
 
 function sourceLabel(sourceChannel: string) {
   if (sourceChannel === 'client_website') return 'Client Website'
-  if (sourceChannel === 'sedifex_market') return 'Retired online channel'
+  if (sourceChannel === 'sedifex_market') return 'Legacy channel'
   if (sourceChannel === 'sedifex_custom_page') return 'Sedifex Public Page'
   return sourceChannel.replace(/_/g, ' ')
 }
@@ -86,8 +85,6 @@ function mapOrder(id: string, data: Record<string, unknown>): OrderRow {
   const item = firstItem(data)
   const itemType = readItemType(data)
   const reportFields = deriveReportPaymentFields(data)
-  const bookingStatus = normalizeBookingStatusFromRecord(data)
-  const orderStatus = itemType === 'service' || itemType === 'course' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : asText(data.orderStatus ?? data.order_status ?? data.status, 'pending')
   return {
     id,
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
@@ -98,9 +95,8 @@ function mapOrder(id: string, data: Record<string, unknown>): OrderRow {
     amount: reportFields.amountReceived,
     currency: asText(payment.currency ?? data.currency, 'GHS'),
     paymentStatus: reportFields.paymentStatus,
-    orderStatus,
     paymentCollectionMode: asText(data.paymentCollectionMode ?? data.payment_collection_mode ?? payment.mode, 'online_checkout'),
-    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? item.name ?? item.itemName ?? item.productName ?? item.serviceName, itemType === 'service' || itemType === 'course' ? 'Service booking' : 'Product order'),
+    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? item.name ?? item.itemName ?? item.productName ?? item.serviceName, itemType === 'service' || itemType === 'course' ? 'Service booking' : 'Product sale'),
     itemType,
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
   }
@@ -171,7 +167,9 @@ export default function WebsiteSalesReport() {
 
   const filtered = useMemo(() => orders.filter(order => {
     const channelOk = channel === 'all' || order.sourceChannel === channel
-    const modeOk = paymentMode === 'all' || order.paymentCollectionMode === paymentMode
+    const normalizedMode = order.paymentCollectionMode.toLowerCase()
+    const onlineMode = ['online_checkout', 'paystack', 'card'].includes(normalizedMode)
+    const modeOk = paymentMode === 'all' || (paymentMode === 'online' ? onlineMode : !onlineMode)
     const dateOk = inDateRange(order.createdAt, range)
     const statusOk = paymentStatus === 'all' || (paymentStatus === 'paid' ? isPaidLike(order.paymentStatus) : order.paymentStatus.toLowerCase().includes(paymentStatus))
     const typeOk = itemType === 'all' || order.itemType === itemType
@@ -185,8 +183,6 @@ export default function WebsiteSalesReport() {
     publicPage: filtered.filter(order => order.sourceChannel === 'sedifex_custom_page').length,
     paid: filtered.filter(order => isPaidLike(order.paymentStatus)).length,
     pending: filtered.filter(order => order.paymentStatus.toLowerCase().includes('pending')).length,
-    cancelled: filtered.filter(order => order.orderStatus.toLowerCase().includes('cancel')).length,
-    payOnDelivery: filtered.filter(order => order.paymentCollectionMode === 'pay_on_delivery').length,
     products: filtered.filter(order => order.itemType === 'product').length,
     services: filtered.filter(order => order.itemType === 'service' || order.itemType === 'course').length,
     websiteValue: filtered.filter(order => order.sourceChannel === 'client_website').reduce((sum, order) => sum + order.amount, 0),
@@ -201,7 +197,6 @@ export default function WebsiteSalesReport() {
     { key: 'item', label: 'Item', sortable: true, value: row => row.itemName, render: row => <><strong>{row.itemName}</strong><br /><small>{itemTypeLabel(row.itemType)}</small></> },
     { key: 'amount', label: 'Amount', sortable: true, align: 'right', value: row => row.amount, render: row => formatMoney(row.amount, row.currency) },
     { key: 'payment', label: 'Payment', sortable: true, value: row => row.paymentStatus, render: row => <>{row.paymentStatus}<br /><small>{row.paymentCollectionMode}</small></> },
-    { key: 'order', label: 'Order', sortable: true, value: row => row.orderStatus },
     { key: 'date', label: 'Date', sortable: true, value: row => row.createdAt ?? undefined, render: row => formatDate(row.createdAt) },
   ]
 
@@ -216,7 +211,6 @@ export default function WebsiteSalesReport() {
       itemName: order.itemName,
       itemType: itemTypeLabel(order.itemType),
       paymentStatus: order.paymentStatus,
-      orderStatus: order.orderStatus,
       paymentCollectionMode: order.paymentCollectionMode,
       createdAt: formatDate(order.createdAt),
     })))
@@ -227,11 +221,10 @@ export default function WebsiteSalesReport() {
       title: 'Website sales report',
       subtitle: 'Online sales from connected client websites and public pages.',
       summary: [
-        { label: 'Orders', value: totals.count },
-        { label: 'Order value', value: formatMoney(totals.revenue, totals.currency) },
-        { label: 'Paid orders', value: totals.paid },
+        { label: 'Sales records', value: totals.count },
+        { label: 'Sales value', value: formatMoney(totals.revenue, totals.currency) },
+        { label: 'Paid records', value: totals.paid },
         { label: 'Services/courses', value: totals.services },
-        { label: 'Pay on delivery', value: totals.payOnDelivery },
       ],
       rows: filtered.map(order => ({
         reference: order.reference,
@@ -243,7 +236,6 @@ export default function WebsiteSalesReport() {
         itemName: order.itemName,
         itemType: itemTypeLabel(order.itemType),
         paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
         paymentCollectionMode: order.paymentCollectionMode,
         createdAt: formatDate(order.createdAt),
       })),
@@ -255,22 +247,22 @@ export default function WebsiteSalesReport() {
       <section className="workspace-card">
         <p className="workspace-eyebrow">Reports / Website sales</p>
         <h1>Online and website sales report</h1>
-        <p className="workspace-muted">Detailed sales from connected client websites and public pages, including online payment, manual payment, and pay on delivery.</p>
+        <p className="workspace-muted">Detailed sales and payment activity from connected client websites and public pages.</p>
       </section>
       <section className="workspace-grid workspace-grid--four">
-        <article className="workspace-card"><strong>{totals.count}</strong><span>Orders</span></article>
-        <article className="workspace-card"><strong>{formatMoney(totals.revenue, totals.currency)}</strong><span>Order value</span></article>
-        <article className="workspace-card"><strong>{totals.paid}</strong><span>Paid orders</span></article>
+        <article className="workspace-card"><strong>{totals.count}</strong><span>Sales records</span></article>
+        <article className="workspace-card"><strong>{formatMoney(totals.revenue, totals.currency)}</strong><span>Sales value</span></article>
+        <article className="workspace-card"><strong>{totals.paid}</strong><span>Paid records</span></article>
         <article className="workspace-card"><strong>{totals.pending}</strong><span>Pending payment</span></article>
         <article className="workspace-card"><strong>{totals.services}</strong><span>Services / courses</span></article>
       </section>
       <section className="workspace-grid workspace-grid--three">
-        <article className="workspace-card"><strong>{formatMoney(totals.websiteValue, totals.currency)}</strong><span>Client website · {totals.website} orders</span></article>
-        <article className="workspace-card"><strong>{formatMoney(totals.publicValue, totals.currency)}</strong><span>Public page · {totals.publicPage} orders</span></article>
+        <article className="workspace-card"><strong>{formatMoney(totals.websiteValue, totals.currency)}</strong><span>Client website · {totals.website} records</span></article>
+        <article className="workspace-card"><strong>{formatMoney(totals.publicValue, totals.currency)}</strong><span>Public page · {totals.publicPage} records</span></article>
       </section>
       <section className="workspace-card">
         <div className="workspace-section-header">
-          <div><h2>Order details</h2><p className="workspace-muted">Filter by date, source, payment mode, and status, then export CSV/PDF.</p></div>
+          <div><h2>Sales and payment details</h2><p className="workspace-muted">Filter by date, source, payment mode, and status, then export CSV/PDF.</p></div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="button button--secondary" onClick={exportPdf} disabled={!filtered.length}>Export PDF</button>
             <button type="button" className="button button--primary" onClick={exportRows} disabled={!filtered.length}>Export CSV</button>
@@ -299,9 +291,8 @@ export default function WebsiteSalesReport() {
           </select>
           <select value={paymentMode} onChange={event => setPaymentMode(event.target.value)}>
             <option value="all">All payment modes</option>
-            <option value="online_checkout">Online checkout</option>
-            <option value="pay_on_delivery">Pay on delivery</option>
-            <option value="manual">Manual</option>
+            <option value="online">Online checkout</option>
+            <option value="direct">Direct / manual</option>
           </select>
           <select value={paymentStatus} onChange={event => setPaymentStatus(event.target.value)}>
             <option value="all">All payment statuses</option>
