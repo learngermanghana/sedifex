@@ -129,7 +129,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
   const hideAllPages = () => {
     setDraft(current => ({ ...current, enabledModules: ['account'], customNavItems: [] }))
-    setError('All optional pages are hidden. Account stays available so you can change navigation later.')
+    setError('All optional pages are hidden. Account stays available from the top bar so you can change navigation later.')
   }
 
   const renderPageRow = (item: typeof NAV_ITEMS[number]) => {
