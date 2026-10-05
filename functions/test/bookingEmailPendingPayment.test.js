@@ -47,8 +47,7 @@ function runAutomaticCheckoutChecks() {
   includesAll(bookings, [
     'initializePayment?: unknown',
     'shouldInitializeBookingPayment',
-    "explicit === false",
-    "explicit === true",
+    "return explicit === true && input.paymentAmount > 0 && Boolean(input.customerEmail)",
     'initializeBookingCheckout',
     '/integrationCheckoutCreate',
     "paymentInitializationStatus: initializePayment ? (initializedPayment ? 'initialized' : 'failed') : 'not_requested'",
@@ -56,6 +55,9 @@ function runAutomaticCheckoutChecks() {
     'paymentReference: initializedPayment?.paymentReference || null',
     "functions.logger.error('Automatic booking checkout initialization failed'",
   ], 'integrationBookings')
+
+  assert.ok(!bookings.includes('return modes.some'), 'integrationBookings: payment mode fields must not implicitly initialize checkout')
+  assert.ok(!bookings.includes('normalizedPaymentMode('), 'integrationBookings: legacy payment modes must not be used as checkout opt-in')
 }
 
 runNotificationCopyChecks()
