@@ -129,27 +129,26 @@ export default function RefundPage() {
 
       <section className="mt-8">
         <h2 className="text-xl font-semibold">
-          4. Sedifex Market and connected website customer payments
+          4. Connected website customer payments
         </h2>
 
         <p>
           Customers may pay for products, services, bookings, registrations or
-          other merchant offerings through <code>www.sedifexmarket.com</code> or
-          through a business website connected to Sedifex.
+          other merchant offerings through a business website or payment link connected to Sedifex.
         </p>
 
         <ul>
           <li>
             Payment confirmation is handled through the payment provider and the
-            related Sedifex order or booking record.
+            related Sedifex payment, sale, or booking record.
           </li>
           <li>
-            Product fulfilment, service delivery, booking attendance and any
+            Product or service completion, booking attendance and any
             customer-facing refund request are primarily the responsibility of
             the merchant selling the item or service.
           </li>
           <li>
-            Sedifex may assist with order records, payment references, support
+            Sedifex may assist with payment and transaction records, payment references, support
             information and technical checks, but Sedifex is not automatically
             responsible for refunding a merchant's customer unless required by
             law or by a specific written agreement.
