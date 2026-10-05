@@ -668,6 +668,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const controlsSection = (
     <div className="shell__controls">
       {renderCreateMenu(false)}
+      {accountMenu}
       {workspaceControl}
       {selectableMemberships.length <= 1 && (
         <p className="shell__store-link-hint">
@@ -675,7 +676,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </p>
       )}
       {statusAndSupportControls}
-      {accountMenu}
     </div>
   )
 
