@@ -120,7 +120,7 @@
 @media (max-width: 960px) {
   .shell__mobile-menu-toggle {
     display: inline-flex;
-    margin-left: auto;
+    margin-left: 0;
   }
 
   .shell__menu-toggle {
