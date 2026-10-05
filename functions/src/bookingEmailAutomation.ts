@@ -208,6 +208,8 @@ function totalAmount(data: RecordMap) {
 
 function amountReceived(data: RecordMap) {
   const payment = record(data.payment)
+  const status = paymentStatus(data)
+  if (!verifiedPaid(data) && status !== 'partial') return 0
   const explicit = Math.max(0, firstNumber([
     data.amountReceived,
     data.amount_received,
@@ -226,6 +228,8 @@ function amountReceived(data: RecordMap) {
 }
 
 function amountOutstanding(data: RecordMap) {
+  const status = paymentStatus(data)
+  if (!verifiedPaid(data) && status !== 'partial') return totalAmount(data)
   const payment = record(data.payment)
   const explicit = firstNumber([
     data.amountOutstanding,
@@ -275,6 +279,14 @@ function notificationData(bookingId: string, data: RecordMap) {
     amountReceived: amountReceived(data).toFixed(2),
     amountOutstanding: amountOutstanding(data).toFixed(2),
     receiptNumber: paymentReference(data) || `BK-${bookingId.slice(0, 12)}`,
+    paymentUrl: firstText([
+      data.paymentUrl,
+      data.payment_url,
+      data.checkoutUrl,
+      data.checkout_url,
+      data.authorizationUrl,
+      data.authorization_url,
+    ], 2000) || null,
     notes: firstText([data.notes, record(data.booking).notes], 1000) || null,
   }
 }
@@ -391,7 +403,7 @@ async function handleBookingEmailTransitions(
     tasks.push(queueBookingEmail(storeId, bookingId, 'booking.completed', after))
   }
 
-  if (afterPaymentStatus === 'awaiting_verification' && beforePaymentStatus !== 'awaiting_verification') {
+  if (!isCreate && afterPaymentStatus === 'awaiting_verification' && beforePaymentStatus !== 'awaiting_verification') {
     tasks.push(queueBookingEmail(storeId, bookingId, 'booking.payment_submitted', after, { forceStoreAlert: true }))
   }
 

@@ -34,6 +34,9 @@ type BookingRequestBody = {
   source?: unknown
   sourceChannel?: unknown
   source_channel?: unknown
+  initializePayment?: unknown
+  returnUrl?: unknown
+  return_url?: unknown
 }
 
 const BOOKING_ABUSE_WINDOW_MS = 10 * 60 * 1000
@@ -178,6 +181,133 @@ function assertContract(req: functions.https.Request, res: functions.Response) {
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function booleanFlag(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  const normalized = clean(value, 40).toLowerCase()
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false
+  return null
+}
+
+function normalizedPaymentMode(value: unknown) {
+  return clean(value, 120).toLowerCase().replace(/[\s-]+/g, '_')
+}
+
+function shouldInitializeBookingPayment(input: {
+  initializePayment: unknown
+  paymentMethod: string
+  paymentCollectionMode: string
+  paymentOption: string
+  paymentAmount: number
+  customerEmail: string
+}) {
+  const explicit = booleanFlag(input.initializePayment)
+  if (explicit === false) return false
+  if (input.paymentAmount <= 0 || !input.customerEmail) return false
+  if (explicit === true) return true
+
+  const modes = [
+    normalizedPaymentMode(input.paymentMethod),
+    normalizedPaymentMode(input.paymentCollectionMode),
+    normalizedPaymentMode(input.paymentOption),
+  ].filter(Boolean)
+
+  return modes.some(mode => [
+    'paystack',
+    'paystack_checkout',
+    'online',
+    'online_checkout',
+    'online_payment',
+    'checkout',
+  ].includes(mode))
+}
+
+function validHttpsUrl(value: unknown) {
+  const candidate = clean(value, 2000)
+  if (!candidate) return null
+  try {
+    const parsed = new URL(candidate)
+    return parsed.protocol === 'https:' ? parsed.toString() : null
+  } catch (_error) {
+    return null
+  }
+}
+
+function bookingCheckoutEndpoint(req: functions.https.Request) {
+  const configured = validHttpsUrl(process.env.SEDIFEX_CHECKOUT_CREATE_URL)
+  if (configured) return configured
+
+  const projectId = clean(process.env.GCLOUD_PROJECT ?? process.env.GCP_PROJECT, 180)
+  if (projectId) return `https://us-central1-${projectId}.cloudfunctions.net/integrationCheckoutCreate`
+
+  const host = clean(req.get('host'), 300).replace(/^https?:\/\//i, '')
+  return host ? `https://${host}/integrationCheckoutCreate` : ''
+}
+
+async function initializeBookingCheckout(input: {
+  req: functions.https.Request
+  storeId: string
+  bookingId: string
+  bookingReference: string
+  serviceId: string
+  serviceName: string
+  customer: { name: string; email: string; phone: string }
+  amount: number
+  currency: string
+  returnUrl: string
+  sourceChannel: string
+}) {
+  const endpoint = bookingCheckoutEndpoint(input.req)
+  if (!endpoint) throw new Error('checkout-endpoint-unavailable')
+
+  const contractVersion = INTEGRATION_CONTRACT_VERSION.value() || '2026-04-13'
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Sedifex-Contract-Version': contractVersion,
+    },
+    body: JSON.stringify({
+      storeId: input.storeId,
+      bookingId: input.bookingId,
+      reference: input.bookingReference,
+      amount: input.amount,
+      currency: input.currency || 'GHS',
+      customer: input.customer,
+      serviceName: input.serviceName || null,
+      itemName: input.serviceName || null,
+      accountingType: 'booking',
+      itemType: 'service',
+      sourceChannel: 'integration_checkout',
+      sourceLabel: 'Website booking checkout',
+      returnUrl: input.returnUrl || undefined,
+      metadata: {
+        bookingId: input.bookingId,
+        booking_id: input.bookingId,
+        bookingReference: input.bookingReference,
+        serviceId: input.serviceId || null,
+        serviceName: input.serviceName || null,
+        sourceChannel: input.sourceChannel || 'integration',
+      },
+    }),
+  })
+
+  const payload = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (!response.ok || payload?.ok !== true) {
+    throw new Error(clean(payload?.error ?? payload?.message, 500) || `checkout-create-failed-${response.status}`)
+  }
+
+  const paymentUrl = validHttpsUrl(
+    payload.checkoutUrl ?? payload.authorizationUrl ?? payload.checkout_url ?? payload.authorization_url,
+  )
+  if (!paymentUrl) throw new Error('checkout-url-missing')
+
+  const paymentReference = clean(payload.payment_reference ?? payload.reference, 220)
+  if (!paymentReference) throw new Error('checkout-reference-missing')
+
+  return { paymentUrl, paymentReference }
 }
 
 async function queryHasMatch(collectionPath: FirebaseFirestore.CollectionReference, field: string, apiKey: string) {
@@ -344,6 +474,7 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     const paymentMethod = clean(body.paymentMethod, 120)
     const paymentStatus = clean(body.paymentStatus ?? body.payment_status, 80) || 'pending'
     const paymentCollectionMode = clean(body.paymentCollectionMode ?? body.paymentOption, 120)
+    const paymentOption = clean(body.paymentOption, 80)
     const depositAmount = toNumber(body.depositAmount, 0)
     const amountOutstanding = toNumber(body.amountOutstanding, toNumber(body.paymentAmount, 0))
     const serviceName = clean(body.serviceName, 240)
@@ -424,6 +555,50 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
 
     const bookingRef = storeRef.collection('integrationBookings').doc()
     const reference = `IB-${bookingRef.id.slice(0, 8).toUpperCase()}`
+    const initializePayment = shouldInitializeBookingPayment({
+      initializePayment: body.initializePayment,
+      paymentMethod,
+      paymentCollectionMode,
+      paymentOption,
+      paymentAmount,
+      customerEmail,
+    })
+    const returnUrl = clean(body.returnUrl ?? body.return_url, 1000)
+    const checkoutCurrency = clean(attributes.currency, 20).toUpperCase() || 'GHS'
+    let initializedPayment: { paymentUrl: string; paymentReference: string } | null = null
+    let paymentInitializationError: string | null = null
+
+    if (initializePayment) {
+      try {
+        initializedPayment = await initializeBookingCheckout({
+          req,
+          storeId,
+          bookingId: bookingRef.id,
+          bookingReference: reference,
+          serviceId: resolvedServiceId,
+          serviceName: resolvedServiceName || serviceName,
+          customer: { name: customerName, email: customerEmail, phone: customerPhone },
+          amount: paymentAmount,
+          currency: checkoutCurrency,
+          returnUrl,
+          sourceChannel,
+        })
+      } catch (error) {
+        paymentInitializationError = error instanceof Error ? error.message : 'checkout-create-failed'
+        functions.logger.error('Automatic booking checkout initialization failed', {
+          storeId,
+          bookingId: bookingRef.id,
+          reference,
+          error: paymentInitializationError,
+        })
+      }
+    }
+
+    const effectivePaymentStatus = initializePayment ? 'pending' : paymentStatus
+    const effectivePaymentMethod = initializePayment ? (paymentMethod || 'paystack') : paymentMethod
+    const effectivePaymentCollectionMode = initializePayment ? 'online_checkout' : paymentCollectionMode
+    const effectiveAmountOutstanding = initializePayment ? paymentAmount : amountOutstanding
+
     const bookingRecord: Record<string, unknown> = {
       bookingId: bookingRef.id,
       reference,
@@ -441,21 +616,36 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
       branchLocationName: branchLocationName || null,
       preferredBranch: preferredBranch || null,
       branch: preferredBranch || null,
-      paymentMethod: paymentMethod || null,
+      paymentMethod: effectivePaymentMethod || null,
       paymentAmount,
-      paymentStatus,
-      payment_status: paymentStatus,
-      paymentCollectionMode: paymentCollectionMode || null,
-      paymentOption: clean(body.paymentOption, 80) || null,
+      paymentStatus: effectivePaymentStatus,
+      payment_status: effectivePaymentStatus,
+      paymentCollectionMode: effectivePaymentCollectionMode || null,
+      paymentOption: paymentOption || null,
       depositAmount,
-      amountOutstanding,
+      amountOutstanding: effectiveAmountOutstanding,
+      paymentProvider: initializePayment ? 'paystack' : null,
+      payment_provider: initializePayment ? 'paystack' : null,
+      paymentReference: initializedPayment?.paymentReference || null,
+      payment_reference: initializedPayment?.paymentReference || null,
+      paystackReference: initializedPayment?.paymentReference || null,
+      paymentUrl: initializedPayment?.paymentUrl || null,
+      payment_url: initializedPayment?.paymentUrl || null,
+      checkoutUrl: initializedPayment?.paymentUrl || null,
+      checkout_url: initializedPayment?.paymentUrl || null,
+      authorizationUrl: initializedPayment?.paymentUrl || null,
+      authorization_url: initializedPayment?.paymentUrl || null,
+      paymentInitializationRequested: initializePayment,
+      paymentInitializationStatus: initializePayment ? (initializedPayment ? 'initialized' : 'failed') : 'not_requested',
       payment: {
-        method: paymentMethod || null,
-        status: paymentStatus,
+        method: effectivePaymentMethod || null,
+        status: effectivePaymentStatus,
         amount: paymentAmount,
         depositAmount,
-        amountOutstanding,
-        confirmed: paymentStatus === 'paid',
+        amountOutstanding: effectiveAmountOutstanding,
+        confirmed: false,
+        reference: initializedPayment?.paymentReference || null,
+        paymentUrl: initializedPayment?.paymentUrl || null,
       },
       attributes,
       bookingStatus: 'pending_approval',
@@ -480,7 +670,16 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     await bookingRef.set(bookingRecord, { merge: true })
     await defaultDb.collection('integrationBookings').doc(bookingRef.id).set(bookingRecord, { merge: true })
 
-    res.status(200).json({ ok: true, bookingId: bookingRef.id, reference, booking: bookingRecord })
+    res.status(200).json({
+      ok: true,
+      bookingId: bookingRef.id,
+      reference,
+      booking: bookingRecord,
+      paymentUrl: initializedPayment?.paymentUrl || null,
+      checkoutUrl: initializedPayment?.paymentUrl || null,
+      paymentReference: initializedPayment?.paymentReference || null,
+      paymentInitializationStatus: bookingRecord.paymentInitializationStatus,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'integration-booking-failed'
     const known = new Set(['slot-not-found', 'slot-not-open', 'slot-capacity-exceeded'])
