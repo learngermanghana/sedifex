@@ -191,37 +191,13 @@ function booleanFlag(value: unknown): boolean | null {
   return null
 }
 
-function normalizedPaymentMode(value: unknown) {
-  return clean(value, 120).toLowerCase().replace(/[\s-]+/g, '_')
-}
-
 function shouldInitializeBookingPayment(input: {
   initializePayment: unknown
-  paymentMethod: string
-  paymentCollectionMode: string
-  paymentOption: string
   paymentAmount: number
   customerEmail: string
 }) {
   const explicit = booleanFlag(input.initializePayment)
-  if (explicit === false) return false
-  if (input.paymentAmount <= 0 || !input.customerEmail) return false
-  if (explicit === true) return true
-
-  const modes = [
-    normalizedPaymentMode(input.paymentMethod),
-    normalizedPaymentMode(input.paymentCollectionMode),
-    normalizedPaymentMode(input.paymentOption),
-  ].filter(Boolean)
-
-  return modes.some(mode => [
-    'paystack',
-    'paystack_checkout',
-    'online',
-    'online_checkout',
-    'online_payment',
-    'checkout',
-  ].includes(mode))
+  return explicit === true && input.paymentAmount > 0 && Boolean(input.customerEmail)
 }
 
 function validHttpsUrl(value: unknown) {
@@ -557,9 +533,6 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
     const reference = `IB-${bookingRef.id.slice(0, 8).toUpperCase()}`
     const initializePayment = shouldInitializeBookingPayment({
       initializePayment: body.initializePayment,
-      paymentMethod,
-      paymentCollectionMode,
-      paymentOption,
       paymentAmount,
       customerEmail,
     })
