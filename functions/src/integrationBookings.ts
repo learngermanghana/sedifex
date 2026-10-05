@@ -238,6 +238,10 @@ function validHttpsUrl(value: unknown) {
 function bookingCheckoutEndpoint(req: functions.https.Request) {
   const configured = validHttpsUrl(process.env.SEDIFEX_CHECKOUT_CREATE_URL)
   if (configured) return configured
+
+  const projectId = clean(process.env.GCLOUD_PROJECT ?? process.env.GCP_PROJECT, 180)
+  if (projectId) return `https://us-central1-${projectId}.cloudfunctions.net/integrationCheckoutCreate`
+
   const host = clean(req.get('host'), 300).replace(/^https?:\/\//i, '')
   return host ? `https://${host}/integrationCheckoutCreate` : ''
 }
@@ -633,7 +637,6 @@ export const v1IntegrationBookings = functions.https.onRequest(async (req, res):
       authorization_url: initializedPayment?.paymentUrl || null,
       paymentInitializationRequested: initializePayment,
       paymentInitializationStatus: initializePayment ? (initializedPayment ? 'initialized' : 'failed') : 'not_requested',
-      paymentInitializationError,
       payment: {
         method: effectivePaymentMethod || null,
         status: effectivePaymentStatus,
