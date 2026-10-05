@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { Link } from 'react-router-dom'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
-import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveCanonicalOrderStatus, deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveReportPaymentFields } from '../../lib/bookingStatus'
 
 type SettlementRow = {
   id: string
@@ -21,7 +22,6 @@ type SettlementRow = {
   merchantNet: number
   currency: string
   paymentStatus: string
-  orderStatus: string
   updatedAt: Date | null
   paymentCollectionMode: string
   subaccountCode: string
@@ -169,8 +169,6 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
   const sourceChannel = normalizeSourceChannel(data.sourceChannel ?? data.source_channel ?? data.source)
   const reportFields = deriveReportPaymentFields(data)
   const paymentStatus = reportFields.paymentStatus
-  const bookingStatus = normalizeBookingStatusFromRecord(data)
-  const orderStatus = String(deriveCanonicalOrderStatus(data, collectionName === 'integrationBookings' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending'))
   const split = readPaystackSplit(data)
   return {
     id,
@@ -178,7 +176,7 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference, id),
     bookingId: asText(data.booking_id ?? data.bookingId, collectionName === 'integrationBookings' ? id : ''),
     sourceChannel,
-    sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Retired online channel' : 'Sedifex Public Page'),
+    sourceLabel: asText(data.sourceLabel ?? data.source_label, sourceChannel === 'client_website' ? 'Client Website' : sourceChannel === 'sedifex_market' ? 'Legacy channel' : 'Sedifex Public Link'),
     customerName: asText(customer.name ?? customer.email, 'Customer'),
     grossAmount: reportFields.amountReceived,
     baseAmount: Math.min(readBaseAmount(data), reportFields.amountReceived || readBaseAmount(data)),
@@ -187,7 +185,6 @@ function mapSettlementRow(id: string, collectionName: 'integrationOrders' | 'int
     merchantNet: readMerchantNet(data),
     currency: readCurrency(data),
     paymentStatus,
-    orderStatus,
     paymentCollectionMode: asText(data.paymentCollectionMode ?? payment.mode, 'online_checkout'),
     subaccountCode: split.subaccount,
     splitEnabled: split.enabled,
@@ -243,7 +240,12 @@ export default function SettlementReport() {
     return Array.from(rowsByKey.values())
       .filter(row => inRange(row, range))
       .filter(row => source === 'all' || row.sourceChannel === source)
-      .filter(row => paymentView === 'all' || (paymentView === 'online' ? row.paymentCollectionMode === 'online_checkout' : row.paymentCollectionMode === paymentView))
+      .filter(row => {
+        if (paymentView === 'all') return true
+        const mode = row.paymentCollectionMode.toLowerCase()
+        const online = ['online_checkout', 'paystack', 'card'].includes(mode)
+        return paymentView === 'online' ? online : !online
+      })
       .filter(row => splitView === 'all' || (splitView === 'split' ? row.splitEnabled : !row.splitEnabled))
       .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
   }, [bookings, orders, paymentView, range, source, splitView])
@@ -271,7 +273,7 @@ export default function SettlementReport() {
   function exportRows() {
     downloadCsv('sedifex-settlement-report.csv', rows.map(row => ({
       reference: row.reference,
-      type: row.collectionName === 'integrationBookings' ? 'Service booking' : 'Product order',
+      type: row.collectionName === 'integrationBookings' ? 'Booking payment' : 'Website payment',
       source: row.sourceLabel,
       customer: row.customerName,
       grossAmount: row.grossAmount,
@@ -281,7 +283,6 @@ export default function SettlementReport() {
       merchantNet: row.merchantNet,
       currency: row.currency,
       paymentStatus: row.paymentStatus,
-      orderStatus: row.orderStatus,
       paymentCollectionMode: row.paymentCollectionMode,
       splitEnabled: row.splitEnabled ? 'yes' : 'no',
       subaccountCode: row.subaccountCode,
@@ -313,22 +314,26 @@ export default function SettlementReport() {
   }
 
   const columns: ReportColumn<SettlementRow>[] = [
-    { key: 'reference', label: 'Reference', sortable: true, value: row => `${row.reference} ${row.collectionName}`, render: row => <><strong>{row.reference}</strong><br /><small>{row.collectionName === 'integrationBookings' ? 'Service booking' : 'Product order'}</small></> },
+    { key: 'reference', label: 'Reference', sortable: true, value: row => `${row.reference} ${row.collectionName}`, render: row => <><strong>{row.reference}</strong><br /><small>{row.collectionName === 'integrationBookings' ? 'Booking payment' : 'Website payment'}</small></> },
     { key: 'source', label: 'Source', sortable: true, value: row => `${row.sourceLabel} ${row.customerName}`, render: row => <>{row.sourceLabel}<br /><small>{row.customerName}</small></> },
     { key: 'gross', label: 'Gross', align: 'right', sortable: true, value: row => row.grossAmount, render: row => <>{formatMoney(row.grossAmount, row.currency)}<br /><small>Base: {formatMoney(row.baseAmount, row.currency)}</small></> },
     { key: 'fees', label: 'Fees / commission', align: 'right', sortable: true, value: row => row.sedifexCommission + row.customerProcessingFee, render: row => <>{formatMoney(row.sedifexCommission, row.currency)}<br /><small>Customer fee: {formatMoney(row.customerProcessingFee, row.currency)}</small></> },
     { key: 'merchantNet', label: 'Merchant net', align: 'right', sortable: true, value: row => row.merchantNet, render: row => formatMoney(row.merchantNet, row.currency) },
     { key: 'split', label: 'Split', sortable: true, value: row => `${row.splitEnabled ? 'Enabled' : 'Missing'} ${row.subaccountCode}`, render: row => <>{row.splitEnabled ? 'Enabled' : 'Missing'}<br /><small>{row.subaccountCode || 'No subaccount'}</small></> },
-    { key: 'status', label: 'Status', sortable: true, value: row => `${row.paymentStatus} ${row.orderStatus}`, render: row => <>{row.paymentStatus}<br /><small>{row.orderStatus}</small></> },
+    { key: 'status', label: 'Payment status', sortable: true, value: row => row.paymentStatus, render: row => row.paymentStatus.replace(/_/g, ' ') },
     { key: 'date', label: 'Date', sortable: true, value: row => row.createdAt, render: row => formatDate(row.createdAt) },
   ]
 
   return (
     <div className="workspace-page">
       <section className="workspace-card">
-        <p className="workspace-eyebrow">Reports / Settlement</p>
-        <h1>Settlement report</h1>
-        <p className="workspace-muted">Track gross online payments, customer processing fees, Sedifex commission, Paystack split status, and expected merchant settlement.</p>
+        <p className="workspace-eyebrow">Admin / Payments</p>
+        <h1>Payments</h1>
+        <p className="workspace-muted">Track client booking and website payments, payment status, Paystack split status, Sedifex commission, and expected payout.</p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
+          <Link to="/bookings" className="button button--secondary">View bookings</Link>
+          <Link to="/settlement/setup" className="button button--primary">Payout account</Link>
+        </div>
       </section>
 
       <section className="workspace-grid workspace-grid--four">
@@ -339,8 +344,8 @@ export default function SettlementReport() {
       </section>
 
       <ReportDataTable
-        title="Settlement details"
-        subtitle="Totals use paid records when available. If no paid records are found, totals show selected records for planning/reconciliation."
+        title="Payment activity"
+        subtitle="Booking and website payments are shown together for reconciliation. Totals use paid records when available."
         rows={rows}
         columns={columns}
         getRowKey={row => `${row.collectionName}-${row.id}`}
@@ -362,8 +367,7 @@ export default function SettlementReport() {
           <select value={paymentView} onChange={event => setPaymentView(event.target.value)}>
             <option value="online">Online checkout only</option>
             <option value="all">All payment modes</option>
-            <option value="pay_on_delivery">Pay on delivery</option>
-            <option value="manual">Manual</option>
+            <option value="direct">Direct / manual payments</option>
           </select>
           <select value={splitView} onChange={event => setSplitView(event.target.value)}>
             <option value="all">All split statuses</option>
