@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useStorePreferences } from '../hooks/useStorePreferences'
 import type { Industry } from '../config/navigation'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, normalizePaymentStatusFromRecord } from '../lib/bookingStatus'
 import './CompactBusinessDashboard.css'
 
 type RecordData = Record<string, unknown>
@@ -173,18 +174,20 @@ function bookingDate(record: RecordData) {
 }
 
 function bookingPaymentStatus(record: RecordData) {
-  const payment = asRecord(record.payment)
-  return normalizeStatus(
-    record.paymentStatus
-      ?? record.payment_status
-      ?? payment.status
-      ?? payment.paymentStatus
-      ?? payment.payment_status,
-  ) || 'pending'
+  return normalizePaymentStatusFromRecord(record)
 }
 
 function isPaidPaymentStatus(status: string) {
-  return ['paid', 'success', 'confirmed', 'captured', 'completed', 'settled'].includes(status)
+  return status === 'paid'
+}
+
+function dashboardBookingRecord(id: string, data: RecordData) {
+  return {
+    ...data,
+    id,
+    createdAt: toDate(data.createdAtServer ?? data.createdAt),
+    updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
+  }
 }
 
 function eventDate(record: RecordData) {
@@ -282,7 +285,8 @@ export default function CompactBusinessDashboard() {
   const enabledModules = useMemo(() => new Set(preferences.navigation.enabledModules), [preferences.navigation.enabledModules])
 
   const [sales, setSales] = useState<RecordData[]>([])
-  const [bookings, setBookings] = useState<RecordData[]>([])
+  const [rootBookings, setRootBookings] = useState<RecordData[]>([])
+  const [storeBookings, setStoreBookings] = useState<RecordData[]>([])
   const [products, setProducts] = useState<RecordData[]>([])
   const [customers, setCustomers] = useState<RecordData[]>([])
   const [invoices, setInvoices] = useState<RecordData[]>([])
@@ -301,7 +305,8 @@ export default function CompactBusinessDashboard() {
   useEffect(() => {
     if (!storeId) {
       setSales([])
-      setBookings([])
+      setRootBookings([])
+      setStoreBookings([])
       setProducts([])
       setCustomers([])
       setInvoices([])
@@ -317,7 +322,16 @@ export default function CompactBusinessDashboard() {
     // recent activity only; that query is explicitly ordered before limiting.
     const unsubscribers = [
       onSnapshot(query(collection(db, 'sales'), where('storeId', '==', storeId)), snapshot => setSales(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setSales([])),
-      onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => setBookings(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setBookings([])),
+      onSnapshot(
+        query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)),
+        snapshot => setRootBookings(snapshot.docs.map(item => dashboardBookingRecord(item.id, item.data() as RecordData))),
+        () => setRootBookings([]),
+      ),
+      onSnapshot(
+        collection(db, 'stores', storeId, 'integrationBookings'),
+        snapshot => setStoreBookings(snapshot.docs.map(item => dashboardBookingRecord(item.id, item.data() as RecordData))),
+        () => setStoreBookings([]),
+      ),
       onSnapshot(query(collection(db, 'products'), where('storeId', '==', storeId)), snapshot => setProducts(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setProducts([])),
       onSnapshot(query(collection(db, 'customers'), where('storeId', '==', storeId)), snapshot => setCustomers(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setCustomers([])),
       onSnapshot(collection(db, 'stores', storeId, 'invoices'), snapshot => setInvoices(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))), () => setInvoices([])),
@@ -328,6 +342,18 @@ export default function CompactBusinessDashboard() {
 
     return () => unsubscribers.forEach(unsubscribe => unsubscribe())
   }, [storeId])
+
+  const bookings = useMemo(() => {
+    const merged = new Map<string, RecordData & { createdAt?: Date | null; updatedAt?: Date | null }>()
+    ;[...rootBookings, ...storeBookings].forEach(item => {
+      const id = pickText(item, ['id'])
+      const key = canonicalBookingOrderKey(item, id)
+      const candidate = item as RecordData & { createdAt?: Date | null; updatedAt?: Date | null }
+      const existing = merged.get(key)
+      merged.set(key, existing ? chooseMoreCompleteRecord(existing, candidate) : candidate)
+    })
+    return Array.from(merged.values())
+  }, [rootBookings, storeBookings])
 
   const availableWidgetIds = useMemo(() => {
     const ids: WidgetId[] = ['needs-attention', 'staff-activity']

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
-import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, isOnlinePaymentMode, normalizeSourceChannel, toDate } from './reportUtils'
 import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveReportPaymentFields } from '../../lib/bookingStatus'
 
 type SettlementRow = {
@@ -152,12 +152,6 @@ function readMerchantNet(data: Record<string, unknown>) {
   return Math.max(0, readBaseAmount(data) - readSedifexCommission(data))
 }
 
-function isOnlineCheckout(data: Record<string, unknown>) {
-  const payment = getNestedObject(data, 'payment')
-  const mode = asText(data.paymentCollectionMode ?? payment.mode, 'online_checkout').toLowerCase()
-  return mode === 'online_checkout' || mode === 'paystack' || mode === 'card'
-}
-
 function isPaidLike(status: string) {
   const normalized = status.toLowerCase()
   return ['success', 'confirmed', 'paid', 'captured', 'completed'].some(token => normalized.includes(token))
@@ -209,7 +203,8 @@ function inRange(row: SettlementRow, range: string) {
 export default function SettlementReport() {
   const { storeId } = useActiveStore()
   const [orders, setOrders] = useState<SettlementRow[]>([])
-  const [bookings, setBookings] = useState<SettlementRow[]>([])
+  const [rootBookings, setRootBookings] = useState<SettlementRow[]>([])
+  const [storeBookings, setStoreBookings] = useState<SettlementRow[]>([])
   const [range, setRange] = useState('30d')
   const [source, setSource] = useState('all')
   const [paymentView, setPaymentView] = useState('online')
@@ -218,21 +213,25 @@ export default function SettlementReport() {
   useEffect(() => {
     if (!storeId) {
       setOrders([])
-      setBookings([])
+      setRootBookings([])
+      setStoreBookings([])
       return undefined
     }
     const unsubOrders = onSnapshot(query(collection(db, 'integrationOrders'), where('storeId', '==', storeId)), snapshot => {
       setOrders(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationOrders', docSnap.data() as Record<string, unknown>)).filter(row => row.sourceChannel !== 'sedifex_market'))
     })
-    const unsubBookings = onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => {
-      setBookings(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)).filter(row => row.sourceChannel !== 'sedifex_market'))
+    const unsubRootBookings = onSnapshot(query(collection(db, 'integrationBookings'), where('storeId', '==', storeId)), snapshot => {
+      setRootBookings(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)).filter(row => row.sourceChannel !== 'sedifex_market'))
     })
-    return () => { unsubOrders(); unsubBookings() }
+    const unsubStoreBookings = onSnapshot(collection(db, 'stores', storeId, 'integrationBookings'), snapshot => {
+      setStoreBookings(snapshot.docs.map(docSnap => mapSettlementRow(docSnap.id, 'integrationBookings', docSnap.data() as Record<string, unknown>)).filter(row => row.sourceChannel !== 'sedifex_market'))
+    })
+    return () => { unsubOrders(); unsubRootBookings(); unsubStoreBookings() }
   }, [storeId])
 
   const rows = useMemo(() => {
     const rowsByKey = new Map<string, SettlementRow>()
-    ;[...orders, ...bookings].forEach(row => {
+    ;[...orders, ...rootBookings, ...storeBookings].forEach(row => {
       const key = canonicalBookingOrderKey({ booking_id: row.bookingId, payment_reference: row.reference }, row.id)
       const existing = rowsByKey.get(key)
       rowsByKey.set(key, existing ? chooseMoreCompleteRecord(existing, { ...existing, ...row, id: row.bookingId || existing.bookingId || row.id }) : row)
@@ -242,16 +241,15 @@ export default function SettlementReport() {
       .filter(row => source === 'all' || row.sourceChannel === source)
       .filter(row => {
         if (paymentView === 'all') return true
-        const mode = row.paymentCollectionMode.toLowerCase()
-        const online = ['online_checkout', 'paystack', 'card'].includes(mode)
+        const online = isOnlinePaymentMode(row.paymentCollectionMode)
         return paymentView === 'online' ? online : !online
       })
       .filter(row => splitView === 'all' || (splitView === 'split' ? row.splitEnabled : !row.splitEnabled))
       .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
-  }, [bookings, orders, paymentView, range, source, splitView])
+  }, [orders, paymentView, range, rootBookings, source, splitView, storeBookings])
 
   const paidRows = useMemo(() => rows.filter(row => isPaidLike(row.paymentStatus)), [rows])
-  const onlineRows = useMemo(() => rows.filter(row => row.paymentCollectionMode === 'online_checkout' || isOnlineCheckout(row as unknown as Record<string, unknown>)), [rows])
+  const onlineRows = useMemo(() => rows.filter(row => isOnlinePaymentMode(row.paymentCollectionMode)), [rows])
 
   const totals = useMemo(() => {
     const basis = paidRows.length ? paidRows : rows
@@ -265,7 +263,7 @@ export default function SettlementReport() {
       commission: basis.reduce((sum, row) => sum + row.sedifexCommission, 0),
       merchantNet: basis.reduce((sum, row) => sum + row.merchantNet, 0),
       splitEnabled: rows.filter(row => row.splitEnabled).length,
-      missingSplit: rows.filter(row => row.paymentCollectionMode === 'online_checkout' && !row.splitEnabled).length,
+      missingSplit: rows.filter(row => isOnlinePaymentMode(row.paymentCollectionMode) && !row.splitEnabled).length,
       currency: rows[0]?.currency ?? 'GHS',
     }
   }, [onlineRows.length, paidRows, rows])
