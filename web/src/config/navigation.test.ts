@@ -48,7 +48,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'account'])
+    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'settlement', 'account'])
   })
 
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
@@ -124,6 +124,7 @@ describe('resolveNavigation', () => {
       'invoices',
       'receipts',
       'customers',
+      'settlement',
     ])
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.travel).toEqual([
       'dashboard',
@@ -132,6 +133,7 @@ describe('resolveNavigation', () => {
       'upcoming-events',
       'invoices',
       'receipts',
+      'settlement',
     ])
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.ngo).toEqual([
       'dashboard',
@@ -141,6 +143,7 @@ describe('resolveNavigation', () => {
       'donor-management',
       'funds-ledger',
       'volunteers',
+      'settlement',
     ])
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.school).toEqual([
       'dashboard',
@@ -150,6 +153,7 @@ describe('resolveNavigation', () => {
       'upcoming-events',
       'student-registration',
       'invoices',
+      'settlement',
     ])
     expect(INDUSTRY_ENABLED_MODULE_PRESETS.event).toEqual([
       'dashboard',
@@ -158,6 +162,7 @@ describe('resolveNavigation', () => {
       'invoices',
       'reports',
       'bulk-email',
+      'settlement',
     ])
   })
 

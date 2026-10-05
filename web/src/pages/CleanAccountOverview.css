@@ -9,3 +9,77 @@
   width: 100%;
   max-width: 1040px;
 }
+
+
+.clean-account-overview__operations {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 1040px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.clean-account-overview__operations > div > p {
+  margin: 0 0 5px;
+  color: #98a2b3;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clean-account-overview__operations h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 1.15rem;
+}
+
+.clean-account-overview__operations > div > span {
+  display: block;
+  margin-top: 7px;
+  color: #667085;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.clean-account-overview__operations nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.clean-account-overview__operations a {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.clean-account-overview__operations a:hover,
+.clean-account-overview__operations a:focus-visible {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.clean-account-overview__operations a strong {
+  color: #111827;
+  font-size: 0.9rem;
+}
+
+.clean-account-overview__operations a span {
+  color: #667085;
+  font-size: 0.77rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .clean-account-overview__operations nav {
+    grid-template-columns: 1fr;
+  }
+}

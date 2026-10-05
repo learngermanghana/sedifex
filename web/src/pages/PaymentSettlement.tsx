@@ -181,8 +181,8 @@ export default function PaymentSettlement() {
 
   return (
     <div className="account-overview">
-      <h1>Payments / Settlement</h1>
-      <p className="account-overview__subtitle">Save payout details to create or update the store’s Paystack subaccount immediately.</p>
+      <h1>Payout account</h1>
+      <p className="account-overview__subtitle">Set where confirmed online payments should settle. This is payout setup, separate from payment activity and booking payment tracking.</p>
       {storeLoading ? <p>Loading workspace…</p> : null}
       {!storeId && !storeLoading ? <p>Select a workspace to configure settlement.</p> : null}
       {storeId && !isOwner ? <div className="account-overview__error" role="alert">Only the workspace owner can set up settlement.</div> : null}

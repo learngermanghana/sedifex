@@ -976,12 +976,12 @@ export default function AccountOverview({
           : current,
       )
 
-      publish({ message: 'Workspace details updated.', tone: 'success' })
+      publish({ message: 'Business details updated.', tone: 'success' })
       setIsEditingProfile(false)
     } catch (error) {
       console.error('[account] Failed to save workspace profile', error)
       publish({
-        message: 'Unable to save workspace details. Please try again.',
+        message: 'Unable to save business details. Please try again.',
         tone: 'error',
       })
     } finally {
@@ -998,7 +998,7 @@ export default function AccountOverview({
   if (storeLoading) {
     return (
       <div className="account-overview">
-        <Heading>Account overview</Heading>
+        <Heading>Business account</Heading>
         <p role="status" aria-live="polite">
           Loading workspace…
         </p>
@@ -1009,7 +1009,7 @@ export default function AccountOverview({
   if (!storeId) {
     return (
       <div className="account-overview" role="status">
-        <Heading>Account overview</Heading>
+        <Heading>Business account</Heading>
         <p>Select a workspace to view account details.</p>
       </div>
     )
@@ -1836,11 +1836,11 @@ export default function AccountOverview({
 
   return (
     <div className="account-overview">
-      <Heading>{isPromotionsView ? 'Public page' : 'Account overview'}</Heading>
+      <Heading>{isPromotionsView ? 'Public page' : 'Business account'}</Heading>
 
       {profile && (
         <p className="account-overview__subtitle">
-          Workspace <strong>{profile.displayName ?? profile.name ?? '—'}</strong>
+          Business <strong>{profile.displayName ?? profile.name ?? '—'}</strong>
           {activeMembership && (
             <>
               {' · '}Your role <strong>{isOwner ? 'Owner' : 'Staff'}</strong>
@@ -1918,7 +1918,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'billing'}
             onClick={() => setActiveTab('billing')}
           >
-            Payments
+            Plan & billing
           </button>
           <button
             type="button"
@@ -1942,7 +1942,7 @@ export default function AccountOverview({
       {profile && !isPromotionsView && activeTab === 'workspace' && (
         <section aria-labelledby="account-overview-profile" id="store-profile" className="account-overview__profile-card">
           <div className="account-overview__section-header">
-            <h2 id="account-overview-profile">Store profile</h2>
+            <h2 id="account-overview-profile">Business profile</h2>
 
             {isOwner && (
               <div className="account-overview__actions account-overview__actions--profile">
@@ -1954,7 +1954,7 @@ export default function AccountOverview({
                     setIsEditingProfile(current => !current)
                   }}
                 >
-                  {isEditingProfile ? 'Close workspace details' : 'Edit workspace details'}
+                  {isEditingProfile ? 'Close business details' : 'Edit business details'}
                 </button>
               </div>
             )}
@@ -1962,7 +1962,7 @@ export default function AccountOverview({
 
           <dl className="account-overview__grid">
             <div className="account-overview__grid-item">
-              <dt>Workspace name</dt>
+              <dt>Business name</dt>
               <dd>{formatValue(profile.displayName ?? profile.name)}</dd>
             </div>
             <div className="account-overview__grid-item">
@@ -2017,7 +2017,7 @@ export default function AccountOverview({
             >
               <div className="account-overview__form-grid">
                 <label>
-                  <span>Workspace name</span>
+                  <span>Business name</span>
                   <input
                     type="text"
                     value={profileDraft.displayName}
@@ -2181,7 +2181,7 @@ export default function AccountOverview({
 
               <div className="account-overview__actions">
                 <p className="account-overview__hint">
-                  Update your workspace name and contact details for invoices and public listings.
+                  Update your business name and contact details for invoices, booking communications, and public listings.
                 </p>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <button
@@ -2189,7 +2189,7 @@ export default function AccountOverview({
                     className="button button--primary"
                     disabled={isSavingProfile}
                   >
-                    {isSavingProfile ? 'Saving…' : 'Save workspace details'}
+                    {isSavingProfile ? 'Saving…' : 'Save business details'}
                   </button>
                   <button
                     type="button"

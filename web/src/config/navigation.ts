@@ -34,7 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'student-registration', label: 'Student registration', type: 'module', target: '/student-registration', rolesAllowed: ['owner', 'staff'], sortOrder: 55 },
   { id: 'volunteers', label: 'Volunteers', type: 'module', target: '/volunteers', rolesAllowed: ['owner', 'staff'], industries: ['ngo'], sortOrder: 56 },
   { id: 'support-requests', label: 'Support requests', type: 'module', target: '/support-requests', rolesAllowed: ['owner', 'staff'], industries: ['ngo'], sortOrder: 57 },
-  { id: 'settlement', label: 'Payments / Settlement', type: 'module', target: '/settlement', rolesAllowed: ['owner'], sortOrder: 58 },
+  { id: 'settlement', label: 'Payments', type: 'module', target: '/settlement', rolesAllowed: ['owner'], sortOrder: 58 },
   { id: 'integrations', label: 'Integrations', type: 'module', target: '/settings/integrations/website', rolesAllowed: ['owner'], sortOrder: 59 },
   { id: 'automations', label: 'Automations', type: 'module', target: '/settings/automations', rolesAllowed: ['owner'], sortOrder: 59.5 },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
@@ -47,7 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   { id: 'donor-management', label: 'Donor management', type: 'module', target: '/donor-management', rolesAllowed: ['owner', 'staff'], sortOrder: 90 },
   { id: 'funds-ledger', label: 'Funds ledger', type: 'module', target: '/funds-ledger', rolesAllowed: ['owner', 'staff'], sortOrder: 105 },
-  { id: 'account', label: 'Account', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
+  { id: 'account', label: 'Business account', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
 ]
 
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
@@ -83,11 +83,11 @@ export type NavigationSettings = {
 export const WEBSITE_BUILDER_SECTION_IDS = ['promo', 'gallery', 'website-hero-slides', 'social-links'] as const
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
-  shop: ['dashboard', 'products', 'sell', 'invoices', 'receipts', 'customers'],
-  travel: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'invoices', 'receipts'],
-  ngo: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'donor-management', 'funds-ledger', 'volunteers'],
-  school: ['dashboard', 'students', 'customers', 'bookings', 'upcoming-events', 'student-registration', 'invoices'],
-  event: ['dashboard', 'events', 'customers', 'invoices', 'reports', 'bulk-email'],
+  shop: ['dashboard', 'products', 'sell', 'invoices', 'receipts', 'customers', 'settlement'],
+  travel: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'invoices', 'receipts', 'settlement'],
+  ngo: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'donor-management', 'funds-ledger', 'volunteers', 'settlement'],
+  school: ['dashboard', 'students', 'customers', 'bookings', 'upcoming-events', 'student-registration', 'invoices', 'settlement'],
+  event: ['dashboard', 'events', 'customers', 'invoices', 'reports', 'bulk-email', 'settlement'],
 }
 
 const LEGACY_EVENT_PRESET = ['events', 'customers', 'invoices', 'bulk-email']
@@ -130,7 +130,7 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
     if (!item.rolesAllowed.includes(role)) return false
     if (item.industries && !item.industries.includes(workspaceProfile.industry)) return false
     if (item.hideFromPrimaryNav) return false
-    if (item.id !== 'account' && !enabledModules.has(item.id)) return false
+    if (!['account', 'settlement'].includes(item.id) && !enabledModules.has(item.id)) return false
     return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {
     const customLabel = workspaceProfile.customLabels?.[item.target]?.trim()

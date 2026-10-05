@@ -4,7 +4,7 @@ import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
 import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, toDate } from './reportUtils'
-import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveCanonicalOrderStatus, deriveOnlineOrderStatusFromBooking, deriveReportPaymentFields, normalizeBookingStatusFromRecord } from '../../lib/bookingStatus'
+import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveReportPaymentFields } from '../../lib/bookingStatus'
 
 type BusinessSaleRow = {
   id: string
@@ -19,7 +19,6 @@ type BusinessSaleRow = {
   currency: string
   paymentMethod: string
   paymentStatus: string
-  orderStatus: string
   settlementScope: 'store_only' | 'sedifex_settlement' | 'pos'
   createdAt: Date | null
   updatedAt: Date | null
@@ -100,7 +99,6 @@ function mapPosSale(id: string, data: Record<string, unknown>): BusinessSaleRow 
     currency: asText(data.currency, 'GHS'),
     paymentMethod: asText(data.paymentMethod ?? data.paymentType, 'POS'),
     paymentStatus: asText(data.paymentStatus ?? data.status, 'completed'),
-    orderStatus: asText(data.orderStatus ?? data.status, 'completed'),
     settlementScope: 'pos',
     createdAt: toDate(data.createdAt ?? data.saleDate ?? data.updatedAt),
     updatedAt: toDate(data.updatedAt ?? data.updated_at),
@@ -113,22 +111,19 @@ function mapIntegrationOrder(id: string, data: Record<string, unknown>, type: 'o
   const first = firstItem(data)
   const storeOnly = data.storeOnly === true || data.excludedFromSedifexSettlement === true
   const reportFields = deriveReportPaymentFields(data)
-  const bookingStatus = normalizeBookingStatusFromRecord(data)
-  const orderStatus = String(deriveCanonicalOrderStatus(data, type === 'booking' ? deriveOnlineOrderStatusFromBooking(bookingStatus) : 'pending'))
   return {
     id: `${type}-${id}`,
     type,
-    label: type === 'booking' ? 'Booking / Service' : 'Online order',
+    label: type === 'booking' ? 'Booking / Service' : 'Website sale',
     reference: asText(data.reference ?? data.paymentReference ?? data.payment_reference ?? payment.reference, id),
     bookingId: asText(data.booking_id ?? data.bookingId, type === 'booking' ? id : ''),
     customerName: asText(customer.name ?? data.customerName ?? data.name, 'Customer'),
     customerContact: asText(customer.phone ?? customer.email ?? data.customerPhone ?? data.customerEmail ?? data.phone ?? data.email, ''),
-    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? first.name ?? first.itemName ?? first.productName, type === 'booking' ? 'Service booking' : 'Online order'),
+    itemName: asText(data.itemName ?? data.productName ?? data.serviceName ?? first.name ?? first.itemName ?? first.productName, type === 'booking' ? 'Service booking' : 'Website sale'),
     amount: reportFields.amountReceived,
     currency: asText(payment.currency ?? data.currency, 'GHS'),
     paymentMethod: asText(data.paymentCollectionMode ?? data.paymentMethod ?? data.payment_method ?? payment.mode, 'online_checkout'),
     paymentStatus: reportFields.paymentStatus,
-    orderStatus,
     settlementScope: storeOnly ? 'store_only' : 'sedifex_settlement',
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
     updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
@@ -151,7 +146,6 @@ function mapCashOrder(id: string, data: Record<string, unknown>): BusinessSaleRo
     currency: asText(data.currency, 'GHS'),
     paymentMethod: asText(data.paymentMethod ?? data.payment_method ?? data.paymentCollectionMode, 'CASH'),
     paymentStatus: asText(data.paymentStatus ?? data.payment_status, 'pending_cash'),
-    orderStatus: asText(data.orderStatus ?? data.order_status, 'awaiting_cash_confirmation'),
     settlementScope: 'store_only',
     createdAt: toDate(data.createdAtServer ?? data.createdAt ?? data.updatedAt),
     updatedAt: toDate(data.updatedAt ?? data.updated_at ?? data.paymentUpdatedAt),
@@ -210,8 +204,8 @@ export default function SalesCashReport() {
     .filter(row => typeFilter === 'all' || row.type === typeFilter)
     .filter(row => {
       if (statusFilter === 'all') return true
-      if (statusFilter === 'paid') return isPaidLike(row.paymentStatus) || isPaidLike(row.orderStatus)
-      if (statusFilter === 'pending') return isPendingLike(row.paymentStatus) || isPendingLike(row.orderStatus)
+      if (statusFilter === 'paid') return isPaidLike(row.paymentStatus)
+      if (statusFilter === 'pending') return isPendingLike(row.paymentStatus)
       if (statusFilter === 'store_only') return row.settlementScope === 'store_only'
       if (statusFilter === 'settlement') return row.settlementScope === 'sedifex_settlement'
       return true
@@ -220,8 +214,8 @@ export default function SalesCashReport() {
   }, [bookingRows, cashRows, onlineRows, posRows, range, statusFilter, typeFilter])
 
   const totals = useMemo(() => {
-    const paidRows = rows.filter(row => isPaidLike(row.paymentStatus) || isPaidLike(row.orderStatus))
-    const pendingRows = rows.filter(row => isPendingLike(row.paymentStatus) || isPendingLike(row.orderStatus))
+    const paidRows = rows.filter(row => isPaidLike(row.paymentStatus))
+    const pendingRows = rows.filter(row => isPendingLike(row.paymentStatus))
     const basis = rows
     return {
       records: rows.length,
@@ -246,7 +240,6 @@ export default function SalesCashReport() {
     { key: 'item', label: 'Item / Service', sortable: true, value: row => row.itemName },
     { key: 'amount', label: 'Amount', sortable: true, align: 'right', value: row => row.amount, render: row => formatMoney(row.amount, row.currency) },
     { key: 'payment', label: 'Payment', sortable: true, value: row => `${row.paymentMethod} ${row.paymentStatus}`, render: row => <>{row.paymentMethod}<br /><small>{row.paymentStatus}</small></> },
-    { key: 'status', label: 'Order status', sortable: true, value: row => row.orderStatus },
   ]
 
   function exportRows() {
@@ -262,7 +255,6 @@ export default function SalesCashReport() {
       currency: row.currency,
       paymentMethod: row.paymentMethod,
       paymentStatus: row.paymentStatus,
-      orderStatus: row.orderStatus,
     })))
   }
 
@@ -286,7 +278,6 @@ export default function SalesCashReport() {
         amount: row.amount,
         payment: row.paymentMethod,
         paymentStatus: row.paymentStatus,
-        orderStatus: row.orderStatus,
       })),
     })
   }
@@ -296,7 +287,7 @@ export default function SalesCashReport() {
       <section className="workspace-card">
         <p className="workspace-eyebrow">Reports / Website and In App Sales</p>
         <h1>Website and In App Sales</h1>
-        <p className="workspace-muted">This combined report includes website orders and sales recorded inside Sedifex through Sell/POS, service bookings, and store-only cash/manual records.</p>
+        <p className="workspace-muted">This combined report includes connected-website sales, Sell/POS activity, service bookings, and store-only cash/manual records.</p>
       </section>
 
       <section className="workspace-grid workspace-grid--four">
@@ -308,7 +299,7 @@ export default function SalesCashReport() {
 
       <section className="workspace-grid workspace-grid--four">
         <article className="workspace-card"><strong>{formatMoney(totals.posValue, totals.currency)}</strong><span>POS / Sell</span></article>
-        <article className="workspace-card"><strong>{formatMoney(totals.onlineValue, totals.currency)}</strong><span>Online orders</span></article>
+        <article className="workspace-card"><strong>{formatMoney(totals.onlineValue, totals.currency)}</strong><span>Website sales</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.bookingValue, totals.currency)}</strong><span>Bookings / services</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.settlementValue, totals.currency)}</strong><span>Sedifex settlement value</span></article>
       </section>
@@ -317,7 +308,7 @@ export default function SalesCashReport() {
         <div className="workspace-section-header">
           <div>
             <h2>Filter report</h2>
-            <p className="workspace-muted">Use this page for store activity. Use Settlement Report only for Paystack/commission/payout.</p>
+            <p className="workspace-muted">Use this page for business activity. Use Payments for Paystack commission, split status and payout tracking.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="button button--secondary" onClick={exportPdf} disabled={!rows.length}>Export PDF</button>
@@ -335,7 +326,7 @@ export default function SalesCashReport() {
           <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
             <option value="all">All activity</option>
             <option value="pos">POS / Sell</option>
-            <option value="online">Online orders</option>
+            <option value="online">Website sales</option>
             <option value="booking">Bookings / services</option>
             <option value="cash">Store cash / manual</option>
           </select>
