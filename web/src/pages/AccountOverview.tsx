@@ -998,7 +998,7 @@ export default function AccountOverview({
   if (storeLoading) {
     return (
       <div className="account-overview">
-        <Heading>Account overview</Heading>
+        <Heading>Business account</Heading>
         <p role="status" aria-live="polite">
           Loading workspace…
         </p>
@@ -1009,7 +1009,7 @@ export default function AccountOverview({
   if (!storeId) {
     return (
       <div className="account-overview" role="status">
-        <Heading>Account overview</Heading>
+        <Heading>Business account</Heading>
         <p>Select a workspace to view account details.</p>
       </div>
     )
@@ -1918,7 +1918,7 @@ export default function AccountOverview({
             aria-pressed={activeTab === 'billing'}
             onClick={() => setActiveTab('billing')}
           >
-            Payments
+            Plan & billing
           </button>
           <button
             type="button"
