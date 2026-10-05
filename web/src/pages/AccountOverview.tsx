@@ -976,12 +976,12 @@ export default function AccountOverview({
           : current,
       )
 
-      publish({ message: 'Workspace details updated.', tone: 'success' })
+      publish({ message: 'Business details updated.', tone: 'success' })
       setIsEditingProfile(false)
     } catch (error) {
       console.error('[account] Failed to save workspace profile', error)
       publish({
-        message: 'Unable to save workspace details. Please try again.',
+        message: 'Unable to save business details. Please try again.',
         tone: 'error',
       })
     } finally {
