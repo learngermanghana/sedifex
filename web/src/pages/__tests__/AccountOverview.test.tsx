@@ -230,7 +230,7 @@ describe('AccountOverview', () => {
     await waitFor(() => expect(getDocMock).toHaveBeenCalledTimes(2))
 
     expect(screen.getAllByRole('button', { name: /^navigation$/i })).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: /^payments$/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^plan & billing$/i })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: /^team & access$/i })).toHaveLength(1)
 
     const status = await screen.findByText('Active')
@@ -277,7 +277,7 @@ describe('AccountOverview', () => {
     expect(screen.queryByTestId('account-invite-form')).not.toBeInTheDocument()
   })
 
-  it('lets owners edit workspace details from the account page', async () => {
+  it('lets owners edit business details from the account page', async () => {
     setDocMock.mockResolvedValueOnce(undefined)
     mockUseMemberships.mockReturnValue({
       memberships: [
@@ -304,7 +304,7 @@ describe('AccountOverview', () => {
     })
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /edit workspace details/i }),
+      await screen.findByRole('button', { name: /edit business details/i }),
     )
 
     const nameInput = await screen.findByTestId('account-profile-name')
@@ -341,7 +341,7 @@ describe('AccountOverview', () => {
       'Kenya',
     )
 
-    await userEvent.click(screen.getByRole('button', { name: /save workspace details/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save business details/i }))
 
     await waitFor(() => expect(setDocMock).toHaveBeenCalled())
     const [, payload, options] = setDocMock.mock.calls[0]
@@ -364,7 +364,7 @@ describe('AccountOverview', () => {
       'hello@sedifex.com',
     )
     expect(mockPublish).toHaveBeenCalledWith({
-      message: 'Workspace details updated.',
+      message: 'Business details updated.',
       tone: 'success',
     })
   })
