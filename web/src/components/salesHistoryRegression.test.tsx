@@ -13,6 +13,7 @@ const fixture = vi.hoisted(() => ({
   rootBookings: [] as Row[],
   storeBookings: [] as Row[],
   enabledModules: ['sell'] as string[],
+  industry: 'shop',
   unsubscribed: vi.fn(),
   queries: [] as TestQuery[],
 }))
@@ -20,7 +21,7 @@ vi.mock('../firebase', () => ({ db: {} }))
 vi.mock('../hooks/useActiveStore', () => ({ useActiveStore: () => ({ storeId: 'store-a' }) }))
 vi.mock('../hooks/useStorePreferences', () => ({
   useStorePreferences: () => ({
-    preferences: { navigation: { industry: 'shop', enabledModules: fixture.enabledModules } },
+    preferences: { navigation: { industry: fixture.industry, enabledModules: fixture.enabledModules } },
   }),
 }))
 vi.mock('./CustomerPortalShareCard', () => ({ default: () => null }))
@@ -68,6 +69,7 @@ beforeEach(() => {
   fixture.rootBookings = []
   fixture.storeBookings = []
   fixture.enabledModules = ['sell']
+  fixture.industry = 'shop'
   fixture.queries = []
   fixture.unsubscribed.mockClear()
 })
@@ -104,6 +106,7 @@ it('retains supported legacy sale timestamps in today sales', () => {
 it('deduplicates store-scoped bookings and recognizes canonical paid statuses', () => {
   const now = new Date()
   fixture.enabledModules = ['sell', 'bookings']
+  fixture.industry = 'travel'
   fixture.rootBookings = [
     {
       id: 'booking-shared',
