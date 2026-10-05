@@ -15,7 +15,7 @@ export default function HowToUseSedifexPage() {
         </p>
         <ul>
           <li><strong>Daily work:</strong> Dashboard, Reports, Items, Sell, Customers, and Bookings.</li>
-          <li><strong>Documents, payments & expenses:</strong> Quick Pay, Invoices, Receipts, Expenses, Settlement, Donor management, and Funds ledger.</li>
+          <li><strong>Documents, payments & expenses:</strong> Quick Pay, Invoices, Receipts, Expenses, Payments, Donor management, and Funds ledger.</li>
           <li><strong>Bookings, registration & cases:</strong> Upcoming events, Student registration, Volunteers, and Support requests.</li>
           <li><strong>Website & marketing:</strong> Integrations, Website Builder, Blog, SMS, and Bulk email.</li>
         </ul>
@@ -25,9 +25,9 @@ export default function HowToUseSedifexPage() {
         <h2>Pick your workspace type</h2>
         <ul>
           <li><strong>Retail / Shop:</strong> Items, Sell, Quick Pay, Customers, Bookings, Website Builder, and Reports.</li>
-          <li><strong>Travel:</strong> Booking, Customers, Upcoming events, Online Orders, Trip promos, Trip gallery, and Contact links.</li>
+          <li><strong>Travel:</strong> Bookings, Customers, Upcoming events, Payments, Trip promos, Trip gallery, and Contact links.</li>
           <li><strong>NGO:</strong> Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, and Petty expenses.</li>
-          <li><strong>School:</strong> Students, Classes, Upcoming classes, Student registration, Registrations & Orders, Admissions promo, and School gallery.</li>
+          <li><strong>School:</strong> Students, Classes, Upcoming classes, Student registration, Payments, Admissions promo, and School gallery.</li>
         </ul>
       </section>
 
@@ -35,7 +35,7 @@ export default function HowToUseSedifexPage() {
         <h2>Core navigation by role</h2>
         <p>
           <strong>Owner</strong>: Dashboard, Reports, Items, Sell, Quick Pay, invoices,
-          receipts, expenses, customers or industry aliases, bookings, upcoming events, settlement,
+          receipts, expenses, customers or industry aliases, bookings, upcoming events, payments,
           integrations, Blog, Website Builder, SMS, Bulk email, Donor management, Funds ledger, and Account.
         </p>
         <p>
