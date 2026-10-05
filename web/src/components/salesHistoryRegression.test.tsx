@@ -3,23 +3,40 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
 import CompactBusinessDashboard from './CompactBusinessDashboard'
 import CustomerCRM from '../pages/CustomerCRM'
+import { isOnlinePaymentMode } from '../pages/reports/reportUtils'
 
 type Row = { id: string; [key: string]: unknown }
 type Constraint = { kind: string; field?: string; op?: string; value?: unknown }
 type TestQuery = { path: string; constraints?: Constraint[] }
-const fixture = vi.hoisted(() => ({ sales: [] as Row[], unsubscribed: vi.fn(), queries: [] as TestQuery[] }))
+const fixture = vi.hoisted(() => ({
+  sales: [] as Row[],
+  rootBookings: [] as Row[],
+  storeBookings: [] as Row[],
+  enabledModules: ['sell'] as string[],
+  unsubscribed: vi.fn(),
+  queries: [] as TestQuery[],
+}))
 vi.mock('../firebase', () => ({ db: {} }))
 vi.mock('../hooks/useActiveStore', () => ({ useActiveStore: () => ({ storeId: 'store-a' }) }))
-vi.mock('../hooks/useStorePreferences', () => {
-  const preferences = { navigation: { industry: 'shop', enabledModules: ['sell'] } }
-  return { useStorePreferences: () => ({ preferences }) }
-})
+vi.mock('../hooks/useStorePreferences', () => ({
+  useStorePreferences: () => ({
+    preferences: { navigation: { industry: 'shop', enabledModules: fixture.enabledModules } },
+  }),
+}))
 vi.mock('./CustomerPortalShareCard', () => ({ default: () => null }))
 vi.mock('firebase/firestore', () => {
   const read = (row: Row, path = ''): unknown => path.split('.').reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], row)
   const evaluate = (q: TestQuery) => {
     fixture.queries.push(q)
-    let rows: Row[] = q.path === 'sales' ? [...fixture.sales] : q.path === 'customers' ? [{ id: 'customer-a', storeId: 'store-a', name: 'Alice', email: 'alice@example.com', phone: '+233 123 456' }] : []
+    let rows: Row[] = q.path === 'sales'
+      ? [...fixture.sales]
+      : q.path === 'integrationBookings'
+        ? [...fixture.rootBookings]
+        : q.path === 'stores/store-a/integrationBookings'
+          ? [...fixture.storeBookings]
+          : q.path === 'customers'
+            ? [{ id: 'customer-a', storeId: 'store-a', name: 'Alice', email: 'alice@example.com', phone: '+233 123 456' }]
+            : []
     for (const c of q.constraints ?? []) {
       if (c.kind === 'where') rows = rows.filter(row => {
         const value = read(row, c.field)
@@ -46,7 +63,14 @@ vi.mock('firebase/firestore', () => {
     serverTimestamp: vi.fn(), setDoc: vi.fn(), addDoc: vi.fn(),
   }
 })
-beforeEach(() => { fixture.sales = []; fixture.queries = []; fixture.unsubscribed.mockClear() })
+beforeEach(() => {
+  fixture.sales = []
+  fixture.rootBookings = []
+  fixture.storeBookings = []
+  fixture.enabledModules = ['sell']
+  fixture.queries = []
+  fixture.unsubscribed.mockClear()
+})
 
 it('counts every sale today beyond historical caps, excluding voids and other stores', () => {
   const now = new Date()
@@ -75,6 +99,58 @@ it('retains supported legacy sale timestamps in today sales', () => {
   render(<MemoryRouter><CompactBusinessDashboard /></MemoryRouter>)
   const money = new Intl.NumberFormat('en-GH', { style: 'currency', currency: 'GHS', maximumFractionDigits: 2 }).format(100)
   expect(screen.getAllByText(money).length).toBeGreaterThan(0)
+})
+
+it('deduplicates store-scoped bookings and recognizes canonical paid statuses', () => {
+  const now = new Date()
+  fixture.enabledModules = ['sell', 'bookings']
+  fixture.rootBookings = [
+    {
+      id: 'booking-shared',
+      storeId: 'store-a',
+      bookingId: 'booking-shared',
+      customerName: 'Shared client',
+      serviceName: 'Consultation',
+      paymentStatus: 'paid_cash',
+      createdAt: now,
+    },
+  ]
+  fixture.storeBookings = [
+    {
+      id: 'booking-shared',
+      bookingId: 'booking-shared',
+      customerName: 'Shared client',
+      serviceName: 'Consultation',
+      paymentStatus: 'paid_cash',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'booking-store-only',
+      bookingId: 'booking-store-only',
+      customerName: 'Admin client',
+      serviceName: 'Tour',
+      paymentStatus: 'payment_paid',
+      createdAt: now,
+    },
+  ]
+
+  render(<MemoryRouter><CompactBusinessDashboard /></MemoryRouter>)
+
+  const paymentCard = screen.getByText('Payment follow-up').closest('article')
+  expect(paymentCard).not.toBeNull()
+  expect(within(paymentCard as HTMLElement).getByText('0')).toBeInTheDocument()
+  expect(within(paymentCard as HTMLElement).getByText('2 booking payments confirmed')).toBeInTheDocument()
+
+  expect(fixture.queries.some(q => q.path === 'stores/store-a/integrationBookings')).toBe(true)
+})
+
+it('treats every supported checkout mode as online for split checks', () => {
+  expect(isOnlinePaymentMode('online_checkout')).toBe(true)
+  expect(isOnlinePaymentMode('paystack')).toBe(true)
+  expect(isOnlinePaymentMode('card')).toBe(true)
+  expect(isOnlinePaymentMode('pay stack')).toBe(false)
+  expect(isOnlinePaymentMode('manual')).toBe(false)
 })
 
 it('keeps complete customer lifetime sales and orders nested customer queries before limiting', async () => {
