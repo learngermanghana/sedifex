@@ -74,9 +74,9 @@ Sedifex can use the same core modules but rename them based on business type. Ch
 | Industry | Common navigation meaning |
 |---|---|
 | **Retail / Shop** | Items, Sell, Payments, Quick Pay, Customers, Bookings, Website Builder, Reports |
-| **Travel** | Trips, Travelers, Upcoming trips, Online Orders, Trip promos, Trip gallery, Contact links |
+| **Travel** | Trips, Travelers, Upcoming trips, Payments, Trip promos, Trip gallery, Contact links |
 | **NGO** | Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, Petty expenses |
-| **School** | Students, Classes, Upcoming classes, Student registration, Registrations & Orders, Admissions promo, School gallery |
+| **School** | Students, Classes, Upcoming classes, Student registration, Registrations & Payments, Admissions promo, School gallery |
 
 Example: the same **Bookings** system may appear as **Trips** for travel, **Campaigns** for NGO, or **Classes** for school. The data model stays consistent while the labels match the business.
 
