@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { db } from '../../firebase'
 import { useActiveStore } from '../../hooks/useActiveStore'
 import ReportDataTable, { type ReportColumn } from './ReportDataTable'
-import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, normalizeSourceChannel, toDate } from './reportUtils'
+import { asNumber, asText, downloadCsv, exportReportPdf, formatDate, formatMoney, getNestedObject, isOnlinePaymentMode, normalizeSourceChannel, toDate } from './reportUtils'
 import { canonicalBookingOrderKey, chooseMoreCompleteRecord, deriveReportPaymentFields } from '../../lib/bookingStatus'
 
 type SettlementRow = {
@@ -150,11 +150,6 @@ function readMerchantNet(data: Record<string, unknown>) {
   )
   if (explicit > 0) return explicit
   return Math.max(0, readBaseAmount(data) - readSedifexCommission(data))
-}
-
-function isOnlinePaymentMode(value: unknown) {
-  const mode = asText(value).trim().toLowerCase().replace(/[\s-]+/g, '_')
-  return ['online_checkout', 'paystack', 'card'].includes(mode)
 }
 
 function isPaidLike(status: string) {
