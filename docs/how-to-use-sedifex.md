@@ -10,7 +10,7 @@ The latest interface focuses on six daily actions:
 2. Add items, services, courses, campaigns, trips, or classes.
 3. Sell, invoice, collect Quick Pay, and track bookings and website payments.
 4. Build and update a website from Sedifex data.
-5. Connect website/API integrations, email tools, and website integrations.
+5. Connect website/API integrations and email tools.
 6. Use Ask Sedifex to search items, prepare safe item edits, upload product images, and move faster.
 
 ---
@@ -23,8 +23,8 @@ Navigation settings are grouped like this:
 
 | Navigation group | Pages included |
 |---|---|
-| **Daily work** | Dashboard, Reports, Items, Sell, Payments, Customers, Bookings |
-| **Documents, payments & expenses** | Quick Pay, Invoices, Receipts, Expenses, Payments / Settlement, Donor management, Funds ledger |
+| **Daily work** | Dashboard, Reports, Items, Sell, Customers, Bookings |
+| **Documents, payments & expenses** | Quick Pay, Invoices, Receipts, Expenses, Payments, Donor management, Funds ledger |
 | **Bookings, registration & cases** | Upcoming events, Student registration, Volunteers, Support requests |
 | **Website & marketing** | Integrations, Website Builder, Blog, SMS, Bulk email |
 | **Account** | Account |
@@ -37,7 +37,6 @@ Core modules now include:
 | **Reports** | Sales, bookings, website sales, payments, inventory, donor, funds, blog, volunteer, and registration reports | Owner, Staff |
 | **Items** | Products, services, courses, packages, campaigns, trips, and catalog records | Owner |
 | **Sell** | POS sales and checkout work | Owner, Staff |
-| **Payments** | Website/website payments, registrations, and online checkout records | Owner, Staff |
 | **Quick Pay** | Simple public payment/search page where customers can find the store and pay quickly | Owner, Staff |
 | **Invoices** | Create and manage invoices | Owner, Staff |
 | **Receipts** | Create and manage receipts | Owner, Staff |
@@ -49,7 +48,7 @@ Core modules now include:
 | **Student registration** | School/course registration records and public signups | Owner, Staff |
 | **Volunteers** | NGO volunteer applications | Owner, Staff; NGO workspaces |
 | **Support requests** | NGO/community support request records | Owner, Staff; NGO workspaces |
-| **Payments / Settlement** | Payment and payments tracking | Owner |
+| **Payments** | Website, Quick Pay, booking, and other payment activity, including settlement tracking | Owner |
 | **Integrations** | Website/API key, products/services API, booking API, Apps Script, Google Business, and email settings | Owner |
 | **Blog** | Store or business blog posts | Owner, Staff |
 | **Website Builder** | Build a website from Sedifex data without coding | Owner, Staff |
@@ -76,7 +75,7 @@ Sedifex can use the same core modules but rename them based on business type. Ch
 | **Retail / Shop** | Items, Sell, Payments, Quick Pay, Customers, Bookings, Website Builder, Reports |
 | **Travel** | Trips, Travelers, Upcoming trips, Payments, Trip promos, Trip gallery, Contact links |
 | **NGO** | Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, Petty expenses |
-| **School** | Students, Classes, Upcoming classes, Student registration, Registrations & Payments, Admissions promo, School gallery |
+| **School** | Students, Classes, Upcoming classes, Student registration, Payments, Admissions promo, School gallery |
 
 Example: the same **Bookings** system may appear as **Trips** for travel, **Campaigns** for NGO, or **Classes** for school. The data model stays consistent while the labels match the business.
 
@@ -103,7 +102,6 @@ Owners can normally manage the full workspace:
 - Upcoming events
 - Student registration where enabled
 - Volunteers and support requests where enabled
-- Payments / Settlement
 - Integrations
 - Blog
 - Website Builder, Promo, Gallery, Website Hero Slides, and Social links
@@ -119,7 +117,6 @@ Staff usually work with daily operations:
 
 - Reports
 - Sell
-- Payments
 - Quick Pay
 - Invoices
 - Receipts
@@ -209,8 +206,7 @@ Use:
 - **Quick Pay** for public payment/search links
 - **Invoices** for billed customers
 - **Receipts** for proof of payment
-- **Payments** for website/website payments and registrations
-- **Payments / Settlement** for payment tracking
+- **Payments** for owner-only payment activity and settlement tracking
 - **Expenses**, **Donor management**, or **Funds ledger** where finance tracking is needed
 
 Quick Pay is useful for sharing a payment link on WhatsApp, Instagram, TikTok, flyers, or a public page. Customers can search the store, pay quickly, and receive a receipt while Sedifex keeps records updated.
@@ -250,7 +246,7 @@ Use this page for:
 
 Important: new websites should use **one Website Integration API key** for products/services, bookings, availability, gallery, and checkout.
 
-### Step 7: Track bookings, orders, and reports
+### Step 7: Track bookings, payments, and reports
 
 Use:
 
@@ -258,7 +254,7 @@ Use:
 - **Upcoming events** for availability, schedules, intakes, classes, trips, campaigns, and events
 - **Student registration** for course/school intake
 - **Volunteers** and **Support requests** for NGO intake
-- **Payments** for website payments, bookings, registrations, and checkout activity
+- **Payments** for owner-only website, Quick Pay, booking, registration, and checkout payment activity
 - **Reports** for sales, bookings, website sales, payments, inventory, donors, funds, blog activity, volunteers, and registrations
 
 ---
@@ -271,7 +267,7 @@ Use:
 2. Add products/services in **Items**.
 3. Use **Ask Sedifex** to find items, prepare edits, or upload item images.
 4. Sell in **Sell**, invoice customers, or share **Quick Pay**.
-5. Track **Payments**, customers, receipts, expenses, payments, and reports.
+5. Track customers, receipts, expenses, and reports; owners can also review **Payments**.
 6. Build a website with **Website Builder** and connect it from **Integrations**.
 
 #### Correcting a completed POS sale
@@ -320,7 +316,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 - **Account → Navigation settings** is where owners choose the business type and tick sidebar pages.
 - **Items** is the source for products, services, courses, packages, campaigns, trips, and catalog records.
 - **Ask Sedifex** can search connected items, prepare safe item edits, and upload product images into open item forms.
-- **Payments** is for website payments, bookings, registrations, and checkout activity.
+- **Payments** is owner-only and is used for website, Quick Pay, booking, registration, and checkout payment activity.
 - **Quick Pay** is for fast public payments and payment links.
 - **Website Builder** creates a website using Sedifex data and groups Promo, Gallery, Website Hero Slides, and Social links.
 - **Integrations** connects external websites, product/service feeds, booking forms, checkout, gallery, Google Business, and email tools.
@@ -335,7 +331,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 
 - Shareable onboarding note for new Sedifex users.
 - Clear explanation of the latest navigation, industry presets, role access, and module system.
-- Helps staff understand where to go for Ask Sedifex, Website Builder, Quick Pay, integrations, bookings, orders, expenses, and reports.
+- Helps staff understand where to go for Ask Sedifex, Website Builder, Quick Pay, integrations, bookings, expenses, and reports, while clearly separating owner-only payment controls.
 - Crawlable URL for search engines and AI assistants.
 - Single source of truth for changing Sedifex navigation patterns.
 
