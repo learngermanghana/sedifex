@@ -15,7 +15,7 @@ export default function QuickPaySuccess() {
           <p className="qp-eyebrow qp-success-eyebrow">Sedifex Quick Pay</p>
           <h1 className="qp-success-title">Thank you for your payment</h1>
           <p className="qp-success-copy">
-            Your payment has been received or is being confirmed. The business will receive your order in Sedifex.
+            Your payment has been received or is being confirmed. The business will receive your payment record in Sedifex.
           </p>
           {reference ? (
             <div className="qp-success-reference">
