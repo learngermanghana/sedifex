@@ -48,7 +48,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'account'])
+    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'settlement', 'account'])
   })
 
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
