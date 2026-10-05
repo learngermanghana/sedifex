@@ -328,7 +328,7 @@ export default function PublicQuickPayCheckout() {
     setIsSubmitting(true);
     setStatus(
       paymentMethod === "CASH"
-        ? "Saving cash order…"
+        ? "Saving cash payment…"
         : "Preparing secure payment…",
     );
 
@@ -509,7 +509,7 @@ export default function PublicQuickPayCheckout() {
             <p className="qp-success-copy">
               {isCashReturn
                 ? "Your cash payment request has been recorded. Please pay the store directly. The store will confirm cash received in Sedifex."
-                : "Your payment has been received or is being confirmed. The business will receive your order in Sedifex."}
+                : "Your payment has been received or is being confirmed. The business will receive your payment record in Sedifex."}
             </p>
             {paymentReference ? (
               <div className="qp-success-reference">
@@ -922,7 +922,7 @@ export default function PublicQuickPayCheckout() {
             >
               {isSubmitting
                 ? paymentMethod === "CASH"
-                  ? "Saving cash order…"
+                  ? "Saving cash payment…"
                   : "Opening payment…"
                 : selectedItem
                   ? paymentMethod === "CASH"
@@ -932,8 +932,7 @@ export default function PublicQuickPayCheckout() {
             </button>
 
             <p className="qp-powered">
-              Powered by Sedifex. Cash orders are recorded for store
-              confirmation.
+              Powered by Sedifex. Cash payments are recorded for business confirmation.
             </p>
           </form>
         </div>
