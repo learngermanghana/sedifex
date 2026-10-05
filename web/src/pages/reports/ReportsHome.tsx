@@ -13,10 +13,10 @@ const REPORT_SEARCH_KEY_PREFIX = 'sedifex-report-search-'
 
 const REPORTS = {
   allSales: { title: 'Website and In App Sales', href: '/reports/sales-cash', description: 'All sales activity from Sedifex and connected websites.', badge: 'Main' },
-  settlement: { title: 'Settlement Report', href: '/reports/settlement', description: 'Paystack/Sedifex settlements, commission, split status, and merchant net.', badge: 'Finance' },
+  settlement: { title: 'Payment Activity', href: '/reports/settlement', description: 'Booking and website payments, Paystack split status, commission, and merchant net.', badge: 'Finance' },
   inventory: { title: 'Inventory Report', href: '/reports/inventory', description: 'Products, services, stock levels, low-stock alerts, and value history.', badge: 'Stock' },
   posSales: { title: 'In App Sales', href: '/reports/pos-sales', description: 'Sales recorded directly inside Sedifex through Sell/POS.', badge: 'POS' },
-  websiteSales: { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Online orders from connected websites and public storefront pages.', badge: 'Online' },
+  websiteSales: { title: 'Website Sales Report', href: '/reports/website-sales', description: 'Payment and sales activity from connected websites and public pages.', badge: 'Online' },
   bookings: { title: 'Bookings Report', href: '/reports/bookings', description: 'Service bookings, appointment status, payment status, and exports.', badge: 'Bookings' },
   students: { title: 'Student Registrations', href: '/reports/student-registrations', description: 'Admissions, enquiries, program interest, and payment progress.', badge: 'School' },
   donors: { title: 'Donors Report', href: '/reports/donors', description: 'Donor profiles, giving totals, and engagement history.', badge: 'Donors' },
