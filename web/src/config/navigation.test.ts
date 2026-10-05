@@ -48,7 +48,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'account'])
+    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell'])
   })
 
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
@@ -159,6 +159,20 @@ describe('resolveNavigation', () => {
       'reports',
       'bulk-email',
     ])
+  })
+
+  it('keeps Account out of industry navigation because it is a global header control', () => {
+    for (const industry of ['shop', 'travel', 'ngo', 'school', 'event'] as const) {
+      const items = resolveNavigation({
+        role: 'owner',
+        workspaceProfile: {
+          industry,
+          labelPolicy: 'industry_aliases',
+          enabledModules: [],
+        },
+      })
+      expect(items.map(item => item.id)).not.toContain('account')
+    }
   })
 
   it('leaves advanced pages available for opt-in instead of enabling them at signup', () => {
