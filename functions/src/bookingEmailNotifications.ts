@@ -130,6 +130,10 @@ function isUnpaidBooking(data: RecordMap) {
     'pending_payment',
     'unpaid',
     'not_paid',
+    'awaiting_verification',
+    'payment_awaiting_verification',
+    'manual_review',
+    'pending_verification',
     'paid',
     'success',
     'succeeded',
@@ -232,6 +236,11 @@ function notificationData(bookingId: string, data: RecordMap) {
       firstText(
         [data.branchLocationName, data.preferredBranch, data.branchName, data.branch, data.location],
         180,
+      ) || null,
+    paymentUrl:
+      firstText(
+        [data.paymentUrl, data.payment_url, data.checkoutUrl, data.checkout_url, data.authorizationUrl, data.authorization_url],
+        2000,
       ) || null,
     notes: originalNotes ? `${originalNotes}\n\n${paymentNote}` : paymentNote,
   }
