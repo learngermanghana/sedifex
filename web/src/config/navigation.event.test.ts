@@ -27,7 +27,6 @@ describe('event business navigation preset', () => {
       'invoices',
       'reports',
       'bulk-email',
-      'account',
     ])
     expect(items.find(item => item.id === 'events')?.label).toBe('Event Management')
     expect(items.find(item => item.id === 'bulk-email')?.label).toBe('Email')
@@ -50,11 +49,10 @@ describe('event business navigation preset', () => {
       'invoices',
       'reports',
       'bulk-email',
-      'account',
     ])
   })
 
-  it('keeps Account last when an event workspace enables more pages', () => {
+  it('keeps Account out of the event sidebar even when more pages are enabled', () => {
     const items = resolveNavigation({
       role: 'owner',
       workspaceProfile: {
@@ -71,12 +69,12 @@ describe('event business navigation preset', () => {
           'integrations',
           'blog',
           'website-builder',
+          'account',
         ],
       },
     })
 
-    expect(items.at(-1)?.id).toBe('account')
-    expect(items.find(item => item.id === 'account')?.sortOrder).toBe(110)
+    expect(items.find(item => item.id === 'account')).toBeUndefined()
     expect(items.map(item => item.id)).toEqual([
       'dashboard',
       'events',
@@ -88,7 +86,6 @@ describe('event business navigation preset', () => {
       'integrations',
       'blog',
       'website-builder',
-      'account',
     ])
   })
 })

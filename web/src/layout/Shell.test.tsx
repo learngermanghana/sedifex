@@ -226,8 +226,25 @@ describe('Shell', () => {
         'Your Sedifex trial has ended. Update payment to continue using the app.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Account' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Account & billing' })).toHaveAttribute('href', '/account')
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('keeps Account global instead of listing it with business pages', () => {
+    renderShell(['/dashboard'])
+
+    expect(screen.getByLabelText('Open account menu')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Account & billing' })).toHaveAttribute('href', '/account')
+    expect(screen.queryByRole('link', { name: 'Account' })).not.toBeInTheDocument()
+  })
+
+  it('keeps compact global actions in the mobile header structure', () => {
+    const { container } = renderShell(['/dashboard'])
+
+    expect(container.querySelector('.shell__mobile-header-actions')).toBeInTheDocument()
+    expect(container.querySelector('.shell__mobile-global-actions')).toBeInTheDocument()
+    expect(container.querySelector('.shell__create-menu--compact')).toBeInTheDocument()
+    expect(container.querySelector('.shell__account-menu')).toBeInTheDocument()
   })
 
   it('filters navigation links using page search', async () => {

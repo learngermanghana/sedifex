@@ -29,7 +29,6 @@ const PAGE_GROUPS: PageGroup[] = [
   { title: 'Documents, payments & expenses', ids: ['quick-pay', 'invoices', 'receipts', 'expenses', 'settlement', 'donor-management', 'funds-ledger'] },
   { title: 'Bookings, registration & cases', ids: ['upcoming-events', 'student-registration', 'volunteers', 'support-requests'] },
   { title: 'Website & marketing', ids: ['integrations', 'automations', 'website-builder', 'blog', 'bulk-messaging', 'bulk-email'] },
-  { title: 'Account', ids: ['account'] },
 ]
 
 const CONFIGURABLE_NAV_ITEMS = NAV_ITEMS.filter(item => !item.hideFromPrimaryNav)
@@ -130,7 +129,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
   const hideAllPages = () => {
     setDraft(current => ({ ...current, enabledModules: ['account'], customNavItems: [] }))
-    setError('All optional pages are hidden. Account stays available so you can change navigation later.')
+    setError('All optional pages are hidden. Account stays available from the top bar so you can change navigation later.')
   }
 
   const renderPageRow = (item: typeof NAV_ITEMS[number]) => {

@@ -338,6 +338,124 @@ body.shell--menu-open {
   min-width: 0;
 }
 
+.shell__mobile-header-actions,
+.shell__mobile-global-actions {
+  display: none;
+}
+
+.shell__create-compact {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: #4338ca;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shell__account-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.shell__account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 5px 10px 5px 6px;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #312e81;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.shell__account-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.shell__account-avatar {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #4338ca;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.shell__account-trigger-label {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.shell__account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 90;
+  display: grid;
+  min-width: 220px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 22px 46px -24px rgba(15, 23, 42, 0.5);
+}
+
+.shell__account-menu-email {
+  overflow: hidden;
+  padding: 8px 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell__account-menu-link,
+.shell__account-menu-signout {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.shell__account-menu-link:hover,
+.shell__account-menu-link:focus-visible,
+.shell__account-menu-signout:hover,
+.shell__account-menu-signout:focus-visible {
+  background: #f1f5f9;
+}
+
+.shell__account-menu-signout {
+  color: #991b1b;
+}
+
 .shell__create-menu {
   position: relative;
 }
@@ -404,6 +522,23 @@ body.shell--menu-open {
     margin-top: 6px;
     box-shadow: none;
     min-width: 0;
+  }
+
+  .shell__create-menu--compact {
+    width: auto;
+  }
+
+  .shell__create-menu--compact > summary {
+    width: 40px;
+  }
+
+  .shell__create-menu--compact .shell__create-menu-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 190px;
+    margin-top: 0;
+    box-shadow: 0 22px 46px -24px rgba(15, 23, 42, .5);
   }
 }
 
@@ -664,8 +799,9 @@ body.shell--menu-open {
   }
 
   .shell__header-inner {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 10px;
   }
 
   .shell__header-controls {
@@ -673,8 +809,45 @@ body.shell--menu-open {
   }
 
   .shell__brand {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .shell__mobile-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .shell__mobile-global-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .shell__account-trigger {
+    min-height: 40px;
+    width: 40px;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 12px;
+  }
+
+  .shell__account-trigger-label {
+    display: none;
+  }
+
+  .shell__account-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .shell__account-menu-panel {
+    right: 0;
+    min-width: min(240px, calc(100vw - 32px));
   }
 
   .shell__tagline {
@@ -774,6 +947,16 @@ body.shell--menu-open {
     justify-content: flex-start;
     align-items: stretch;
     gap: 10px;
+  }
+
+  .shell__controls--drawer .shell__store-switcher {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .shell__controls--drawer .shell__store-select {
+    min-width: 0;
+    max-width: 65%;
   }
 
   .shell__resume-banner {

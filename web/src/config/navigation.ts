@@ -47,7 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   { id: 'donor-management', label: 'Donor management', type: 'module', target: '/donor-management', rolesAllowed: ['owner', 'staff'], sortOrder: 90 },
   { id: 'funds-ledger', label: 'Funds ledger', type: 'module', target: '/funds-ledger', rolesAllowed: ['owner', 'staff'], sortOrder: 105 },
-  { id: 'account', label: 'Account', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
+  { id: 'account', label: 'Account', type: 'module', target: '/account', hideFromPrimaryNav: true, rolesAllowed: ['owner'], sortOrder: 110 },
 ]
 
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
@@ -130,7 +130,7 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
     if (!item.rolesAllowed.includes(role)) return false
     if (item.industries && !item.industries.includes(workspaceProfile.industry)) return false
     if (item.hideFromPrimaryNav) return false
-    if (item.id !== 'account' && !enabledModules.has(item.id)) return false
+    if (!enabledModules.has(item.id)) return false
     return hasPermissions(item.requiredPermissions, grantedPermissions)
   }).map(item => {
     const customLabel = workspaceProfile.customLabels?.[item.target]?.trim()

@@ -76,7 +76,7 @@ const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = 
   {
     id: 'manage',
     label: 'Manage',
-    itemIds: ['donor-management', 'funds-ledger', 'volunteers', 'support-requests', 'account'],
+    itemIds: ['donor-management', 'funds-ledger', 'volunteers', 'support-requests'],
   },
 ]
 
@@ -167,19 +167,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           label: 'Blog',
           rolesAllowed: [role],
         },
-        {
-          id: 'account',
-          type: 'module',
-          target: '/account',
-          sortOrder: 20,
-          label: 'Account',
-          end: true,
-          rolesAllowed: [role],
-        },
       ]
     }
 
-    return resolveNavItems(role, preferences.navigation)
+    return resolveNavItems(role, preferences.navigation).filter(item => item.id !== 'account')
   }, [hasTrialEnded, role, preferences.navigation])
 
   const filteredNavItems = useMemo(() => {
@@ -371,11 +362,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (membershipsLoading || !isStaff) return
 
-    const isAllowed = navItems.some(
-      item =>
-        location.pathname === item.target ||
-        location.pathname.startsWith(`${item.target}/`),
-    )
+    const isAccountRoute = location.pathname.startsWith('/account')
+    const isAllowed =
+      isAccountRoute ||
+      navItems.some(
+        item =>
+          location.pathname === item.target ||
+          location.pathname.startsWith(`${item.target}/`),
+      )
 
     if (!isAllowed) {
       navigate('/sell', { replace: true })
@@ -564,59 +558,89 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     navItems.some(item => item.id === action.id),
   )
 
-  const controlsSection = (
-    <div className="shell__controls">
-      {availableCreateActions.length > 0 ? (
-        <details className="shell__create-menu">
-          <summary className="button button--primary button--small">+ Create</summary>
-          <div className="shell__create-menu-panel">
-            <span className="shell__create-menu-label">Create new</span>
-            {availableCreateActions.map(action => (
-              <Link key={action.id} to={action.target} className="shell__create-menu-link">
-                {action.label}
-              </Link>
-            ))}
-          </div>
-        </details>
-      ) : null}
-      <div
-        className="shell__store-switcher"
-        role="status"
-        aria-live="polite"
-      >
-        <span className="shell__store-label">Workspace</span>
-        {selectableMemberships.length > 1 ? (
-          <select
-            className="shell__store-select"
-            value={storeId ?? ''}
-            onChange={event => setActiveStoreId(event.target.value)}
-            aria-label="Select workspace"
-          >
-            {selectableMemberships.map((membership, index) => (
-              <option
-                key={membership.id}
-                value={membership.storeId ?? ''}
-              >
-                {workspaceNames[membership.storeId ?? ''] || `Store ${index + 1}`}
-                {membership.role === 'owner' ? ' (Owner)' : ''}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span
-            className="shell__store-select"
-            data-readonly
-          >
-            {workspaceStatus}
-          </span>
-        )}
-      </div>
-      {selectableMemberships.length <= 1 && (
-        <p className="shell__store-link-hint">
-          To link more stores, create a Master Invite Link in Staff Management and ask the other workspace owner to accept it.
-        </p>
-      )}
+  const accountInitial = (userEmail.trim().charAt(0) || 'A').toUpperCase()
 
+  const renderCreateMenu = (compact = false) =>
+    availableCreateActions.length > 0 ? (
+      <details className={`shell__create-menu${compact ? ' shell__create-menu--compact' : ''}`}>
+        <summary
+          className={compact ? 'shell__create-compact' : 'button button--primary button--small'}
+          aria-label={compact ? 'Create' : undefined}
+        >
+          {compact ? '+' : '+ Create'}
+        </summary>
+        <div className="shell__create-menu-panel">
+          <span className="shell__create-menu-label">Create new</span>
+          {availableCreateActions.map(action => (
+            <Link key={action.id} to={action.target} className="shell__create-menu-link">
+              {action.label}
+            </Link>
+          ))}
+        </div>
+      </details>
+    ) : null
+
+  const workspaceControl = (
+    <div
+      className="shell__store-switcher"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="shell__store-label">Workspace</span>
+      {selectableMemberships.length > 1 ? (
+        <select
+          className="shell__store-select"
+          value={storeId ?? ''}
+          onChange={event => setActiveStoreId(event.target.value)}
+          aria-label="Select workspace"
+        >
+          {selectableMemberships.map((membership, index) => (
+            <option
+              key={membership.id}
+              value={membership.storeId ?? ''}
+            >
+              {workspaceNames[membership.storeId ?? ''] || `Store ${index + 1}`}
+              {membership.role === 'owner' ? ' (Owner)' : ''}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span
+          className="shell__store-select"
+          data-readonly
+        >
+          {workspaceStatus}
+        </span>
+      )}
+    </div>
+  )
+
+  const accountMenu = (
+    <details className="shell__account-menu">
+      <summary className="shell__account-trigger" aria-label="Open account menu">
+        <span className="shell__account-avatar" aria-hidden="true">{accountInitial}</span>
+        <span className="shell__account-trigger-label">Account</span>
+      </summary>
+      <div className="shell__account-menu-panel">
+        <div className="shell__account-menu-email">{userEmail}</div>
+        {!isStaff ? (
+          <Link to="/account" className="shell__account-menu-link">
+            Account &amp; billing
+          </Link>
+        ) : null}
+        <button
+          type="button"
+          className="shell__account-menu-signout"
+          onClick={() => signOut(auth)}
+        >
+          Sign out
+        </button>
+      </div>
+    </details>
+  )
+
+  const statusAndSupportControls = (
+    <>
       {banner && (
         <div
           className="shell__status-badge"
@@ -626,9 +650,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           title={banner.message}
         >
           <span
-            className={`shell__status-dot${
-              banner.pulse ? ' is-pulsing' : ''
-            }`}
+            className={`shell__status-dot${banner.pulse ? ' is-pulsing' : ''}`}
             aria-hidden="true"
           />
           <span className="shell__status-label">
@@ -639,21 +661,40 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
       )}
-
       <SupportTicketLauncher />
+    </>
+  )
 
-      <div className="shell__account">
-        <span className="shell__account-email">
-          {userEmail}
-        </span>
-        <button
-          type="button"
-          className="button button--primary button--small"
-          onClick={() => signOut(auth)}
-        >
-          Sign out
-        </button>
-      </div>
+  const controlsSection = (
+    <div className="shell__controls">
+      {renderCreateMenu(false)}
+      {accountMenu}
+      {workspaceControl}
+      {selectableMemberships.length <= 1 && (
+        <p className="shell__store-link-hint">
+          To link more stores, create a Master Invite Link in Staff Management and ask the other workspace owner to accept it.
+        </p>
+      )}
+      {statusAndSupportControls}
+    </div>
+  )
+
+  const mobileDrawerControls = (
+    <div className="shell__controls shell__controls--drawer">
+      {workspaceControl}
+      {selectableMemberships.length <= 1 && (
+        <p className="shell__store-link-hint">
+          To link more stores, create a Master Invite Link in Staff Management and ask the other workspace owner to accept it.
+        </p>
+      )}
+      {statusAndSupportControls}
+    </div>
+  )
+
+  const mobileGlobalActions = (
+    <div className="shell__mobile-global-actions">
+      {renderCreateMenu(true)}
+      {accountMenu}
     </div>
   )
 
@@ -683,23 +724,26 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               {controlsSection}
             </div>
 
-            <button
-              type="button"
-              className="shell__mobile-menu-toggle"
-              aria-expanded={isMobileMenuOpen}
-              aria-controls="primary-nav"
-              onClick={() => setIsMobileMenuOpen(open => !open)}
-            >
-              <span className="shell__menu-icon" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
-              <span className="shell__menu-label">
-                {isMobileMenuOpen ? 'Close' : 'Menu'}
-              </span>
-              <span className="shell__sr-only">Toggle navigation</span>
-            </button>
+            <div className="shell__mobile-header-actions">
+              {mobileGlobalActions}
+              <button
+                type="button"
+                className="shell__mobile-menu-toggle"
+                aria-expanded={isMobileMenuOpen}
+                aria-controls="primary-nav"
+                onClick={() => setIsMobileMenuOpen(open => !open)}
+              >
+                <span className="shell__menu-icon" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="shell__menu-label">
+                  {isMobileMenuOpen ? 'Close' : 'Menu'}
+                </span>
+                <span className="shell__sr-only">Toggle navigation</span>
+              </button>
+            </div>
           </div>
 
           <div
@@ -708,7 +752,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             }`}
           >
             {navSection}
-            {controlsSection}
+            {mobileDrawerControls}
           </div>
         </div>
 
