@@ -145,7 +145,7 @@ export default function TermsPage() {
             <li>Upload malware or attempt to interfere with platform security.</li>
             <li>Scrape, reverse engineer, overload, or abuse APIs beyond permitted use.</li>
             <li>Infringe intellectual property, privacy, consumer-protection, tax, or data-protection rights of others.</li>
-            <li>Misrepresent stock availability, service or fulfilment timelines, service capability, price, discounts, or payment terms.</li>
+            <li>Misrepresent stock availability, service timelines, service capability, price, discounts, or payment terms.</li>
           </ul>
         </section>
 
