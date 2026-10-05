@@ -40,6 +40,11 @@ export function getNestedObject(source: Record<string, unknown>, key: string): R
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
+export function isOnlinePaymentMode(value: unknown) {
+  const mode = asText(value).trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return ['online_checkout', 'paystack', 'card'].includes(mode)
+}
+
 export function normalizeSourceChannel(value: unknown) {
   const normalized = asText(value, 'sedifex_market').toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
   if (['client_website', 'website', 'client_site', 'wordpress', 'external_website'].includes(normalized)) return 'client_website'
