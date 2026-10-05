@@ -19,9 +19,9 @@ export default function RefundPage() {
 
       <p className="text-sm text-slate-500">
         This Subscription, Payment &amp; Refund Policy explains how billing,
-        renewals, Sedifex Market payments and refunds work for your use of{" "}
+        renewals, Sedifex payment processing and refunds work for your use of{" "}
         <strong>Sedifex</strong>, the POS, inventory, booking, website
-        integration and marketplace system operated by{" "}
+        integration and business operations system operated by{" "}
         <strong>Learn Language Education Academy</strong>.
       </p>
 
@@ -43,18 +43,14 @@ export default function RefundPage() {
             schools, service providers, NGOs and similar organisations.
           </li>
           <li>
-            Public product, service and store discovery through{" "}
-            <code>www.sedifexmarket.com</code>.
-          </li>
-          <li>
             Website integrations that allow businesses to display products,
             services, bookings, upcoming events and registration forms from
             their Sedifex data.
           </li>
           <li>
-            Optional online checkout through Sedifex Market or connected client
-            websites, including payment confirmation, order records and merchant
-            settlement where enabled.
+            Optional online checkout through connected client
+            websites, including payment confirmation, transaction records and business
+            payout tracking where enabled.
           </li>
           <li>
             Reports, dashboards and automation tools to help merchants review
@@ -63,11 +59,11 @@ export default function RefundPage() {
         </ul>
 
         <p>
-          Sedifex may process online payments for marketplace or connected
+          Sedifex may process online payments for connected
           website checkouts through payment providers such as{" "}
-          <strong>Paystack</strong>. Where merchant settlement is enabled,
-          payment may be split between Sedifex service fees and the merchant's
-          settlement account according to the checkout rules shown at the time of
+          <strong>Paystack</strong>. Where business payout is enabled,
+          payment may be split between Sedifex service fees and the business's
+          payout account according to the checkout rules shown at the time of
           payment.
         </p>
       </section>
