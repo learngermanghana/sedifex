@@ -8,9 +8,9 @@ The latest interface focuses on six daily actions:
 
 1. Set up the workspace, staff, billing, navigation, and public profile.
 2. Add items, services, courses, campaigns, trips, or classes.
-3. Sell, invoice, collect Quick Pay, and track marketplace/website orders.
+3. Sell, invoice, collect Quick Pay, and track bookings and website payments.
 4. Build and update a website from Sedifex data.
-5. Connect website/API integrations, email tools, and marketplace catalog sync.
+5. Connect website/API integrations, email tools, and website integrations.
 6. Use Ask Sedifex to search items, prepare safe item edits, upload product images, and move faster.
 
 ---
@@ -23,7 +23,7 @@ Navigation settings are grouped like this:
 
 | Navigation group | Pages included |
 |---|---|
-| **Daily work** | Dashboard, Reports, Items, Sell, Marketplace Orders, Customers, Bookings |
+| **Daily work** | Dashboard, Reports, Items, Sell, Payments, Customers, Bookings |
 | **Documents, payments & expenses** | Quick Pay, Invoices, Receipts, Expenses, Payments / Settlement, Donor management, Funds ledger |
 | **Bookings, registration & cases** | Upcoming events, Student registration, Volunteers, Support requests |
 | **Website & marketing** | Integrations, Website Builder, Blog, SMS, Bulk email |
@@ -34,10 +34,10 @@ Core modules now include:
 | Module | Use it for | Main role access |
 |---|---|---|
 | **Dashboard** | Quick business summary and daily overview | Owner |
-| **Reports** | Sales, bookings, website sales, settlement, inventory, donor, funds, blog, volunteer, and registration reports | Owner, Staff |
+| **Reports** | Sales, bookings, website sales, payments, inventory, donor, funds, blog, volunteer, and registration reports | Owner, Staff |
 | **Items** | Products, services, courses, packages, campaigns, trips, and catalog records | Owner |
 | **Sell** | POS sales and checkout work | Owner, Staff |
-| **Marketplace Orders** | Website/marketplace product orders, registrations, and online checkout records | Owner, Staff |
+| **Payments** | Website/website payments, registrations, and online checkout records | Owner, Staff |
 | **Quick Pay** | Simple public payment/search page where customers can find the store and pay quickly | Owner, Staff |
 | **Invoices** | Create and manage invoices | Owner, Staff |
 | **Receipts** | Create and manage receipts | Owner, Staff |
@@ -49,7 +49,7 @@ Core modules now include:
 | **Student registration** | School/course registration records and public signups | Owner, Staff |
 | **Volunteers** | NGO volunteer applications | Owner, Staff; NGO workspaces |
 | **Support requests** | NGO/community support request records | Owner, Staff; NGO workspaces |
-| **Payments / Settlement** | Payment and settlement tracking | Owner |
+| **Payments / Settlement** | Payment and payments tracking | Owner |
 | **Integrations** | Website/API key, products/services API, booking API, Apps Script, Google Business, and email settings | Owner |
 | **Blog** | Store or business blog posts | Owner, Staff |
 | **Website Builder** | Build a website from Sedifex data without coding | Owner, Staff |
@@ -61,7 +61,7 @@ Core modules now include:
 | **Bulk email** | Email marketing and customer updates | Owner |
 | **Donor management** | Donations, expenses, donor records, and NGO-style finance tracking | Owner, Staff |
 | **Funds ledger** | Funds and ledger tracking | Owner, Staff |
-| **Account** | Workspace, staff, billing, navigation, marketplace sync, and setup settings | Owner |
+| **Account** | Workspace, staff, billing, navigation, integration, and setup settings | Owner |
 
 Important: **Promo**, **Gallery**, **Website Hero Slides**, and **Social links** are website-builder sections. If one of those sections is enabled, Sedifex keeps **Website Builder** available as the parent area.
 
@@ -73,10 +73,10 @@ Sedifex can use the same core modules but rename them based on business type. Ch
 
 | Industry | Common navigation meaning |
 |---|---|
-| **Retail / Shop** | Items, Sell, Marketplace Orders, Quick Pay, Customers, Bookings, Website Builder, Reports |
-| **Travel** | Trips, Travelers, Upcoming trips, Online Orders, Trip promos, Trip gallery, Contact links |
+| **Retail / Shop** | Items, Sell, Payments, Quick Pay, Customers, Bookings, Website Builder, Reports |
+| **Travel** | Trips, Travelers, Upcoming trips, Payments, Trip promos, Trip gallery, Contact links |
 | **NGO** | Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, Petty expenses |
-| **School** | Students, Classes, Upcoming classes, Student registration, Registrations & Orders, Admissions promo, School gallery |
+| **School** | Students, Classes, Upcoming classes, Student registration, Registrations & Payments, Admissions promo, School gallery |
 
 Example: the same **Bookings** system may appear as **Trips** for travel, **Campaigns** for NGO, or **Classes** for school. The data model stays consistent while the labels match the business.
 
@@ -92,7 +92,7 @@ Owners can normally manage the full workspace:
 - Reports
 - Items
 - Sell
-- Marketplace Orders
+- Payments
 - Quick Pay
 - Invoices
 - Receipts
@@ -111,7 +111,7 @@ Owners can normally manage the full workspace:
 - Bulk email
 - Donor management
 - Funds ledger
-- Account, marketplace sync, billing, navigation, and staff settings
+- Account, integration, billing, navigation, and staff settings
 
 ### Staff
 
@@ -119,7 +119,7 @@ Staff usually work with daily operations:
 
 - Reports
 - Sell
-- Marketplace Orders
+- Payments
 - Quick Pay
 - Invoices
 - Receipts
@@ -145,7 +145,7 @@ The owner can adjust modules from **Account → Navigation settings**. If a tria
 Use Ask Sedifex for:
 
 - searching connected products, services, and courses by name, category, or item type
-- seeing item price, category, stock, image, and marketplace visibility when available
+- seeing item price, category, stock, image, and website visibility when available
 - opening the **Items** page from a selected result
 - preparing safe item form edits such as “change price to 150,” “write description,” or “make name professional”
 - reviewing prepared changes before applying them to the item form
@@ -166,7 +166,7 @@ Go to **Account** and confirm:
 - billing/contract status
 - navigation modules
 - industry preset
-- marketplace catalog sync settings
+- website integrations settings
 - public profile/contact details
 
 ### Step 2: Choose the right navigation
@@ -199,7 +199,7 @@ Go to **Items** and add what the business offers:
 - consultation packages
 - appointment-based services
 
-These records can power reports, Sell, Quick Pay, Marketplace Orders, Website Builder, booking forms, checkout, and the public catalog. Use **Ask Sedifex** to search items, prepare safer item edits, or upload product images while the Add/Edit Item form is open.
+These records can power reports, Sell, Quick Pay, Payments, Website Builder, booking forms, checkout, and the public catalog. Use **Ask Sedifex** to search items, prepare safer item edits, or upload product images while the Add/Edit Item form is open.
 
 ### Step 4: Set up selling and payments
 
@@ -209,7 +209,7 @@ Use:
 - **Quick Pay** for public payment/search links
 - **Invoices** for billed customers
 - **Receipts** for proof of payment
-- **Marketplace Orders** for website/marketplace product orders and registrations
+- **Payments** for website/website payments and registrations
 - **Payments / Settlement** for payment tracking
 - **Expenses**, **Donor management**, or **Funds ledger** where finance tracking is needed
 
@@ -258,8 +258,8 @@ Use:
 - **Upcoming events** for availability, schedules, intakes, classes, trips, campaigns, and events
 - **Student registration** for course/school intake
 - **Volunteers** and **Support requests** for NGO intake
-- **Marketplace Orders** for website/marketplace product orders, registrations, and checkout orders
-- **Reports** for sales, bookings, website sales, settlement, inventory, donors, funds, blog activity, volunteers, and registrations
+- **Payments** for website payments, bookings, registrations, and checkout activity
+- **Reports** for sales, bookings, website sales, payments, inventory, donors, funds, blog activity, volunteers, and registrations
 
 ---
 
@@ -271,7 +271,7 @@ Use:
 2. Add products/services in **Items**.
 3. Use **Ask Sedifex** to find items, prepare edits, or upload item images.
 4. Sell in **Sell**, invoice customers, or share **Quick Pay**.
-5. Track **Marketplace Orders**, customers, receipts, expenses, settlement, and reports.
+5. Track **Payments**, customers, receipts, expenses, payments, and reports.
 6. Build a website with **Website Builder** and connect it from **Integrations**.
 
 #### Correcting a completed POS sale
@@ -320,14 +320,14 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 - **Account → Navigation settings** is where owners choose the business type and tick sidebar pages.
 - **Items** is the source for products, services, courses, packages, campaigns, trips, and catalog records.
 - **Ask Sedifex** can search connected items, prepare safe item edits, and upload product images into open item forms.
-- **Marketplace Orders** is for website/marketplace purchases, registrations, and checkout orders.
+- **Payments** is for website payments, bookings, registrations, and checkout activity.
 - **Quick Pay** is for fast public payments and payment links.
 - **Website Builder** creates a website using Sedifex data and groups Promo, Gallery, Website Hero Slides, and Social links.
 - **Integrations** connects external websites, product/service feeds, booking forms, checkout, gallery, Google Business, and email tools.
 - **Bookings** should be used for appointments, services, classes, trips, campaigns, and consultations.
 - **Expenses**, **Donor management**, and **Funds ledger** support day-to-day finance tracking depending on business type.
 - Industry aliases can rename modules without changing the core data model.
-- Staff see the pages their role can access; owners keep Account, billing, settlement, integration, messaging, and navigation controls.
+- Staff see the pages their role can access; owners keep Account, billing, payments, integration, messaging, and navigation controls.
 
 ---
 

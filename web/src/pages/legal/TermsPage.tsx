@@ -18,7 +18,7 @@ export default function TermsPage() {
 
         <p className="text-sm text-slate-500">
           These Terms of Service (&quot;Terms&quot;) govern your use of <strong>Sedifex — Inventory &amp; POS</strong>,
-          Sedifex Market, Sedifex checkout links, public store pages, website integrations, and related services
+          Sedifex checkout links, public business pages, website integrations, and related services
           operated by <strong>Learn Language Education Academy</strong>.
         </p>
 
@@ -34,7 +34,7 @@ export default function TermsPage() {
             <li>You are responsible for keeping your login credentials secure.</li>
             <li>You agree not to share accounts in ways that bypass role and permission controls.</li>
             <li>You are responsible for all activity that happens under your workspace.</li>
-            <li>You must provide accurate business, contact, product, service, payment, and delivery information.</li>
+            <li>You must provide accurate business, contact, product, service, booking, and payment information.</li>
           </ul>
         </section>
 
@@ -42,22 +42,22 @@ export default function TermsPage() {
           <h2 className="text-xl font-semibold">2. What Sedifex provides</h2>
           <p>
             Sedifex provides tools for point-of-sale workflows, inventory tracking, customer management,
-            service bookings, public catalog pages, website integrations, reporting, checkout/payment links,
-            Sedifex Market listings, and related merchant tools.
+            service bookings, public business pages, website integrations, reporting, checkout/payment links,
+            and related business tools.
           </p>
           <p>
-            Sedifex may make your published products, services, promotions, public pages, and approved store
-            information available through Sedifex Market or connected integration channels where enabled.
+            Sedifex may make your published products, services, promotions, public pages, and approved business
+            information available through connected websites and integration channels where enabled.
           </p>
         </section>
 
         <section className="mt-8">
-          <h2 className="text-xl font-semibold">3. Merchant responsibility for products, services, and fulfilment</h2>
+          <h2 className="text-xl font-semibold">3. Business responsibility for products and services</h2>
           <ul>
-            <li>You are responsible for product accuracy, service descriptions, prices, stock availability, taxes, delivery promises, and customer communication.</li>
+            <li>You are responsible for product accuracy, service descriptions, prices, stock availability, taxes, booking commitments, and customer communication.</li>
             <li>You must not list illegal, unsafe, counterfeit, restricted, misleading, or prohibited products or services.</li>
-            <li>You are responsible for fulfilling customer orders, service bookings, pay-on-delivery orders, and after-sales support unless Sedifex expressly agrees otherwise in writing.</li>
-            <li>If a customer contacts Sedifex about an order, Sedifex may contact you, review order records, or temporarily limit a listing to protect customers and platform trust.</li>
+            <li>You are responsible for fulfilling customer purchases and service bookings, and for after-sales support unless Sedifex expressly agrees otherwise in writing.</li>
+            <li>If a customer contacts Sedifex about a purchase, booking, or payment, Sedifex may contact you, review relevant records, or temporarily limit a listing to protect customers and platform trust.</li>
           </ul>
         </section>
 
@@ -75,39 +75,37 @@ export default function TermsPage() {
         <section className="mt-8">
           <h2 className="text-xl font-semibold">5. Checkout, payment processing, and Sedifex commission</h2>
           <p>
-            Sedifex may support online payment collection for product orders, service bookings, public pages,
-            client websites, and Sedifex Market transactions. Online payments may be processed by third-party
+            Sedifex may support online payment collection for products, services, bookings, public pages,
+            and connected client websites. Online payments may be processed by third-party
             providers such as Paystack or other payment partners.
           </p>
           <ul>
             <li>Sedifex is not a bank or payment processor. Payment providers may apply their own processing fees, settlement timelines, chargeback rules, and verification checks.</li>
-            <li>Sedifex may charge a platform commission, service fee, convenience fee, or payment facilitation fee on transactions processed through Sedifex checkout or Sedifex Market.</li>
+            <li>Sedifex may charge a platform commission, service fee, convenience fee, or payment facilitation fee on transactions processed through Sedifex checkout.</li>
             <li>Fees may be charged to the customer, deducted from merchant settlement, added to checkout totals, or handled according to the active fee policy shown or configured for that transaction.</li>
             <li>Where a checkout page or dashboard shows fees, totals, net amounts, or commission estimates, those values are part of the transaction terms for that checkout.</li>
-            <li>Sedifex may update commission rates, processing-fee recovery rules, or marketplace fee policies with notice. Continued use of Sedifex checkout after notice means you accept the updated fee policy.</li>
+            <li>Sedifex may update commission rates, processing-fee recovery rules, or payment fee policies with notice. Continued use of Sedifex checkout after notice means you accept the updated fee policy.</li>
             <li>Payment confirmation is based on Sedifex and payment-provider verification, not only on a customer returning from a payment page.</li>
           </ul>
         </section>
 
         <section className="mt-8">
-          <h2 className="text-xl font-semibold">6. Pay on delivery and manual payment</h2>
+          <h2 className="text-xl font-semibold">6. Manual and offline payments</h2>
           <p>
-            Sedifex may allow customers to place pay-on-delivery or manual-payment orders where the store collects
-            payment directly from the customer. During launch, Sedifex may make pay-on-delivery available without a
-            Sedifex commission under a free-launch policy.
+            Sedifex may allow businesses to record payments collected directly from customers, including cash,
+            bank transfer, mobile money, or other offline methods supported by the business.
           </p>
           <ul>
-            <li>Pay-on-delivery transactions may be marked as free launch, for example under <code>sedifex_free_pay_on_delivery_v1</code>.</li>
-            <li>For pay-on-delivery, the merchant is responsible for collection, delivery confirmation, customer support, and any cash/mobile-money reconciliation outside Sedifex.</li>
-            <li>Sedifex may later introduce a commission, subscription requirement, delivery fee, verification fee, or other rule for pay-on-delivery or manual-payment transactions after notice.</li>
-            <li>Sedifex may restrict pay-on-delivery if there is suspected abuse, repeated failed deliveries, customer complaints, or inaccurate listings.</li>
+            <li>The business is responsible for confirming funds it collects outside Sedifex.</li>
+            <li>Manual payment records should accurately reflect the amount, method, customer, and related booking or sale.</li>
+            <li>Sedifex may introduce verification, reconciliation, or service fees for supported payment workflows after notice.</li>
           </ul>
         </section>
 
         <section className="mt-8">
-          <h2 className="text-xl font-semibold">7. Sedifex Market and website integrations</h2>
+          <h2 className="text-xl font-semibold">7. Website integrations</h2>
           <ul>
-            <li>Product orders from Sedifex Market or connected websites may be saved as <code>integrationOrders</code>.</li>
+            <li>Website purchase and payment records may be saved in legacy integration collections used by connected websites.</li>
             <li>Service bookings, appointments, registrations, or classes may be saved as <code>integrationBookings</code>.</li>
             <li>Lead-only enquiries may be saved as <code>checkoutRequests</code>.</li>
             <li>Webhook and payment event logs may be stored for auditing and troubleshooting.</li>
@@ -130,10 +128,10 @@ export default function TermsPage() {
           <h2 className="text-xl font-semibold">9. Product comments, reviews, and engagement</h2>
           <p>
             Sedifex may support product comments, favorites, reactions, and other engagement features across
-            Sedifex Market and connected websites.
+            connected websites and public business pages.
           </p>
           <ul>
-            <li>Approved public comments may be shown across Sedifex Market and websites connected to the same product.</li>
+            <li>Approved public comments may be shown across websites and public pages connected to the same product.</li>
             <li>Sedifex and stores may moderate, hide, reject, or remove comments that are abusive, fraudulent, irrelevant, unsafe, unlawful, or misleading.</li>
             <li>You must not manipulate reviews, post fake engagement, or encourage deceptive comments.</li>
           </ul>
@@ -147,7 +145,7 @@ export default function TermsPage() {
             <li>Upload malware or attempt to interfere with platform security.</li>
             <li>Scrape, reverse engineer, overload, or abuse APIs beyond permitted use.</li>
             <li>Infringe intellectual property, privacy, consumer-protection, tax, or data-protection rights of others.</li>
-            <li>Misrepresent stock availability, delivery timelines, service capability, price, discounts, or payment terms.</li>
+            <li>Misrepresent stock availability, service timelines, service capability, price, discounts, or payment terms.</li>
           </ul>
         </section>
 
@@ -175,7 +173,7 @@ export default function TermsPage() {
             <li>We may update, improve, limit, or retire features to support reliability, safety, compliance, or scale.</li>
             <li>We aim for high availability but do not guarantee uninterrupted service at all times.</li>
             <li>Scheduled maintenance, third-party outages, network issues, or incidents may temporarily affect access.</li>
-            <li>We may adjust marketplace, checkout, engagement, and integration features as we learn from real merchant and customer usage.</li>
+            <li>We may adjust checkout, engagement, website, and integration features as we learn from real merchant and customer usage.</li>
           </ul>
         </section>
 
@@ -184,7 +182,7 @@ export default function TermsPage() {
           <p>
             To the maximum extent permitted by law, Sedifex and Learn Language Education Academy are not liable
             for indirect, incidental, special, consequential, or punitive damages arising from use of Sedifex,
-            including lost profits, failed deliveries, disputes between merchants and customers, third-party
+            including lost profits, failed services or transactions, disputes between merchants and customers, third-party
             payment delays, or integration downtime.
           </p>
         </section>
@@ -201,8 +199,8 @@ export default function TermsPage() {
         <section className="mt-8">
           <h2 className="text-xl font-semibold">16. Updates to these Terms</h2>
           <p>
-            We may update these Terms as Sedifex grows, including changes related to marketplace fees,
-            commission, checkout, delivery, subscriptions, integrations, or compliance. We will update this page
+            We may update these Terms as Sedifex grows, including changes related to payment fees,
+            commission, checkout, subscriptions, integrations, or compliance. We will update this page
             and may provide additional notice for material changes. Continued use of Sedifex after changes take
             effect means you accept the updated Terms.
           </p>
