@@ -48,7 +48,14 @@ export const SMS_STAGE_TO_EVENT: Record<SmsAutomationStage, string> = {
   thank_you: 'booking.completed',
 }
 
+const EMAIL_ONLY_REMINDER_EVENTS = new Set<string>([
+  'booking.reminder_3d',
+  'booking.reminder_2d',
+  'booking.reminder_1d',
+])
+
 export const AUTOMATION_SMS_EVENTS = Object.values(SMS_STAGE_TO_EVENT)
+  .filter(eventType => !EMAIL_ONLY_REMINDER_EVENTS.has(eventType))
 
 const EMAIL_EVENT_SET = new Set<string>(AUTOMATION_EMAIL_EVENTS)
 const SMS_EVENT_SET = new Set<string>(AUTOMATION_SMS_EVENTS)
