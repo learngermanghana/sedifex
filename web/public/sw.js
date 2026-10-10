@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sedifex-static-v3'
+const CACHE_NAME = 'sedifex-static-v4'
 const SYNC_TAG = 'sync-pending-requests'
 const BASE_URL = new URL('./', self.location).pathname
 const PRECACHE_URLS = [
@@ -90,11 +90,11 @@ self.addEventListener('message', event => {
   if (!data || typeof data !== 'object') return
 
   if (data.type === 'QUEUE_BACKGROUND_REQUEST' && data.payload) {
-    event.waitUntil(handleQueueRequest(data.payload))
+    event.waitUntil(handleQueueRequest(data.payload, event.ports[0]))
   }
 
   if (data.type === 'PROCESS_QUEUE_NOW') {
-    event.waitUntil(processQueue())
+    event.waitUntil(processQueue(data.retryFailed === true))
   }
 
   if (data.type === 'REQUEST_QUEUE_STATUS') {
@@ -108,18 +108,25 @@ self.addEventListener('sync', event => {
   }
 })
 
-async function handleQueueRequest(payload) {
+async function handleQueueRequest(payload, replyPort) {
   const entry = {
     requestType: payload.requestType,
     endpoint: payload.endpoint,
     payload: payload.payload,
     authToken: payload.authToken || null,
+    authUid: payload.authUid || null,
     createdAt: payload.createdAt || Date.now(),
     retries: 0,
     updatedAt: Date.now(),
   }
 
-  await addQueueEntry(entry)
+  try {
+    await addQueueEntry(entry)
+    replyPort?.postMessage({ stored: true })
+  } catch (error) {
+    replyPort?.postMessage({ stored: false })
+    throw error
+  }
   await scheduleSync()
   await broadcastQueueState(isProcessingQueue ? 'processing' : 'pending')
 }
@@ -246,7 +253,7 @@ async function updateQueueEntry(id, updates) {
   })
 }
 
-async function processQueue() {
+async function processQueue(retryFailed = false) {
   if (isProcessingQueue) return
   isProcessingQueue = true
   try {
@@ -260,9 +267,16 @@ async function processQueue() {
 
     const failures = []
     let lastFailureMessage = null
+    let retryableFailures = false
 
     for (const entry of entries) {
       if (!entry || entry.id === undefined) continue
+      if ((entry.retries || 0) >= MAX_RETRIES && !retryFailed) {
+        failures.push(entry.id)
+        lastFailureMessage = 'Saved offline work needs attention. Open Sedifex and retry sync.'
+        continue
+      }
+      if (retryFailed) entry.retries = 0
       try {
         await sendQueueEntry(entry)
         await deleteQueueEntry(entry.id)
@@ -271,13 +285,17 @@ async function processQueue() {
         console.warn('[sw] Failed to send queued request', error)
         const attempts = (entry.retries || 0) + 1
         if (attempts >= MAX_RETRIES) {
-          await deleteQueueEntry(entry.id)
+          // Retain failed work for recovery; never discard a sale on retry exhaustion.
+          await updateQueueEntry(entry.id, { retries: attempts, updatedAt: Date.now() })
+          failures.push(entry.id)
+          lastFailureMessage = error instanceof Error ? error.message : 'Unknown error'
           notifyClients({
             type: 'QUEUE_REQUEST_FAILED',
             requestType: entry.requestType,
             error: error instanceof Error ? error.message : 'Unknown error',
           })
         } else {
+          retryableFailures = true
           await updateQueueEntry(entry.id, { retries: attempts, updatedAt: Date.now() })
           failures.push(entry.id)
           lastFailureMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -292,8 +310,9 @@ async function processQueue() {
         pending,
         error: lastFailureMessage || 'Some queued requests failed',
       })
-      notifyClients({ type: 'QUEUE_PROCESSING_REQUIRED' })
-      if (self.registration && 'sync' in self.registration) {
+      // Retry exhausted requests only after an explicit user action.
+      if (retryableFailures) notifyClients({ type: 'QUEUE_PROCESSING_REQUIRED' })
+      if (retryableFailures && self.registration && 'sync' in self.registration) {
         try {
           await self.registration.sync.register(SYNC_TAG)
         } catch (error) {
@@ -318,7 +337,27 @@ async function processQueue() {
   }
 }
 
+async function refreshQueueAuth(entry) {
+  if (!entry.authUid) return entry.authToken
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  for (const client of clients) {
+    const token = await new Promise(resolve => {
+      const channel = new MessageChannel()
+      const timer = setTimeout(() => { channel.port1.close(); resolve(null) }, 3000)
+      channel.port1.onmessage = event => {
+        clearTimeout(timer)
+        channel.port1.close()
+        resolve(event.data?.authToken || null)
+      }
+      client.postMessage({ type: 'REQUEST_QUEUE_AUTH', authUid: entry.authUid }, [channel.port2])
+    })
+    if (token) return token
+  }
+  return entry.authToken
+}
+
 async function sendQueueEntry(entry) {
+  entry.authToken = await refreshQueueAuth(entry)
   const headers = { 'Content-Type': 'application/json' }
   if (entry.authToken) {
     headers['Authorization'] = `Bearer ${entry.authToken}`
