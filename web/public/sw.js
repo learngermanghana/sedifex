@@ -431,7 +431,12 @@ async function respondQueueStatus(target) {
     status = 'processing'
   }
 
-  let pending = await getQueueCount().catch(() => 0)
+  const entries = await getQueueEntries().catch(() => null)
+  let pending = entries ? entries.length : await getQueueCount().catch(() => 0)
+  if (!isProcessingQueue && entries?.some(entry => (entry.retries || 0) >= MAX_RETRIES)) {
+    status = 'error'
+    error = 'Saved offline work needs attention. Open Sedifex and retry sync.'
+  }
   if (pending <= 0 && status !== 'error') {
     pending = 0
     status = 'idle'
