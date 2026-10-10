@@ -1,3 +1,4 @@
+import { triggerQueueProcessing } from '../utils/offlineQueue'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
@@ -92,8 +93,8 @@ function buildBannerMessage(queueStatus: ReturnType<typeof useConnectivityStatus
       pendingCount > 0
         ? `We couldn’t sync ${pendingCount} ${formatRequestCount(
             pendingCount,
-          )}. We’ll retry automatically.`
-        : 'We hit a snag syncing recent work. We’ll retry automatically.'
+          )}. Your work is saved on this device; retry sync when ready.`
+        : 'We hit a snag syncing recent work. Retry sync when ready.'
 
     if (queueStatus.lastError) {
       return `${baseMessage} (${queueStatus.lastError})`
@@ -540,7 +541,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                       key={item.id}
                       to={item.target}
                       end={item.end}
-                      className={({ isActive }) => navLinkClass(isActive, Boolean(item.parentTarget))}
+                      className={({ isActive }) => navLinkClass(isActive, Boolean('parentTarget' in item && item.parentTarget))}
                     >
                       {item.label}
                     </NavLink>
@@ -639,6 +640,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
       )}
+
+      {queue.status === 'error' && queue.pending > 0 ? (
+        <button type="button" className="button button--small" disabled={!isOnline || !isReachable} onClick={() => void triggerQueueProcessing(true)}>
+          Retry sync ({queue.pending})
+        </button>
+      ) : null}
 
       <SupportTicketLauncher />
 
