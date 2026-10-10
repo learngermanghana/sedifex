@@ -13,12 +13,13 @@ type QueueMessage = {
     requestType: QueueRequestType
     endpoint: string
     payload: unknown
+    authUid: string | null
     authToken: string | null
     createdAt: number
   }
 }
 
-type ProcessMessage = { type: 'PROCESS_QUEUE_NOW' }
+type ProcessMessage = { type: 'PROCESS_QUEUE_NOW'; retryFailed?: boolean }
 
 function getController(registration: ServiceWorkerRegistration) {
   return registration.active ?? registration.waiting ?? registration.installing ?? null
@@ -58,6 +59,7 @@ export async function queueCallableRequest(
       type: 'QUEUE_BACKGROUND_REQUEST',
       payload: {
         requestType,
+        authUid: auth.currentUser?.uid ?? null,
         endpoint: getCallableEndpoint(functionName),
         payload,
         authToken,
@@ -65,7 +67,18 @@ export async function queueCallableRequest(
       },
     }
 
-    controller.postMessage(message)
+    // Only report success after IndexedDB has committed the request.
+    const stored = await new Promise<boolean>(resolve => {
+      const channel = new MessageChannel()
+      const timer = setTimeout(() => { channel.port1.close(); resolve(false) }, 10000)
+      channel.port1.onmessage = event => {
+        clearTimeout(timer)
+        channel.port1.close()
+        resolve(event.data?.stored === true)
+      }
+      controller.postMessage(message, [channel.port2])
+    })
+    if (!stored) return false
 
     const syncManager = (registration as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } }).sync
     if (syncManager) {
@@ -86,12 +99,12 @@ export async function queueCallableRequest(
   }
 }
 
-export async function triggerQueueProcessing() {
+export async function triggerQueueProcessing(retryFailed = false) {
   if (!('serviceWorker' in navigator)) return
   try {
     const registration = await navigator.serviceWorker.ready
     const controller = getController(registration)
-    controller?.postMessage({ type: 'PROCESS_QUEUE_NOW' } satisfies ProcessMessage)
+    controller?.postMessage({ type: 'PROCESS_QUEUE_NOW', retryFailed } satisfies ProcessMessage)
     const syncManager = (registration as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } }).sync
     if (syncManager) {
       try {
@@ -103,4 +116,22 @@ export async function triggerQueueProcessing() {
   } catch (error) {
     console.warn('[offline-queue] Unable to trigger queue processing', error)
   }
+}
+
+// The worker cannot refresh Firebase credentials itself. Only supply credentials
+// for the account which originally queued the request.
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.type !== 'REQUEST_QUEUE_AUTH' || !event.ports[0]) return
+    const port = event.ports[0]
+    const user = auth.currentUser
+    if (!user || user.uid !== event.data.authUid) {
+      port.postMessage({ authToken: null })
+      return
+    }
+    void user.getIdToken().then(
+      authToken => port.postMessage({ authToken }),
+      () => port.postMessage({ authToken: null }),
+    )
+  })
 }
