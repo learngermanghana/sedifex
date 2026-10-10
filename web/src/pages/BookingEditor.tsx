@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { UnsavedChangesGuard } from '../hooks/useUnsavedChanges'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -289,6 +291,8 @@ export default function BookingEditor() {
   const navigate = useNavigate()
   const isCreateMode = bookingId === 'new'
   const [form, setForm] = useState<BookingFormState>(DEFAULT_FORM)
+  const [formBaseline, setFormBaseline] = useState(() => JSON.stringify(DEFAULT_FORM))
+  const actionInFlight = useRef(false)
   const [loading, setLoading] = useState(!isCreateMode)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -351,7 +355,9 @@ export default function BookingEditor() {
         }
 
         if (cancelled) return
-        setForm(normalizeBookingForm(data))
+        const loadedForm = normalizeBookingForm(data)
+        setForm(loadedForm)
+        setFormBaseline(JSON.stringify(loadedForm))
         setExistingPaymentConfirmedAt(data.paymentConfirmedAt ?? data.payment_confirmed_at ?? null)
         setPaymentStatusReviewed(false)
         setPortalRequest(normalizeCustomerPortalRequest(data.customerPortalRequest, bookingId))
@@ -415,6 +421,7 @@ export default function BookingEditor() {
   }
 
   async function handleSave() {
+    if (actionInFlight.current) return
     if (!storeId) {
       setErrorMessage('Select a workspace before editing bookings.')
       return
@@ -441,6 +448,7 @@ export default function BookingEditor() {
       if (!continueWithPendingPayment) return
     }
 
+    actionInFlight.current = true
     setSaving(true)
     setErrorMessage(null)
     setSuccessMessage(null)
@@ -636,6 +644,7 @@ export default function BookingEditor() {
       setSuccessMessage(saveMessage)
       publish({ tone: 'success', message: saveMessage })
       void playSound('success')
+      flushSync(() => setFormBaseline(JSON.stringify(form)))
       navigate('/bookings')
     } catch (error) {
       console.error('[booking-editor] Failed to save booking', error)
@@ -644,6 +653,7 @@ export default function BookingEditor() {
       publish({ tone: 'error', message: failureMessage })
       void playSound('error')
     } finally {
+      actionInFlight.current = false
       setSaving(false)
     }
   }
@@ -692,6 +702,7 @@ export default function BookingEditor() {
   }
 
   async function handleDeleteBooking() {
+    if (actionInFlight.current) return
     if (!storeId || isCreateMode) {
       setErrorMessage('Select an existing booking before deleting.')
       return
@@ -700,6 +711,7 @@ export default function BookingEditor() {
     const confirmed = window.confirm('Delete this booking? This will remove it from Sedifex bookings.')
     if (!confirmed) return
 
+    actionInFlight.current = true
     setDeleting(true)
     setErrorMessage(null)
     setSuccessMessage(null)
@@ -718,6 +730,7 @@ export default function BookingEditor() {
       setSuccessMessage(deleteMessage)
       publish({ tone: 'success', message: deleteMessage })
       void playSound('success')
+      flushSync(() => setFormBaseline(JSON.stringify(form)))
       navigate('/bookings')
     } catch (error) {
       console.error('[booking-editor] Failed to delete booking', error)
@@ -726,12 +739,14 @@ export default function BookingEditor() {
       publish({ tone: 'error', message: failureMessage })
       void playSound('error')
     } finally {
+      actionInFlight.current = false
       setDeleting(false)
     }
   }
 
   return (
     <main className="page booking-editor-page">
+      <UnsavedChangesGuard dirty={JSON.stringify(form) !== formBaseline} />
       <section className="card booking-editor-page__card stack gap-3">
         <header className="stack gap-1">
           <p className="form__hint">
@@ -744,8 +759,8 @@ export default function BookingEditor() {
         </header>
 
         {loading && <p className="form__hint">Loading booking…</p>}
-        {errorMessage && <p className="form__error">{errorMessage}</p>}
-        {successMessage && <p className="form__success">{successMessage}</p>}
+        {errorMessage && <p role="alert" className="form__error">{errorMessage}</p>}
+        {successMessage && <p role="status" className="form__success">{successMessage}</p>}
 
         {!loading && (
           <form
