@@ -1,4 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { mergeCommittedFields } from '../lib/mergeCommittedFields'
+import { flushSync } from 'react-dom'
+import { UnsavedChangesGuard } from '../hooks/useUnsavedChanges'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -288,7 +291,12 @@ export default function BookingEditor() {
   const location = useLocation()
   const navigate = useNavigate()
   const isCreateMode = bookingId === 'new'
+  const returnContext = location.state as { returnTo?: unknown; returnScroll?: unknown } | null
+  const returnTo = typeof returnContext?.returnTo === 'string' && (returnContext.returnTo === '/bookings' || returnContext.returnTo.startsWith('/bookings?')) ? returnContext.returnTo : '/bookings'
+  const returnScroll = typeof returnContext?.returnScroll === 'number' && Number.isFinite(returnContext.returnScroll) ? Math.max(0, returnContext.returnScroll) : 0
   const [form, setForm] = useState<BookingFormState>(DEFAULT_FORM)
+  const [formBaseline, setFormBaseline] = useState(() => JSON.stringify(DEFAULT_FORM))
+  const actionInFlight = useRef(false)
   const [loading, setLoading] = useState(!isCreateMode)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -351,7 +359,9 @@ export default function BookingEditor() {
         }
 
         if (cancelled) return
-        setForm(normalizeBookingForm(data))
+        const loadedForm = normalizeBookingForm(data)
+        setForm(loadedForm)
+        setFormBaseline(JSON.stringify(loadedForm))
         setExistingPaymentConfirmedAt(data.paymentConfirmedAt ?? data.payment_confirmed_at ?? null)
         setPaymentStatusReviewed(false)
         setPortalRequest(normalizeCustomerPortalRequest(data.customerPortalRequest, bookingId))
@@ -415,6 +425,7 @@ export default function BookingEditor() {
   }
 
   async function handleSave() {
+    if (actionInFlight.current) return
     if (!storeId) {
       setErrorMessage('Select a workspace before editing bookings.')
       return
@@ -441,6 +452,7 @@ export default function BookingEditor() {
       if (!continueWithPendingPayment) return
     }
 
+    actionInFlight.current = true
     setSaving(true)
     setErrorMessage(null)
     setSuccessMessage(null)
@@ -636,7 +648,8 @@ export default function BookingEditor() {
       setSuccessMessage(saveMessage)
       publish({ tone: 'success', message: saveMessage })
       void playSound('success')
-      navigate('/bookings')
+      flushSync(() => setFormBaseline(JSON.stringify(form)))
+      navigate(returnTo, { state: { returnScroll } })
     } catch (error) {
       console.error('[booking-editor] Failed to save booking', error)
       const failureMessage = 'Unable to save booking right now.'
@@ -644,6 +657,7 @@ export default function BookingEditor() {
       publish({ tone: 'error', message: failureMessage })
       void playSound('error')
     } finally {
+      actionInFlight.current = false
       setSaving(false)
     }
   }
@@ -662,16 +676,17 @@ export default function BookingEditor() {
       }, PortalRequestDecisionResponse>(functions, 'reviewCustomerPortalBookingRequest')
       const response = await reviewRequest({ storeId, bookingId, decision, note: portalDecisionNote })
       setPortalRequest(response.data.request)
+      const committed: Partial<BookingFormState> = {}
       if (decision === 'approve' && response.data.request.type === 'reschedule') {
-        setForm(previous => ({
-          ...previous,
-          bookingDate: response.data.bookingDate || previous.bookingDate,
-          bookingTime: response.data.bookingTime || previous.bookingTime,
-        }))
+        if (response.data.bookingDate) committed.bookingDate = response.data.bookingDate
+        if (response.data.bookingTime) committed.bookingTime = response.data.bookingTime
       }
-      if (decision === 'approve' && response.data.request.type === 'cancel') {
-        setForm(previous => ({ ...previous, status: 'cancelled' }))
-      }
+      if (decision === 'approve' && response.data.request.type === 'cancel') committed.status = 'cancelled'
+      const saved = JSON.parse(formBaseline) as BookingFormState
+      setForm(previous => {
+        return mergeCommittedFields(previous, saved, committed)
+      })
+      setFormBaseline(JSON.stringify({ ...saved, ...committed }))
       const message = decision === 'approve'
         ? 'Customer request approved. Sedifex updated the booking and will handle the customer notification.'
         : 'Customer request rejected. Sedifex has recorded the decision and notified the customer when email is available.'
@@ -692,6 +707,7 @@ export default function BookingEditor() {
   }
 
   async function handleDeleteBooking() {
+    if (actionInFlight.current) return
     if (!storeId || isCreateMode) {
       setErrorMessage('Select an existing booking before deleting.')
       return
@@ -700,6 +716,7 @@ export default function BookingEditor() {
     const confirmed = window.confirm('Delete this booking? This will remove it from Sedifex bookings.')
     if (!confirmed) return
 
+    actionInFlight.current = true
     setDeleting(true)
     setErrorMessage(null)
     setSuccessMessage(null)
@@ -718,7 +735,8 @@ export default function BookingEditor() {
       setSuccessMessage(deleteMessage)
       publish({ tone: 'success', message: deleteMessage })
       void playSound('success')
-      navigate('/bookings')
+      flushSync(() => setFormBaseline(JSON.stringify(form)))
+      navigate(returnTo, { state: { returnScroll } })
     } catch (error) {
       console.error('[booking-editor] Failed to delete booking', error)
       const failureMessage = 'Unable to delete booking right now.'
@@ -726,16 +744,18 @@ export default function BookingEditor() {
       publish({ tone: 'error', message: failureMessage })
       void playSound('error')
     } finally {
+      actionInFlight.current = false
       setDeleting(false)
     }
   }
 
   return (
     <main className="page booking-editor-page">
+      <UnsavedChangesGuard dirty={JSON.stringify(form) !== formBaseline} />
       <section className="card booking-editor-page__card stack gap-3">
         <header className="stack gap-1">
           <p className="form__hint">
-            <Link to="/bookings">← Back to bookings</Link>
+            <Link to={returnTo} state={{ returnScroll }}>← Back to bookings</Link>
           </p>
           <h1>{isCreateMode ? 'Add booking' : 'Edit booking'}</h1>
           <p className="form__hint">
@@ -744,8 +764,8 @@ export default function BookingEditor() {
         </header>
 
         {loading && <p className="form__hint">Loading booking…</p>}
-        {errorMessage && <p className="form__error">{errorMessage}</p>}
-        {successMessage && <p className="form__success">{successMessage}</p>}
+        {errorMessage && <p role="alert" className="form__error">{errorMessage}</p>}
+        {successMessage && <p role="status" className="form__success">{successMessage}</p>}
 
         {!loading && (
           <form
