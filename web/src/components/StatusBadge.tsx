@@ -1,3 +1,4 @@
+import { bookingPresentation, paymentPresentation } from '../lib/recordStatus'
 import React from 'react'
 import './StatusBadge.css'
 
@@ -50,21 +51,15 @@ export function statusBadgePresentation(value: unknown, kind: StatusBadgeKind = 
     }
   }
 
-  if (kind === 'payment') {
-    if (['manual_review', 'awaiting_verification', 'review'].includes(status)) {
-      return { label: 'Payment review', tone: 'warning' }
-    }
-    if (['pending', 'payment_pending', 'partial', 'unpaid'].includes(status)) {
-      return { label: 'Payment pending', tone: 'warning' }
-    }
-  }
+  if (kind === 'payment') return paymentPresentation({ paymentStatus: status })
+  if (kind === 'booking') return bookingPresentation({ bookingStatus: status })
 
   const shared = SHARED_STATUS_PRESENTATIONS[status]
   if (shared) return shared
 
   return {
     label: status.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
-    tone: kind === 'payment' ? 'warning' : 'neutral',
+    tone: 'neutral',
   }
 }
 
