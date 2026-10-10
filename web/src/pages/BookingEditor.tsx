@@ -1,3 +1,4 @@
+import { mergeCommittedFields } from '../lib/mergeCommittedFields'
 import { flushSync } from 'react-dom'
 import { UnsavedChangesGuard } from '../hooks/useUnsavedChanges'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -290,6 +291,9 @@ export default function BookingEditor() {
   const location = useLocation()
   const navigate = useNavigate()
   const isCreateMode = bookingId === 'new'
+  const returnContext = location.state as { returnTo?: unknown; returnScroll?: unknown } | null
+  const returnTo = typeof returnContext?.returnTo === 'string' && (returnContext.returnTo === '/bookings' || returnContext.returnTo.startsWith('/bookings?')) ? returnContext.returnTo : '/bookings'
+  const returnScroll = typeof returnContext?.returnScroll === 'number' && Number.isFinite(returnContext.returnScroll) ? Math.max(0, returnContext.returnScroll) : 0
   const [form, setForm] = useState<BookingFormState>(DEFAULT_FORM)
   const [formBaseline, setFormBaseline] = useState(() => JSON.stringify(DEFAULT_FORM))
   const actionInFlight = useRef(false)
@@ -645,7 +649,7 @@ export default function BookingEditor() {
       publish({ tone: 'success', message: saveMessage })
       void playSound('success')
       flushSync(() => setFormBaseline(JSON.stringify(form)))
-      navigate('/bookings')
+      navigate(returnTo, { state: { returnScroll } })
     } catch (error) {
       console.error('[booking-editor] Failed to save booking', error)
       const failureMessage = 'Unable to save booking right now.'
@@ -672,16 +676,17 @@ export default function BookingEditor() {
       }, PortalRequestDecisionResponse>(functions, 'reviewCustomerPortalBookingRequest')
       const response = await reviewRequest({ storeId, bookingId, decision, note: portalDecisionNote })
       setPortalRequest(response.data.request)
+      const committed: Partial<BookingFormState> = {}
       if (decision === 'approve' && response.data.request.type === 'reschedule') {
-        setForm(previous => ({
-          ...previous,
-          bookingDate: response.data.bookingDate || previous.bookingDate,
-          bookingTime: response.data.bookingTime || previous.bookingTime,
-        }))
+        if (response.data.bookingDate) committed.bookingDate = response.data.bookingDate
+        if (response.data.bookingTime) committed.bookingTime = response.data.bookingTime
       }
-      if (decision === 'approve' && response.data.request.type === 'cancel') {
-        setForm(previous => ({ ...previous, status: 'cancelled' }))
-      }
+      if (decision === 'approve' && response.data.request.type === 'cancel') committed.status = 'cancelled'
+      const saved = JSON.parse(formBaseline) as BookingFormState
+      setForm(previous => {
+        return mergeCommittedFields(previous, saved, committed)
+      })
+      setFormBaseline(JSON.stringify({ ...saved, ...committed }))
       const message = decision === 'approve'
         ? 'Customer request approved. Sedifex updated the booking and will handle the customer notification.'
         : 'Customer request rejected. Sedifex has recorded the decision and notified the customer when email is available.'
@@ -731,7 +736,7 @@ export default function BookingEditor() {
       publish({ tone: 'success', message: deleteMessage })
       void playSound('success')
       flushSync(() => setFormBaseline(JSON.stringify(form)))
-      navigate('/bookings')
+      navigate(returnTo, { state: { returnScroll } })
     } catch (error) {
       console.error('[booking-editor] Failed to delete booking', error)
       const failureMessage = 'Unable to delete booking right now.'
@@ -750,7 +755,7 @@ export default function BookingEditor() {
       <section className="card booking-editor-page__card stack gap-3">
         <header className="stack gap-1">
           <p className="form__hint">
-            <Link to="/bookings">← Back to bookings</Link>
+            <Link to={returnTo} state={{ returnScroll }}>← Back to bookings</Link>
           </p>
           <h1>{isCreateMode ? 'Add booking' : 'Edit booking'}</h1>
           <p className="form__hint">
