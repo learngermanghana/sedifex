@@ -45,3 +45,17 @@ test('queue acknowledgement follows storage commit and precedes network processi
   await assert.rejects(ctx.handleQueueRequest({}, { postMessage: message => reply.push(message.stored) }), /quota exceeded/);
   assert.deepEqual(reply, [false]);
 });
+
+test('a restarted worker reports retained exhausted sales as recoverable errors', async () => {
+  const ctx = worker();
+  ctx.getQueueEntries = async () => [{ id: 1, retries: 3 }];
+  let status;
+  await ctx.respondQueueStatus({ postMessage: message => { status = message; } });
+  assert.equal(status.status, 'error');
+  assert.equal(status.pending, 1);
+  assert.match(status.error, /retry sync/);
+  ctx.getQueueEntries = async () => [];
+  await ctx.respondQueueStatus({ postMessage: message => { status = message; } });
+  assert.equal(status.status, 'idle');
+  assert.equal(status.pending, 0);
+});
