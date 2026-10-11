@@ -1,0 +1,29 @@
+Sedifex: Fix common setup and integration problems
+Source: https://sedifex.com/help/troubleshooting.html
+Last updated: 2026-10-11
+
+Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
+
+Signup or verification fails
+If your email already has an account, choose Log in or Reset password instead of creating another account. Check password requirements and matching confirmation.
+Check spam/junk for verification email and use the link sent to the correct address. If account creation succeeded but workspace setup failed, keep the error message and contact support; do not repeatedly create new accounts.
+
+Workspace or navigation is missing
+Confirm you signed into the correct account and selected the correct workspace. Invited staff should ask the owner to check their membership and assigned role. Owners can review enabled pages in Account → Navigation settings.
+A page can be hidden by navigation settings or unavailable to your role. Do not assume that a missing sidebar entry means the records were deleted.
+
+Payment or sync looks wrong
+Refresh the relevant booking, order or payment and compare its saved status with the provider reference. Do not mark a record paid only because the customer says payment was sent.
+If saved offline work needs attention, use the sync retry control shown in Sedifex when connectivity returns. Avoid recreating the same sale while a retained offline entry is still waiting to sync.
+
+Integration request fails
+1. Check the HTTP status and error body. Keep the request ID, endpoint and time of the failure.
+2. Verify the base URL, store ID, active key and contract header against the integration guide.
+3. For server errors, retry a read-only request with a reasonable delay. For writes or payments, confirm whether a record was already created before retrying; follow the documented reference/deduplication behavior.
+4. When contacting support or an AI assistant, share a redacted request and response. Remove keys, tokens, private portal URLs and customer/payment information.
+
+More guidance
+Integration setup: https://sedifex.com/help/integrations.html
+Business setup: https://sedifex.com/help/business-setup.html
+Support in Sedifex: https://sedifex.com/support
+
