@@ -40,4 +40,11 @@
     <priority>0.8</priority>
     <changefreq>weekly</changefreq>
   </url>
+  <url><loc>https://sedifex.com/help.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://sedifex.com/help/sign-up.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://sedifex.com/help/business-setup.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://sedifex.com/help/products-and-sales.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://sedifex.com/help/bookings-and-payments.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://sedifex.com/help/integrations.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://sedifex.com/help/troubleshooting.html</loc><lastmod>2026-10-11</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>
