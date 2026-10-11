@@ -1,3 +1,5 @@
+import { bookingReminderPortal } from './bookingReminderPortal'
+import { loadAutomationSettings, isEmailAutomationEnabled } from './automationSettings'
 import * as functions from 'firebase-functions/v1'
 import { defaultDb } from './firestore'
 import { queueBrandedNotification } from './notifications'
@@ -313,7 +315,7 @@ async function queueBookingEmail(
   bookingId: string,
   eventType: BookingEmailEvent,
   data: RecordMap,
-  options: { forceStoreAlert?: boolean; referenceSuffix?: string } = {},
+  options: { forceStoreAlert?: boolean; referenceSuffix?: string; portalUrl?: string | null } = {},
 ) {
   return queueBrandedNotification({
     eventType,
@@ -321,7 +323,7 @@ async function queueBookingEmail(
     reference: eventReference(bookingId, eventType, data, options.referenceSuffix),
     customer: customerFromBooking(data),
     payment: paymentFromBooking(data),
-    data: notificationData(bookingId, data),
+    data: { ...notificationData(bookingId, data), portalUrl: options.portalUrl || null },
     forceStoreAlert: options.forceStoreAlert === true,
   })
 }
@@ -459,6 +461,9 @@ export const automateBookingEmailOnWrite = functions.firestore
   })
 
 async function runReminderForBooking(storeId: string, bookingId: string, data: RecordMap, today: string) {
+  const latest = await defaultDb.collection('stores').doc(storeId).collection('integrationBookings').doc(bookingId).get()
+  if (!latest.exists) return false
+  data = latest.data() as RecordMap
   const status = bookingStatus(data)
   if (!['confirmed', 'rescheduled'].includes(status)) return false
   const appointmentDate = bookingDate(data)
@@ -467,8 +472,12 @@ async function runReminderForBooking(storeId: string, bookingId: string, data: R
   if (days === null || !REMINDER_DAYS.has(days)) return false
 
   const eventType = `booking.reminder_${days}d` as BookingEmailEvent
+  const settings = await loadAutomationSettings(storeId)
+  if (!isEmailAutomationEnabled(settings, eventType)) return false
+  const portalUrl = await bookingReminderPortal(storeId, bookingId, data, customerFromBooking(data).email || '')
   await queueBookingEmail(storeId, bookingId, eventType, data, {
-    referenceSuffix: appointmentDate,
+    referenceSuffix: `${appointmentDate}-${bookingTime(data)}`,
+    portalUrl,
   })
   return true
 }

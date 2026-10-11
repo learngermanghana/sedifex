@@ -1,3 +1,4 @@
+import { bookingSchedule, canConfirmAttendance } from './bookingReminderCore'
 import * as functions from 'firebase-functions/v1'
 import { randomBytes } from 'crypto'
 import { admin, defaultDb } from './firestore'
@@ -426,6 +427,31 @@ export const getCustomerPortalSelfServiceState = functions.https.onCall(async da
     .map(item => serializeRequest(item.data.customerPortalRequest, item.id))
     .filter(item => Boolean(item.id))
   return { ok: true, requests }
+})
+
+export const confirmCustomerPortalBookingAttendance = functions.https.onCall(async data => {
+  const loaded = await loadPortalBooking(data?.token, data?.bookingId)
+  const expectedDate = text(data?.bookingDate, 40)
+  const expectedTime = text(data?.bookingTime, 40)
+  const rootRef = defaultDb.collection('integrationBookings').doc(loaded.bookingId)
+  await defaultDb.runTransaction(async transaction => {
+    const [snapshot, root, linkSnapshot, customerSnapshot] = await Promise.all([transaction.get(loaded.bookingRef), transaction.get(rootRef), transaction.get(defaultDb.collection('eventClientLinks').doc(loaded.hash)), transaction.get(loaded.customerRef)])
+    const liveLink = linkSnapshot.data()
+    const liveCustomer = customerSnapshot.data()
+    if (liveLink?.status !== 'active' || liveLink?.linkKind !== 'customer_portal' || liveLink?.storeId !== loaded.link.storeId || liveLink?.customerId !== loaded.link.customerId || !(liveLink.expiresAt?.toMillis?.() > Date.now()) || liveCustomer?.storeId !== loaded.link.storeId || liveCustomer?.portal?.status !== 'active' || liveCustomer?.portal?.publicLinkHash !== loaded.hash) throw new functions.https.HttpsError('permission-denied', 'This customer portal link is no longer active.')
+    const current = snapshot.data() as RecordMap | undefined
+    if (!current || !bookingBelongsToCustomer(loaded.link.customerId, liveCustomer, current) || (firstText(current, ['storeId', 'store_id', 'merchantId'], 180) && firstText(current, ['storeId', 'store_id', 'merchantId'], 180) !== loaded.link.storeId)) throw new functions.https.HttpsError('permission-denied', 'Booking is not linked to this portal.')
+    if (!canConfirmAttendance(current)) throw new functions.https.HttpsError('failed-precondition', 'The business must confirm the booking first, and any pending request must be reviewed.')
+    const schedule = bookingSchedule(current)
+    if (schedule.date !== expectedDate || schedule.time !== expectedTime) throw new functions.https.HttpsError('failed-precondition', 'The appointment changed. Refresh your portal and confirm the new time.')
+    const existing = record(current.customerAttendanceConfirmation)
+    if (existing.date === schedule.date && existing.time === schedule.time && existing.confirmedAt) return
+    const confirmation = { ...schedule, customerId: loaded.link.customerId, confirmedAt: admin.firestore.FieldValue.serverTimestamp() }
+    transaction.set(loaded.bookingRef, { customerAttendanceConfirmation: confirmation }, { merge: true })
+    const rootData = root.data() as RecordMap | undefined
+    if (rootData && firstText(rootData, ['storeId', 'store_id', 'merchantId'], 180) === loaded.link.storeId && bookingBelongsToCustomer(loaded.link.customerId, liveCustomer, rootData) && bookingSchedule(rootData).date === schedule.date && bookingSchedule(rootData).time === schedule.time) transaction.set(rootRef, { customerAttendanceConfirmation: confirmation }, { merge: true })
+  })
+  return { ok: true, bookingId: loaded.bookingId }
 })
 
 export const submitCustomerPortalBookingRequest = functions.https.onCall(async data => {

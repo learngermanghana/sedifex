@@ -1,3 +1,4 @@
+import { hasAttendanceConfirmation } from '../lib/bookingAttendance';
 import { bookingPresentation, paymentPresentation, payoutPresentation, recordAmounts, formatRecordAmount } from '../lib/recordStatus';
 import { useStorePreferenceSync } from '../hooks/useStorePreferenceSync';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -815,6 +816,7 @@ export default function Bookings() {
                       </td>
                       <td>
                         <StatusBadge status={b.bookingStatus} kind="booking" />
+                        {hasAttendanceConfirmation(b.sourceRecord || {}) && <small>Customer attendance confirmed</small>}
                         <small>
                           {b.paymentStatus === "paid" &&
                           b.bookingStatus === "pending"
@@ -869,6 +871,7 @@ export default function Bookings() {
                   </p>
                   <div className="bookings-card__statuses">
                     <StatusBadge status={b.bookingStatus || b.status} kind="booking" />
+                    {hasAttendanceConfirmation(b.sourceRecord || {}) && <small>Customer attendance confirmed</small>}
                     <StatusBadge status={b.paymentStatus} kind="payment" />
                         <small>Received: {formatRecordAmount(bookingAmounts(b).received, bookingAmounts(b).currency)} · Balance: {formatRecordAmount(bookingAmounts(b).outstanding, bookingAmounts(b).currency)}</small>
                         <small>Payout: {bookingPayout(b)}</small>

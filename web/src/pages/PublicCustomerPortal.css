@@ -283,3 +283,5 @@
   .customer-portal__record-actions button,
   .customer-portal__action-form-actions button { width: 100%; }
 }
+.customer-portal__record--highlighted { border-color: #818cf8; box-shadow: 0 0 0 2px #c7d2fe; }
+.customer-portal__attendance { padding: 10px 12px; border-radius: 10px; background: #ecfdf5; color: #166534; font-weight: 600; }
