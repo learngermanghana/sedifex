@@ -1,0 +1,319 @@
+{
+  "updated": "2026-10-11",
+  "guides": [
+    {
+      "slug": "sign-up",
+      "category": "Getting started",
+      "title": "Create your Sedifex account",
+      "description": "Sign up, verify your email and reach your business workspace.",
+      "sections": [
+        {
+          "title": "Create an owner account",
+          "steps": [
+            "Open sedifex.com and choose Sign up free.",
+            "Enter your full name, email address, password and matching confirmation. Follow the password requirements shown on screen.",
+            "Choose Create free account. Sedifex creates your account and prepares your workspace. Business details come next in guided setup."
+          ]
+        },
+        {
+          "title": "Verify your email",
+          "paragraphs": [
+            "Check your inbox and spam folder for the verification message. Open the link sent to your own email address. Return to Sedifex and sign in when prompted. Do not share verification links or passwords with another person or an AI assistant."
+          ]
+        },
+        {
+          "title": "Already have an account or work for a business?",
+          "paragraphs": [
+            "Choose Log in, or Continue with Google if that is how you access your existing account. Use Reset password if you have forgotten your password.",
+            "Invited staff should use the account and invitation arranged by the business owner. Creating a new owner account creates a separate workspace; it does not join you to an existing business."
+          ]
+        },
+        {
+          "title": "Next step",
+          "links": [
+            {
+              "label": "Set up your business",
+              "url": "/help/business-setup.html"
+            },
+            {
+              "label": "Open Sedifex",
+              "url": "/"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "business-setup",
+      "category": "Getting started",
+      "title": "Set up your business workspace",
+      "description": "Choose your business type, save your details and start your first task.",
+      "sections": [
+        {
+          "title": "Your business",
+          "steps": [
+            "In guided setup, enter your business name.",
+            "Choose Shop or retail, Travel or bookings, NGO/church/foundation, School/training centre, or Event planning. Sedifex seeds recommended pages when navigation has not already been configured.",
+            "Expand Contact and location if you want to add a business phone, country, town or address. These details can be added later.",
+            "Choose Save and continue. Existing navigation and dashboard customizations are preserved."
+          ]
+        },
+        {
+          "title": "First task and ready screen",
+          "paragraphs": [
+            "Choose the recommended first task or Explore the dashboard. Continue to the ready screen, then open that task. Travel opens a Service draft; School opens a Course draft. Review and save the item yourself. Setup does not publish your business publicly.",
+            "Finish later saves your current draft and opens the dashboard. Return using Continue guided setup in the business setup checklist. Progress is saved when you continue or finish later, not on every keystroke."
+          ]
+        },
+        {
+          "title": "Complete the checklist when useful",
+          "steps": [
+            "Business profile: save your business name and contact information in Account. A logo is optional.",
+            "Products or services: create your first item.",
+            "Payout account: open Payout account and complete the available Paystack setup before relying on online payment routing.",
+            "Public page: save and enable your page in Public page settings, then preview its customer view."
+          ],
+          "paragraphs": [
+            "Optional steps may be skipped. A skipped step is not counted as completed. Refresh progress after saving changes. Staff use their assigned workspace pages; owners manage business setup."
+          ]
+        },
+        {
+          "title": "Useful pages",
+          "links": [
+            {
+              "label": "Account",
+              "url": "/account?section=workspace"
+            },
+            {
+              "label": "Navigation settings",
+              "url": "/account?section=navigation"
+            },
+            {
+              "label": "Payout account",
+              "url": "/settlement/setup"
+            },
+            {
+              "label": "Public page",
+              "url": "/promo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "products-and-sales",
+      "category": "Daily work",
+      "title": "Add products, services and courses",
+      "description": "Build your catalog and choose the right workflow for a sale or appointment.",
+      "sections": [
+        {
+          "title": "Add an item",
+          "steps": [
+            "Open Products/Items, then Add item. Navigation labels may vary by business type.",
+            "Choose the item type: Product, Service, Course, or another supported type.",
+            "Enter its name, category, price/fee, currency and relevant details. Add images if useful.",
+            "For physical products, review stock and product fields. For services, review service and payment details. For courses, review course fees and course fields.",
+            "Review visibility options and save. Do not assume that adding an item automatically publishes a public website."
+          ]
+        },
+        {
+          "title": "Choose the correct transaction",
+          "paragraphs": [
+            "Use Sell for a point-of-sale transaction. Use Bookings for a service appointment. Online Orders contains product purchases from connected websites; product purchases should not be created as service bookings.",
+            "Before recording a real payment, check the customer, amount, currency and payment method. Review the saved sale, receipt or order afterward."
+          ]
+        },
+        {
+          "title": "Open an item editor",
+          "links": [
+            {
+              "label": "Add a product",
+              "url": "/products/new"
+            },
+            {
+              "label": "Add a service",
+              "url": "/products/new?itemType=service"
+            },
+            {
+              "label": "Add a course",
+              "url": "/products/new?itemType=course"
+            },
+            {
+              "label": "Products",
+              "url": "/products"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "bookings-and-payments",
+      "category": "Daily work",
+      "title": "Manage bookings, reminders and payments",
+      "description": "Keep attendance, business approval and payment status clear.",
+      "sections": [
+        {
+          "title": "Review a booking",
+          "steps": [
+            "Open Bookings and select the customer appointment.",
+            "Check service, date/time, customer details, booking status and payment status separately.",
+            "Confirm, reschedule or cancel using the available booking actions. Verify the saved result after the action."
+          ]
+        },
+        {
+          "title": "Customer reminders and portal actions",
+          "paragraphs": [
+            "The email reminder schedule runs at 08:00 Africa/Accra for configured reminders three, two and one calendar days before confirmed or rescheduled appointments. These are calendar-day reminders, not exact hourly countdowns. Owners can turn email or individual reminder rules off in Automations.",
+            "Reminder emails include a private customer portal link when a saved customer matches the business and recipient email. Revoked links remain revoked. Unmatched bookings can receive reminders without a portal button.",
+            "Customers can confirm attendance or request a new time from the portal. Attendance confirmation does not mark a payment paid or replace business approval. A changed appointment time requires a new attendance confirmation. Pending reschedule/cancellation requests need business review."
+          ]
+        },
+        {
+          "title": "Payments and payout setup",
+          "paragraphs": [
+            "Review payments in Payments and the relevant booking/order. Check the actual payment status before treating an appointment as paid. Setting up a payout account configures routing; it is not proof that a particular payment or settlement succeeded.",
+            "Use the customer record to share a private portal when appropriate. Do not publish private portal links, customer contact details or payment records in an AI chat."
+          ]
+        },
+        {
+          "title": "Useful pages",
+          "links": [
+            {
+              "label": "Bookings",
+              "url": "/bookings"
+            },
+            {
+              "label": "Payments",
+              "url": "/settlement"
+            },
+            {
+              "label": "Automations",
+              "url": "/settings/automations"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "integrations",
+      "category": "Integrations",
+      "title": "Connect a website to Sedifex",
+      "description": "Create an integration key and test a read-only catalog request from your server.",
+      "sections": [
+        {
+          "title": "Prepare the workspace",
+          "steps": [
+            "Sign in as the owner of the business you want to connect. Select the correct workspace.",
+            "Open Account \u2192 Integrations \u2192 API keys. Create an integration key and keep the newly shown token in your server secret configuration.",
+            "Copy the workspace/store ID shown in Account. Use that ID with a key belonging to the same business.",
+            "Read the canonical integration contract and endpoint guide linked below before adding write or payment flows."
+          ]
+        },
+        {
+          "title": "Keep credentials on the server",
+          "paragraphs": [
+            "Use your backend or a server route to call Sedifex. Never put an integration key into browser JavaScript, a public repository, a screenshot or an AI prompt. The placeholders in this guide must be replaced privately in your environment.",
+            "The client-facing contract requires x-api-key and X-Sedifex-Contract-Version: 2026-04-13. Keep the contract version in the header, not in the URL path. The deployed project/environment determines the base URL. Some endpoints accept alternate authentication headers; use the canonical x-api-key example here."
+          ]
+        },
+        {
+          "title": "Test the catalog with a read-only request",
+          "paragraphs": [
+            "Run this request from your server or a private terminal after substituting your own store ID and key. It reads catalog data and does not create orders or payments."
+          ],
+          "code": "curl --fail-with-body --get \\\n  'https://us-central1-sedifex-web.cloudfunctions.net/v1IntegrationProducts' \\\n  --data-urlencode 'storeId=YOUR_STORE_ID' \\\n  -H 'x-api-key: YOUR_INTEGRATION_KEY' \\\n  -H 'X-Sedifex-Contract-Version: 2026-04-13'"
+        },
+        {
+          "title": "Check the response",
+          "paragraphs": [
+            "A successful response includes catalog items and the store ID. Log the response header x-sedifex-request-id for support and check x-sedifex-contract-version. An empty catalog can mean no visible items; review item visibility and the selected store before assuming a sync failure.",
+            "For an authentication error (401/403), verify the key is active, belongs to the supplied store ID, and is actually being sent by your server. Rotate/revoke an exposed key in Account. For a 400 contract-version-mismatch response, align your integration with the canonical contract before retrying. Do not silently fall back to another contract version."
+          ]
+        },
+        {
+          "title": "Add checkout and bookings only after the read works",
+          "paragraphs": [
+            "Sedifex remains the source of truth: product orders use integrationOrders; service appointments use integrationBookings; lead-only enquiries use checkoutRequests. Webhook logs are not order records. Follow the endpoint guide for payloads, references and webhook verification.",
+            "Review AI-generated code before using it. Ask the assistant to identify assumptions and verify endpoint names against the sources below. Never claim an integration is connected until a real response and the saved record have been checked."
+          ]
+        },
+        {
+          "title": "Authoritative references",
+          "links": [
+            {
+              "label": "Canonical integration contract",
+              "url": "https://github.com/learngermanghana/sedifex/blob/main/docs/integration-contract.md"
+            },
+            {
+              "label": "Endpoint and API guide",
+              "url": "https://github.com/learngermanghana/sedifex/blob/main/docs/integration-api-guide.md"
+            },
+            {
+              "label": "Account integrations",
+              "url": "/account?section=integrations"
+            },
+            {
+              "label": "WordPress installation guide",
+              "url": "/docs/wordpress-install-guide"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "troubleshooting",
+      "category": "Troubleshooting",
+      "title": "Fix common setup and integration problems",
+      "description": "Find the next check for signup, workspaces, payments and API errors.",
+      "sections": [
+        {
+          "title": "Signup or verification fails",
+          "paragraphs": [
+            "If your email already has an account, choose Log in or Reset password instead of creating another account. Check password requirements and matching confirmation.",
+            "Check spam/junk for verification email and use the link sent to the correct address. If account creation succeeded but workspace setup failed, keep the error message and contact support; do not repeatedly create new accounts."
+          ]
+        },
+        {
+          "title": "Workspace or navigation is missing",
+          "paragraphs": [
+            "Confirm you signed into the correct account and selected the correct workspace. Invited staff should ask the owner to check their membership and assigned role. Owners can review enabled pages in Account \u2192 Navigation settings.",
+            "A page can be hidden by navigation settings or unavailable to your role. Do not assume that a missing sidebar entry means the records were deleted."
+          ]
+        },
+        {
+          "title": "Payment or sync looks wrong",
+          "paragraphs": [
+            "Refresh the relevant booking, order or payment and compare its saved status with the provider reference. Do not mark a record paid only because the customer says payment was sent.",
+            "If saved offline work needs attention, use the sync retry control shown in Sedifex when connectivity returns. Avoid recreating the same sale while a retained offline entry is still waiting to sync."
+          ]
+        },
+        {
+          "title": "Integration request fails",
+          "steps": [
+            "Check the HTTP status and error body. Keep the request ID, endpoint and time of the failure.",
+            "Verify the base URL, store ID, active key and contract header against the integration guide.",
+            "For server errors, retry a read-only request with a reasonable delay. For writes or payments, confirm whether a record was already created before retrying; follow the documented reference/deduplication behavior.",
+            "When contacting support or an AI assistant, share a redacted request and response. Remove keys, tokens, private portal URLs and customer/payment information."
+          ]
+        },
+        {
+          "title": "More guidance",
+          "links": [
+            {
+              "label": "Integration setup",
+              "url": "/help/integrations.html"
+            },
+            {
+              "label": "Business setup",
+              "url": "/help/business-setup.html"
+            },
+            {
+              "label": "Support in Sedifex",
+              "url": "/support"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
