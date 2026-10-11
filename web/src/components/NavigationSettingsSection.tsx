@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, NAV_ITEMS, type Industry } from '../config/navigation'
 import type { StorePreferences } from '../hooks/useStorePreferences'
 
@@ -60,6 +59,8 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
     enabledModules: Array.isArray(preferences.enabledModules) ? preferences.enabledModules : [],
     customNavItems: [],
   })
+  const [pageQuery, setPageQuery] = useState('')
+  const [savedMessage, setSavedMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ValidationError>(null)
 
@@ -85,15 +86,21 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
     return CONFIGURABLE_NAV_ITEMS.filter(item => !groupedIds.has(item.id))
   }, [])
 
+  const dirty = draft.industry !== preferences.industry || JSON.stringify([...enabledModuleIds].sort()) !== JSON.stringify(effectiveModules(preferences.industry, preferences.enabledModules).sort())
+  const matchesSearch = (item: typeof NAV_ITEMS[number]) => item.label.toLowerCase().includes(pageQuery.trim().toLowerCase())
   const save = async () => {
     setError(null)
     setSaving(true)
+    setSavedMessage('')
     try {
       await onSave({
         ...draft,
         enabledModules: uniqueList(draft.enabledModules),
         customNavItems: [],
       })
+      setSavedMessage('Navigation saved. Your sidebar is up to date.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save navigation. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -138,15 +145,15 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
     const recommended = enabledModulesByIndustry.has(item.id)
     const isAccount = item.id === 'account'
     return (
-      <div key={item.id} className="account-overview__integration-key-item">
-        <label style={{ alignItems: 'center', display: 'flex', flex: 1, gap: 12, margin: 0 }}>
+      <div key={item.id} className={`navigation-settings__row ${checked ? 'is-enabled' : ''}`}>
+        <label className="navigation-settings__choice">
           <input type="checkbox" disabled={!canEdit || isAccount} checked={checked} onChange={() => toggleModule(item.id)} />
           <span>
-            <Link to={item.target} style={{ color: 'inherit', fontWeight: 700, textDecoration: 'none' }}>{item.label}</Link>
-            {isAccount ? <small className="account-overview__hint" style={{ display: 'block' }}>Always available to workspace owners</small> : recommended ? <small className="account-overview__hint" style={{ display: 'block' }}>Recommended for {selectedIndustry.label}</small> : null}
+            <strong>{item.label}</strong>
+            {isAccount ? <small className="account-overview__hint">Always available to workspace owners</small> : recommended ? <small className="account-overview__hint">Recommended for {selectedIndustry.label}</small> : null}
           </span>
         </label>
-        <Link className="button button--secondary" to={item.target}>Open</Link>
+        <span className="navigation-settings__state">{isAccount ? 'Always on' : checked ? 'Visible' : 'Hidden'}</span>
       </div>
     )
   }
@@ -178,9 +185,11 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
       <button type="button" className="button button--ghost" disabled={!canEdit} onClick={hideAllPages}>Hide optional pages</button>
     </div>
 
+    <label className="navigation-settings__search"><span>Find a page</span><input type="search" value={pageQuery} onChange={event => setPageQuery(event.target.value)} placeholder="Search page names" /></label>
+    {!CONFIGURABLE_NAV_ITEMS.some(matchesSearch) && <p role="status">No pages match your search.</p>}
     <div className="account-overview__nav-groups">
       {PAGE_GROUPS.map(group => {
-        const groupItems = group.ids.map(findNavItem).filter(Boolean) as typeof NAV_ITEMS
+        const groupItems = group.ids.map(findNavItem).filter(Boolean).filter(item => matchesSearch(item!)) as typeof NAV_ITEMS
         if (groupItems.length === 0) return null
         return <div className="account-overview__card" key={group.title}>
           <h3>{group.title}</h3>
@@ -190,15 +199,15 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
         </div>
       })}
 
-      {ungroupedItems.length ? <div className="account-overview__card">
+      {ungroupedItems.filter(matchesSearch).length ? <div className="account-overview__card">
         <h3>Other pages</h3>
         <div className="account-overview__toggle-list">
-          {ungroupedItems.map(renderPageRow)}
+          {ungroupedItems.filter(matchesSearch).map(renderPageRow)}
         </div>
       </div> : null}
     </div>
 
     {error && <p className="account-overview__error-text">{error}</p>}
-    {canEdit && <button type="button" className="button" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save navigation settings'}</button>}
+    {canEdit && <div className="navigation-settings__save-bar"><p role="status">{dirty ? 'You have unsaved navigation changes.' : savedMessage || 'Your navigation is up to date.'}</p><button type="button" className="button" disabled={saving || !dirty} onClick={save}>{saving ? 'Saving…' : 'Save navigation settings'}</button></div>}
   </section>
 }
