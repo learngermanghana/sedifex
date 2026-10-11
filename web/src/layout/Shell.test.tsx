@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import Shell from './Shell'
@@ -42,7 +42,11 @@ vi.mock('../hooks/useStorePreferences', () => ({
   useStorePreferences: () => mockUseStorePreferences(),
 }))
 
+vi.mock('../context/PwaContext', () => ({ usePwaContext: () => ({ isPwaApp: false }) }))
+vi.mock('../components/SupportTicketLauncher', () => ({ default: () => null }))
+vi.mock('firebase/firestore', () => ({ doc: () => ({}), getDoc: async () => ({ data: () => ({ displayName: 'Demo Store' }) }) }))
 vi.mock('../firebase', () => ({
+  db: {},
   auth: {},
 }))
 
@@ -119,6 +123,28 @@ describe('Shell', () => {
       loading: false,
       updatePreferences: vi.fn(),
     })
+  })
+
+  it('navigation update shows business identity and closes the drawer on same-page selection', async () => {
+    mockUseMemberships.mockReturnValue({ memberships: [{ id: 'm1', uid: 'user-123', storeId: 'store-123', role: 'owner' }], loading: false })
+    const { container } = renderShell(['/products'])
+    expect((await screen.findAllByText('Demo Store')).length).toBeGreaterThan(0)
+    const user = userEvent.setup()
+    const toggle = container.querySelector('.shell__mobile-menu-toggle') as HTMLButtonElement
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const nav = within(container.querySelector('#primary-nav-mobile') as HTMLElement)
+    await user.type(container.querySelector('#primary-nav-mobile input[type=search]') as HTMLInputElement, 'Payments')
+    expect(nav.getByText('Payments', { selector: 'a' })).toBeInTheDocument()
+    await user.click(nav.getByText('Clear search'))
+    await user.click(nav.getByText('Items', { selector: 'a' }))
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    await user.keyboard('{Escape}')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveFocus()
+    const ids = Array.from(container.querySelectorAll('[id]')).map(node => node.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('renders the workspace status', () => {
