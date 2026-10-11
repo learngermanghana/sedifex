@@ -98,10 +98,11 @@ export async function fetchOnboardingStatus(
 export async function setOnboardingStatus(
   uid: string | null,
   status: OnboardingStatus,
+  options: { requireRemote?: boolean } = {},
 ) {
   if (!uid) return
 
-  setCachedOnboardingStatus(uid, status)
+  if (!options.requireRemote) setCachedOnboardingStatus(uid, status)
 
   try {
     const ref = doc(db, 'teamMembers', uid)
@@ -114,7 +115,9 @@ export async function setOnboardingStatus(
       },
       { merge: true },
     )
+    if (options.requireRemote) setCachedOnboardingStatus(uid, status)
   } catch (error) {
+    if (options.requireRemote) throw error
     console.warn('[onboarding] Failed to persist onboarding status', error)
   }
 }
