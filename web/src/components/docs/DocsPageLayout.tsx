@@ -13,6 +13,8 @@ export default function DocsPageLayout({ title, subtitle, children }: DocsPageLa
     <main className="docs-page">
       <div className="docs-page__container">
         <nav aria-label="Documentation navigation" className="docs-page__nav">
+          <a href="/help.html">Help Centre</a>
+          <span>·</span>
           <Link to="/account">← Back to account</Link>
           <span>·</span>
           <Link to="/docs/how-to-use-sedifex">How to use Sedifex</Link>
