@@ -684,22 +684,24 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 const PRODUCT_SEARCH_KEY_PREFIX = 'sedifex-products-search-'
 
 type ProductsServiceFirstProps = {
+  initialItemType?: 'product' | 'service' | 'course'
   openEditorInitially?: boolean
   onEditorClose?: (result: { saved: boolean; message?: string }) => void
 }
 
 export default function ProductsServiceFirst({
+  initialItemType = 'product',
   openEditorInitially = false,
   onEditorClose,
 }: ProductsServiceFirstProps) {
   const { storeId } = useActiveStore()
   const { memberships } = useMemberships()
   const [items, setItems] = useState<Product[]>([])
-  const [draft, setDraft] = useState<Draft>(blankDraft)
+  const [draft, setDraft] = useState<Draft>(() => ({ ...blankDraft, itemType: initialItemType, category: normalizeCategory('', initialItemType) }))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(openEditorInitially)
   const [search, setSearch] = useState('')
-  const [draftBaseline, setDraftBaseline] = useState(() => JSON.stringify(blankDraft))
+  const [draftBaseline, setDraftBaseline] = useState(() => JSON.stringify({ ...blankDraft, itemType: initialItemType, category: normalizeCategory('', initialItemType) }))
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const actionInFlight = useRef(false)
   const returnScroll = useRef<number | null>(null)
