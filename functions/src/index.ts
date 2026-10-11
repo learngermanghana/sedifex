@@ -42,7 +42,7 @@ export {
 } from './automationCenter'
 export { runEventCommunicationsNow } from './eventCommunications'
 export { notifyUnpaidBookingCreated } from './bookingEmailNotifications'
-export { automateBookingEmailOnWrite } from './bookingEmailAutomation'
+export { automateBookingEmailOnWrite, processBookingEmailReminders } from './bookingEmailAutomation'
 export {
   sendEventContractForSignature,
   getPublicEventContract,
@@ -63,6 +63,7 @@ export {
 export {
   getCustomerPortalSelfServiceState,
   submitCustomerPortalBookingRequest,
+  confirmCustomerPortalBookingAttendance,
   reviewCustomerPortalBookingRequest,
   createCustomerPortalPaymentCheckout,
 } from './customerPortalSelfService'
@@ -105,3 +106,5 @@ export { getPricingPlans } from './pricingPlans'
 export { commitSale } from './pos/commitSale'
 export { receiveStock } from './pos/receiveStock'
 export { voidSale } from './pos/voidSale'
+
+export { getBusinessSetupChecklist, setBusinessSetupStepSkipped } from './businessSetup'
