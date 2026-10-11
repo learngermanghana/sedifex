@@ -1,0 +1,29 @@
+Sedifex: Set up your business workspace
+Source: https://sedifex.com/help/business-setup.html
+Last updated: 2026-10-11
+
+Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
+
+Your business
+1. In guided setup, enter your business name.
+2. Choose Shop or retail, Travel or bookings, NGO/church/foundation, School/training centre, or Event planning. Sedifex seeds recommended pages when navigation has not already been configured.
+3. Expand Contact and location if you want to add a business phone, country, town or address. These details can be added later.
+4. Choose Save and continue. Existing navigation and dashboard customizations are preserved.
+
+First task and ready screen
+Choose the recommended first task or Explore the dashboard. Continue to the ready screen, then open that task. Travel opens a Service draft; School opens a Course draft. Review and save the item yourself. Setup does not publish your business publicly.
+Finish later saves your current draft and opens the dashboard. Return using Continue guided setup in the business setup checklist. Progress is saved when you continue or finish later, not on every keystroke.
+
+Complete the checklist when useful
+Optional steps may be skipped. A skipped step is not counted as completed. Refresh progress after saving changes. Staff use their assigned workspace pages; owners manage business setup.
+1. Business profile: save your business name and contact information in Account. A logo is optional.
+2. Products or services: create your first item.
+3. Payout account: open Payout account and complete the available Paystack setup before relying on online payment routing.
+4. Public page: save and enable your page in Public page settings, then preview its customer view.
+
+Useful pages
+Account: https://sedifex.com/account?section=workspace
+Navigation settings: https://sedifex.com/account?section=navigation
+Payout account: https://sedifex.com/settlement/setup
+Public page: https://sedifex.com/promo
+
