@@ -83,3 +83,9 @@
     grid-template-columns: 1fr;
   }
 }
+.clean-account-overview { max-width: 1040px; margin-inline: auto; min-width: 0; }
+.clean-account-overview > * { min-width: 0; }
+@media (max-width: 720px) {
+  .clean-account-overview { gap: 16px; }
+  .clean-account-overview__operations { padding: 16px; box-sizing: border-box; }
+}
