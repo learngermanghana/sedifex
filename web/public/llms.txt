@@ -1,0 +1,18 @@
+# Sedifex
+
+Public guides for using Sedifex. These guides do not grant account access.
+
+## Help Centre
+- [Help Centre](https://sedifex.com/help.html)
+- [Create your Sedifex account](https://sedifex.com/help/sign-up.html): Sign up, verify your email and reach your business workspace.
+- [Set up your business workspace](https://sedifex.com/help/business-setup.html): Choose your business type, save your details and start your first task.
+- [Add products, services and courses](https://sedifex.com/help/products-and-sales.html): Build your catalog and choose the right workflow for a sale or appointment.
+- [Manage bookings, reminders and payments](https://sedifex.com/help/bookings-and-payments.html): Keep attendance, business approval and payment status clear.
+- [Connect a website to Sedifex](https://sedifex.com/help/integrations.html): Create an integration key and test a read-only catalog request from your server.
+- [Fix common setup and integration problems](https://sedifex.com/help/troubleshooting.html): Find the next check for signup, workspaces, payments and API errors.
+
+## Integration source
+- [Canonical contract](https://github.com/learngermanghana/sedifex/blob/main/docs/integration-contract.md)
+- [API guide](https://github.com/learngermanghana/sedifex/blob/main/docs/integration-api-guide.md)
+
+Use placeholder credentials. Do not request secrets or private customer/payment records.
