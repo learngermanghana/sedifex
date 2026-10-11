@@ -1,5 +1,7 @@
+import { flushSync } from 'react-dom'
+import { UnsavedChangesGuard } from '../hooks/useUnsavedChanges'
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   addDoc,
@@ -697,6 +699,20 @@ export default function ProductsServiceFirst({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(openEditorInitially)
   const [search, setSearch] = useState('')
+  const [draftBaseline, setDraftBaseline] = useState(() => JSON.stringify(blankDraft))
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const actionInFlight = useRef(false)
+  const returnScroll = useRef<number | null>(null)
+  const dirty = isEditorOpen && JSON.stringify(draft) !== draftBaseline
+  useEffect(() => {
+    setDraftBaseline(JSON.stringify(draft))
+    // Opening a different item establishes its saved baseline.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, isEditorOpen])
+
+  function confirmDiscard() {
+    return !dirty || window.confirm('Discard your unsaved item changes?')
+  }
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -923,7 +939,7 @@ export default function ProductsServiceFirst({
     }
   }
 
-  function resetForm() {
+  function resetForm(keepReturnScroll = false) {
     setEditingId(null)
     setIsEditorOpen(false)
     setDraft(current => ({
@@ -936,9 +952,16 @@ export default function ProductsServiceFirst({
     setError('')
     setImageUploadState('idle')
     setImageStatusMessage('')
+    if (!keepReturnScroll && returnScroll.current !== null) {
+      const scroll = returnScroll.current
+      returnScroll.current = null
+      requestAnimationFrame(() => window.scrollTo({ top: scroll }))
+    }
   }
 
   function editItem(item: Product) {
+    if (!confirmDiscard()) return
+    returnScroll.current = window.scrollY
     const itemType: ItemFormType = item.itemType === 'course' || (item.itemType === 'service' && item.listingType === 'course') ? 'course' : item.itemType
     setEditingId(item.id)
     setIsEditorOpen(true)
@@ -1002,7 +1025,8 @@ export default function ProductsServiceFirst({
 
   async function saveItem(event: React.FormEvent) {
     event.preventDefault()
-    if (!storeId || !canManage) return
+    if (!storeId || !canManage || actionInFlight.current) return
+    actionInFlight.current = true
     setSaving(true)
     setMessage('')
     setError('')
@@ -1052,20 +1076,32 @@ export default function ProductsServiceFirst({
       if (imageUploadPending) {
         setError('Image upload failed or is incomplete. Item was still saved; retry upload later.')
       }
-      resetForm()
+      flushSync(() => resetForm())
       onEditorClose?.({ saved: true, message: savedMessage })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save item. Please check the details and try again.')
     } finally {
+      actionInFlight.current = false
       setSaving(false)
     }
   }
 
   async function deleteItem(item: Product) {
-    if (!canManage) return
+    if (!canManage || actionInFlight.current) return
     if (!window.confirm(`Delete ${item.name}?`)) return
-    await deleteDoc(doc(db, 'products', item.id))
-    setMessage(`${item.itemType === 'course' ? 'Course' : item.itemType === 'tour_package' ? 'Tour package' : item.itemType === 'service' ? 'Service' : 'Product'} deleted.`)
+    actionInFlight.current = true
+    setDeletingId(item.id)
+    setError('')
+    setMessage('')
+    try {
+      await deleteDoc(doc(db, 'products', item.id))
+      setMessage(`${item.name} deleted.`)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to delete this item. Please retry.')
+    } finally {
+      actionInFlight.current = false
+      setDeletingId(null)
+    }
   }
 
   const visibleItems = useMemo(() => {
@@ -1076,6 +1112,7 @@ export default function ProductsServiceFirst({
 
   return (
     <div className="page products-page">
+      <UnsavedChangesGuard dirty={dirty} />
       <header className="page__header products-page__header">
         <div>
           <h2 className="page__title">Items</h2>
@@ -1086,7 +1123,9 @@ export default function ProductsServiceFirst({
             type="button"
             className="button button--primary products-page__primary-action"
             onClick={() => {
-              resetForm()
+              if (!confirmDiscard()) return
+              returnScroll.current = window.scrollY
+              resetForm(true)
               setIsEditorOpen(true)
               window.scrollTo({ top: 0, behavior: 'smooth' })
             }}
@@ -1460,8 +1499,10 @@ export default function ProductsServiceFirst({
               <button
                 type="button"
                 className="button button--ghost"
+                disabled={saving || imageUploadState === 'uploading'}
                 onClick={() => {
-                  resetForm()
+                  if (!confirmDiscard()) return
+                  flushSync(() => resetForm())
                   onEditorClose?.({ saved: false })
                 }}
               >
@@ -1547,7 +1588,7 @@ export default function ProductsServiceFirst({
                   <div className="products-page__list-actions">
                     {itemIsTour ? <Link className="button button--primary" to={`/upcoming-events?serviceId=${encodeURIComponent(item.id)}&eventKind=trip`}>Manage departures</Link> : null}
                     {canManage ? <button type="button" className="button button--ghost" onClick={() => editItem(item)}>Edit</button> : null}
-                    {canManage ? <button type="button" className="button button--danger" onClick={() => void deleteItem(item)}>Delete</button> : null}
+                    {canManage ? <button type="button" className="button button--danger" disabled={saving || Boolean(deletingId)} onClick={() => void deleteItem(item)}>{deletingId === item.id ? 'Deleting…' : 'Delete'}</button> : null}
                   </div>
                 </article>
               )

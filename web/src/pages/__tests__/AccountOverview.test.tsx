@@ -33,6 +33,8 @@ vi.mock('../../hooks/useStorePreferences', () => ({
 }))
 
 vi.mock('react-router-dom', () => ({
+  useLocation: () => ({ pathname: '/account' }),
+  useSearchParams: () => React.useState(() => new URLSearchParams()),
   Link: ({ children, ...props }: React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>) => (
     <a {...props}>{children}</a>
   ),

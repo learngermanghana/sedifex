@@ -1,77 +1,58 @@
+import { MessageChannel } from 'node:worker_threads'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const getSessionMock = vi.fn(async () => ({ data: { session: null }, error: null }))
+const { auth } = vi.hoisted(() => ({ auth: { currentUser: { uid: 'owner-1', getIdToken: vi.fn(async () => 'fresh-token') } } }))
+vi.mock('../../firebase', () => ({ auth }))
 
-vi.mock('../../config/supabaseEnv', () => ({
-  supabaseEnv: {
-    url: 'https://demo.supabase.co',
-    anonKey: 'anon-test',
-    functionsUrl: 'https://demo.supabase.co/functions/v1',
-  },
-}))
-
-vi.mock('../../supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: getSessionMock,
-    },
-  },
-}))
-
-describe('offlineQueue', () => {
-  const originalNavigator = globalThis.navigator
-  let postMessageMock: ReturnType<typeof vi.fn>
+describe('offline queue persistence confirmation', () => {
+  let postMessage: ReturnType<typeof vi.fn>
+  let listener: (event: MessageEvent) => void
   let queueCallableRequest: (typeof import('../offlineQueue'))['queueCallableRequest']
-  let getCallableEndpoint: (typeof import('../offlineQueue'))['getCallableEndpoint']
 
   beforeEach(async () => {
     vi.resetModules()
-    getSessionMock.mockReset()
-    postMessageMock = vi.fn()
-    const registration = {
-      active: { postMessage: postMessageMock },
-    }
-
-    const serviceWorker = {
-      ready: Promise.resolve(registration),
-    }
-
-    Object.defineProperty(globalThis, 'navigator', {
-      value: { serviceWorker } as Navigator,
-      configurable: true,
-      writable: true,
+    vi.stubEnv('VITE_FB_PROJECT_ID', 'demo-project')
+    vi.stubEnv('VITE_FB_FUNCTIONS_REGION', 'us-central1')
+    vi.stubGlobal('MessageChannel', MessageChannel)
+    auth.currentUser = { uid: 'owner-1', getIdToken: vi.fn(async () => 'fresh-token') }
+    postMessage = vi.fn((message, ports) => {
+      if (message.type === 'QUEUE_BACKGROUND_REQUEST') ports[0].postMessage({ stored: true })
     })
-
-    ;({ queueCallableRequest, getCallableEndpoint } = await import('../offlineQueue'))
+    vi.stubGlobal('navigator', { serviceWorker: {
+      ready: Promise.resolve({ active: { postMessage } }),
+      addEventListener: vi.fn((_type, callback) => { listener = callback }),
+    } })
+    ;({ queueCallableRequest } = await import('../offlineQueue'))
   })
 
-  afterEach(() => {
-    if (originalNavigator) {
-      Object.defineProperty(globalThis, 'navigator', {
-        value: originalNavigator,
-        configurable: true,
-        writable: true,
-      })
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (globalThis as any).navigator
-    }
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+
+  it('reports success only when storage acknowledges the sale', async () => {
+    postMessage.mockImplementationOnce((_message, ports) => {
+      setTimeout(() => ports[0].postMessage({ stored: true }), 20)
+    })
+    let completed = false
+    const request = queueCallableRequest('commitSale', { saleId: 'sale-1' }, 'sale').then(result => { completed = true; return result })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(completed).toBe(false)
+    expect(await request).toBe(true)
+    expect(postMessage.mock.calls[0][0].payload).toMatchObject({ authUid: 'owner-1', authToken: 'fresh-token', endpoint: 'https://us-central1-demo-project.cloudfunctions.net/commitSale' })
   })
 
-  it('queues sale request with the correct request type', async () => {
-    const queued = await queueCallableRequest('processSale', { total: 100 }, 'sale')
-
-    expect(queued).toBe(true)
-    const firstMessage = postMessageMock.mock.calls[0]?.[0]
-    expect(firstMessage?.payload?.requestType).toBe('sale')
-    expect(firstMessage?.payload?.endpoint).toBe(
-      'https://demo.supabase.co/functions/v1/processSale'
-    )
+  it('does not claim the sale is saved when storage fails', async () => {
+    postMessage.mockImplementationOnce((_message, ports) => ports[0].postMessage({ stored: false }))
+    expect(await queueCallableRequest('commitSale', {}, 'sale')).toBe(false)
+    expect(postMessage).toHaveBeenCalledTimes(1)
   })
 
-  it('builds callable endpoint using the configured functions region', () => {
-    expect(getCallableEndpoint('generateReport')).toBe(
-      'https://demo.supabase.co/functions/v1/generateReport'
-    )
+  it('refreshes credentials only for the account which queued the request', async () => {
+    const port = { postMessage: vi.fn() }
+    listener({ data: { type: 'REQUEST_QUEUE_AUTH', authUid: 'another-owner' }, ports: [port] } as unknown as MessageEvent)
+    expect(port.postMessage).toHaveBeenCalledWith({ authToken: null })
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled()
+    port.postMessage.mockClear()
+    listener({ data: { type: 'REQUEST_QUEUE_AUTH', authUid: 'owner-1' }, ports: [port] } as unknown as MessageEvent)
+    await Promise.resolve()
+    expect(port.postMessage).toHaveBeenCalledWith({ authToken: 'fresh-token' })
   })
 })

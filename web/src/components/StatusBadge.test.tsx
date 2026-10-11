@@ -5,8 +5,8 @@ import StatusBadge, { statusBadgeLabel, statusBadgeTone } from './StatusBadge'
 
 describe('StatusBadge', () => {
   it('distinguishes payment review from booking approval', () => {
-    expect(statusBadgeLabel('manual_review', 'payment')).toBe('Payment review')
-    expect(statusBadgeLabel('manual_review', 'booking')).toBe('Needs approval')
+    expect(statusBadgeLabel('manual_review', 'payment')).toBe('Awaiting verification')
+    expect(statusBadgeLabel('manual_review', 'booking')).toBe('Needs confirmation')
   })
 
   it('keeps missing workflow data neutral instead of inventing pending state', () => {
@@ -29,13 +29,13 @@ describe('StatusBadge', () => {
     expect(statusBadgeLabel('partial', 'generic')).toBe('Partial')
     expect(statusBadgeTone('partial', 'generic')).toBe('warning')
     expect(statusBadgeLabel('unpaid', 'payment')).toBe('Payment pending')
-    expect(statusBadgeLabel('partial', 'payment')).toBe('Payment pending')
+    expect(statusBadgeLabel('partial', 'payment')).toBe('Partially paid')
   })
 
   it('renders the centralized label and tone', () => {
     render(<StatusBadge status="awaiting_verification" kind="payment" />)
 
-    const badge = screen.getByText('Payment review')
+    const badge = screen.getByText('Awaiting verification')
     expect(badge).toHaveClass('status-badge--warning')
   })
 })

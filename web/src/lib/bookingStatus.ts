@@ -17,7 +17,7 @@ function objectValue(value: unknown): Record<string, unknown> {
 export function normalizePaymentStatus(value: unknown, fallback: CanonicalPaymentStatus = 'pending'): CanonicalPaymentStatus {
   const raw = text(value).toLowerCase().replace(/[\s-]+/g, '_')
   if (!raw) return fallback
-  if (['paid', 'payment_paid', 'paid_cash', 'confirmed', 'success', 'succeeded', 'captured', 'complete', 'completed'].includes(raw)) return 'paid'
+  if (['paid', 'payment_paid', 'paid_cash', 'settled', 'successful', 'confirmed', 'success', 'succeeded', 'captured', 'complete', 'completed'].includes(raw)) return 'paid'
   if (['partially_paid', 'partial', 'payment_partial', 'deposit_paid', 'part_paid'].includes(raw)) return 'partial'
   if (['awaiting_verification', 'manual_review', 'payment_awaiting_verification', 'pending_verification'].includes(raw)) return 'awaiting_verification'
   if (['pending', 'payment_pending', 'unpaid', 'pending_payment', 'pending_cash'].includes(raw)) return 'pending'

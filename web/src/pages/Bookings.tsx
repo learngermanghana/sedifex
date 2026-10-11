@@ -1,3 +1,5 @@
+import { bookingPresentation, paymentPresentation, payoutPresentation, recordAmounts, formatRecordAmount } from '../lib/recordStatus';
+import { useStorePreferenceSync } from '../hooks/useStorePreferenceSync';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
@@ -8,13 +10,14 @@ import {
   Timestamp,
   where,
 } from "firebase/firestore";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { db } from "../firebase";
 import { useActiveStore } from "../hooks/useActiveStore";
 import StatusBadge from "../components/StatusBadge";
 import "./Bookings.css";
 
 type BookingRecord = {
+  sourceRecord: Record<string, unknown>;
   id: string;
   serviceId: string;
   serviceName: string;
@@ -149,6 +152,7 @@ const BOOKING_VIEW_KEY_PREFIX = "sedifex-bookings-view-";
 
 export default function Bookings() {
   const { storeId } = useActiveStore();
+  const location = useLocation();
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -277,18 +281,14 @@ export default function Bookings() {
             "paymentOption",
             "payment_option",
           ]),
-        bookingStatus: normalizeStatus(data.bookingStatus ?? data.status),
+        sourceRecord: { ...nestedData, ...data, payment, booking },
+        bookingStatus: bookingPresentation(data).state,
         status: normalizeStatus(data.status),
         syncStatus: normalizeStatus(
           data.syncStatus ?? data.sync_status,
           "not_ready",
         ),
-        paymentStatus:
-          payment.confirmed === true
-            ? "paid"
-            : normalizePaymentStatus(
-                data.paymentStatus ?? data.payment_status ?? payment.status,
-              ),
+        paymentStatus: paymentPresentation({ ...data, payment }).state,
         customerId:
           pickString(data, ["customerId"]) ??
           pickString(customer, ["id", "customerId"]) ??
@@ -472,26 +472,32 @@ export default function Bookings() {
     void loadBookings();
   }, [loadBookings]);
 
-  useEffect(() => {
-    if (!storeId) return;
-    try {
-      const saved = localStorage.getItem(`${BOOKING_VIEW_KEY_PREFIX}${storeId}`);
-      if (saved === "needs_attention" || saved === "confirmed" || saved === "all") {
-        setActiveTab(saved);
-      }
-    } catch (error) {
-      console.warn("[bookings] Unable to load view preference", error);
-    }
-  }, [storeId]);
+  useStorePreferenceSync<BookingView>({
+    storeId,
+    keyPrefix: BOOKING_VIEW_KEY_PREFIX,
+    value: activeTab,
+    defaultValue: 'needs_attention',
+    apply: setActiveTab,
+    serialize: value => value,
+    deserialize: value => value === 'confirmed' || value === 'all' ? value : 'needs_attention',
+    debugName: 'bookings',
+  });
 
   useEffect(() => {
-    if (!storeId) return;
-    try {
-      localStorage.setItem(`${BOOKING_VIEW_KEY_PREFIX}${storeId}`, activeTab);
-    } catch (error) {
-      console.warn("[bookings] Unable to save view preference", error);
-    }
-  }, [activeTab, storeId]);
+    const state = location.state as { returnScroll?: unknown } | null;
+    if (loading || typeof state?.returnScroll !== 'number' || !Number.isFinite(state.returnScroll)) return;
+    const top = Math.max(0, state.returnScroll);
+    const frame = requestAnimationFrame(() => window.scrollTo({ top }));
+    return () => cancelAnimationFrame(frame);
+  }, [loading, location.state]);
+
+  function bookingAmounts(booking: BookingRecord) {
+    return recordAmounts({ ...booking.sourceRecord, paymentAmount: booking.paymentAmount });
+  }
+
+  function bookingPayout(booking: BookingRecord) {
+    return payoutPresentation(booking.sourceRecord).label;
+  }
 
   const needsAttention = useCallback((booking: BookingRecord) => {
     if (["cancelled", "deleted", "completed"].includes(booking.bookingStatus || booking.status)) return false;
@@ -500,7 +506,7 @@ export default function Bookings() {
       ["pending", "payment_pending", "manual_review"].includes(booking.paymentStatus);
     const paidNeedsConfirmation =
       booking.paymentStatus === "paid" && booking.bookingStatus !== "confirmed";
-    return directPaymentNeedsReview || paidNeedsConfirmation || booking.bookingStatus === "pending_approval";
+    return directPaymentNeedsReview || paidNeedsConfirmation || ["pending", "pending_approval"].includes(booking.bookingStatus);
   }, []);
 
   const summary = {
@@ -801,15 +807,17 @@ export default function Bookings() {
                         </small>
                       </td>
                       <td>
-                        <strong>{b.paymentAmount || "—"}</strong>
+                        <strong>{formatRecordAmount(bookingAmounts(b).total, bookingAmounts(b).currency)}</strong>
                         <StatusBadge status={b.paymentStatus} kind="payment" />
+                        <small>Received: {formatRecordAmount(bookingAmounts(b).received, bookingAmounts(b).currency)} · Balance: {formatRecordAmount(bookingAmounts(b).outstanding, bookingAmounts(b).currency)}</small>
+                        <small>Payout: {bookingPayout(b)}</small>
                         <small>{b.paymentMethod || b.paymentCollectionMode || "Method not set"}</small>
                       </td>
                       <td>
                         <StatusBadge status={b.bookingStatus} kind="booking" />
                         <small>
                           {b.paymentStatus === "paid" &&
-                          b.bookingStatus !== "confirmed"
+                          b.bookingStatus === "pending"
                             ? "Paid - waiting for store confirmation"
                             : ""}
                         </small>
@@ -826,6 +834,7 @@ export default function Bookings() {
                           <Link
                             className="btn btn-secondary"
                             to={`/bookings/${b.id}`}
+                            state={{ returnTo: `${location.pathname}${location.search}`, returnScroll: window.scrollY }}
                           >
                             Open
                           </Link>
@@ -861,6 +870,8 @@ export default function Bookings() {
                   <div className="bookings-card__statuses">
                     <StatusBadge status={b.bookingStatus || b.status} kind="booking" />
                     <StatusBadge status={b.paymentStatus} kind="payment" />
+                        <small>Received: {formatRecordAmount(bookingAmounts(b).received, bookingAmounts(b).currency)} · Balance: {formatRecordAmount(bookingAmounts(b).outstanding, bookingAmounts(b).currency)}</small>
+                        <small>Payout: {bookingPayout(b)}</small>
                   </div>
                   <label className="bookings-card__select">
                     <input
@@ -880,6 +891,7 @@ export default function Bookings() {
                     <Link
                       className="btn btn-secondary"
                       to={`/bookings/${b.id}`}
+                            state={{ returnTo: `${location.pathname}${location.search}`, returnScroll: window.scrollY }}
                     >
                       Open
                     </Link>

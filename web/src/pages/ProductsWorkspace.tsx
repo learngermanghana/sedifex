@@ -39,9 +39,9 @@ export default function ProductsWorkspace() {
     const state = location.state as { productsNotice?: unknown } | null
     if (typeof state?.productsNotice === 'string' && state.productsNotice.trim()) {
       setNotice(state.productsNotice.trim())
-      navigate(location.pathname, { replace: true, state: null })
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
     }
-  }, [location.pathname, location.state, navigate])
+  }, [location.pathname, location.search, location.state, navigate])
 
   useEffect(() => {
     if (isAddPage) return
