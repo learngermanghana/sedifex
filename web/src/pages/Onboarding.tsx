@@ -13,9 +13,9 @@ import './Onboarding.css'
 type Draft = { name: string; industry: Industry; phone: string; country: string; city: string; address: string }
 const TYPES: { id: Industry; title: string; description: string; action: string; target: string }[] = [
   { id: 'shop', title: 'Shop or retail', description: 'Products, sales and stock', action: 'Add your first product', target: '/products/new' },
-  { id: 'travel', title: 'Travel or bookings', description: 'Services and appointments', action: 'Add your first service', target: '/products/new' },
+  { id: 'travel', title: 'Travel or bookings', description: 'Services and appointments', action: 'Add your first service', target: '/products/new?itemType=service' },
   { id: 'ngo', title: 'NGO, church or foundation', description: 'Supporters and activities', action: 'Add your first customer or supporter', target: '/customers' },
-  { id: 'school', title: 'School or training centre', description: 'Courses and registrations', action: 'Add your first course', target: '/products/new' },
+  { id: 'school', title: 'School or training centre', description: 'Courses and registrations', action: 'Add your first course', target: '/products/new?itemType=course' },
   { id: 'event', title: 'Event planning', description: 'Events, clients and coordination', action: 'Plan your first event', target: '/event-planning' },
 ]
 const empty: Draft = { name: '', industry: 'shop', phone: '', country: '', city: '', address: '' }
@@ -32,15 +32,17 @@ export default function Onboarding() {
   const [loadedStore, setLoadedStore] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [navigationConfigured, setNavigationConfigured] = useState(true)
   const [reload, setReload] = useState(0)
   const inFlight = useRef(false)
   useEffect(() => {
     let active = true
     setLoadedStore(''); setError(''); setStep(0); setDraft(empty)
     if (!storeId || !owner) return
-    void getDoc(doc(db, 'stores', storeId)).then(snapshot => {
+    void Promise.all([getDoc(doc(db, 'stores', storeId)), getDoc(doc(db, 'storeSettings', storeId))]).then(([snapshot, settings]) => {
       if (!active) return
       if (!snapshot.exists()) throw new Error('Workspace not found.')
+      setNavigationConfigured(Boolean(settings.data()?.navigation))
       const data = snapshot.data()
       const saved = data.onboardingGuide || {}
       const fields = saved.draft || {}
@@ -65,7 +67,7 @@ export default function Onboarding() {
     inFlight.current = true; setBusy(true); setError('')
     try {
       if (requireProfile) {
-        const navigation = { ...preferences.navigation, industry: draft.industry, enabledModules: INDUSTRY_ENABLED_MODULE_PRESETS[draft.industry], dashboardModules: [], primaryMetrics: [], customLabels: {}, customNavItems: [] }
+        const navigation = { ...preferences.navigation, industry: draft.industry, enabledModules: navigationConfigured ? preferences.navigation.enabledModules : INDUSTRY_ENABLED_MODULE_PRESETS[draft.industry] }
         await Promise.all([
           updatePreferences({ navigation }),
           setDoc(doc(db, 'stores', storeId), { displayName: draft.name.trim(), name: draft.name.trim(), industry: draft.industry, phone: draft.phone.trim(), country: draft.country.trim(), city: draft.city.trim(), addressLine1: draft.address.trim(), updatedAt: serverTimestamp() }, { merge: true }),
