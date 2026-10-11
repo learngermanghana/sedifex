@@ -1,3 +1,4 @@
+import PaymentNavigation from '../components/PaymentNavigation'
 import React, { useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../firebase'
@@ -180,15 +181,16 @@ export default function PaymentSettlement() {
   if (storeError) return <div role="alert">{storeError}</div>
 
   return (
-    <div className="account-overview">
+    <div className="account-overview payout-settings">
       <h1>Payout account</h1>
       <p className="account-overview__subtitle">Set where confirmed online payments should settle. This is payout setup, separate from payment activity and booking payment tracking.</p>
+      <PaymentNavigation />
       {storeLoading ? <p>Loading workspace…</p> : null}
       {!storeId && !storeLoading ? <p>Select a workspace to configure settlement.</p> : null}
       {storeId && !isOwner ? <div className="account-overview__error" role="alert">Only the workspace owner can set up settlement.</div> : null}
       {storeId && isOwner ? (
         <>
-          <section aria-labelledby="settlement-status">
+          <section className="account-overview__settings-card" aria-labelledby="settlement-status">
             <div className="account-overview__section-header">
               <h2 id="settlement-status">Current setup</h2>
               <button type="button" className="button button--secondary" onClick={() => void refreshSubaccount()} disabled={isLoadingStatus}>{isLoadingStatus ? 'Refreshing…' : 'Refresh'}</button>
@@ -204,15 +206,15 @@ export default function PaymentSettlement() {
               <div><dt>Verified</dt><dd>{status?.isVerified === true ? 'Yes' : status?.isVerified === false ? 'No' : '—'}</dd></div>
             </dl>
           </section>
-          <section aria-labelledby="settlement-form">
+          <section className="account-overview__settings-card" aria-labelledby="settlement-form">
             <div className="account-overview__section-header"><h2 id="settlement-form">Create or update payout details</h2><p className="account-overview__hint">Saving creates or updates the Paystack subaccount immediately. Choose bank or mobile money to auto-fill the Paystack routing code.</p></div>
             <form className="account-overview__profile-form" onSubmit={handleSubmit}>
-              <div className="account-overview__grid" style={{ marginBottom: 16 }}>
-                <button type="button" className={`button ${paymentType === 'bank' ? 'button--primary' : 'button--secondary'}`} onClick={() => { setPaymentType('bank'); setSelectedBankCode(''); setRoutingCode('') }}>Bank account</button>
-                <button type="button" className={`button ${paymentType === 'mobile_money' ? 'button--primary' : 'button--secondary'}`} onClick={() => { setPaymentType('mobile_money'); setSelectedBankCode(''); setRoutingCode('') }}>Mobile money</button>
+              <div className="payout-settings__methods" role="group" aria-label="Payout method">
+                <button type="button" aria-pressed={paymentType === 'bank'} className={`button ${paymentType === 'bank' ? 'button--primary' : 'button--secondary'}`} onClick={() => { setPaymentType('bank'); setSelectedBankCode(''); setRoutingCode('') }}>Bank account</button>
+                <button type="button" aria-pressed={paymentType === 'mobile_money'} className={`button ${paymentType === 'mobile_money' ? 'button--primary' : 'button--secondary'}`} onClick={() => { setPaymentType('mobile_money'); setSelectedBankCode(''); setRoutingCode('') }}>Mobile money</button>
               </div>
               <p className="account-overview__hint">{template.helper}</p>
-              <div className="account-overview__form-grid">
+              <fieldset className="payout-settings__fields"><legend>Account details</legend><div className="account-overview__form-grid">
                 <label><span>Business name</span><input value={businessName} onChange={event => setBusinessName(event.target.value)} maxLength={120} required /></label>
                 <label>
                   <span>{paymentType === 'mobile_money' ? 'Mobile money provider' : 'Bank'}</span>
@@ -223,17 +225,20 @@ export default function PaymentSettlement() {
                 </label>
                 <label><span>Paystack routing code</span><input value={routingCode} onChange={event => setRoutingCode(event.target.value.trim())} maxLength={30} placeholder="Auto-filled when you select provider" required /></label>
                 <label><span>{template.numberLabel}</span><input inputMode="numeric" value={paymentNumber} onChange={event => setPaymentNumber(digitsOnly(event.target.value, 20))} maxLength={20} placeholder={template.placeholder} required /></label>
+              </div></fieldset>
+              <fieldset className="payout-settings__fields"><legend>Contact details</legend><div className="account-overview__form-grid">
                 <label><span>Contact email</span><input type="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} /></label>
                 <label><span>Contact name</span><input value={contactName} onChange={event => setContactName(event.target.value)} maxLength={160} /></label>
                 <label><span>Phone</span><input type="tel" value={contactPhone} onChange={event => setContactPhone(event.target.value)} maxLength={80} /></label>
               </div>
-              <div className="account-overview__banner" role="note" style={{ marginTop: 16 }}>
+              </fieldset>
+              <div className="account-overview__banner" role="note">
                 <p><strong>{template.numberLabel}:</strong> {template.numberHint}</p>
                 {selectedOption ? <p><strong>Selected provider:</strong> {selectedOption.name} ({selectedOption.code})</p> : null}
                 <button type="button" className="button button--secondary" onClick={() => setPaymentNumber(digitsOnly(contactPhone, 20))} disabled={!contactPhone}>Use contact phone as payment number</button>
               </div>
               {errorMessage ? <p className="account-overview__error" role="alert">{errorMessage}</p> : null}
-              <div className="account-overview__actions"><p className="account-overview__hint">Sedifex stores the Paystack subaccount code and masked payment number. Commission remains controlled by Sedifex.</p><button type="submit" className="button button--primary" disabled={isSaving}>{isSaving ? 'Saving…' : 'Save payment setup'}</button></div>
+              <div className="account-overview__actions"><p className="account-overview__hint">Sedifex stores the Paystack subaccount code and masked payment number. Commission remains controlled by Sedifex.</p><button type="submit" className="button button--primary" disabled={isSaving}>{isSaving ? 'Saving…' : 'Save payout account'}</button></div>
             </form>
           </section>
         </>
