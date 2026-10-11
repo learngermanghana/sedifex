@@ -8,6 +8,7 @@
   "scripts": {
     "build": "rimraf lib && tsc",
     "test": "node test/bookingEmailPendingPayment.test.js && node test/bookingNormalization.test.js && node test/smsGateway.test.js",
+    "test:booking-reminders-setup": "node test/bookingRemindersSetup.test.js",
     "test:automation-settings": "node test/automationSettings.test.js",
     "test:booking-lifecycle-sms": "node test/bookingLifecycleSmsRules.test.js",
     "test:event-audit": "node test/eventAudit.test.js",
