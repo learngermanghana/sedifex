@@ -61,13 +61,13 @@ const CREATE_ACTIONS = [
 const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = [
   {
     id: 'daily',
-    label: 'Daily',
+    label: 'Daily work',
     itemIds: ['dashboard', 'products', 'sell', 'customers', 'students', 'bookings', 'events', 'upcoming-events', 'student-registration'],
   },
   {
     id: 'money',
-    label: 'Money',
-    itemIds: ['reports', 'quick-pay', 'invoices', 'receipts', 'expenses', 'settlement'],
+    label: 'Payments',
+    itemIds: ['reports', 'quick-pay', 'invoices', 'receipts', 'expenses', 'settlement', 'funds-ledger'],
   },
   {
     id: 'website',
@@ -76,8 +76,8 @@ const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = 
   },
   {
     id: 'manage',
-    label: 'Manage',
-    itemIds: ['donor-management', 'funds-ledger', 'volunteers', 'support-requests', 'account'],
+    label: 'Account & management',
+    itemIds: ['donor-management', 'volunteers', 'support-requests', 'account'],
   },
 ]
 
@@ -131,6 +131,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const { preferences } = useStorePreferences(storeId)
 
   const [dismissedOn, setDismissedOn] = useState<string | null>(null)
+  const mobileMenuButton = useRef<HTMLButtonElement>(null)
   const [navSearchQuery, setNavSearchQuery] = useState('')
   const [resumePath, setResumePath] = useState<string | null>(null)
   const [dismissedResumePath, setDismissedResumePath] = useState<string | null>(null)
@@ -186,7 +187,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const filteredNavItems = useMemo(() => {
     const normalizedQuery = navSearchQuery.trim().toLowerCase()
     if (!normalizedQuery) return navItems
-    return navItems.filter(item => item.label.toLowerCase().includes(normalizedQuery))
+    return navItems.filter(item => {
+      const group = NAV_GROUPS.find(group => group.itemIds.includes(item.id))
+      return `${item.label} ${group?.label || ''}`.toLowerCase().includes(normalizedQuery)
+    })
   }, [navItems, navSearchQuery])
 
   const groupedNavItems = useMemo(() => {
@@ -203,7 +207,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       if (manageGroup) {
         manageGroup.items.push(...remaining)
       } else {
-        groups.push({ id: 'manage', label: 'Manage', itemIds: [], items: remaining } as (typeof groups)[number])
+        groups.push({ id: 'manage', label: 'Account & management', itemIds: [], items: remaining } as (typeof groups)[number])
       }
     }
     return groups
@@ -311,7 +315,20 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setIsMobileMenuOpen(false)
-  }, [location.pathname])
+    setNavSearchQuery('')
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMobileMenuOpen(false)
+        mobileMenuButton.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [isMobileMenuOpen])
 
   useEffect(() => {
     shouldSkipInitialPathPersist.current = true
@@ -479,7 +496,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             getDoc(doc(db, 'workspaces', currentStoreId)).catch(() => null),
           ])
           const data = storeSnapshot?.data() ?? workspaceSnapshot?.data() ?? {}
-          const candidates = [data.company, data.name, data.companyName, data.storeName, data.businessName]
+          const candidates = [data.displayName, data.company, data.name, data.companyName, data.storeName, data.businessName]
           const name = candidates.find(value => typeof value === 'string' && value.trim())
           return [currentStoreId, typeof name === 'string' ? name.trim() : 'Store workspace'] as const
         }),
@@ -496,14 +513,18 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
   }, [selectableMemberships])
 
-  const navSection = (
+  const activeWorkspaceName = storeId ? workspaceNames[storeId] || `Workspace ${storeId}` : 'Select a workspace'
+
+  const renderNavSection = (surface: 'mobile' | 'desktop') => (
     <div className="shell__nav-group">
       <nav
         className="shell__nav"
         aria-label="Primary"
-        id="primary-nav"
+        id={`primary-nav-${surface}`}
       >
-        <label className="shell__nav-search">
+        <div className="shell__nav-workspace"><span>Current workspace</span><strong>{activeWorkspaceName}</strong></div>
+        {surface === 'mobile' && <button type="button" className="shell__drawer-close" onClick={() => { setIsMobileMenuOpen(false); mobileMenuButton.current?.focus() }}>Close menu</button>}
+        <div className="shell__nav-search-tools"><label className="shell__nav-search">
           <span className="shell__nav-search-label">Search pages</span>
           <input
             type="search"
@@ -513,6 +534,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             className="shell__nav-search-input"
           />
         </label>
+        {navSearchQuery && <button type="button" className="shell__nav-search-clear" onClick={() => setNavSearchQuery('')}>Clear search</button>}
+        </div>
 
         {groupedNavItems.map(group => {
           const isSearchActive = Boolean(navSearchQuery.trim())
@@ -523,6 +546,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 type="button"
                 className="shell__nav-section-toggle"
                 aria-expanded={!isCollapsed}
+                aria-controls={`nav-${surface}-${group.id}`}
                 onClick={() => {
                   setCollapsedNavGroups(current =>
                     current.includes(group.id)
@@ -535,12 +559,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 <span aria-hidden="true">{isCollapsed ? '+' : '−'}</span>
               </button>
               {!isCollapsed ? (
-                <div className="shell__nav-section-links">
+                <div className="shell__nav-section-links" id={`nav-${surface}-${group.id}`}>
                   {group.items.map(item => (
                     <NavLink
                       key={item.id}
                       to={item.target}
                       end={item.end}
+                      onClick={() => { setIsMobileMenuOpen(false); setNavSearchQuery('') }}
                       className={({ isActive }) => navLinkClass(isActive, Boolean('parentTarget' in item && item.parentTarget))}
                     >
                       {item.label}
@@ -608,7 +633,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             className="shell__store-select"
             data-readonly
           >
-            {workspaceStatus}
+            {activeWorkspaceName}
+            <small className="shell__workspace-plan">{workspaceStatus}</small>
           </span>
         )}
       </div>
@@ -684,6 +710,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <div className="shell__brand">
               <div className="shell__logo">Sedifex</div>
               <span className="shell__tagline">Sell faster. Count smarter.</span>
+              <span className="shell__brand-workspace">{activeWorkspaceName}</span>
             </div>
 
             <div className="shell__header-controls">
@@ -694,7 +721,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               type="button"
               className="shell__mobile-menu-toggle"
               aria-expanded={isMobileMenuOpen}
-              aria-controls="primary-nav"
+              ref={mobileMenuButton}
+              aria-controls="primary-nav-mobile"
               onClick={() => setIsMobileMenuOpen(open => !open)}
             >
               <span className="shell__menu-icon" aria-hidden="true">
@@ -714,7 +742,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               isMobileMenuOpen ? ' is-open' : ''
             }`}
           >
-            {navSection}
+            {renderNavSection('mobile')}
             {controlsSection}
           </div>
         </div>
@@ -794,7 +822,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   <span>Hide navigation</span>
                 </button>
               </div>
-              {navSection}
+              {renderNavSection('desktop')}
             </aside>
           )}
           <section className="shell__content">
