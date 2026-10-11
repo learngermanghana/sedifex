@@ -1,0 +1,22 @@
+Sedifex: Create your Sedifex account
+Source: https://sedifex.com/help/sign-up.html
+Last updated: 2026-10-11
+
+Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
+
+Create an owner account
+1. Open sedifex.com and choose Sign up free.
+2. Enter your full name, email address, password and matching confirmation. Follow the password requirements shown on screen.
+3. Choose Create free account. Sedifex creates your account and prepares your workspace. Business details come next in guided setup.
+
+Verify your email
+Check your inbox and spam folder for the verification message. Open the link sent to your own email address. Return to Sedifex and sign in when prompted. Do not share verification links or passwords with another person or an AI assistant.
+
+Already have an account or work for a business?
+Choose Log in, or Continue with Google if that is how you access your existing account. Use Reset password if you have forgotten your password.
+Invited staff should use the account and invitation arranged by the business owner. Creating a new owner account creates a separate workspace; it does not join you to an existing business.
+
+Next step
+Set up your business: https://sedifex.com/help/business-setup.html
+Open Sedifex: https://sedifex.com/
+
