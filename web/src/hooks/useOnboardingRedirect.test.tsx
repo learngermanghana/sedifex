@@ -7,7 +7,7 @@ const mockNavigate = vi.fn()
 const mockGetOnboardingStatus = vi.fn<[], 'pending' | 'completed' | null>(
   () => 'pending',
 )
-const mockFetchOnboardingStatus = vi.fn(() => Promise.resolve<'pending' | 'completed' | null>('pending'))
+const mockFetchOnboardingStatus = vi.fn((_uid?: string) => Promise.resolve<'pending' | 'completed' | null>('pending'))
 const mockSetOnboardingStatus = vi.fn(() => Promise.resolve())
 
 vi.mock('react-router-dom', async importOriginal => {
@@ -21,7 +21,7 @@ vi.mock('react-router-dom', async importOriginal => {
 
 vi.mock('../utils/onboarding', () => ({
   getOnboardingStatus: (..._args: unknown[]) => mockGetOnboardingStatus(),
-  fetchOnboardingStatus: (..._args: unknown[]) => mockFetchOnboardingStatus(),
+  fetchOnboardingStatus: (uid: string) => mockFetchOnboardingStatus(uid),
   setOnboardingStatus: (...args: unknown[]) => mockSetOnboardingStatus(...args),
 }))
 

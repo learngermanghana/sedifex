@@ -1,0 +1,5 @@
+.form--signup { gap: 18px; }
+.form--signup .form__field input { min-height: 48px; font-size: 16px; border-radius: 12px; }
+.form--signup .form__hint-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 12px; margin-top: 10px; }
+.form--signup .primary-button { min-height: 48px; border-radius: 12px; }
+@media(max-width:480px) { .form--signup .form__hint-list { grid-template-columns: minmax(0,1fr); } }

@@ -80,6 +80,7 @@ vi.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: (...args: unknown[]) =>
     mocks.signInWithEmailAndPassword(...args),
   signOut: (...args: unknown[]) => mocks.auth.signOut(...args),
+  sendEmailVerification: vi.fn(async () => {}),
   onAuthStateChanged: (_auth: unknown, callback: (user: User | null) => void) => {
     mocks.listeners.push(callback)
     callback(mocks.auth.currentUser)
@@ -197,10 +198,6 @@ describe('App signup cleanup', () => {
       await user.click(screen.getByRole('tab', { name: /Sign up/i }))
       await user.type(screen.getByLabelText(/Email/i), 'owner@example.com')
       await user.type(screen.getByLabelText(/Full name/i), 'Morgan Owner')
-      await user.type(screen.getByLabelText(/Business name/i), 'Morgan Retail Co')
-      await user.type(screen.getByLabelText(/Phone/i), '5551234567')
-      await user.type(screen.getByLabelText(/Country/i), 'Canada')
-      await user.type(screen.getByLabelText(/Town or city/i), 'Toronto')
       await user.type(screen.getByLabelText(/^Password$/i), 'Password1!')
       await user.type(screen.getByLabelText(/Confirm password/i), 'Password2!')
     })
@@ -227,15 +224,11 @@ describe('App signup cleanup', () => {
       await user.click(screen.getByRole('tab', { name: /Sign up/i }))
       await user.type(screen.getByLabelText(/Email/i), 'owner@example.com')
       await user.type(screen.getByLabelText(/Full name/i), 'Morgan Owner')
-      await user.type(screen.getByLabelText(/Business name/i), 'Morgan Retail Co')
-      await user.type(screen.getByLabelText(/Phone/i), '5551234567')
-      await user.type(screen.getByLabelText(/Country/i), 'Canada')
-      await user.type(screen.getByLabelText(/Town or city/i), 'Toronto')
       await user.type(screen.getByLabelText(/^Password$/i), 'weak')
       await user.type(screen.getByLabelText(/Confirm password/i), 'weak')
     })
 
-    const submitButton = screen.getByRole('button', { name: /Start free trial/i })
+    const submitButton = screen.getByRole('button', { name: /Create free account/i })
     expect(submitButton).toBeDisabled()
 
     await act(async () => {
@@ -261,7 +254,6 @@ describe('App signup cleanup', () => {
 
     mocks.createUserWithEmailAndPassword.mockImplementation(async () => {
       mocks.auth.currentUser = createdUser
-      mocks.listeners.forEach(listener => listener(createdUser))
       return { user: createdUser }
     })
 
@@ -278,14 +270,10 @@ describe('App signup cleanup', () => {
       await user.click(screen.getByRole('tab', { name: /Sign up/i }))
       await user.type(screen.getByLabelText(/Email/i), 'owner@example.com')
       await user.type(screen.getByLabelText(/Full name/i), 'Morgan Owner')
-      await user.type(screen.getByLabelText(/Business name/i), 'Morgan Retail Co')
-      await user.type(screen.getByLabelText(/Phone/i), '5551234567')
-      await user.type(screen.getByLabelText(/Country/i), 'Canada')
-      await user.type(screen.getByLabelText(/Town or city/i), 'Toronto')
       await user.type(screen.getByLabelText(/^Password$/i), 'Password1!')
       await user.type(screen.getByLabelText(/Confirm password/i), 'Password1!')
 
-      await user.click(screen.getByRole('button', { name: /Start free trial/i }))
+      await user.click(screen.getByRole('button', { name: /Create free account/i }))
     })
 
     await waitFor(() => expect(mocks.persistSession).toHaveBeenCalled())
@@ -298,13 +286,12 @@ describe('App signup cleanup', () => {
     )
   })
 
-  it('persists workspace metadata without seeding store/team/product docs on signup success', async () => {
+  it('persists resolved workspace metadata and onboarding without seeding business or catalog data', async () => {
     const user = userEvent.setup()
     const { user: createdUser } = createTestUser()
 
     mocks.createUserWithEmailAndPassword.mockImplementation(async () => {
       mocks.auth.currentUser = createdUser
-      mocks.listeners.forEach(listener => listener(createdUser))
       return { user: createdUser }
     })
 
@@ -328,15 +315,10 @@ describe('App signup cleanup', () => {
       await user.click(screen.getByRole('tab', { name: /Sign up/i }))
       await user.type(screen.getByLabelText(/Email/i), 'owner@example.com')
       await user.type(screen.getByLabelText(/Full name/i), 'Morgan Owner')
-      await user.type(screen.getByLabelText(/Business name/i), 'Morgan Retail Co')
-      await user.type(screen.getByLabelText(/Phone/i), ' (555) 123-4567 ')
-      await user.type(screen.getByLabelText(/Country/i), 'United States')
-      await user.type(screen.getByLabelText(/Town or city/i), 'Seattle')
-      await user.type(screen.getByLabelText(/Store ID/i), 'workspace-store-id')
       await user.type(screen.getByLabelText(/^Password$/i), 'Password1!')
       await user.type(screen.getByLabelText(/Confirm password/i), 'Password1!')
 
-      await user.click(screen.getByRole('button', { name: /Start free trial/i }))
+      await user.click(screen.getByRole('button', { name: /Create free account/i }))
     })
 
     await waitFor(() => expect(mocks.persistSession).toHaveBeenCalledTimes(2))
@@ -354,41 +336,21 @@ describe('App signup cleanup', () => {
     await waitFor(() =>
       expect(mocks.initializeStore).toHaveBeenCalledWith(
         {
-          phone: '5551234567',
           firstSignupEmail: 'owner@example.com',
           ownerName: 'Morgan Owner',
-          businessName: 'Morgan Retail Co',
-          country: 'United States',
-          town: 'Seattle',
-          signupRole: 'team-member',
+          signupRole: 'owner',
         },
-        'workspace-store-id',
+        null,
       ),
     )
     await waitFor(() =>
       expect(mocks.resolveStoreAccess).toHaveBeenCalledWith('workspace-store-id'),
     )
 
-    const ownerDocKey = `teamMembers/${createdUser.uid}`
-    const customerDocKey = `customers/${createdUser.uid}`
-    const ownerDocRef = firestore.docRefByPath.get(ownerDocKey)
-    const customerDocRef = firestore.docRefByPath.get(customerDocKey)
-
-    expect(ownerDocRef).toBeDefined()
-    expect(customerDocRef).toBeDefined()
-
+    const onboardingWrite = firestore.setDocMock.mock.calls.find(([ref]) => ref?.path === `teamMembers/${createdUser.uid}`)
+    expect(onboardingWrite?.[1]).toMatchObject({ onboardingStatus: 'pending' })
+    expect(firestore.docRefByPath.has(`customers/${createdUser.uid}`)).toBe(false)
     const setDocCalls = firestore.setDocMock.mock.calls
-    const customerCall = setDocCalls.find(([ref]) => ref === customerDocRef)
-    expect(customerCall).toBeDefined()
-
-    const pendingStaffCall = setDocCalls.find(([ref]) => ref === ownerDocRef)
-    expect(pendingStaffCall?.[1]).toMatchObject({
-      uid: createdUser.uid,
-      storeId: 'workspace-store-id',
-      role: 'staff',
-      status: 'pending',
-      email: 'owner@example.com',
-    })
 
     const unrelatedWrites = setDocCalls.filter(([ref]) => {
       const path = ref?.path ?? ''
@@ -396,19 +358,13 @@ describe('App signup cleanup', () => {
     })
     expect(unrelatedWrites).toHaveLength(0)
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole('heading', { name: /Welcome to Sedifex/i }),
-      ).toBeInTheDocument(),
-    )
-
     expect(mocks.auth.signOut).not.toHaveBeenCalled()
     expect(mocks.auth.currentUser).toBe(createdUser)
 
     expect(mocks.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         tone: 'success',
-        message: 'Account created! You can now sign in.',
+        message: 'Free account created. Confirm your email, then sign in.',
       }),
     )
   })
@@ -419,7 +375,6 @@ describe('App signup cleanup', () => {
 
     mocks.createUserWithEmailAndPassword.mockImplementation(async () => {
       mocks.auth.currentUser = createdUser
-      mocks.listeners.forEach(listener => listener(createdUser))
       return { user: createdUser }
     })
 
@@ -441,25 +396,17 @@ describe('App signup cleanup', () => {
       await user.click(screen.getByRole('tab', { name: /Sign up/i }))
       await user.type(screen.getByLabelText(/Email/i), 'owner@example.com')
       await user.type(screen.getByLabelText(/Full name/i), 'Morgan Owner')
-      await user.type(screen.getByLabelText(/Business name/i), 'Morgan Retail Co')
-      await user.type(screen.getByLabelText(/Phone/i), '5551234567')
-      await user.type(screen.getByLabelText(/Country/i), 'Kenya')
-      await user.type(screen.getByLabelText(/Town or city/i), 'Nairobi')
       await user.type(screen.getByLabelText(/^Password$/i), 'Password1!')
       await user.type(screen.getByLabelText(/Confirm password/i), 'Password1!')
 
-      await user.click(screen.getByRole('button', { name: /Start free trial/i }))
+      await user.click(screen.getByRole('button', { name: /Create free account/i }))
     })
 
     await waitFor(() =>
       expect(mocks.initializeStore).toHaveBeenCalledWith(
         {
-          phone: '5551234567',
           firstSignupEmail: 'owner@example.com',
           ownerName: 'Morgan Owner',
-          businessName: 'Morgan Retail Co',
-          country: 'Kenya',
-          town: 'Nairobi',
           signupRole: 'owner',
         },
         null,

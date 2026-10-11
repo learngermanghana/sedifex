@@ -34,6 +34,8 @@ export default function ProductsWorkspace() {
   const rootRef = useRef<HTMLDivElement>(null)
   const [notice, setNotice] = useState('')
   const isAddPage = location.pathname === '/products/new'
+  const requestedType = new URLSearchParams(location.search).get('itemType')
+  const initialItemType = isAddPage && (requestedType === 'service' || requestedType === 'course') ? requestedType : 'product'
 
   useEffect(() => {
     const state = location.state as { productsNotice?: unknown } | null
@@ -89,7 +91,8 @@ export default function ProductsWorkspace() {
       </nav>
 
       <ProductsServiceFirst
-        key={isAddPage ? 'products-add' : 'products-list'}
+        key={isAddPage ? `products-add-${initialItemType}` : 'products-list'}
+        initialItemType={initialItemType}
         openEditorInitially={isAddPage}
         onEditorClose={isAddPage
           ? result => {

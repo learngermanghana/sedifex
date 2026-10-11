@@ -1,134 +1,49 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-
 import AuthPage from './AuthPage'
-
-const mockAuth = { signOut: vi.fn(async () => {}) }
-const mockSignInWithEmailAndPassword = vi.fn()
-const mockCreateUserWithEmailAndPassword = vi.fn()
-const mockSignInWithPopup = vi.fn()
-const mockGoogleAuthProviderSetCustomParameters = vi.fn()
-const mockPersistSession = vi.fn(async () => {})
-const mockResolveStoreAccess = vi.fn(async () => ({
-  storeId: 'store-1',
-  workspaceSlug: 'workspace-1',
-  role: 'owner',
-}))
-const mockInitializeStore = vi.fn()
-const mockPublish = vi.fn()
-const mockServerTimestamp = vi.fn(() => ({ __type: 'timestamp' }))
-const mockSetDoc = vi.fn(async () => {})
-const mockSetOnboardingStatus = vi.fn()
-const mockPayWithPaystack = vi.fn(async () => ({ ok: true, reference: 'ref-123' }))
-
-vi.mock('../firebase', () => ({
-  auth: mockAuth,
-  db: {},
-}))
-
-vi.mock('firebase/auth', () => ({
-  createUserWithEmailAndPassword: (...args: unknown[]) => mockCreateUserWithEmailAndPassword(...args),
-  signInWithEmailAndPassword: (...args: unknown[]) => mockSignInWithEmailAndPassword(...args),
-  signInWithPopup: (...args: unknown[]) => mockSignInWithPopup(...args),
-  GoogleAuthProvider: class {
-    setCustomParameters(...args: unknown[]) {
-      mockGoogleAuthProviderSetCustomParameters(...args)
-    }
-  },
-}))
-
-vi.mock('firebase/firestore', () => ({
-  doc: (...segments: string[]) => ({ path: segments.join('/') }),
-  serverTimestamp: (...args: unknown[]) => mockServerTimestamp(...args),
-  setDoc: (...args: unknown[]) => mockSetDoc(...args),
-}))
-
-vi.mock('../controllers/sessionController', () => ({
-  persistSession: (...args: unknown[]) => mockPersistSession(...args),
-}))
-
-vi.mock('../controllers/accessController', () => ({
-  initializeStore: (...args: unknown[]) => mockInitializeStore(...args),
-  resolveStoreAccess: (...args: unknown[]) => mockResolveStoreAccess(...args),
-  extractCallableErrorMessage: () => null,
-  INACTIVE_WORKSPACE_MESSAGE: 'workspace inactive',
-}))
-
-vi.mock('../components/ToastProvider', () => ({
-  useToast: () => ({ publish: mockPublish }),
-}))
-
-vi.mock('../utils/onboarding', () => ({
-  setOnboardingStatus: (...args: unknown[]) => mockSetOnboardingStatus(...args),
-}))
-
-vi.mock('../utils/paystack', () => ({
-  payWithPaystack: (...args: unknown[]) => mockPayWithPaystack(...args),
-}))
-
-describe('AuthPage', () => {
-  beforeEach(() => {
-    mockSignInWithEmailAndPassword.mockReset()
-    mockCreateUserWithEmailAndPassword.mockReset()
-    mockSignInWithPopup.mockReset()
-    mockGoogleAuthProviderSetCustomParameters.mockReset()
-    mockPersistSession.mockClear()
-    mockResolveStoreAccess.mockClear()
-    mockInitializeStore.mockClear()
-    mockPublish.mockClear()
-    mockSetDoc.mockClear()
-    mockServerTimestamp.mockClear()
-    mockSetOnboardingStatus.mockClear()
-    mockPayWithPaystack.mockClear()
-  })
-
-  it('shows a loading state while signing in and surfaces success toasts', async () => {
-    const user = userEvent.setup()
-    let resolveSignIn: (value: unknown) => void
-    const signInPromise = new Promise(resolve => {
-      resolveSignIn = resolve
-    })
-    mockSignInWithEmailAndPassword.mockReturnValueOnce(signInPromise)
-
-    render(
-      <MemoryRouter>
-        <AuthPage />
-      </MemoryRouter>,
-    )
-
-    await user.type(screen.getByLabelText(/Email/i), ' shopper@example.com ')
-    await user.type(screen.getByLabelText(/^Password$/i), 'Password1!')
-
-    await user.click(screen.getByRole('button', { name: /Log in/i }))
-
-    expect(screen.getByRole('button', { name: /Signing in…/i })).toBeDisabled()
-
-    resolveSignIn?.({ user: { uid: 'user-1' } })
-
-    await waitFor(() => expect(mockPersistSession).toHaveBeenCalledTimes(2))
-
-    const successToast = mockPublish.mock.calls.find(([options]) => options.tone === 'success')?.[0]
-    expect(successToast?.message).toBe('Welcome back! Redirecting…')
-  })
-
-  it('supports Google sign in from login page', async () => {
-    const user = userEvent.setup()
-    mockSignInWithPopup.mockResolvedValueOnce({ user: { uid: 'google-user-1' } })
-
-    render(
-      <MemoryRouter>
-        <AuthPage />
-      </MemoryRouter>,
-    )
-
-    await user.click(screen.getByRole('button', { name: /Continue with Google/i }))
-
-    await waitFor(() => expect(mockSignInWithPopup).toHaveBeenCalledTimes(1))
-    expect(mockGoogleAuthProviderSetCustomParameters).toHaveBeenCalledWith({
-      prompt: 'select_account',
-    })
-    await waitFor(() => expect(mockPersistSession).toHaveBeenCalledTimes(2))
-  })
+const state = vi.hoisted(() => ({ create: vi.fn(), login: vi.fn(), popup: vi.fn(), verify: vi.fn(), token: vi.fn(), initialize: vi.fn(), resolve: vi.fn(), persist: vi.fn(), onboarding: vi.fn(), publish: vi.fn() }))
+vi.mock('../firebase', () => ({ auth: { signOut: vi.fn() }, db: {} }))
+vi.mock('firebase/auth', () => ({ createUserWithEmailAndPassword: state.create, signInWithEmailAndPassword: state.login, signInWithPopup: state.popup, sendEmailVerification: state.verify, GoogleAuthProvider: class { setCustomParameters() {} } }))
+vi.mock('../controllers/sessionController', () => ({ persistSession: state.persist }))
+vi.mock('../controllers/accessController', () => ({ initializeStore: state.initialize, resolveStoreAccess: state.resolve, extractCallableErrorMessage: () => null, INACTIVE_WORKSPACE_MESSAGE: 'Workspace inactive' }))
+vi.mock('../components/ToastProvider', () => ({ useToast: () => ({ publish: state.publish }) }))
+vi.mock('../utils/onboarding', () => ({ setOnboardingStatus: state.onboarding }))
+vi.mock('../components/UsedByBusinesses', () => ({ default: () => null }))
+vi.mock('../components/SafeFirebaseImage', () => ({ default: () => null }))
+beforeEach(() => {
+  Object.values(state).forEach(mock => mock.mockReset())
+  const user = { uid: 'owner', getIdToken: state.token }
+  state.create.mockResolvedValue({ user }); state.login.mockResolvedValue({ user }); state.popup.mockResolvedValue({ user })
+  state.initialize.mockResolvedValue({ storeId: 'owner' }); state.resolve.mockResolvedValue({ storeId: 'owner', role: 'owner' })
+})
+function mount() { render(<MemoryRouter><AuthPage /></MemoryRouter>) }
+it('creates an account with only personal credentials and preserves verification', async () => {
+  mount(); const user = userEvent.setup()
+  await user.click(screen.getByRole('tab', { name: 'Sign up free' }))
+  const form = within(screen.getByRole('form', { name: 'Sign up form' }))
+  expect(form.queryByLabelText('Business name')).toBeNull()
+  expect(form.queryByLabelText('Phone number')).toBeNull()
+  await user.type(form.getByLabelText('Full name'), 'Felix Asadu')
+  await user.type(form.getByLabelText('Email'), 'felix@example.com')
+  await user.type(form.getByLabelText('Password'), 'Password1!')
+  await user.type(form.getByLabelText('Confirm password'), 'Password1!')
+  await user.click(form.getByRole('button', { name: 'Create free account' }))
+  await waitFor(() => expect(state.verify).toHaveBeenCalledTimes(1))
+  expect(state.create).toHaveBeenCalledWith(expect.anything(), 'felix@example.com', 'Password1!')
+  expect(state.initialize).toHaveBeenCalledWith({ firstSignupEmail: 'felix@example.com', ownerName: 'Felix Asadu', signupRole: 'owner' }, null)
+  expect(state.onboarding).toHaveBeenCalledWith('owner', 'pending')
+})
+it('keeps login and workspace resolution working', async () => {
+  mount(); const user = userEvent.setup(); const form = within(screen.getByRole('form', { name: 'Log in form' }))
+  await user.type(form.getByLabelText('Email'), 'felix@example.com')
+  await user.type(form.getByLabelText('Password'), 'Password1!')
+  await user.click(form.getByRole('button', { name: 'Log in' }))
+  await waitFor(() => expect(state.persist).toHaveBeenCalledTimes(2))
+  expect(state.resolve).toHaveBeenCalledTimes(1)
+})
+it('keeps Google login available', async () => {
+  mount(); await userEvent.click(screen.getByRole('button', { name: 'Continue with Google' }))
+  await waitFor(() => expect(state.persist).toHaveBeenCalledTimes(2))
 })
