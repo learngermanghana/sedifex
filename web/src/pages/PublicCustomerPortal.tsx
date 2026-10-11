@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { functions } from '../firebase'
@@ -7,6 +7,7 @@ import './PublicCustomerPortal.css'
 type BookingRow = {
   id: string
   reference: string
+  attendanceConfirmed?: boolean
   serviceName: string
   bookingDate: string
   bookingTime: string
@@ -144,6 +145,8 @@ export default function PublicCustomerPortal() {
   const [requestedTime, setRequestedTime] = useState('')
   const [actionNote, setActionNote] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [confirmingBookingId, setConfirmingBookingId] = useState('')
+  const confirmationInFlight = useRef(false)
   const [payingBookingId, setPayingBookingId] = useState('')
   const [actionMessage, setActionMessage] = useState('')
   const [actionError, setActionError] = useState('')
@@ -206,6 +209,20 @@ export default function PublicCustomerPortal() {
     setRequestedDate('')
     setRequestedTime('')
     setActionNote('')
+  }
+
+  async function confirmAttendance(booking: BookingRow) {
+    if (confirmationInFlight.current) return
+    confirmationInFlight.current = true
+    setConfirmingBookingId(booking.id)
+    setActionError('')
+    try {
+      const confirm = httpsCallable(functions, 'confirmCustomerPortalBookingAttendance')
+      await confirm({ token, bookingId: booking.id, bookingDate: booking.bookingDate, bookingTime: booking.bookingTime })
+      setData(current => current ? { ...current, bookings: current.bookings.map(row => row.id === booking.id ? { ...row, attendanceConfirmed: true } : row) } : current)
+      setActionMessage('Your attendance is confirmed for this appointment. Your payment status has not changed.')
+    } catch (cause) { setActionError(actionErrorMessage(cause)) }
+    finally { confirmationInFlight.current = false; setConfirmingBookingId('') }
   }
 
   async function submitBookingRequest(booking: BookingRow) {
@@ -324,7 +341,7 @@ export default function PublicCustomerPortal() {
 
       <section className="customer-portal__content">
         {activeSection === 'bookings' ? (
-          data.bookings.length ? <div className="customer-portal__records">{data.bookings.map(booking => {
+          data.bookings.length ? <div className="customer-portal__records">{[...data.bookings].sort((a, b) => Number(b.id === searchParams.get('booking')) - Number(a.id === searchParams.get('booking'))).map(booking => {
             const normalizedBookingStatus = booking.status.toLowerCase().replace(/[\s-]+/g, '_')
             const normalizedPaymentStatus = booking.paymentStatus.toLowerCase().replace(/[\s-]+/g, '_')
             const isClosed = ['cancelled', 'canceled', 'completed', 'complete'].includes(normalizedBookingStatus)
@@ -335,7 +352,7 @@ export default function PublicCustomerPortal() {
             const canPay = !isClosed && !isPaid && typeof displayOutstanding === 'number' && displayOutstanding > 0
             const isEditingAction = actionBookingId === booking.id && Boolean(actionType)
             return (
-              <article className="customer-portal__record" key={booking.id}>
+              <article className={`customer-portal__record ${searchParams.get('booking') === booking.id ? 'customer-portal__record--highlighted' : ''}`} key={booking.id}>
                 <div className="customer-portal__record-head"><div><small>Booking</small><h3>{booking.serviceName}</h3></div><span>{statusLabel(booking.status)}</span></div>
                 <dl>
                   <div><dt>Date</dt><dd>{booking.bookingDate || '—'}{booking.bookingTime ? ` · ${booking.bookingTime}` : ''}</dd></div>
@@ -358,6 +375,7 @@ export default function PublicCustomerPortal() {
 
                 {!isClosed ? (
                   <div className="customer-portal__record-actions">
+                    {booking.attendanceConfirmed ? <span className="customer-portal__attendance" role="status">Attendance confirmed for this appointment</span> : !pendingRequest && ['confirmed', 'rescheduled'].includes(normalizedBookingStatus) ? <button type="button" className="customer-portal__action-button" disabled={Boolean(confirmingBookingId)} onClick={() => void confirmAttendance(booking)}>{confirmingBookingId === booking.id ? 'Confirming…' : 'Confirm attendance'}</button> : null}
                     {canPay ? (
                       <button type="button" className="customer-portal__action-button customer-portal__action-button--primary" disabled={Boolean(payingBookingId)} onClick={() => void payBookingBalance(booking)}>
                         {payingBookingId === booking.id ? 'Opening secure payment…' : `Pay balance · ${formatMoney(displayOutstanding, booking.currency)}`}
