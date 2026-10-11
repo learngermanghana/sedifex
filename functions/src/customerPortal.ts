@@ -1,3 +1,4 @@
+import { bookingSchedule, hasAttendanceConfirmation } from './bookingReminderCore'
 import * as functions from 'firebase-functions/v1'
 import { randomBytes } from 'crypto'
 import { admin, defaultDb } from './firestore'
@@ -223,12 +224,13 @@ function mapBooking(id: string, data: RecordMap) {
         : null
   return {
     id,
+    attendanceConfirmed: hasAttendanceConfirmation(data),
     reference: firstText(data, ['reference', 'bookingId', 'paymentReference', 'payment.reference']) || id,
     serviceName: firstText(data, ['serviceName', 'booking.serviceName', 'metadata.serviceName', 'itemName']) || 'Service booking',
-    bookingDate: firstText(data, ['bookingDate', 'date', 'booking.preferredDate', 'metadata.bookingDate']),
-    bookingTime: firstText(data, ['bookingTime', 'time', 'booking.preferredTime', 'metadata.bookingTime']),
+    bookingDate: bookingSchedule(data).date || firstText(data, ['metadata.bookingDate']),
+    bookingTime: bookingSchedule(data).time || firstText(data, ['metadata.bookingTime']),
     location: firstText(data, ['location', 'branch', 'venue', 'booking.location']),
-    status: firstText(data, ['status', 'bookingStatus']) || 'pending',
+    status: firstText(data, ['bookingStatus', 'booking_status', 'status', 'booking.status']) || 'pending',
     paymentStatus,
     currency: firstText(data, ['currency', 'payment.currency']) || 'GHS',
     total,
