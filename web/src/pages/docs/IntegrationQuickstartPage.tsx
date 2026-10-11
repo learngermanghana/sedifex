@@ -7,6 +7,7 @@ export default function IntegrationQuickstartPage() {
       title="Sedifex Integration Quickstart (Next.js + WordPress)"
       subtitle="Use this guide to auto-load Sedifex products in WordPress or a Next.js storefront on Vercel."
     >
+      <p><a href="/help/integrations.html">Current integration setup and AI-ready instructions</a> · <a href="https://github.com/learngermanghana/sedifex/blob/main/docs/integration-contract.md">Canonical integration contract</a>. Always send X-Sedifex-Contract-Version: 2026-04-13 with your integration key.</p>
       <section>
         <h2>What you get</h2>
         <ul>
@@ -17,7 +18,7 @@ export default function IntegrationQuickstartPage() {
           </li>
           <li>
             Integration flow with API key auth via{" "}
-            <code>GET /integrationProducts?storeId=&lt;storeId&gt;</code>.
+            <code>GET /v1IntegrationProducts?storeId=&lt;storeId&gt;</code>.
           </li>
           <li>
             Companion endpoints for promotions, promo galleries, customers, top
@@ -50,7 +51,7 @@ export default function IntegrationQuickstartPage() {
             <strong>Account → Integrations</strong>.
           </li>
           <li>
-            Send <code>Authorization: Bearer &lt;integration_key&gt;</code> with
+            Send <code>x-api-key: &lt;integration_key&gt;</code> with
             your request.
           </li>
           <li>

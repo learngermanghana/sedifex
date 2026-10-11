@@ -1,0 +1,23 @@
+Sedifex: Add products, services and courses
+Source: https://sedifex.com/help/products-and-sales.html
+Last updated: 2026-10-11
+
+Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
+
+Add an item
+1. Open Products/Items, then Add item. Navigation labels may vary by business type.
+2. Choose the item type: Product, Service, Course, or another supported type.
+3. Enter its name, category, price/fee, currency and relevant details. Add images if useful.
+4. For physical products, review stock and product fields. For services, review service and payment details. For courses, review course fees and course fields.
+5. Review visibility options and save. Do not assume that adding an item automatically publishes a public website.
+
+Choose the correct transaction
+Use Sell for a point-of-sale transaction. Use Bookings for a service appointment. Online Orders contains product purchases from connected websites; product purchases should not be created as service bookings.
+Before recording a real payment, check the customer, amount, currency and payment method. Review the saved sale, receipt or order afterward.
+
+Open an item editor
+Add a product: https://sedifex.com/products/new
+Add a service: https://sedifex.com/products/new?itemType=service
+Add a course: https://sedifex.com/products/new?itemType=course
+Products: https://sedifex.com/products
+

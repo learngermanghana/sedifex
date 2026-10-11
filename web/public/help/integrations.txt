@@ -1,0 +1,38 @@
+Sedifex: Connect a website to Sedifex
+Source: https://sedifex.com/help/integrations.html
+Last updated: 2026-10-11
+
+Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
+
+Prepare the workspace
+1. Sign in as the owner of the business you want to connect. Select the correct workspace.
+2. Open Account → Integrations → API keys. Create an integration key and keep the newly shown token in your server secret configuration.
+3. Copy the workspace/store ID shown in Account. Use that ID with a key belonging to the same business.
+4. Read the canonical integration contract and endpoint guide linked below before adding write or payment flows.
+
+Keep credentials on the server
+Use your backend or a server route to call Sedifex. Never put an integration key into browser JavaScript, a public repository, a screenshot or an AI prompt. The placeholders in this guide must be replaced privately in your environment.
+The client-facing contract requires x-api-key and X-Sedifex-Contract-Version: 2026-04-13. Keep the contract version in the header, not in the URL path. The deployed project/environment determines the base URL. Some endpoints accept alternate authentication headers; use the canonical x-api-key example here.
+
+Test the catalog with a read-only request
+Run this request from your server or a private terminal after substituting your own store ID and key. It reads catalog data and does not create orders or payments.
+curl --fail-with-body --get \
+  'https://us-central1-sedifex-web.cloudfunctions.net/v1IntegrationProducts' \
+  --data-urlencode 'storeId=YOUR_STORE_ID' \
+  -H 'x-api-key: YOUR_INTEGRATION_KEY' \
+  -H 'X-Sedifex-Contract-Version: 2026-04-13'
+
+Check the response
+A successful response includes catalog items and the store ID. Log the response header x-sedifex-request-id for support and check x-sedifex-contract-version. An empty catalog can mean no visible items; review item visibility and the selected store before assuming a sync failure.
+For an authentication error (401/403), verify the key is active, belongs to the supplied store ID, and is actually being sent by your server. Rotate/revoke an exposed key in Account. For a 400 contract-version-mismatch response, align your integration with the canonical contract before retrying. Do not silently fall back to another contract version.
+
+Add checkout and bookings only after the read works
+Sedifex remains the source of truth: product orders use integrationOrders; service appointments use integrationBookings; lead-only enquiries use checkoutRequests. Webhook logs are not order records. Follow the endpoint guide for payloads, references and webhook verification.
+Review AI-generated code before using it. Ask the assistant to identify assumptions and verify endpoint names against the sources below. Never claim an integration is connected until a real response and the saved record have been checked.
+
+Authoritative references
+Canonical integration contract: https://github.com/learngermanghana/sedifex/blob/main/docs/integration-contract.md
+Endpoint and API guide: https://github.com/learngermanghana/sedifex/blob/main/docs/integration-api-guide.md
+Account integrations: https://sedifex.com/account?section=integrations
+WordPress installation guide: https://sedifex.com/docs/wordpress-install-guide
+

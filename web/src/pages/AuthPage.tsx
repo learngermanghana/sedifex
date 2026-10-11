@@ -176,6 +176,7 @@ export default function AuthPage() {
       <div className="app__layout">
         <div className="app__card">
           <div className="app__brand"><span className="app__logo">Sx</span><div><h1 className="app__title">Sedifex</h1><p className="app__tagline">A business operating system for <span className="app__highlight">growing businesses in Africa and beyond.</span></p><p className="app__trial-note">Manage operations, publish connected websites, accept payments, and grow with automation tools — all from one workspace.</p></div></div>
+          <a href="/help.html" className="form__link">Help with signup and setup</a>
           <div className="app__auth-heading"><h2>{formTitle}</h2><p>{formSubtitle}</p></div>
           <div className="app__mode-toggle" role="tablist" aria-label="Authentication mode"><button className={`app__mode-button${mode === 'login' ? ' is-active' : ''}`} role="tab" aria-selected={mode === 'login'} onClick={() => handleModeChange('login')} type="button" disabled={isLoading}>Log in</button><button className={`app__mode-button${mode === 'signup' ? ' is-active' : ''}`} role="tab" aria-selected={mode === 'signup'} onClick={() => handleModeChange('signup')} type="button" disabled={isLoading}>Sign up free</button></div>
           <p className="app__auth-switch">{mode === 'login' ? 'New to Sedifex?' : 'Already have an account?'} <button type="button" onClick={() => handleModeChange(mode === 'login' ? 'signup' : 'login')} disabled={isLoading}>{mode === 'login' ? 'Create a free account' : 'Log in instead'}</button></p>

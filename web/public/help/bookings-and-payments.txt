@@ -1,0 +1,25 @@
+Sedifex: Manage bookings, reminders and payments
+Source: https://sedifex.com/help/bookings-and-payments.html
+Last updated: 2026-10-11
+
+Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
+
+Review a booking
+1. Open Bookings and select the customer appointment.
+2. Check service, date/time, customer details, booking status and payment status separately.
+3. Confirm, reschedule or cancel using the available booking actions. Verify the saved result after the action.
+
+Customer reminders and portal actions
+The email reminder schedule runs at 08:00 Africa/Accra for configured reminders three, two and one calendar days before confirmed or rescheduled appointments. These are calendar-day reminders, not exact hourly countdowns. Owners can turn email or individual reminder rules off in Automations.
+Reminder emails include a private customer portal link when a saved customer matches the business and recipient email. Revoked links remain revoked. Unmatched bookings can receive reminders without a portal button.
+Customers can confirm attendance or request a new time from the portal. Attendance confirmation does not mark a payment paid or replace business approval. A changed appointment time requires a new attendance confirmation. Pending reschedule/cancellation requests need business review.
+
+Payments and payout setup
+Review payments in Payments and the relevant booking/order. Check the actual payment status before treating an appointment as paid. Setting up a payout account configures routing; it is not proof that a particular payment or settlement succeeded.
+Use the customer record to share a private portal when appropriate. Do not publish private portal links, customer contact details or payment records in an AI chat.
+
+Useful pages
+Bookings: https://sedifex.com/bookings
+Payments: https://sedifex.com/settlement
+Automations: https://sedifex.com/settings/automations
+

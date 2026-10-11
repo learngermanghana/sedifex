@@ -16,6 +16,7 @@ export default function CleanAccountOverview() {
   return (
     <div className="clean-account-overview">
       <BusinessSetupChecklist />
+      <a href="/help.html">Help Centre: setup, payments and integrations</a>
       <AccountOverview defaultAccountTab="workspace" />
       <section className="clean-account-overview__operations" aria-labelledby="business-operations-title">
         <div>
