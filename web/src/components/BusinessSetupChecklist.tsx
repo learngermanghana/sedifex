@@ -53,6 +53,7 @@ export default function BusinessSetupChecklist() {
   return <details className="business-setup" open={done < STEPS.length}>
     <summary><span><strong>Get your business ready</strong><small>{data ? `${done} of ${STEPS.length} steps complete${data.skipped.length ? ` · ${data.skipped.length} skipped` : ''}` : 'Checking saved setup progress…'}</small></span><span aria-hidden="true">⌄</span></summary>
     <div className="business-setup__body">
+      <Link to="/onboarding">Continue guided setup</Link>
       <p>Complete the essentials, or skip optional steps and return whenever you need them.</p>
       <progress aria-label="Business setup progress" value={done} max={STEPS.length} />
       {error && <p role="alert">{error}</p>}
