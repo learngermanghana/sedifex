@@ -1,7 +1,7 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 // web/src/pages/AccountOverview.tsx
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import type { FirebaseError } from 'firebase/app'
 import { httpsCallable } from 'firebase/functions'
 import {
@@ -466,7 +466,17 @@ export default function AccountOverview({
   const [logoImageUploadError, setLogoImageUploadError] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
-  const [activeTab, setActiveTab] = useState<AccountTab>(defaultAccountTab)
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const accountSection = searchParams.get('section')
+  const accountSections: AccountTab[] = ['workspace', 'navigation', 'integrations', 'billing', 'team', 'data-controls', 'promotions']
+  const [fallbackTab, setFallbackTab] = useState<AccountTab>(defaultAccountTab)
+  const isAccountPage = location.pathname === '/account'
+  const activeTab = isAccountPage ? (accountSections.includes(accountSection as AccountTab) ? accountSection as AccountTab : defaultAccountTab) : fallbackTab
+  const setActiveTab = (tab: AccountTab) => {
+    setFallbackTab(tab)
+    if (isAccountPage) setSearchParams(current => { const next = new URLSearchParams(current); next.set('section', tab); return next })
+  }
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(defaultIntegrationTab)
   const isFocusedIntegrationView = viewMode === 'full' && defaultAccountTab === 'integrations'
   const visibleIntegrationTab: IntegrationTab = isFocusedIntegrationView ? defaultIntegrationTab : integrationTab
@@ -1836,6 +1846,7 @@ export default function AccountOverview({
 
   return (
     <div className="account-overview">
+      <header className="account-overview__page-header">
       <Heading>{isPromotionsView ? 'Public page' : 'Business account'}</Heading>
 
       {profile && (
@@ -1848,6 +1859,10 @@ export default function AccountOverview({
           )}
         </p>
       )}
+
+      {!isPromotionsView && <p className="account-overview__hint">Manage your business, team, website and Sedifex subscription.</p>}
+      {!isPromotionsView && <p className="account-overview__plan-summary"><span>Sedifex plan</span><strong>{billingPlan || 'Not recorded'}</strong></p>}
+      </header>
 
       {isTrial && (
         <div
@@ -1887,7 +1902,7 @@ export default function AccountOverview({
 
 
       {!isPromotionsView && (
-        <nav className="account-overview__tabs" aria-label="Account sections">
+        <nav className="account-overview__tabs account-overview__tabs--sections" aria-label="Account sections">
           <button
             type="button"
             className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
