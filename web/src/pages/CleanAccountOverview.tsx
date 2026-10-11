@@ -1,3 +1,4 @@
+import BusinessSetupChecklist from '../components/BusinessSetupChecklist'
 import { Link } from 'react-router-dom'
 import PublicLinkSummaryCard from '../components/PublicLinkSummaryCard'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -14,6 +15,7 @@ export default function CleanAccountOverview() {
 
   return (
     <div className="clean-account-overview">
+      <BusinessSetupChecklist />
       <AccountOverview defaultAccountTab="workspace" />
       <section className="clean-account-overview__operations" aria-labelledby="business-operations-title">
         <div>
