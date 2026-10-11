@@ -1,3 +1,4 @@
+import './scripts/build-help.mjs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
