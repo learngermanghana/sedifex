@@ -1,3 +1,5 @@
+import PaymentNavigation from '../../components/PaymentNavigation'
+import '../AccountOverview.css'
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
@@ -323,9 +325,9 @@ export default function SettlementReport() {
   ]
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page payment-activity">
       <section className="workspace-card">
-        <p className="workspace-eyebrow">Admin / Payments</p>
+        <p className="workspace-eyebrow">Customer payments</p>
         <h1>Payments</h1>
         <p className="workspace-muted">Track client booking and website payments, payment status, Paystack split status, Sedifex commission, and expected payout.</p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
@@ -334,6 +336,7 @@ export default function SettlementReport() {
         </div>
       </section>
 
+      <PaymentNavigation />
       <section className="workspace-grid workspace-grid--four">
         <article className="workspace-card"><strong>{formatMoney(totals.gross, totals.currency)}</strong><span>Gross paid/selected</span></article>
         <article className="workspace-card"><strong>{formatMoney(totals.commission, totals.currency)}</strong><span>Sedifex commission</span></article>
