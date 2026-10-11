@@ -87,7 +87,6 @@ jobs:
             processBookingSmsStoreAlertChecks \
             processBookingSmsDeliveryChecks \
             processUnpaidBookingEmailNotifications \
-            processBookingEmailReminders \
             processEventCommunications \
             googleAdsMetricsSyncScheduled \
             runNightlyDataHygiene \
@@ -119,7 +118,6 @@ jobs:
             queueBookingSmsDeliveryCheck \
             processBookingSmsDeliveryChecks \
             processUnpaidBookingEmailNotifications \
-            processBookingEmailReminders \
             automateEventCommunicationsOnWrite \
             processEventCommunications \
             googleAdsMetricsSyncScheduled \
@@ -142,6 +140,10 @@ jobs:
 
       - name: Deploy Firebase Functions
         run: .github/scripts/deploy-functions-with-retry.sh
+
+      - name: Enable booking reminder schedule
+        run: |
+          gcloud scheduler jobs resume firebase-schedule-processBookingEmailReminders-us-central1 --location us-central1 --project sedifex-web
 
       - name: Deploy Firestore rules
         run: firebase deploy --only firestore:rules --project sedifex-web --force
