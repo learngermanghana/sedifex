@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-11",
+  "updated": "2026-10-12",
   "guides": [
     {
       "slug": "sign-up",
@@ -62,17 +62,17 @@
           "title": "First task and ready screen",
           "paragraphs": [
             "Choose the recommended first task or Explore the dashboard. Continue to the ready screen, then open that task. Travel opens a Service draft; School opens a Course draft. Review and save the item yourself. Setup does not publish your business publicly.",
-            "Finish later saves your current draft and opens the dashboard. It also dismisses the optional profile reminder. You can update your business profile later in Account."
+            "Finish later saves your draft and opens the dashboard. Your initial onboarding ends here, and no profile reminder appears on Dashboard or Account. You can update your business profile anytime in Account."
           ]
         },
         {
-          "title": "Complete your business profile",
+          "title": "Profile details after signup",
           "steps": [
-            "Add your business name and contact details in Account. A logo is optional.",
-            "Or choose Skip setup on the dashboard. Once your profile is complete or skipped, the reminder stays hidden on future visits."
+            "Add your business name when signing up or during the first onboarding step.",
+            "You can add optional contact and location information then, or edit it later in Account → Business details."
           ],
           "paragraphs": [
-            "Products, services, payouts and website integration can be configured separately whenever needed."
+            "The dashboard does not show an additional profile setup checklist. Products, services, payouts and website integration are separate tools you can use whenever needed."
           ]
         },
         {
