@@ -62,19 +62,17 @@
           "title": "First task and ready screen",
           "paragraphs": [
             "Choose the recommended first task or Explore the dashboard. Continue to the ready screen, then open that task. Travel opens a Service draft; School opens a Course draft. Review and save the item yourself. Setup does not publish your business publicly.",
-            "Finish later saves your current draft and opens the dashboard. Return using Continue guided setup in the business setup checklist. Progress is saved when you continue or finish later, not on every keystroke."
+            "Finish later saves your current draft and opens the dashboard. It also dismisses the optional profile reminder. You can update your business profile later in Account."
           ]
         },
         {
-          "title": "Complete the checklist when useful",
+          "title": "Complete your business profile",
           "steps": [
-            "Business profile: save your business name and contact information in Account. A logo is optional.",
-            "Products or services: create your first item.",
-            "Payout account: open Payout account and complete the available Paystack setup before relying on online payment routing.",
-            "Public page: save and enable your page in Public page settings, then preview its customer view."
+            "Add your business name and contact details in Account. A logo is optional.",
+            "Or choose Skip setup on the dashboard. Once your profile is complete or skipped, the reminder stays hidden on future visits."
           ],
           "paragraphs": [
-            "Optional steps may be skipped. A skipped step is not counted as completed. Refresh progress after saving changes. Staff use their assigned workspace pages; owners manage business setup."
+            "Products, services, payouts and website integration can be configured separately whenever needed."
           ]
         },
         {
@@ -89,12 +87,8 @@
               "url": "/account?section=navigation"
             },
             {
-              "label": "Payout account",
-              "url": "/settlement/setup"
-            },
-            {
-              "label": "Public page",
-              "url": "/promo"
+              "label": "Website integration",
+              "url": "/settings/integrations/website"
             }
           ]
         }
@@ -204,7 +198,7 @@
           "title": "Prepare the workspace",
           "steps": [
             "Sign in as the owner of the business you want to connect. Select the correct workspace.",
-            "Open Account \u2192 Integrations \u2192 API keys. Create an integration key and keep the newly shown token in your server secret configuration.",
+            "Open Account → Integrations → API keys. Create an integration key and keep the newly shown token in your server secret configuration.",
             "Copy the workspace/store ID shown in Account. Use that ID with a key belonging to the same business.",
             "Read the canonical integration contract and endpoint guide linked below before adding write or payment flows."
           ]
@@ -276,7 +270,7 @@
         {
           "title": "Workspace or navigation is missing",
           "paragraphs": [
-            "Confirm you signed into the correct account and selected the correct workspace. Invited staff should ask the owner to check their membership and assigned role. Owners can review enabled pages in Account \u2192 Navigation settings.",
+            "Confirm you signed into the correct account and selected the correct workspace. Invited staff should ask the owner to check their membership and assigned role. Owners can review enabled pages in Account → Navigation settings.",
             "A page can be hidden by navigation settings or unavailable to your role. Do not assume that a missing sidebar entry means the records were deleted."
           ]
         },
