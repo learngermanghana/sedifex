@@ -87,7 +87,7 @@
 
 .compact-dashboard__kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -706,5 +706,58 @@
 
   .compact-dashboard__attention-links a {
     flex: 1 1 160px;
+  }
+}
+
+/* Keep the first screen short; advanced widgets are an explicit choice. */
+.compact-dashboard__details {
+  border-top: 1px solid var(--dashboard-border);
+  padding-top: 4px;
+}
+
+.compact-dashboard__details-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 2px;
+  border: 0;
+  background: none;
+  color: #344054;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compact-dashboard__details-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+.compact-dashboard__attention-more {
+  margin-left: auto;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: #9a3412;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .compact-dashboard__kpi:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .compact-dashboard__quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .compact-dashboard__quick-actions a:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
