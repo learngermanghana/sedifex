@@ -903,7 +903,7 @@ export default function CompactBusinessDashboard() {
       ) : (
         <section className="compact-dashboard__empty-state">
           <strong>No dashboard widgets selected.</strong>
-          <p>Your four summary cards will stay visible. Add widgets only when you want more detail.</p>
+          <p>Your main business numbers will stay visible. Add details only when you need them.</p>
           <button type="button" className="button button--secondary" onClick={() => setIsCustomizing(true)}>Choose widgets</button>
         </section>
       )}
