@@ -6,7 +6,7 @@ import './InventorySystemGhana.css'
 
 const PAGE_TITLE = 'Inventory Management Software in Ghana | Sedifex'
 const PAGE_DESCRIPTION =
-  'Sedifex helps businesses in Ghana manage inventory, send branded Bulk SMS, publish a free public store page, display TikTok/YouTube videos, and keep sites updated.'
+  'Sedifex helps businesses in Ghana manage inventory, send branded Bulk SMS, connect their websites, display TikTok/YouTube videos, and keep sites updated.'
 
 const FEATURES = [
   {
@@ -20,9 +20,9 @@ const FEATURES = [
       'Send promotions and updates with your company identity to build trust and keep customers engaged.',
   },
   {
-    title: 'Free public store page',
+    title: 'Connected website support',
     description:
-      'Get discovered online with a free public business page that showcases your products and services.',
+      'Share products and services through your own connected business website.',
   },
   {
     title: 'TikTok + YouTube website display',
@@ -53,7 +53,7 @@ const FAQS = [
   {
     question: 'Is Sedifex only for inventory tracking?',
     answer:
-      'No. Sedifex combines inventory management with branded communication and visibility tools such as public pages and social video integrations.',
+      'No. Sedifex combines inventory management with branded communication and visibility tools such as website integrations and social video tools.',
   },
   {
     question: 'Can Sedifex be used by small businesses in Ghana?',
@@ -94,7 +94,7 @@ export default function InventoryManagementSoftwareGhana() {
           <h1>Inventory management software in Ghana for smarter stock control.</h1>
           <p>
             Sedifex helps Ghana businesses manage inventory, communicate with customers through
-            branded Bulk SMS, and improve online visibility with a free public store page.
+            branded Bulk SMS, and improve online visibility with a connected business website.
           </p>
           <div className="seo-page__hero-actions">
             <a className="seo-page__secondary" href="mailto:info@sedifex.com">
