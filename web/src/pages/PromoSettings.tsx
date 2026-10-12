@@ -6,7 +6,6 @@ import { uploadProductImage } from '../api/productImageUpload'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import { useToast } from '../components/ToastProvider'
-import { buildPromoSlug } from '../utils/promoSlug'
 import './AccountOverview.css'
 
 type StorePromoProfile = {
@@ -17,7 +16,6 @@ type StorePromoProfile = {
   promoSummary?: string | null
   promoStartDate?: string | null
   promoEndDate?: string | null
-  promoSlug?: string | null
   promoImageUrl?: string | null
   promoImageAlt?: string | null
 }
@@ -57,12 +55,6 @@ export default function PromoSettings() {
     return memberships.find(member => member.storeId === storeId) ?? null
   }, [memberships, storeId])
   const canEdit = activeMembership?.role === 'owner' || activeMembership?.role === 'staff'
-
-  const publicSlug = useMemo(() => {
-    if (!storeId) return ''
-    return buildPromoSlug(profile?.promoSlug, profile?.displayName, profile?.name, storeId)
-  }, [profile, storeId])
-  const publicUrl = publicSlug ? `sedifex.com/${publicSlug}` : ''
 
   useEffect(() => {
     let cancelled = false
@@ -120,14 +112,12 @@ export default function PromoSettings() {
     setSaving(true)
     setMessage('')
     try {
-      const slug = buildPromoSlug(profile?.promoSlug, profile?.displayName, profile?.name, storeId)
       const payload = {
         promoEnabled: true,
         promoTitle: nullable(title),
         promoSummary: nullable(summary),
         promoStartDate: nullable(startDate),
         promoEndDate: nullable(endDate),
-        promoSlug: slug,
         promoImageUrl: nullable(imageUrl),
         promoImageAlt: nullable(imageAlt),
         updatedAt: Timestamp.now(),
@@ -150,14 +140,11 @@ export default function PromoSettings() {
       <header className="account-overview__section-header">
         <div>
           <h1>Promo</h1>
-          <p className="account-overview__subtitle">Create a simple promo with title, message, and duration for your Sedifex public link.</p>
+          <p className="account-overview__subtitle">Create promotion content for your connected website.</p>
         </div>
       </header>
 
-      <div className="account-overview__banner" role="note">
-        <p><strong>Public URL:</strong> {publicUrl || 'Save your promo to generate your public link.'}</p>
-        <p>Your promo can work together with your gallery, inventory, services, and blog posts so customers see one organized public profile.</p>
-      </div>
+      <p className="account-overview__hint">Promotions are saved for use on your own connected website. Sedifex does not generate a public storefront link.</p>
 
       {isLoading || loadingProfile ? <p>Loading promo…</p> : null}
       {!storeId && !isLoading ? <p>Select a workspace first.</p> : null}
