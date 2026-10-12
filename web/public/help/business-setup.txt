@@ -12,18 +12,13 @@ Your business
 
 First task and ready screen
 Choose the recommended first task or Explore the dashboard. Continue to the ready screen, then open that task. Travel opens a Service draft; School opens a Course draft. Review and save the item yourself. Setup does not publish your business publicly.
-Finish later saves your current draft and opens the dashboard. Return using Continue guided setup in the business setup checklist. Progress is saved when you continue or finish later, not on every keystroke.
+Finish later saves your current draft and opens the dashboard. Finishing later permanently dismisses the optional profile prompt. You can edit your business profile at any time from Account.
 
-Complete the checklist when useful
-Optional steps may be skipped. A skipped step is not counted as completed. Refresh progress after saving changes. Staff use their assigned workspace pages; owners manage business setup.
-1. Business profile: save your business name and contact information in Account. A logo is optional.
-2. Products or services: create your first item.
-3. Payout account: open Payout account and complete the available Paystack setup before relying on online payment routing.
-4. Public page: save and enable your page in Public page settings, then preview its customer view.
+Your business profile
+The dashboard shows one optional profile reminder until your business name and contact information are saved or you choose Skip setup. Once completed or skipped, the reminder stays hidden after refreshing or signing in again. You can add products, services, bank details and website integrations independently.
 
 Useful pages
 Account: https://sedifex.com/account?section=workspace
 Navigation settings: https://sedifex.com/account?section=navigation
-Payout account: https://sedifex.com/settlement/setup
-Public page: https://sedifex.com/promo
+Website integration: https://sedifex.com/settings/integrations/website
 
