@@ -125,6 +125,23 @@ describe('Shell', () => {
     })
   })
 
+  it('expands the desktop workspace and restores navigation across refreshes', async () => {
+    const user = userEvent.setup()
+    const view = renderShell(['/dashboard'])
+    const expand = screen.getByRole('button', { name: 'Expand workspace' })
+    expect(expand).toBeInTheDocument()
+    await user.click(expand)
+    expect(screen.queryByRole('button', { name: 'Expand workspace' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show navigation' })).toBeInTheDocument()
+    expect(localStorage.getItem('sedifex-nav-collapsed-user-123')).toBe('true')
+    view.unmount()
+    renderShell(['/dashboard'])
+    expect(screen.getByRole('button', { name: 'Show navigation' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show navigation' }))
+    expect(screen.getByRole('button', { name: 'Expand workspace' })).toBeInTheDocument()
+    expect(localStorage.getItem('sedifex-nav-collapsed-user-123')).toBe('false')
+  })
+
   it('navigation update shows business identity and closes the drawer on same-page selection', async () => {
     mockUseMemberships.mockReturnValue({ memberships: [{ id: 'm1', uid: 'user-123', storeId: 'store-123', role: 'owner' }], loading: false })
     const { container } = renderShell(['/products'])
