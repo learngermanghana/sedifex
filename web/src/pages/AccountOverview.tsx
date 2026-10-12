@@ -986,6 +986,8 @@ export default function AccountOverview({
           : current,
       )
 
+      // Refresh the owner's lightweight setup prompt after a successful profile save.
+      window.dispatchEvent(new CustomEvent('sedifex:profile-saved', { detail: { storeId } }))
       publish({ message: 'Business details updated.', tone: 'success' })
       setIsEditingProfile(false)
     } catch (error) {
