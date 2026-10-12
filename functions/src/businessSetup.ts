@@ -22,7 +22,9 @@ export const getBusinessSetupChecklist = functions.https.onCall(async (data, con
   const storeId = String(data?.storeId || '').trim()
   const store = await ownerStore(storeId, context)
   // The dashboard now needs only profile status: avoid an extra products query.
-  return { ok: true, completion: setupCompletion(store.data), dismissed: store.data.setupChecklist?.profileDismissed === true }
+  const guideStatus = String(store.data.onboardingGuide?.status || '')
+  const dismissed = store.data.setupChecklist?.profileDismissed === true || guideStatus === 'completed' || guideStatus === 'paused'
+  return { ok: true, completion: setupCompletion(store.data), dismissed }
 })
 export const setBusinessSetupStepSkipped = functions.https.onCall(async (data, context) => {
   const store = await ownerStore(String(data?.storeId || '').trim(), context)
