@@ -801,13 +801,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 type="button"
                 className="shell__nav-rail-button"
                 onClick={() => setIsDesktopNavCollapsed(false)}
+                aria-label="Show navigation"
+                title="Show the navigation sidebar"
               >
                 <span className="shell__menu-icon" aria-hidden="true">
                   <span />
                   <span />
                   <span />
                 </span>
-                <span>Show nav</span>
+                <span>Show navigation</span>
               </button>
             </aside>
           ) : (
@@ -817,9 +819,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   type="button"
                   className="shell__nav-collapse-button"
                   onClick={() => setIsDesktopNavCollapsed(true)}
+                  aria-label="Expand workspace"
+                  title="Hide navigation to use the full page width"
                 >
-                  <span aria-hidden="true">←</span>
-                  <span>Hide navigation</span>
+                  <span aria-hidden="true">⛶</span>
+                  <span>Expand workspace</span>
                 </button>
               </div>
               {renderNavSection('desktop')}
