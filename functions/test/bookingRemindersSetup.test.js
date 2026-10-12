@@ -71,7 +71,8 @@ async function run() {
   await setup.setBusinessSetupStepSkipped({ storeId: 's', step: 'profile', skipped: true }, { auth: { uid: 'owner' } })
   assert.equal(db.writes.length, 1)
   assert.deepEqual(db.writes[0].data, { 'setupChecklist.profileDismissed': true })
-  assert.equal((await setup.getBusinessSetupChecklist({ storeId: 's' }, { auth: { uid: 'owner' } })).dismissed, false, 'mock applies dotted field at top level')
+  rows['stores/s'].setupChecklist.profileDismissed = true
+  assert.equal((await setup.getBusinessSetupChecklist({ storeId: 's' }, { auth: { uid: 'owner' } })).dismissed, true)
   await assert.rejects(setup.setBusinessSetupStepSkipped({ storeId: 's', step: 'invalid', skipped: true }, { auth: { uid: 'owner' } }), e => e.code === 'invalid-argument')
   console.log('Booking reminder and setup behavior checks passed')
 }
