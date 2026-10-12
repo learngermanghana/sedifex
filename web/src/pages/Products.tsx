@@ -40,7 +40,6 @@ import { ProductImageUploadError, uploadProductImage } from '../api/productImage
 import { requestAiAdvisor } from '../api/aiAdvisor'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
-import { buildPromoSlug } from '../utils/promoSlug'
 import { productMatchesSearch } from '../utils/productSearch'
 
 type CachedProduct = Omit<Product, 'id'>
@@ -774,12 +773,11 @@ export default function Products() {
             : typeof data.name === 'string' && data.name.trim()
               ? data.name.trim()
               : null
-        const promoSlug = buildPromoSlug(
-          typeof data.promoSlug === 'string' ? data.promoSlug : null,
-          storeName,
-          typeof data.name === 'string' ? data.name : null,
-          activeStoreId,
-        )
+        // Never advertise a retired Sedifex-hosted public page as the business website.
+        const websiteValue = typeof data.promoWebsiteUrl === 'string' && data.promoWebsiteUrl.trim()
+          ? data.promoWebsiteUrl.trim()
+          : typeof data.websiteUrl === 'string' ? data.websiteUrl.trim() : ''
+        const websiteLink = /^https?:\/\//i.test(websiteValue) ? websiteValue : null
 
         setProductStoreMeta({
           storeName,
@@ -787,9 +785,7 @@ export default function Products() {
             typeof data.phone === 'string' && data.phone.trim() ? data.phone.trim() : null,
           storeCity:
             typeof data.city === 'string' && data.city.trim() ? data.city.trim() : null,
-          websiteLink: promoSlug
-            ? `https://www.sedifex.com/${encodeURIComponent(promoSlug)}`
-            : null,
+          websiteLink,
         })
       } catch (error) {
         console.warn('[products] Failed to load store metadata for product defaults', error)
