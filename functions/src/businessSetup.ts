@@ -29,12 +29,17 @@ export const getBusinessSetupChecklist = functions.https.onCall(async (data, con
   const products = await defaultDb.collection('products').where('storeId', '==', storeId).limit(1).get()
   const completion = setupCompletion(store.data, !products.empty)
   const skipped = Array.isArray(store.data.setupChecklist?.skipped) ? store.data.setupChecklist.skipped.filter((id: string) => OPTIONAL.includes(id) && !completion[id as keyof typeof completion]) : []
-  return { ok: true, completion, skipped, publicUrl: store.data.promoSlug ? `https://sedifex.com/${encodeURIComponent(store.data.promoSlug)}` : null }
+  return { ok: true, completion, skipped, dismissed: store.data.setupChecklist?.profileDismissed === true, publicUrl: store.data.promoSlug ? `https://sedifex.com/${encodeURIComponent(store.data.promoSlug)}` : null }
 })
 export const setBusinessSetupStepSkipped = functions.https.onCall(async (data, context) => {
   const store = await ownerStore(String(data?.storeId || '').trim(), context)
   const step = String(data?.step || '')
-  if (!OPTIONAL.includes(step) || typeof data?.skipped !== 'boolean') throw new functions.https.HttpsError('invalid-argument', 'Choose an optional setup step.')
-  await store.ref.update({ 'setupChecklist.skipped': data.skipped ? admin.firestore.FieldValue.arrayUnion(step) : admin.firestore.FieldValue.arrayRemove(step) })
+  if (typeof data?.skipped !== 'boolean' || (step !== 'profile' && !OPTIONAL.includes(step))) throw new functions.https.HttpsError('invalid-argument', 'Choose a valid setup step.')
+  if (step === 'profile') {
+    await store.ref.update({ 'setupChecklist.profileDismissed': data.skipped })
+  } else {
+    // Keep the legacy optional-step contract for clients updating from an older release.
+    await store.ref.update({ 'setupChecklist.skipped': data.skipped ? admin.firestore.FieldValue.arrayUnion(step) : admin.firestore.FieldValue.arrayRemove(step) })
+  }
   return { ok: true }
 })
