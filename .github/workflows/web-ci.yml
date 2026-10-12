@@ -56,6 +56,10 @@ jobs:
         run: |
           npm exec vitest run src/hooks/useStorePreferenceSync.test.tsx src/components/StatusBadge.test.tsx src/utils/itemImages.test.ts src/utils/itemCategories.test.ts
           npm exec -- vitest run src/pages/__tests__/AccountOverview.test.tsx -t "keeps account settings on one navigation layer"
+          npm exec vitest run src/pages/DashboardSetupVisibility.test.tsx src/pages/Onboarding.test.tsx
+          # Run the changed workspace expand behavior without gating on unrelated
+          # existing Shell tests that use ambiguous text/link queries.
+          npm exec -- vitest run src/layout/Shell.test.tsx -t "expands the desktop workspace"
         working-directory: web
 
       - name: Test sales history regressions

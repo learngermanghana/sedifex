@@ -32,7 +32,6 @@ import { AccountBillingSection } from '../components/AccountBillingSection'
 import NavigationSettingsSection from '../components/NavigationSettingsSection'
 import { deleteWorkspaceData } from '../controllers/dataDeletion'
 import { getStoreIdFromRecord } from '../utils/storeId'
-import { buildPromoSlug, normalizePromoSlug } from '../utils/promoSlug'
 import { normalizeGhanaPhoneDigits, normalizeGhanaPhoneE164 } from '../utils/phone'
 import {
   ProductImageUploadError,
@@ -469,7 +468,7 @@ export default function AccountOverview({
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const accountSection = searchParams.get('section')
-  const accountSections: AccountTab[] = ['workspace', 'navigation', 'integrations', 'billing', 'team', 'data-controls', 'promotions']
+  const accountSections: AccountTab[] = ['workspace', 'navigation', 'integrations', 'billing', 'team', 'data-controls']
   const [fallbackTab, setFallbackTab] = useState<AccountTab>(defaultAccountTab)
   const isAccountPage = location.pathname === '/account'
   const activeTab = isAccountPage ? (accountSections.includes(accountSection as AccountTab) ? accountSection as AccountTab : defaultAccountTab) : fallbackTab
@@ -1052,15 +1051,6 @@ export default function AccountOverview({
     setPromoDraft(current => ({ ...current, [key]: value }))
   }
 
-  const existingPromoSlug = normalizePromoSlug(profile?.promoSlug ?? '')
-  const normalizedStoreId = normalizePromoSlug(storeId)
-  const looksLikeLegacyStoreIdSlug =
-    Boolean(existingPromoSlug) && Boolean(normalizedStoreId) && existingPromoSlug === normalizedStoreId
-
-  const promoSlug = looksLikeLegacyStoreIdSlug
-    ? buildPromoSlug(profile?.displayName, profile?.name, profile?.promoSlug, storeId)
-    : buildPromoSlug(profile?.promoSlug, profile?.displayName, profile?.name, storeId)
-
   async function handleSavePromo() {
     if (!storeId) return
     if (!isOwner) {
@@ -1080,7 +1070,6 @@ export default function AccountOverview({
         promoSummary: normalizeInput(promoDraft.summary),
         promoStartDate: normalizeInput(promoDraft.startDate),
         promoEndDate: normalizeInput(promoDraft.endDate),
-        promoSlug,
         promoWebsiteUrl: normalizeInput(promoDraft.websiteUrl),
         promoYoutubeUrl: normalizeInput(promoDraft.youtubeUrl),
         promoYoutubeChannelId: normalizeInput(promoDraft.youtubeChannelId),
@@ -1101,7 +1090,6 @@ export default function AccountOverview({
               promoSummary: payload.promoSummary,
               promoStartDate: payload.promoStartDate,
               promoEndDate: payload.promoEndDate,
-              promoSlug: payload.promoSlug,
               promoWebsiteUrl: payload.promoWebsiteUrl,
               promoYoutubeUrl: payload.promoYoutubeUrl,
               promoYoutubeChannelId: payload.promoYoutubeChannelId,
@@ -1847,7 +1835,7 @@ export default function AccountOverview({
   return (
     <div className="account-overview">
       <header className="account-overview__page-header">
-      <Heading>{isPromotionsView ? 'Public page' : 'Business account'}</Heading>
+      <Heading>{isPromotionsView ? 'Promotions' : 'Business account'}</Heading>
 
       {profile && (
         <p className="account-overview__subtitle">
@@ -2616,12 +2604,11 @@ export default function AccountOverview({
           <div className="account-overview__section-header">
             <h2 id="account-overview-promotions">Upcoming promos</h2>
             <p className="account-overview__subtitle">
-              This page gives your business SEO visibility with a free Sedifex URL. Updates to your
-              promo, gallery, and catalog content will appear automatically on the public page.
+              Save your promotions and gallery content for your own connected website.
             </p>
           </div>
 
-          <nav className="account-overview__tabs" aria-label="Public page settings sections">
+          <nav className="account-overview__tabs" aria-label="Promotion settings sections">
             <button
               type="button"
               className={`account-overview__tab ${publicPageTab === 'overview' ? 'is-active' : ''}`}
@@ -2651,23 +2638,10 @@ export default function AccountOverview({
           {publicPageTab === 'overview' && (
             <div className="account-overview__card">
               <p className="account-overview__hint">
-                Use this page to manage your public Sedifex profile. Your store name, promo details,
-                gallery images, and available products/services are organized for customers at your
-                free link.
+                Save promotional content here for your connected business website.
               </p>
               <p className="account-overview__hint">
-                You can also reuse this same data on your own website. Contact the Sedifex team if
-                you want updates made here to auto-sync to your website integration.
-              </p>
-              <p className="account-overview__promo-link">
-                Public URL:{' '}
-                <a
-                  href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  www.sedifex.com/{promoSlug}
-                </a>
+                You can use Sedifex website integration to keep this data synchronized.
               </p>
             </div>
           )}
@@ -2731,28 +2705,6 @@ export default function AccountOverview({
                 </label>
               </div>
 
-              <div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span>Promo URL slug</span>
-                  <input
-                    type="text"
-                    value={promoSlug}
-                    readOnly
-                    aria-readonly="true"
-                    data-testid="account-promo-slug-constant"
-                  />
-                </label>
-                <p className="account-overview__promo-link">
-                  Free route preview:{' '}
-                  <a
-                    href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    www.sedifex.com/{promoSlug}
-                  </a>
-                </p>
-              </div>
 
               <div>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3117,14 +3069,6 @@ export default function AccountOverview({
                         </div>
                       </div>
                     )}
-                    <a
-                      className="button button--ghost"
-                      href={`https://www.sedifex.com/${encodeURIComponent(promoSlug)}#promo-gallery`}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      Open public gallery
-                    </a>
                   </>
                 )}
                 {promoGalleryImageUploadError ? (

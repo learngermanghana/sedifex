@@ -13,12 +13,6 @@ type StoreFeedState = {
   promoWebsiteUrl: string
 }
 
-function buildPublicStoreUrl(state: StoreFeedState): string | null {
-  if (state.promoWebsiteUrl) return state.promoWebsiteUrl
-  if (!state.promoSlug) return null
-  return `https://www.sedifex.com/${encodeURIComponent(state.promoSlug)}`
-}
-
 function buildMerchantFeedUrl(state: StoreFeedState): string | null {
   if (!state.promoSlug) return null
   return `${PUBLIC_SEDIFEX_API_BASE_URL}/integrationGoogleMerchantFeed?slug=${encodeURIComponent(state.promoSlug)}`
@@ -80,7 +74,6 @@ export default function GoogleMerchantFeedPage() {
     }
   }, [publish, storeId])
 
-  const publicStoreUrl = useMemo(() => buildPublicStoreUrl(state), [state])
   const merchantFeedUrl = useMemo(() => buildMerchantFeedUrl(state), [state])
 
   return (
@@ -93,15 +86,15 @@ export default function GoogleMerchantFeedPage() {
           <strong>Store:</strong> {state.name}
         </p>
         <p style={{ margin: 0 }}>
-          <strong>Promo slug:</strong> {state.promoSlug || 'Not set yet'}
+          <strong>Integration slug:</strong> {state.promoSlug || 'Not set yet'}
         </p>
         <p style={{ margin: 0 }}>
-          <strong>Public store URL:</strong>{' '}
-          {publicStoreUrl ? <code>{publicStoreUrl}</code> : 'Set your Public page slug first.'}
+          <strong>Your website:</strong>{' '}
+          {state.promoWebsiteUrl ? <code>{state.promoWebsiteUrl}</code> : 'Connect your own website through Website integration.'}
         </p>
         <p style={{ margin: 0 }}>
           <strong>Merchant feed URL:</strong>{' '}
-          {merchantFeedUrl ? <code>{merchantFeedUrl}</code> : 'Set your promo slug first.'}
+          {merchantFeedUrl ? <code>{merchantFeedUrl}</code> : 'An integration slug is required for this existing feed.'}
         </p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -110,7 +103,7 @@ export default function GoogleMerchantFeedPage() {
             className="button button--secondary"
             onClick={() => {
               if (!merchantFeedUrl) {
-                publish({ tone: 'error', message: 'Set your promo slug before copying the feed URL.' })
+                publish({ tone: 'error', message: 'This feed needs an integration slug before it can be copied.' })
                 return
               }
               copyText(merchantFeedUrl)

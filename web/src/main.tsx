@@ -59,7 +59,6 @@ import WeddingPlanningSoftware from './pages/WeddingPlanningSoftware'
 import EventManagementSoftwareGhana from './pages/EventManagementSoftwareGhana'
 import PricingPage from './pages/PricingPage'
 import DataTransfer from './pages/DataTransfer'
-import PromoLandingPage from './pages/PromoLandingPage'
 import PromoSettings from './pages/PromoSettings'
 import GallerySettings from './pages/GallerySettings'
 import WebsiteHeroSlides from './pages/WebsiteHeroSlides'
@@ -105,12 +104,10 @@ const router = createBrowserRouter([
   { path: '/quick-pay/receipt/:storeId/:reference', element: <PublicQuickPayReceipt /> },
   { path: '/event-contract/:token', element: <PublicEventContractPage /> },
   { path: '/customer-portal/:token', element: <PublicCustomerPortal /> },
-  { path: '/promo/:slug', element: <PromoLandingPage /> },
   { path: '/login', element: <Navigate to="/" replace /> },
   { path: '/s/:storeId', element: <PublicQuickPayCheckout /> },
   { path: '/sites/:slug/:pageSlug', element: <PublicWebsiteEngine /> },
   { path: '/sites/:slug', element: <PublicWebsiteEngine /> },
-  { path: '/:slug', element: <PromoLandingPage /> },
   { path: '/customer-display', element: <CustomerDisplay /> },
   { path: '/display', element: <CustomerDisplay /> },
   { path: '/join-customers/:inviteId', element: <PublicCustomerIntake /> },

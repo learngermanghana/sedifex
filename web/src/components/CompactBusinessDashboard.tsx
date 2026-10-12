@@ -301,6 +301,7 @@ export default function CompactBusinessDashboard() {
   const [layoutMessage, setLayoutMessage] = useState('')
   const [draggedWidgetId, setDraggedWidgetId] = useState<WidgetId | null>(null)
   const [showMoreInsights, setShowMoreInsights] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
 
   useEffect(() => {
     if (!storeId) {
@@ -724,8 +725,16 @@ export default function CompactBusinessDashboard() {
     }
   }
 
-  const visibleWidgets = selectedWidgetIds.map(buildWidget)
-  const extraWidgets = availableWidgetIds.filter(id => !selectedWidgetIds.includes(id)).map(buildWidget)
+  const visibleWidgets = selectedWidgetIds.map(buildWidget).filter(widget => widget.id !== 'needs-attention')
+  const extraWidgets = availableWidgetIds.filter(id => id !== 'needs-attention' && !selectedWidgetIds.includes(id)).map(buildWidget)
+  const quickActions = [
+    ...(industry === 'event' || enabledModules.has('events') ? [{ to: '/event-planning', label: 'Events', detail: 'Manage events' }] : []),
+    ...(enabledModules.has('bookings') && industry !== 'event' ? [{ to: '/bookings', label: 'Bookings', detail: 'Manage bookings' }] : []),
+    ...(enabledModules.has('products') && !enabledModules.has('bookings') && industry !== 'event' ? [{ to: '/products', label: 'Products & services', detail: 'Manage what you offer' }] : []),
+    ...(enabledModules.has('customers') ? [{ to: '/customers', label: 'Clients', detail: 'View customer records' }] : []),
+    { to: '/settlement', label: 'Payments', detail: 'Check payments' },
+    { to: '/account', label: 'Business profile', detail: 'Update your details' },
+  ].slice(0, 3)
 
   function toggleWidget(id: WidgetId) {
     setLayoutMessage('')
@@ -799,44 +808,36 @@ export default function CompactBusinessDashboard() {
     <main className="compact-dashboard">
       <header className="compact-dashboard__header">
         <div>
-          <p className="compact-dashboard__eyebrow">Sedifex admin</p>
-          <h1>Bookings, payments and clients at a glance</h1>
-          <p>Start with the work that needs attention, then move directly into bookings, payment activity, client records or business settings.</p>
+          <p className="compact-dashboard__eyebrow">Welcome to Sedifex</p>
+          <h1>Your dashboard</h1>
+          <p>Choose what you want to do today.</p>
         </div>
-        <button type="button" className="button button--secondary" onClick={() => setIsCustomizing(true)}>Customize dashboard</button>
       </header>
 
       {layoutMessage && !isCustomizing ? <p className={`compact-dashboard__message${layoutMessage.startsWith('Unable') ? ' is-error' : ''}`}>{layoutMessage}</p> : null}
 
-      <nav className="compact-dashboard__quick-actions" aria-label="Admin shortcuts">
-        {enabledModules.has('bookings') ? <Link to="/bookings"><strong>Bookings</strong><span>Review client bookings</span></Link> : null}
-        {enabledModules.has('bookings') ? <Link to="/bookings/new"><strong>New booking</strong><span>Add a booking manually</span></Link> : null}
-        <Link to="/settlement"><strong>Payments</strong><span>Track payment activity</span></Link>
-        {enabledModules.has('customers') ? <Link to="/customers"><strong>Clients</strong><span>Open customer records</span></Link> : null}
-        <Link to="/account"><strong>Business account</strong><span>Profile, team and integrations</span></Link>
+      <nav className="compact-dashboard__quick-actions" aria-label="Quick actions">
+        {quickActions.map(action => <Link key={action.to} to={action.to}><strong>{action.label}</strong><span>{action.detail}</span></Link>)}
       </nav>
 
-      <section className={`compact-dashboard__attention-strip${attentionSignals.length ? '' : ' is-clear'}`} aria-label="Needs attention">
+      {attentionSignals.length > 0 ? <section className="compact-dashboard__attention-strip" aria-label="Needs attention">
         <div className="compact-dashboard__attention-heading">
           <span>Needs attention</span>
           <strong>{attentionSignalCount}</strong>
         </div>
-        {attentionSignals.length ? (
-          <div className="compact-dashboard__attention-links">
-            {attentionSignals.map(signal => (
-              <Link key={signal.id} to={signal.to}>
-                <strong>{signal.count}</strong>
-                <span>{signal.label}</span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p>Nothing urgent needs attention right now.</p>
-        )}
-      </section>
+        <div className="compact-dashboard__attention-links">
+          {attentionSignals.slice(0, 3).map(signal => (
+            <Link key={signal.id} to={signal.to}>
+              <strong>{signal.count}</strong>
+              <span>{signal.label}</span>
+            </Link>
+          ))}
+        </div>
+        {attentionSignals.length > 3 ? <button type="button" className="compact-dashboard__attention-more" onClick={() => setShowDetails(true)}>See more</button> : null}
+      </section> : null}
 
       <section className="compact-dashboard__kpis" aria-label="Business summary">
-        {topKpis.map(kpi => (
+        {topKpis.slice(0, 3).map(kpi => (
           <article key={kpi.id} className="compact-dashboard__kpi">
             <p>{kpi.label}</p>
             <strong>{kpi.value}</strong>
@@ -845,6 +846,14 @@ export default function CompactBusinessDashboard() {
         ))}
       </section>
 
+      <section className="compact-dashboard__details">
+        <button type="button" className="compact-dashboard__details-toggle" onClick={() => setShowDetails(value => !value)} aria-expanded={showDetails}>
+          {showDetails ? 'Hide details' : 'More details'} <span aria-hidden="true">{showDetails ? '↑' : '↓'}</span>
+        </button>
+        {showDetails ? <>
+          <div className="compact-dashboard__details-tools">
+            <button type="button" className="button button--secondary" onClick={() => setIsCustomizing(true)}>Choose dashboard details</button>
+          </div>
       {visibleWidgets.length ? (
         <section className="compact-dashboard__widgets" aria-label="Selected dashboard widgets">
           {visibleWidgets.map((widget, index) => (
@@ -895,7 +904,7 @@ export default function CompactBusinessDashboard() {
       ) : (
         <section className="compact-dashboard__empty-state">
           <strong>No dashboard widgets selected.</strong>
-          <p>Your four summary cards will stay visible. Add widgets only when you want more detail.</p>
+          <p>Your main business numbers will stay visible. Add details only when you need them.</p>
           <button type="button" className="button button--secondary" onClick={() => setIsCustomizing(true)}>Choose widgets</button>
         </section>
       )}
@@ -916,6 +925,9 @@ export default function CompactBusinessDashboard() {
           ) : null}
         </section>
       ) : null}
+
+        </> : null}
+      </section>
 
       {isCustomizing ? (
         <div className="compact-dashboard__overlay" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) closeCustomizer() }}>
