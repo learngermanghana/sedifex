@@ -14,22 +14,15 @@ async function ownerStore(storeId: string, context: functions.https.CallableCont
   if (![data.ownerUid, data.ownerId, storeId].includes(uid) && !validMember) throw new functions.https.HttpsError('permission-denied', 'Only the workspace owner can manage setup.')
   return { ref: store.ref, data }
 }
-export function setupCompletion(store: Row, hasCatalog: boolean) {
+export function setupCompletion(store: Row) {
   const name = store.displayName || store.businessName || store.name
-  return {
-    profile: Boolean(typeof name === 'string' && name.trim() && (store.email || store.ownerEmail || store.phone)),
-    catalog: hasCatalog,
-    payout: Boolean(store.paymentRouting?.paystackSubaccountCode || store.paystackSubaccountCode),
-    'public-page': store.promoEnabled === true && Boolean(store.promoSlug),
-  }
+  return { profile: Boolean(typeof name === 'string' && name.trim() && (store.email || store.ownerEmail || store.phone)) }
 }
 export const getBusinessSetupChecklist = functions.https.onCall(async (data, context) => {
   const storeId = String(data?.storeId || '').trim()
   const store = await ownerStore(storeId, context)
-  const products = await defaultDb.collection('products').where('storeId', '==', storeId).limit(1).get()
-  const completion = setupCompletion(store.data, !products.empty)
-  const skipped = Array.isArray(store.data.setupChecklist?.skipped) ? store.data.setupChecklist.skipped.filter((id: string) => OPTIONAL.includes(id) && !completion[id as keyof typeof completion]) : []
-  return { ok: true, completion, skipped, dismissed: store.data.setupChecklist?.profileDismissed === true, publicUrl: store.data.promoSlug ? `https://sedifex.com/${encodeURIComponent(store.data.promoSlug)}` : null }
+  // The dashboard now needs only profile status: avoid an extra products query.
+  return { ok: true, completion: setupCompletion(store.data), dismissed: store.data.setupChecklist?.profileDismissed === true }
 })
 export const setBusinessSetupStepSkipped = functions.https.onCall(async (data, context) => {
   const store = await ownerStore(String(data?.storeId || '').trim(), context)
