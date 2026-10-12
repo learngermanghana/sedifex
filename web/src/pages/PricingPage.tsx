@@ -5,9 +5,9 @@ import '../App.css'
 import './InventorySystemGhana.css'
 
 const PAGE_TITLE =
-  'Sedifex Pricing | Inventory, Bulk SMS, Google Ads Automation & Free Store Page'
+  'Sedifex Pricing | Inventory, Bulk SMS, Google Ads Automation & Website Integrations'
 const PAGE_DESCRIPTION =
-  'Choose a Sedifex plan for inventory management, branded Bulk SMS, Google Ads automation, free public store page, social video integration, and connected business communication in Ghana.'
+  'Choose a Sedifex plan for inventory management, branded Bulk SMS, Google Ads automation, connected website tools, social video integration, and connected business communication in Ghana.'
 
 const CORE_FEATURES = [
   'Real-time inventory tracking',
@@ -15,7 +15,7 @@ const CORE_FEATURES = [
   'Branded Bulk SMS capabilities',
   'Google Ads automation for campaign performance',
   'SEO-friendly landing page content',
-  'Free public store page',
+  'connected website tools',
   'TikTok and YouTube display on website',
   'Website updates reflected from Sedifex',
   'Unified communication across operations',
@@ -29,7 +29,7 @@ const PLANS = [
       'Price: GHS 20/month (GHS 240/year billed upfront)',
       'Core inventory management',
       'Basic reporting',
-      'Free public store page',
+      'connected website tools',
       '1 business location',
       'Email support',
     ],
@@ -87,7 +87,7 @@ const FAQS = [
     answer: 'Yes. You can upgrade your plan as your business grows.',
   },
   {
-    question: 'Do all plans include a free public store page?',
+    question: 'Do all plans include a connected website tools?',
     answer: 'Yes. Every plan includes a free public page for your business profile and products.',
   },
   {
@@ -140,7 +140,7 @@ export default function PricingPage() {
           <h1>Simple, affordable pricing for growing businesses.</h1>
           <p>
             Choose a plan that fits your business. Sedifex combines inventory control, branded
-            Bulk SMS, Google Ads automation, free public store pages, and social video
+            Bulk SMS, Google Ads automation, connected website toolss, and social video
             integration in one platform.
           </p>
           <div className="seo-page__hero-actions">
