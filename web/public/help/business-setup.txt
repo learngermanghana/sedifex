@@ -1,6 +1,6 @@
 Sedifex: Set up your business workspace
 Source: https://sedifex.com/help/business-setup.html
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 Guide me step by step using these documented instructions. Do not invent endpoint names or claim an action succeeded without checking it. Ask me to clarify missing context. Never ask me to paste passwords, API keys, verification links or private customer/payment data. Use placeholders for credentials. Any action in my account requires my authorization.
 
@@ -12,10 +12,10 @@ Your business
 
 First task and ready screen
 Choose the recommended first task or Explore the dashboard. Continue to the ready screen, then open that task. Travel opens a Service draft; School opens a Course draft. Review and save the item yourself. Setup does not publish your business publicly.
-Finish later saves your current draft and opens the dashboard. Finishing later permanently dismisses the optional profile prompt. You can edit your business profile at any time from Account.
+Finish later saves your draft and opens the dashboard. Your initial onboarding ends here. No further profile setup prompt appears on Dashboard or Account. You can update your business profile at any time from Account.
 
-Your business profile
-The dashboard shows one optional profile reminder until your business name and contact information are saved or you choose Skip setup. Once completed or skipped, the reminder stays hidden after refreshing or signing in again. You can add products, services, bank details and website integrations independently.
+Profile details after signup
+Enter your business name during initial onboarding. Contact and location details are optional and may be entered then or updated later under Account → Business details. There is no recurring dashboard or account profile checklist. You can add products, services, bank details and website integrations independently.
 
 Useful pages
 Account: https://sedifex.com/account?section=workspace
