@@ -75,8 +75,6 @@ export default function Onboarding() {
       }
       await setDoc(doc(db, 'stores', storeId), {
         onboardingGuide: { draft, step: nextStep, action, status: destination ? nextStep === 2 ? 'completed' : 'paused' : 'in_progress', updatedAt: serverTimestamp() },
-        // Finishing later is a deliberate skip: do not reopen profile setup on Dashboard.
-        ...(destination && nextStep < 2 ? { setupChecklist: { profileDismissed: true } } : {}),
       }, { merge: true })
       if (activeIdentity.current !== requestIdentity) return
       if (destination) {
