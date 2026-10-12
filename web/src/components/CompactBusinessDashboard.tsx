@@ -834,7 +834,7 @@ export default function CompactBusinessDashboard() {
           ))}
         </div>
         {attentionSignals.length > 3 ? <button type="button" className="compact-dashboard__attention-more" onClick={() => setShowDetails(true)}>See more</button> : null}
-      </section> : null>
+      </section> : null}
 
       <section className="compact-dashboard__kpis" aria-label="Business summary">
         {topKpis.slice(0, 3).map(kpi => (
