@@ -34,6 +34,7 @@ it('saves unfinished details without pretending the profile is complete', async 
   await user.click(screen.getByRole('button', { name: 'Finish later' }))
   await waitFor(() => expect(state.navigate).toHaveBeenCalledWith('/', { replace: true }))
   expect(state.set.mock.calls[0][1].onboardingGuide.draft.name).toBe('Work in progress')
+  expect(state.set.mock.calls.every(call => !Object.prototype.hasOwnProperty.call(call[1], 'setupChecklist'))).toBe(true)
   expect(state.preferences).not.toHaveBeenCalled()
 })
 it('resumes saved stage and reports completion failures without leaving', async () => {
