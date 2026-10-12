@@ -728,8 +728,9 @@ export default function CompactBusinessDashboard() {
   const visibleWidgets = selectedWidgetIds.map(buildWidget).filter(widget => widget.id !== 'needs-attention')
   const extraWidgets = availableWidgetIds.filter(id => id !== 'needs-attention' && !selectedWidgetIds.includes(id)).map(buildWidget)
   const quickActions = [
-    ...(enabledModules.has('bookings') ? [{ to: '/bookings', label: 'Bookings', detail: 'Manage bookings' }] : []),
-    ...(enabledModules.has('products') && !enabledModules.has('bookings') ? [{ to: '/products', label: 'Products & services', detail: 'Manage what you offer' }] : []),
+    ...(industry === 'event' || enabledModules.has('events') ? [{ to: '/event-planning', label: 'Events', detail: 'Manage events' }] : []),
+    ...(enabledModules.has('bookings') && industry !== 'event' ? [{ to: '/bookings', label: 'Bookings', detail: 'Manage bookings' }] : []),
+    ...(enabledModules.has('products') && !enabledModules.has('bookings') && industry !== 'event' ? [{ to: '/products', label: 'Products & services', detail: 'Manage what you offer' }] : []),
     ...(enabledModules.has('customers') ? [{ to: '/customers', label: 'Clients', detail: 'View customer records' }] : []),
     { to: '/settlement', label: 'Payments', detail: 'Check payments' },
     { to: '/account', label: 'Business profile', detail: 'Update your details' },
