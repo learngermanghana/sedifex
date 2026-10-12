@@ -42,7 +42,7 @@ const PLANS: PlanOption[] = [
     workspaceRule: '1 free workspace',
     badge: 'Current free entry plan',
     description: 'For very small businesses testing Sedifex before upgrading.',
-    includes: ['Public Sedifex page', 'QR code / public link', 'Limited reports', 'Sedifex branding'],
+    includes: ['Basic dashboard', 'Limited reports', 'Sedifex branding'],
     limits: ['Up to 50 products/services', 'Up to 30 receipts/invoices per month', 'No custom domain', 'No API keys'],
   },
   {
@@ -61,7 +61,6 @@ const PLANS: PlanOption[] = [
       'Customers and bookings',
       'Basic reports',
       'Basic website builder',
-      'Connected public business page',
       'Branded text messaging with purchased credits',
     ],
     limits: ['No custom domain', 'No Products API or Bookings API', 'Very large imports may need review'],
