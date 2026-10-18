@@ -122,7 +122,6 @@ Staff usually work with daily operations:
 - Student registration where enabled
 - Volunteers and support requests where enabled
 - Blog
-- Website Builder, Promo, Gallery, Website Hero Slides, and Social links
 - Donor management and funds ledger where enabled
 
 The owner can adjust modules from **Account → Navigation settings**. If a trial has ended, the app limits navigation to the billing/account recovery path and the blog until payment is updated.
@@ -190,7 +189,7 @@ Go to **Items** and add what the business offers:
 - consultation packages
 - appointment-based services
 
-These records can power reports, Sell, Quick Pay, Payments, Website Builder, booking forms, checkout, and the public catalog. Use **Ask Sedifex** to search items, prepare safer item edits, or upload product images while the Add/Edit Item form is open.
+These records can power reports, Sell, Quick Pay, Payments, external website integrations, booking forms, checkout, and the public catalog. Use **Ask Sedifex** to search items, prepare safer item edits, or upload product images while the Add/Edit Item form is open.
 
 ### Step 4: Set up selling and payments
 
