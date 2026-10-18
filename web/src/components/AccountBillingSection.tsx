@@ -60,7 +60,6 @@ const PLANS: PlanOption[] = [
       'POS selling',
       'Customers and bookings',
       'Basic reports',
-      'Basic website builder',
       'Branded text messaging with purchased credits',
     ],
     limits: ['No custom domain', 'No Products API or Bookings API', 'Very large imports may need review'],
@@ -77,8 +76,7 @@ const PLANS: PlanOption[] = [
     badge: 'Best for online growth',
     description: 'For businesses that want a real website connected to Sedifex.',
     includes: [
-      'Full website builder',
-      'Website template library',
+      'External website integrations',
       'Custom domain setup',
       'SEO settings',
       'Products API and Bookings API',
