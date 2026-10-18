@@ -70,8 +70,7 @@ describe('event business navigation preset', () => {
           'upcoming-events',
           'integrations',
           'blog',
-          'website-builder',
-        ],
+            ],
       },
     })
 
