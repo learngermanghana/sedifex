@@ -1,8 +1,8 @@
 # Sedifex Integration API Guide
 
-This guide explains how a partner website connects to Sedifex for **products/services**, **bookings**, and **website builder public content** such as hero slides and social/contact profile data.
+This guide explains how a partner website connects to Sedifex for **products/services**, **bookings**, and **public content integration APIs** such as hero slides and social/contact profile data.
 
-The most important rule is simple:
+**Website Builder retirement:** The unfinished visual editor has been removed from Sedifex. Build the public frontend with Next.js, WordPress, or another framework. Existing integration endpoints remain available, including legacy content endpoints; references to Website Builder sections below describe their legacy data sources, not an active editor.\n\nThe most important rule is simple:
 
 > Use **one Website Integration API key** for the whole website. The same key can load products/services, create bookings, check availability, open checkout, read booking records, and fetch Website Builder hero slides and public profile/social settings.
 
