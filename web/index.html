@@ -8,6 +8,17 @@
     <meta name="theme-color" content="#4338CA" />
     <title>Sedifex — Run the business. Grow the brand.</title>
 
+    <!-- Tailwind utilities are still used by authentication, reporting, billing, pricing, and legal pages.
+         Preserve the legacy element styling by disabling Tailwind preflight until these pages are migrated. -->
+    <script>
+      window.tailwind = window.tailwind || {}
+      window.tailwind.config = {
+        corePlugins: {
+          preflight: false,
+        },
+      }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/shell-navigation.css" />
     <link rel="stylesheet" href="/sell-final-price-discount.css" />
     <link rel="stylesheet" href="/customer-whatsapp-contact.css" />
