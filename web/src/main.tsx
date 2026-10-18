@@ -63,7 +63,6 @@ import PromoSettings from './pages/PromoSettings'
 import GallerySettings from './pages/GallerySettings'
 import WebsiteHeroSlides from './pages/WebsiteHeroSlides'
 import SocialLinksSettings from './pages/SocialLinksSettings'
-import WebsiteBuilder from './pages/WebsiteBuilder'
 import BookingMappingSettings from './pages/BookingMappingSettings'
 import IntegrationWebsiteSettings from './pages/IntegrationWebsiteSettings'
 import IntegrationBookingsSettings from './pages/IntegrationBookingsSettings'
@@ -173,7 +172,7 @@ const router = createBrowserRouter([
       { path: 'account', element: <CleanAccountOverview /> },
       { path: 'account/overview', element: <CleanAccountOverview /> },
       { path: 'public-page', element: <Navigate to="/account" replace /> },
-      { path: 'website-builder', element: <WebsiteBuilder /> },
+      { path: 'website-builder', element: <Navigate to="/settings/integrations/website" replace /> },
       { path: 'promo', element: <PromoSettings /> },
       { path: 'gallery', element: <GallerySettings /> },
       { path: 'website-hero-slides', element: <WebsiteHeroSlides /> },
