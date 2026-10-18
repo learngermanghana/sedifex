@@ -19,6 +19,7 @@ describe('event business navigation preset', () => {
       'invoices',
       'reports',
       'bulk-email',
+      'settlement',
     ])
     expect(items.map(item => item.id)).toEqual([
       'dashboard',
@@ -26,6 +27,7 @@ describe('event business navigation preset', () => {
       'customers',
       'invoices',
       'reports',
+      'settlement',
       'bulk-email',
       'account',
     ])
@@ -49,6 +51,7 @@ describe('event business navigation preset', () => {
       'customers',
       'invoices',
       'reports',
+      'settlement',
       'bulk-email',
       'account',
     ])
@@ -82,9 +85,10 @@ describe('event business navigation preset', () => {
       'customers',
       'invoices',
       'reports',
-      'bulk-email',
       'upcoming-events',
+      'settlement',
       'integrations',
+      'bulk-email',
       'blog',
       'account',
     ])
