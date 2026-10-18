@@ -74,16 +74,16 @@ const PLANS: PlanOption[] = [
     productLimit: 'Unlimited products/services under fair use',
     workspaceRule: 'Extra workspace: GHS 99/month',
     badge: 'Best for online growth',
-    description: 'For businesses that want a real website connected to Sedifex.',
+    description: 'For businesses connecting a separately built website to Sedifex.',
     includes: [
       'External website integrations',
-      'Custom domain setup',
-      'SEO settings',
+      'Bring your own website and custom domain',
+      'Next.js and WordPress integration guides',
       'Products API and Bookings API',
       'Website sales reports',
       'Branded text messaging with purchased credits',
     ],
-    limits: ['Advanced custom integrations may require setup fee', 'Very high API usage may need review'],
+    limits: ['Website design and hosting are not included', 'Advanced custom integrations may require setup fee', 'Very high API usage may need review'],
   },
 ]
 
