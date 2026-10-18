@@ -102,18 +102,18 @@ describe('resolveNavigation', () => {
     expect(items.find(item => item.target === '/bookings')?.label).toBe('Classes')
   })
 
-  it('groups website content behind the website builder nav item', () => {
+  it('does not reveal the retired Website Builder even for previously enabled modules', () => {
     const items = resolveNavigation({
       role: 'staff',
       workspaceProfile: {
         industry: 'shop',
         labelPolicy: 'shared',
-        enabledModules: ['promo', 'gallery', 'website-hero-slides', 'social-links'],
+        enabledModules: ['website-builder', 'promo', 'gallery', 'website-hero-slides', 'social-links'],
+        customNavItems: [{ id: 'website-builder', label: 'Old editor', type: 'internal', target: '/website-builder', roles_allowed: ['staff'], sort_order: 4 }],
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['website-builder'])
-    expect(items[0].target).toBe('/website-builder')
+    expect(items).toEqual([])
   })
 
   it('keeps signup presets focused on the selected business type', () => {

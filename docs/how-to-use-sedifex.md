@@ -9,7 +9,7 @@ The latest interface focuses on six daily actions:
 1. Set up the workspace, staff, billing, navigation, and public profile.
 2. Add items, services, courses, campaigns, trips, or classes.
 3. Sell, invoice, collect Quick Pay, and track bookings and website payments.
-4. Build and update a website from Sedifex data.
+4. Build and host a custom website with Next.js, WordPress, or another framework.
 5. Connect website/API integrations and email tools.
 6. Use Ask Sedifex to search items, prepare safe item edits, upload product images, and move faster.
 
@@ -26,7 +26,7 @@ Navigation settings are grouped like this:
 | **Daily work** | Dashboard, Reports, Items, Sell, Customers, Bookings |
 | **Documents, payments & expenses** | Quick Pay, Invoices, Receipts, Expenses, Payments, Donor management, Funds ledger |
 | **Bookings, registration & cases** | Upcoming events, Student registration, Volunteers, Support requests |
-| **Website & marketing** | Integrations, Website Builder, Blog, SMS, Bulk email |
+| **Website & marketing** | Integrations, Blog, SMS, Bulk email |
 | **Account** | Account |
 
 Core modules now include:
@@ -51,18 +51,13 @@ Core modules now include:
 | **Payments** | Website, Quick Pay, booking, and other payment activity, including settlement tracking | Owner |
 | **Integrations** | Website/API key, products/services API, booking API, Apps Script, Google Business, and email settings | Owner |
 | **Blog** | Store or business blog posts | Owner, Staff |
-| **Website Builder** | Build a website from Sedifex data without coding | Owner, Staff |
-| **Promo** | Promo/landing page content inside the Website Builder area | Owner, Staff |
-| **Gallery** | Website/public gallery images and albums inside the Website Builder area | Owner, Staff |
-| **Website Hero Slides** | Website homepage hero/banner slide content inside the Website Builder area | Owner, Staff |
-| **Social links** | Website contact links, WhatsApp, social pages, and public profile links inside the Website Builder area | Owner, Staff |
 | **SMS** | Bulk SMS or customer messaging | Owner |
 | **Bulk email** | Email marketing and customer updates | Owner |
 | **Donor management** | Donations, expenses, donor records, and NGO-style finance tracking | Owner, Staff |
 | **Funds ledger** | Funds and ledger tracking | Owner, Staff |
 | **Account** | Workspace, staff, billing, navigation, integration, and setup settings | Owner |
 
-Important: **Promo**, **Gallery**, **Website Hero Slides**, and **Social links** are website-builder sections. If one of those sections is enabled, Sedifex keeps **Website Builder** available as the parent area.
+Important: the visual **Website Builder is retired**. Existing integration APIs and their underlying data remain available for independently built websites; the editor is no longer offered in navigation.
 
 ---
 
@@ -72,7 +67,7 @@ Sedifex can use the same core modules but rename them based on business type. Ch
 
 | Industry | Common navigation meaning |
 |---|---|
-| **Retail / Shop** | Items, Sell, Payments, Quick Pay, Customers, Bookings, Website Builder, Reports |
+| **Retail / Shop** | Items, Sell, Payments, Quick Pay, Customers, Bookings, Reports |
 | **Travel** | Trips, Travelers, Upcoming trips, Payments, Trip promos, Trip gallery, Contact links |
 | **NGO** | Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, Petty expenses |
 | **School** | Students, Classes, Upcoming classes, Student registration, Payments, Admissions promo, School gallery |
@@ -104,7 +99,6 @@ Owners can normally manage the full workspace:
 - Volunteers and support requests where enabled
 - Integrations
 - Blog
-- Website Builder, Promo, Gallery, Website Hero Slides, and Social links
 - SMS
 - Bulk email
 - Donor management
@@ -128,7 +122,6 @@ Staff usually work with daily operations:
 - Student registration where enabled
 - Volunteers and support requests where enabled
 - Blog
-- Website Builder, Promo, Gallery, Website Hero Slides, and Social links
 - Donor management and funds ledger where enabled
 
 The owner can adjust modules from **Account → Navigation settings**. If a trial has ended, the app limits navigation to the billing/account recovery path and the blog until payment is updated.
@@ -196,7 +189,7 @@ Go to **Items** and add what the business offers:
 - consultation packages
 - appointment-based services
 
-These records can power reports, Sell, Quick Pay, Payments, Website Builder, booking forms, checkout, and the public catalog. Use **Ask Sedifex** to search items, prepare safer item edits, or upload product images while the Add/Edit Item form is open.
+These records can power reports, Sell, Quick Pay, Payments, external website integrations, booking forms, checkout, and the public catalog. Use **Ask Sedifex** to search items, prepare safer item edits, or upload product images while the Add/Edit Item form is open.
 
 ### Step 4: Set up selling and payments
 
@@ -211,22 +204,17 @@ Use:
 
 Quick Pay is useful for sharing a payment link on WhatsApp, Instagram, TikTok, flyers, or a public page. Customers can search the store, pay quickly, and receive a receipt while Sedifex keeps records updated.
 
-### Step 5: Build the website
+### Step 5: Build a custom website
 
-Go to **Website Builder** to build a website from Sedifex data.
+The unfinished visual Website Builder is retired. Build the frontend with **Next.js**, **WordPress**, React, or another framework, and host it independently. Connect it to Sedifex via the **Integrations** page; do not expose the Website Integration API key in browser code.
 
-The Website Builder can use:
+1. Create and deploy a site in your preferred framework.
+2. Open **Account → Integrations → Website API key** (requires an eligible plan).
+3. Configure `SEDIFEX_STORE_ID`, `SEDIFEX_INTEGRATION_API_KEY`, and the Sedifex base URL as **server-side secrets**.
+4. Fetch products/services, bookings, availability, gallery data, and checkout through the documented integration APIs.
+5. Test failures, pricing, and payment confirmation before going live.
 
-- products/services from Items
-- hero slides
-- gallery images
-- promo content
-- blog posts
-- social/contact links
-- public profile details
-- booking/payment actions
-
-This means the business can update Sedifex once and let the website pull the latest data.
+Full examples: [Next.js + WordPress integration quickstart](/docs/integration-quickstart) and [Sedifex integration API guide](integration-api-guide.md).
 
 ### Step 6: Configure integrations
 
@@ -268,7 +256,7 @@ Use:
 3. Use **Ask Sedifex** to find items, prepare edits, or upload item images.
 4. Sell in **Sell**, invoice customers, or share **Quick Pay**.
 5. Track customers, receipts, expenses, and reports; owners can also review **Payments**.
-6. Build a website with **Website Builder** and connect it from **Integrations**.
+6. Build a custom website and connect it through **Integrations** using the developer quickstart.
 
 #### Correcting a completed POS sale
 
@@ -288,7 +276,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 2. Add travel services/packages in **Items**.
 3. Use **Bookings/Trips** for customer travel requests.
 4. Use **Upcoming events/trips** for travel dates or appointment slots.
-5. Use **Promo**, **Gallery**, **Website Hero Slides**, and **Social links** for public marketing.
+5. Prepare website content and customer offers in your custom frontend; Sedifex provides products, bookings, and integration APIs.
 6. Connect the travel website from **Integrations**.
 
 ### School workflow
@@ -298,7 +286,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 3. Use **Student registration** for new student signups.
 4. Use **Bookings/Classes** and **Upcoming classes** for scheduled lessons.
 5. Use **Bulk email** and **SMS** for student communication.
-6. Use **Website Builder** and **Integrations** to publish course data online.
+6. Publish course data through a custom website connected via **Integrations**.
 
 ### NGO workflow
 
@@ -306,7 +294,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 2. Add campaigns or support services in **Items**.
 3. Use **Donor management**, **Expenses/Petty expenses**, and **Funds ledger** for finance tracking.
 4. Use **Volunteers** and **Support requests** for public intake.
-5. Use **Campaigns**, **Upcoming campaigns**, **Promo**, **Website Hero Slides**, and **Impact gallery** for public updates.
+5. Use **Campaigns** and **Upcoming campaigns** for records; publish updates through your external website.
 6. Connect donation/volunteer pages through **Integrations**.
 
 ---
@@ -318,7 +306,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 - **Ask Sedifex** can search connected items, prepare safe item edits, and upload product images into open item forms.
 - **Payments** is owner-only and is used for website, Quick Pay, booking, registration, and checkout payment activity.
 - **Quick Pay** is for fast public payments and payment links.
-- **Website Builder** creates a website using Sedifex data and groups Promo, Gallery, Website Hero Slides, and Social links.
+- The old **Website Builder is retired**; create external websites using Next.js, WordPress, or your preferred framework.
 - **Integrations** connects external websites, product/service feeds, booking forms, checkout, gallery, Google Business, and email tools.
 - **Bookings** should be used for appointments, services, classes, trips, campaigns, and consultations.
 - **Expenses**, **Donor management**, and **Funds ledger** support day-to-day finance tracking depending on business type.
@@ -331,7 +319,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 
 - Shareable onboarding note for new Sedifex users.
 - Clear explanation of the latest navigation, industry presets, role access, and module system.
-- Helps staff understand where to go for Ask Sedifex, Website Builder, Quick Pay, integrations, bookings, expenses, and reports, while clearly separating owner-only payment controls.
+- Helps staff understand where to go for Ask Sedifex, Quick Pay, integrations, bookings, expenses, and reports, while clearly separating owner-only payment controls.
 - Crawlable URL for search engines and AI assistants.
 - Single source of truth for changing Sedifex navigation patterns.
 

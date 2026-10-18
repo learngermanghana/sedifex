@@ -9,6 +9,20 @@ export default function IntegrationQuickstartPage() {
     >
       <p><a href="/help/integrations.html">Current integration setup and AI-ready instructions</a> · <a href="https://github.com/learngermanghana/sedifex/blob/main/docs/integration-contract.md">Canonical integration contract</a>. Always send X-Sedifex-Contract-Version: 2026-04-13 with your integration key.</p>
       <section>
+        <h2>Build your own website with Next.js</h2>
+        <p>Sedifex no longer offers the unfinished visual Website Builder. Instead, use Next.js, WordPress, or another framework to build and host a professional website, while Sedifex handles the business data and integrations.</p>
+        <ol>
+          <li>Create a Next.js App Router project (for example with <code>npx create-next-app@latest</code>).</li>
+          <li>In Sedifex open <strong>Account → Integrations → Website API key</strong> and create a key on a plan that permits API access.</li>
+          <li>Configure <code>SEDIFEX_STORE_ID</code>, <code>SEDIFEX_INTEGRATION_API_KEY</code>, and <code>SEDIFEX_API_BASE_URL</code> in server-side environment variables. Never use <code>NEXT_PUBLIC_</code> for an API key.</li>
+          <li>Fetch data securely from the server using the <code>x-api-key</code> and <code>X-Sedifex-Contract-Version</code> headers.</li>
+          <li>Test product listings, booking requests, checkout, payment confirmation and error handling before going live.</li>
+        </ol>
+        <pre><code>{"// app/products/page.tsx (Next.js Server Component)\nconst base = process.env.SEDIFEX_API_BASE_URL ||\n  \"https://us-central1-sedifex-web.cloudfunctions.net\";\n\nexport default async function ProductsPage() {\n  const storeId = process.env.SEDIFEX_STORE_ID;\n  const key = process.env.SEDIFEX_INTEGRATION_API_KEY;\n  if (!storeId || !key) throw new Error(\"Missing Sedifex configuration\");\n\n  const url = new URL(\"/v1IntegrationProducts\", base);\n  url.searchParams.set(\"storeId\", storeId);\n  const response = await fetch(url.toString(), {\n    headers: {\n      \"x-api-key\": key,\n      \"X-Sedifex-Contract-Version\": \"2026-04-13\",\n    },\n    next: { revalidate: 60 },\n  });\n  if (!response.ok) throw new Error(\"Unable to load products\");\n  const { products = [] } = await response.json();\n  return <main><h1>Products</h1><ul>{products.map(\n    (product: { id: string; name: string }) =>\n      <li key={product.id}>{product.name}</li>\n  )}</ul></main>;\n}"}</code></pre>
+        <p>For working examples, environment setup, and the contract, read the <a href="https://github.com/learngermanghana/sedifex/blob/main/docs/integration-quickstart.md">full Next.js integration guide</a> and <a href="https://github.com/learngermanghana/sedifex/blob/main/docs/integration-api-guide.md">API reference</a>. WordPress and other frameworks use the same server-side API authentication pattern.</p>
+      </section>
+
+      <section>
         <h2>What you get</h2>
         <ul>
           <li>
@@ -23,7 +37,7 @@ export default function IntegrationQuickstartPage() {
           <li>
             Companion endpoints for promotions, promo galleries, customers, top
             sellers, and Google Merchant XML feed:{" "}
-            <code>GET /integrationPromo?storeId=&lt;storeId&gt;</code>,{" "}
+            <code>GET /v1IntegrationPromo?storeId=&lt;storeId&gt;</code>,{" "}
             <code>GET /integrationGallery?storeId=&lt;storeId&gt;</code>,{" "}
             <code>GET /integrationCustomers?storeId=&lt;storeId&gt;</code>,{" "}
             <code>

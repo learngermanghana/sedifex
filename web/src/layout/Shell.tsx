@@ -72,7 +72,7 @@ const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = 
   {
     id: 'website',
     label: 'Website',
-    itemIds: ['website-builder', 'integrations', 'blog', 'bulk-email', 'bulk-messaging', 'automations'],
+    itemIds: ['integrations', 'blog', 'bulk-email', 'bulk-messaging', 'automations'],
   },
   {
     id: 'manage',

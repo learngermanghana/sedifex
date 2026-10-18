@@ -367,7 +367,8 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
   return (
     <section className="account-overview" aria-labelledby="integrations-title">
       <h1 id="integrations-title">Integrations</h1>
-      <p className="account-overview__subtitle">Connect websites, checkout, bookings, sheets, and Apps Script tools without editing Firestore.</p>
+      <p className="account-overview__subtitle">Connect independently developed websites (Next.js, WordPress, or another framework), checkout, bookings, and third-party tools without editing Firestore.</p>
+      <p className="account-overview__hint">Building a website? <a href="/docs/integration-quickstart">Follow the developer integration guide</a> before generating a website API key. Sedifex supplies the backend; your website is built and hosted separately.</p>
 
       <nav className="account-overview__tabs" aria-label="Integration sections">
         {([

@@ -1,5 +1,7 @@
 # Sedifex Integration Quickstart (Next.js + WordPress)
 
+**Current approach:** Build and host your own frontend. The visual Sedifex Website Builder is retired. Sedifex remains the backend for products, bookings, availability, checkout, and content APIs. This guide is for developers building independent sites, not for using an in-app page editor.
+
 Use this guide to auto-load products from Sedifex into either:
 
 - a **WordPress** site, or

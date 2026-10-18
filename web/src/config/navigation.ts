@@ -38,11 +38,10 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'integrations', label: 'Integrations', type: 'module', target: '/settings/integrations/website', rolesAllowed: ['owner'], sortOrder: 59 },
   { id: 'automations', label: 'Automations', type: 'module', target: '/settings/automations', rolesAllowed: ['owner'], sortOrder: 59.5 },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
-  { id: 'website-builder', label: 'Website Builder', type: 'module', target: '/website-builder', rolesAllowed: ['owner', 'staff'], sortOrder: 61 },
-  { id: 'promo', label: 'Promo', type: 'module', target: '/promo', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.1 },
-  { id: 'gallery', label: 'Gallery', type: 'module', target: '/gallery', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.2 },
-  { id: 'website-hero-slides', label: 'Website Hero Slides', type: 'module', target: '/website-hero-slides', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.3 },
-  { id: 'social-links', label: 'Social links', type: 'module', target: '/social-links', parentTarget: '/website-builder', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.4 },
+  { id: 'promo', label: 'Promo', type: 'module', target: '/promo', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.1 },
+  { id: 'gallery', label: 'Gallery', type: 'module', target: '/gallery', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.2 },
+  { id: 'website-hero-slides', label: 'Website Hero Slides', type: 'module', target: '/website-hero-slides', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.3 },
+  { id: 'social-links', label: 'Social links', type: 'module', target: '/social-links', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.4 },
   { id: 'bulk-messaging', label: 'SMS', type: 'module', target: '/bulk-messaging', rolesAllowed: ['owner'], sortOrder: 70 },
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   { id: 'donor-management', label: 'Donor management', type: 'module', target: '/donor-management', rolesAllowed: ['owner', 'staff'], sortOrder: 90 },
@@ -52,9 +51,9 @@ export const NAV_ITEMS: NavItem[] = [
 
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
   shop: {},
-  travel: { '/customers': 'Customers', '/bookings': 'Booking', '/upcoming-events': 'Upcoming events', '/website-builder': 'Website Builder', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
-  ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/website-builder': 'Website Builder', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
-  school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/website-builder': 'Website Builder', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
+  travel: { '/customers': 'Customers', '/bookings': 'Booking', '/upcoming-events': 'Upcoming events', '/promo': 'Trip promos', '/gallery': 'Trip gallery', '/social-links': 'Contact links' },
+  ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
+  school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
   event: { '/event-planning': 'Event Management', '/bulk-email': 'Email' },
 }
 
@@ -79,8 +78,6 @@ export type NavigationSettings = {
   enabledModules?: string[]
   customNavItems?: CustomNavItem[]
 }
-
-export const WEBSITE_BUILDER_SECTION_IDS = ['promo', 'gallery', 'website-hero-slides', 'social-links'] as const
 
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   shop: ['dashboard', 'products', 'sell', 'invoices', 'receipts', 'customers', 'settlement'],
@@ -122,9 +119,6 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
     enabledModules.add('dashboard')
     enabledModules.add('reports')
   }
-  if (enabledModules && WEBSITE_BUILDER_SECTION_IDS.some(id => enabledModules.has(id))) {
-    enabledModules.add('website-builder')
-  }
   const grantedPermissions = input.permissions && input.permissions.length > 0 ? new Set(input.permissions) : null
   const baseItems = NAV_ITEMS.filter(item => {
     if (!item.rolesAllowed.includes(role)) return false
@@ -140,6 +134,8 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
   })
   const customItems = (workspaceProfile.customNavItems ?? []).filter(item => {
     if (!item.roles_allowed.includes(role)) return false
+    // Old saved custom navigation cannot resurrect the retired website editor.
+    if (item.id === 'website-builder' || item.target.trim().startsWith('/website-builder')) return false
     if (!item.label.trim() || !item.target.trim()) return false
     if (!['module', 'internal', 'external'].includes(item.type)) return false
     return hasPermissions(item.required_permissions, grantedPermissions)
