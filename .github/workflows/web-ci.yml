@@ -62,6 +62,10 @@ jobs:
           npm exec -- vitest run src/layout/Shell.test.tsx -t "expands the desktop workspace"
         working-directory: web
 
+      - name: Test shared Tailwind utility runtime
+        run: npm exec vitest run src/config/tailwind-runtime.test.ts
+        working-directory: web
+
       - name: Test sales history regressions
         run: npm exec vitest run src/components/salesHistoryRegression.test.tsx
         working-directory: web
