@@ -112,11 +112,11 @@ async function ensureNotificationSettings(storeId: string, brand?: StoreBrand): 
   const existingAdminEmails = Array.isArray(existing.adminEmails) ? existing.adminEmails.map(email).filter(Boolean) : []
   const defaultAdminEmails = existingAdminEmails.length ? existingAdminEmails : [resolvedBrand.email].filter((value): value is string => Boolean(value))
   if (!existing.createdAt) {
-    await settingsRef.set({ notifications: { customerEmailEnabled: existing.customerEmailEnabled !== false, storeAlertEnabled: true, adminEmails: defaultAdminEmails, replyToEmail: email(existing.replyToEmail) || resolvedBrand.email || null, mode: text(existing.mode, 40) || 'sedifex_default', customWebhookEnabled: existing.customWebhookEnabled === true, customWebhookUrl: text(existing.customWebhookUrl, 1000) || null, createdAt: now, updatedAt: now } }, { merge: true })
+    await settingsRef.set({ notifications: { customerEmailEnabled: existing.customerEmailEnabled !== false, storeAlertEnabled: existing.storeAlertEnabled !== false, adminEmails: defaultAdminEmails, replyToEmail: email(existing.replyToEmail) || resolvedBrand.email || null, mode: text(existing.mode, 40) || 'sedifex_default', customWebhookEnabled: existing.customWebhookEnabled === true, customWebhookUrl: text(existing.customWebhookUrl, 1000) || null, createdAt: now, updatedAt: now } }, { merge: true })
   } else if (!existingAdminEmails.length && resolvedBrand.email) {
     await settingsRef.set({ notifications: { adminEmails: [resolvedBrand.email], replyToEmail: email(existing.replyToEmail) || resolvedBrand.email, updatedAt: now } }, { merge: true })
   }
-  return { customerEmailEnabled: existing.customerEmailEnabled !== false, storeAlertEnabled: true, adminEmails: defaultAdminEmails, replyToEmail: email(existing.replyToEmail) || resolvedBrand.email, mode: existing.mode === 'custom_webhook' ? 'custom_webhook' : 'sedifex_default', customWebhookEnabled: existing.customWebhookEnabled === true, customWebhookUrl: text(existing.customWebhookUrl, 1000) || null }
+  return { customerEmailEnabled: existing.customerEmailEnabled !== false, storeAlertEnabled: existing.storeAlertEnabled !== false, adminEmails: defaultAdminEmails, replyToEmail: email(existing.replyToEmail) || resolvedBrand.email, mode: existing.mode === 'custom_webhook' ? 'custom_webhook' : 'sedifex_default', customWebhookEnabled: existing.customWebhookEnabled === true, customWebhookUrl: text(existing.customWebhookUrl, 1000) || null }
 }
 
 
@@ -263,7 +263,7 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
     const intro = `Hello ${customerName}, ${copy.customerIntro}`
     deliveries.push(createDelivery({ payload: { ...payload, reference }, brand, settings, recipientType: 'customer', to: customerEmail, subject: `${title} - ${brand.storeName}`, html: buildHtmlEmail({ brand, title, intro, rows, footerNote: 'Keep this email for your records. If you did not receive this order or there is a problem, contact the store or Sedifex support as soon as possible.', paymentUrl, portalUrl }), text: buildTextEmail(title, intro, rows, undefined, paymentUrl, portalUrl) }))
   }
-  const forceStoreAlert = payload.forceStoreAlert || REQUIRED_STORE_ALERT_EVENTS.has(payload.eventType)
+  const forceStoreAlert = payload.forceStoreAlert ?? REQUIRED_STORE_ALERT_EVENTS.has(payload.eventType)
   const adminEmails = settings.adminEmails.length ? settings.adminEmails : [brand.email].filter((value): value is string => Boolean(value))
   if ((settings.storeAlertEnabled || forceStoreAlert) && adminEmails.length) {
     const amount = formatMoney(payload.payment)

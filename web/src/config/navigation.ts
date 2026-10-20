@@ -82,7 +82,7 @@ export type NavigationSettings = {
 export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   shop: ['dashboard', 'products', 'sell', 'invoices', 'receipts', 'customers', 'settlement'],
   travel: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'invoices', 'receipts', 'settlement'],
-  ngo: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'donor-management', 'funds-ledger', 'volunteers', 'settlement'],
+  ngo: ['dashboard', 'reports', 'customers', 'bookings', 'upcoming-events', 'donor-management', 'funds-ledger', 'volunteers', 'support-requests', 'integrations', 'blog', 'settlement'],
   school: ['dashboard', 'students', 'customers', 'bookings', 'upcoming-events', 'student-registration', 'invoices', 'settlement'],
   event: ['dashboard', 'events', 'customers', 'invoices', 'reports', 'bulk-email', 'settlement'],
 }

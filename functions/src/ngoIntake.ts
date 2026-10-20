@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import * as functions from 'firebase-functions/v1'
 import { defaultDb } from './firestore'
 import { admin } from './firestore'
@@ -43,6 +44,40 @@ function rejectSpam(body: Record<string, unknown>) {
   return Boolean(text(body.website) || text(body.company) || text(body.url))
 }
 
+
+async function protectIntake(req: functions.https.Request, res: functions.Response, body: Record<string, unknown>, storeId: string) {
+  const phone = text(body.phone ?? body.telephone ?? body.whatsapp, 80)
+  const email = optionalEmail(body.email)
+  if (body.consent !== true) {
+    res.status(400).json({ ok: false, error: 'consent-required' })
+    return false
+  }
+  if ((email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ||
+      (phone && !/^\+?[0-9 ()-]{8,25}$/.test(phone))) {
+    res.status(400).json({ ok: false, error: 'invalid-contact' })
+    return false
+  }
+  const now = Date.now()
+  const ipHash = createHash('sha256').update(req.ip || req.socket.remoteAddress || 'unknown').digest('hex')
+  const key = createHash('sha256').update(storeId + ':' + ipHash + ':' + Math.floor(now / 600000)).digest('hex')
+  const rateRef = defaultDb.collection('publicIntakeRateLimits').doc('ngo_' + key)
+  try {
+    await defaultDb.runTransaction(async tx => {
+      const snapshot = await tx.get(rateRef)
+      const count = Number(snapshot.data()?.count || 0)
+      if (count >= 6) throw new Error('rate-limited')
+      tx.set(rateRef, { count: count + 1, expiresAt: admin.firestore.Timestamp.fromMillis(now + 3600000) })
+    })
+    return true
+  } catch (error) {
+    if (error instanceof Error && error.message === 'rate-limited') {
+      res.status(429).json({ ok: false, error: 'too-many-submissions' })
+      return false
+    }
+    throw error
+  }
+}
+
 export const volunteerIntake = functions.https.onRequest(async (req, res): Promise<void> => {
   setCors(res)
   if (req.method === 'OPTIONS') {
@@ -76,11 +111,13 @@ export const volunteerIntake = functions.https.onRequest(async (req, res): Promi
       return
     }
 
+    if (!await protectIntake(req, res, body, storeId)) return
     const now = admin.firestore.FieldValue.serverTimestamp()
     const doc = await defaultDb.collection('volunteer_applications').add({
       storeId,
       pageType: 'volunteer_application',
       source: 'website_intake',
+      consent: { granted: true, purpose: 'application-follow-up', recordedAt: now },
       status: 'new',
       person: { name, phone: phone || null, email },
       data: {
@@ -136,11 +173,13 @@ export const supportRequestIntake = functions.https.onRequest(async (req, res): 
     }
 
     const priority = text(body.priority ?? body.urgency, 80) || 'normal'
+    if (!await protectIntake(req, res, body, storeId)) return
     const now = admin.firestore.FieldValue.serverTimestamp()
     const doc = await defaultDb.collection('support_requests').add({
       storeId,
       pageType: 'support_request',
       source: 'website_intake',
+      consent: { granted: true, purpose: 'application-follow-up', recordedAt: now },
       status: 'new',
       priority,
       person: { name, phone: phone || null, email },

@@ -157,12 +157,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       createdAt: FieldValue.serverTimestamp(),
     })
 
-    await firestore.collection('donor_profiles').doc(donorProfileId).set({
-      lifetimeGiving: FieldValue.increment(amount),
-      lastGiftAmount: amount,
-      lastGiftDate: today,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true })
   }
 
   await dedupeRef.set({

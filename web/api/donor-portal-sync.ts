@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { FieldValue } from 'firebase-admin/firestore'
 import { db } from './_firebase-admin.js'
@@ -46,9 +47,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'storeId, donor name, and email or phone are required.' })
   }
 
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid donor email.' })
+  if (initializePayment && (!Number.isFinite(amount) || amount <= 0)) return res.status(400).json({ error: 'Valid amount is required for payment.' })
   const firestore = db()
+  if (!(await firestore.collection('stores').doc(storeId).get()).exists) return res.status(400).json({ error: 'Invalid workspace.' })
   const now = FieldValue.serverTimestamp()
-  const donorRef = await firestore.collection('donor_profiles').add({
+  const identity = email || phone.replace(/\D/g, '')
+  const existing = await firestore.collection('donor_profiles').where('storeId', '==', storeId)
+    .where(email ? 'email' : 'phone', '==', email || phone).limit(1).get()
+  const donorRef = existing.empty
+    ? firestore.collection('donor_profiles').doc(createHash('sha256').update(storeId + ':' + identity).digest('hex'))
+    : existing.docs[0].ref
+  await firestore.runTransaction(async tx => {
+    const snapshot = await tx.get(donorRef)
+    tx.set(donorRef, {
     storeId,
     name,
     email: email || null,
@@ -56,8 +68,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     source: sourceChannel,
     latestDonationAmount: Number.isFinite(amount) && amount > 0 ? amount : null,
     latestDonationCurrency: currency,
-    createdAt: now,
+    ...(!snapshot.exists ? { createdAt: now, lifetimeGiving: 0 } : {}),
     updatedAt: now,
+  }, { merge: true })
   })
 
   let payment: Record<string, unknown> | null = null
