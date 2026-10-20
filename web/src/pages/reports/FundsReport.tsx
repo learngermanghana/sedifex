@@ -1,3 +1,4 @@
+import { isPostedFundTransaction } from '../../utils/fundTransactionStatus'
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -26,7 +27,7 @@ export default function FundsReport() {
       const data = docSnap.data() as Record<string, unknown>
       return { id: docSnap.id, fundName: asText(data.fundName, 'Fund'), sourceName: asText(data.sourceName, ''), restrictionType: asText(data.restrictionType, 'restricted'), openingBalance: asNumber(data.openingBalance, 0), endDate: asText(data.endDate, ''), reportDueDate: asText(data.reportDueDate, ''), status: asText(data.status, 'active') }
     })))
-    const unsubTx = onSnapshot(query(collection(db, 'fund_transactions'), where('storeId', '==', storeId)), snapshot => setTransactions(snapshot.docs.map(docSnap => {
+    const unsubTx = onSnapshot(query(collection(db, 'fund_transactions'), where('storeId', '==', storeId)), snapshot => setTransactions(snapshot.docs.filter(docSnap => isPostedFundTransaction(docSnap.data())).map(docSnap => {
       const data = docSnap.data() as Record<string, unknown>
       return { id: docSnap.id, fundId: asText(data.fundId, ''), fundName: asText(data.fundName, ''), direction: data.direction === 'outflow' ? 'outflow' : 'inflow', amount: asNumber(data.amount, 0), date: asText(data.date, ''), project: asText(data.project, ''), category: asText(data.category, ''), description: asText(data.description, '') }
     })))
