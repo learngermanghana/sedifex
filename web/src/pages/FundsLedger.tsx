@@ -242,6 +242,10 @@ export default function FundsLedger() {
   async function deleteFund(fund: Fund) {
     if (!storeId) return
     const relatedTransactions = transactions.filter(tx => tx.fundId === fund.id)
+    if (relatedTransactions.some(tx => tx.source && tx.source !== 'manual_fund_ledger')) {
+      setError('This fund contains online donations. Preserve its payment history instead of deleting it.')
+      return
+    }
     const confirmed = window.confirm(
       relatedTransactions.length > 0
         ? `Delete ${fund.fundName} and ${relatedTransactions.length} related transaction(s)? This cannot be undone.`
