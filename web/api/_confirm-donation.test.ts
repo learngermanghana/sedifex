@@ -43,6 +43,13 @@ describe('provider-verified donations', () => {
     await expect(confirmDonation('DON-1', 'ngo')).rejects.toThrow('mismatch')
     expect(state.writes).toHaveLength(0)
   })
+  it('never trusts an unsuccessful provider response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
+      status: true, data: { status: 'failed', reference: 'DON-1', amount: 10200, currency: 'GHS' },
+    }) })))
+    await expect(confirmDonation('DON-1', 'ngo')).rejects.toThrow('successful')
+    expect(state.writes).toHaveLength(0)
+  })
   it('does not queue duplicate receipts after repeated confirmation', async () => {
     state.data.accountingConfirmed = true
     await confirmDonation('DON-1', 'ngo')
