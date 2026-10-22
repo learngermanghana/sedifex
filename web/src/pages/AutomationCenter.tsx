@@ -36,9 +36,9 @@ const RULES: Rule[] = [
   { eventType: 'booking.payment_submitted', label: 'Payment submitted', detail: 'Acknowledge payment details that are awaiting verification.', group: 'Payments', smsSupported: false },
   { eventType: 'booking.payment_received', label: 'Partial payment received', detail: 'Confirm a recorded part-payment and remaining balance.', group: 'Payments', smsSupported: false },
   { eventType: 'booking.payment_confirmed', label: 'Payment confirmed', detail: 'Confirm a verified payment or completed payment collection.', group: 'Payments', smsSupported: true },
-  { eventType: 'booking.reminder_3d', label: '3-day booking reminder', detail: 'Remind confirmed, paid customers three days before the booking.', group: 'Reminders', smsSupported: true },
-  { eventType: 'booking.reminder_2d', label: '2-day booking reminder', detail: 'Remind confirmed, paid customers two days before the booking.', group: 'Reminders', smsSupported: true },
-  { eventType: 'booking.reminder_1d', label: '1-day booking reminder', detail: 'Remind confirmed, paid customers the day before the booking.', group: 'Reminders', smsSupported: true },
+  { eventType: 'booking.reminder_3d', label: '3-day booking reminder', detail: 'Email confirmed customers three days before the booking.', group: 'Reminders', smsSupported: false },
+  { eventType: 'booking.reminder_2d', label: '2-day booking reminder', detail: 'Email confirmed customers two days before the booking.', group: 'Reminders', smsSupported: false },
+  { eventType: 'booking.reminder_1d', label: '1-day booking reminder', detail: 'Email confirmed customers the day before the booking.', group: 'Reminders', smsSupported: false },
   { eventType: 'booking.completed', label: 'Completion thank-you', detail: 'Thank the customer after the booking is marked completed.', group: 'Follow-up', smsSupported: true },
 ]
 
