@@ -59,7 +59,8 @@ jobs:
           npm exec vitest run src/pages/DashboardSetupVisibility.test.tsx src/pages/Onboarding.test.tsx
           # Run the changed workspace expand behavior without gating on unrelated
           # existing Shell tests that use ambiguous text/link queries.
-          npm exec -- vitest run src/layout/Shell.test.tsx -t "expands the desktop workspace"
+          npm exec -- vitest run src/layout/Shell.test.tsx -t "opens a top navigation drawer"
+          npm exec vitest run src/pages/EventStudio.design.test.tsx
         working-directory: web
 
       - name: Test shared Tailwind utility runtime
