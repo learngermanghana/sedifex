@@ -61,6 +61,7 @@ jobs:
           # existing Shell tests that use ambiguous text/link queries.
           npm exec -- vitest run src/layout/Shell.test.tsx -t "opens a top navigation drawer"
           npm exec vitest run src/pages/EventStudio.design.test.tsx
+          npm exec vitest run src/pages/EventStudio.template.test.tsx
           npm exec vitest run src/utils/eventStudioGrid.test.ts
         working-directory: web
 
