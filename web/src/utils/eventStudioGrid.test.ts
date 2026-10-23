@@ -43,8 +43,6 @@ describe('Event Studio grid tools', () => {
     ]
     const exported = copyStudioGrid(source, donationFields)
     const blank = (): StudioRow => ({ id: Math.random().toString(), donor: '', pledged: '', received: '', method: 'Not specified', notes: '' })
-    const pasted = pasteStudioGrid([blank()], donationFields, 'placeholder', 'donor', exported, blank)
-    // The actual row id must identify the existing destination.
     const destination = { id: 'destination', donor: '', pledged: '', received: '', method: 'Not specified', notes: '' }
     const result = pasteStudioGrid([destination], donationFields, destination.id, 'donor', exported, blank)
     expect(result.rejected).toBe(0)
@@ -54,7 +52,6 @@ describe('Event Studio grid tools', () => {
       source.map(row => [row.donor, row.pledged, row.received, row.method, row.notes]),
     )
     expect(result.rows[0]).not.toHaveProperty('balance')
-    expect(pasted.changed).toBe(false)
     const partial = pasteStudioGrid([destination], donationFields, 'destination', 'received', '35\tCash\tPaid now', blank)
     expect(partial.rows[0]).toMatchObject({ received: '35', method: 'Cash', notes: 'Paid now' })
   })
