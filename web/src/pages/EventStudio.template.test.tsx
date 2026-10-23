@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
-const mockAddDoc = vi.hoisted(() => vi.fn(async () => ({ id: 'created-event' })))
+const mockAddDoc = vi.hoisted(() => vi.fn(async (_reference: unknown, _data: { eventType: string; title: string }) => ({ id: 'created-event' })))
 const mockGetDocs = vi.hoisted(() => vi.fn(async () => ({ docs: [] })))
 
 vi.mock('firebase/firestore', () => ({
