@@ -134,7 +134,7 @@ export default function EventTypeExtras({ storeId, eventId, eventTitle }: Props)
 
   const isDonationEvent = ['Funeral', 'Charity / community'].includes(eventType)
   const isWeddingEvent = ['Traditional wedding', 'White wedding', 'Engagement'].includes(eventType)
-  const isCorporateEvent = eventType === 'Corporate event'
+  const isCorporateEvent = ['Corporate event', 'Conference / seminar'].includes(eventType)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -173,7 +173,7 @@ export default function EventTypeExtras({ storeId, eventId, eventTitle }: Props)
         }).sort((a, b) => a.tableName.localeCompare(b.tableName) || a.guestName.localeCompare(b.guestName)))
       }
 
-      if (type === 'Corporate event') {
+      if (['Corporate event', 'Conference / seminar'].includes(type)) {
         const [speakerSnapshot, sponsorSnapshot, agendaSnapshot] = await Promise.all([getDocs(speakersRef), getDocs(sponsorsRef), getDocs(agendaRef)])
         setSpeakers(speakerSnapshot.docs.map(item => {
           const data = item.data()
