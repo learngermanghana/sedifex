@@ -61,7 +61,7 @@ export default function App() {
     (isQuickPayHost && location.pathname === '/') ||
     publicPaths.some(path => location.pathname.startsWith(path))
   const isAccountRoute = location.pathname.startsWith('/account')
-  const isEventPlanningListRoute = Boolean(matchPath({ path: '/event-planning', end: true }, location.pathname))
+  const isEventPlanningListRoute = Boolean(matchPath({ path: '/event-planning/classic', end: true }, location.pathname))
 
   useEffect(() => {
     configureAuthPersistence(auth).catch(error => {
