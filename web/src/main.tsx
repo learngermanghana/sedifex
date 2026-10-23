@@ -21,6 +21,7 @@ import Students from './pages/Students'
 import Bookings from './pages/Bookings'
 import EventPlanningRoute from './pages/EventPlanningRoute'
 import EventWorkspace from './pages/EventWorkspace'
+import { EventStudioHome, EventStudioWorkspace } from './pages/EventStudio'
 import BookingEditor from './pages/BookingEditor'
 import BookingsAvailability from './pages/BookingsAvailability'
 import StudentRegistration from './pages/StudentRegistration'
@@ -140,8 +141,10 @@ const router = createBrowserRouter([
       { path: 'customers/:customerId', element: <CustomerCRM /> },
       { path: 'students', element: <Students /> },
       { path: 'bookings', element: <Bookings /> },
-      { path: 'event-planning', element: <EventPlanningRoute /> },
-      { path: 'event-planning/:eventId', element: <EventWorkspace /> },
+      { path: 'event-planning', element: <EventStudioHome /> },
+      { path: 'event-planning/classic', element: <EventPlanningRoute /> },
+      { path: 'event-planning/:eventId/classic', element: <EventWorkspace /> },
+      { path: 'event-planning/:eventId', element: <EventStudioWorkspace /> },
       { path: 'bookings/new', element: <BookingEditor /> },
       { path: 'bookings/availability', element: <Navigate to="/upcoming-events" replace /> },
       { path: 'upcoming-events', element: <BookingsAvailability /> },
