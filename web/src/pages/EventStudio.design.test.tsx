@@ -55,7 +55,7 @@ describe('Event Studio compact spreadsheet design', () => {
     await user.click(screen.getByRole('button', { name: '+ Add row' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Budgeted (GHS) row 1' }), { target: { value: '500' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' }), { target: { value: '150' } })
-    expect(screen.getByText('GHS 350.00')).toBeInTheDocument()
+    expect(screen.getAllByText('GHS 350.00').length).toBeGreaterThan(0)
   })
 
   it('supports duplicate, undo, sort and compact full view', async () => {
