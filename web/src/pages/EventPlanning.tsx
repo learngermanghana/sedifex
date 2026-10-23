@@ -673,7 +673,7 @@ export default function EventPlanning() {
   }
 
   function openWorkspace(event: EventRecord) {
-    navigate(`/event-planning/${encodeURIComponent(event.id)}`)
+    navigate(`/event-planning/${encodeURIComponent(event.id)}/classic`)
   }
 
   async function removeEvent(event: EventRecord) {
