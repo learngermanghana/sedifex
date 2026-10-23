@@ -695,7 +695,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className={`shell${isDesktopNavCollapsed ? ' shell--nav-collapsed' : ''}`}>
+    <div className={`shell shell--top-navigation${isDesktopNavCollapsed ? ' shell--nav-collapsed' : ''}`}>
       {isMobileMenuOpen && (
         <button
           type="button"
