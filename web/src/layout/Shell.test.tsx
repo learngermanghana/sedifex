@@ -125,21 +125,19 @@ describe('Shell', () => {
     })
   })
 
-  it('expands the desktop workspace and restores navigation across refreshes', async () => {
+  it('opens a top navigation drawer and preserves full-width workspace content', async () => {
     const user = userEvent.setup()
-    const view = renderShell(['/dashboard'])
-    const expand = screen.getByRole('button', { name: 'Expand workspace' })
-    expect(expand).toBeInTheDocument()
-    await user.click(expand)
-    expect(screen.queryByRole('button', { name: 'Expand workspace' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Show navigation' })).toBeInTheDocument()
-    expect(localStorage.getItem('sedifex-nav-collapsed-user-123')).toBe('true')
-    view.unmount()
-    renderShell(['/dashboard'])
-    expect(screen.getByRole('button', { name: 'Show navigation' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Show navigation' }))
-    expect(screen.getByRole('button', { name: 'Expand workspace' })).toBeInTheDocument()
-    expect(localStorage.getItem('sedifex-nav-collapsed-user-123')).toBe('false')
+    const { container } = renderShell(['/dashboard'])
+    expect(container.querySelector('.shell--top-navigation')).toBeInTheDocument()
+    const toggle = container.querySelector('.shell__mobile-menu-toggle') as HTMLButtonElement
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const navigation = within(container.querySelector('#primary-nav-mobile') as HTMLElement)
+    expect(navigation.getByText('Dashboard', { selector: 'a' })).toBeInTheDocument()
+    expect(container.querySelector('.shell__content-inner')).toHaveTextContent('Content')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('navigation update shows business identity and closes the drawer on same-page selection', async () => {

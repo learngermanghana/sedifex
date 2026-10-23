@@ -258,3 +258,75 @@
 .shell__brand { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; min-width: 0; }
 .shell__brand-workspace { grid-column: 1 / -1; }
 @media (max-width: 960px) { .shell__brand { flex: 1 1 0; width: auto; grid-template-columns: minmax(0, 1fr); } .shell__header-inner { flex-wrap: nowrap; align-items: center; } }
+
+
+/* 2026 Event Studio navigation refresh: use a top hamburger menu on all
+   viewports so spreadsheets and other workspaces retain the full content width. */
+.shell.shell--top-navigation .shell__container {
+  max-width: 1700px !important;
+}
+.shell.shell--top-navigation .shell__layout {
+  display: block !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.shell.shell--top-navigation .shell__sidebar,
+.shell.shell--top-navigation .shell__nav-rail {
+  display: none !important;
+}
+.shell.shell--top-navigation .shell__content,
+.shell.shell--top-navigation .shell__content-inner {
+  width: 100%;
+  min-width: 0;
+}
+.shell.shell--top-navigation .shell__mobile-menu-toggle {
+  display: inline-flex !important;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.shell.shell--top-navigation .shell__toolbar {
+  display: none !important;
+}
+.shell.shell--top-navigation .shell__toolbar.is-open {
+  display: grid !important;
+  position: fixed;
+  z-index: 42;
+  top: 76px;
+  right: clamp(14px, 3vw, 38px);
+  left: auto;
+  width: min(390px, calc(100vw - 28px));
+  max-height: calc(100dvh - 92px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #dde4f2;
+  border-radius: 15px;
+  box-shadow: 0 24px 56px -21px rgba(15, 23, 42, .35);
+}
+.shell.shell--top-navigation:has(.shell__toolbar.is-open) .shell__backdrop {
+  display: block !important;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+.shell.shell--top-navigation .shell__main {
+  padding-top: 22px;
+}
+.shell.shell--top-navigation .shell__toolbar .shell__nav {
+  max-height: none;
+}
+.shell.shell--top-navigation .shell__toolbar .shell__nav-link {
+  width: 100%;
+  min-height: 42px;
+  justify-content: flex-start;
+}
+@media (max-width: 960px) {
+  .shell.shell--top-navigation .shell__toolbar.is-open {
+    top: 70px;
+  }
+  .shell.shell--top-navigation .shell__main {
+    padding-top: 16px;
+  }
+}

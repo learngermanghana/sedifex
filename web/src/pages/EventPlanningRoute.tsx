@@ -69,7 +69,7 @@ export default function EventPlanningRoute() {
     if (!eventId) return
     captureEvent.preventDefault()
     captureEvent.stopPropagation()
-    navigate(`/event-planning/${eventId}`)
+    navigate(`/event-planning/${eventId}/classic`)
   }
 
   return (
