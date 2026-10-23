@@ -510,7 +510,7 @@ export function EventStudioWorkspace() {
   }
 
   const selectedTools = useMemo(() => TOOLS.filter(tool => studio?.selected.includes(tool.id)), [studio?.selected])
-  const current = selectedTools.find(tool => tool.id === active) || selectedTools[0]
+  const current = active === 'overview' ? undefined : (selectedTools.find(tool => tool.id === active) || selectedTools[0])
   const rows = current && studio ? studio.sheets[current.id] : []
   const visibleRows = rows
     .filter(row => !query.trim() || Object.values(row).some(cell => String(cell).toLowerCase().includes(query.toLowerCase())))
@@ -528,13 +528,13 @@ export function EventStudioWorkspace() {
   const sum = (key: string) => rows.reduce((total, row) => total + cellNumber(row, key), 0)
 
   if (storeLoading || loading) return <main className="event-studio workspace-page"><div className="event-studio__panel">Loading event workspace…</div></main>
-  if (storeError || pageError || !studio || !current && studio.selected.length) {
+  if (storeError || pageError || !studio || (!current && active !== 'overview' && studio.selected.length)) {
     return <main className="event-studio workspace-page"><div className="event-studio__panel"><h1>Unable to open event</h1><p role="alert">{storeError || pageError || 'Workspace unavailable.'}</p><Link to="/event-planning">← Back to events</Link></div></main>
   }
 
   return (
-    <main className={`event-studio event-studio--refined workspace-page${focusMode ? ' event-studio--focus' : ''}`}>
-      <div className="event-studio__crumb"><Link to="/event-planning">← All events</Link><span>/</span><span>Event Studio</span></div>
+    <main className={`event-studio event-studio--refined workspace-page${focusMode ? ' event-studio--focus' : ''}${printMode === 'programme' ? ' event-studio--printing-programme' : ''}`}>
+      <div className="event-studio__crumb"><Link to="/event-planning" onClick={confirmLeave}>← All events</Link><span>/</span><span>Event Studio</span></div>
       <header className="event-studio__workspace-bar">
         <div className="event-studio__workspace-identity">
           <span className="event-studio__eyebrow">EVENT WORKSPACE</span>
@@ -546,7 +546,7 @@ export function EventStudioWorkspace() {
         </div>
         <div className="event-studio__workspace-controls">
           <div className={`event-studio__save-state event-studio__save-state--${saveStatus}`} role="status" aria-live="polite">
-            {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Save failed' : 'Unsaved changes'}
+            {saveStatus === 'saved' ? (lastSavedAt ? `✓ Saved at ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '✓ Saved') : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Save failed — retry' : 'Unsaved changes'}
             {(saveStatus === 'error' || saveStatus === 'unsaved') && <button type="button" onClick={() => save(studio, revision.current)}>Save now</button>}
           </div>
           <button type="button" className="event-studio__plain-button event-studio__focus-button" onClick={() => setFocusMode(value => !value)} aria-pressed={focusMode}>
@@ -558,6 +558,7 @@ export function EventStudioWorkspace() {
       <section className="event-studio__panel event-studio__sheet-panel" aria-label="Event spreadsheets">
         <div className="event-studio__tabs-bar">
           <div className="event-studio__tabs" role="tablist" aria-label="Event planning sheets">
+            <button type="button" role="tab" aria-selected={active === 'overview'} className={active === 'overview' ? 'is-active' : ''} onClick={() => { setActive('overview'); setQuery(''); setSelectedRowId(null) }}>Overview</button>
             {selectedTools.map(tool => (
               <button type="button" role="tab" aria-selected={current?.id === tool.id} key={tool.id}
                 className={current?.id === tool.id ? 'is-active' : ''}
@@ -589,7 +590,19 @@ export function EventStudioWorkspace() {
           </div>
         )}
 
-        {current ? (
+        {active === 'overview' && overview ? (
+          <div className="event-studio__overview">
+            <header><span className="event-studio__step">AT A GLANCE</span><h1>Event overview</h1><p>Live figures calculated from the event sheets. No additional database requests.</p></header>
+            <div className="event-studio__overview-grid">
+              <article><span>Checklist progress</span><strong>{overview.completed} / {overview.tasks}</strong><small>Tasks completed</small><progress max={Math.max(1, overview.tasks)} value={overview.completed} /></article>
+              <article><span>Programme duration</span><strong>{Math.floor(overview.programmeMinutes / 60)}h {overview.programmeMinutes % 60}m</strong><small>{overview.programmeItems} programme items</small></article>
+              <article><span>Confirmed guests</span><strong>{overview.confirmedGuests}</strong><small>{overview.confirmedSeats} seats · {overview.guestRecords} records</small></article>
+              <article><span>Budget remaining</span><strong>{money(overview.budget - overview.spent)}</strong><small>{money(overview.spent)} spent of {money(overview.budget)}</small></article>
+              <article><span>Donations received</span><strong>{money(overview.received)}</strong><small>{money(overview.pledged - overview.received)} outstanding</small></article>
+            </div>
+            <p className="event-studio__overview-note">Select a sheet above to update these figures. Figures from hidden sheets are included so no information disappears when a tool is hidden.</p>
+          </div>
+        ) : current ? (
           <div className="event-studio__sheet-inner">
             <div className="event-studio__refined-heading">
               <div><h1>{current.name}</h1><p>{current.caption}</p></div>
@@ -598,6 +611,9 @@ export function EventStudioWorkspace() {
             <div className="event-studio__toolbar" role="toolbar" aria-label="Spreadsheet actions">
               <button type="button" className="event-studio__primary" onClick={addRow}>+ Add row</button>
               <button type="button" className="event-studio__plain-button" onClick={duplicateSelected} disabled={!selectedRowId || !rows.some(row => row.id === selectedRowId)}>⧉ Duplicate</button>
+              <button type="button" className="event-studio__plain-button" onClick={insertAbove} disabled={!selectedRowId}>Insert above</button>
+              <button type="button" className="event-studio__plain-button" onClick={() => reorderRow(-1)} disabled={!selectedRowId || rows[0]?.id === selectedRowId}>↑ Move</button>
+              <button type="button" className="event-studio__plain-button" onClick={() => reorderRow(1)} disabled={!selectedRowId || rows[rows.length - 1]?.id === selectedRowId}>↓ Move</button>
               <button type="button" className="event-studio__plain-button" onClick={undoChange} disabled={undoHistory.current.length === 0}>↶ Undo</button>
               <label className="event-studio__sort-label">Sort
                 <select aria-label="Sort rows by" value={sortBy} onChange={e => setSortBy(e.target.value)}>
@@ -607,14 +623,25 @@ export function EventStudioWorkspace() {
               </label>
               <button type="button" className="event-studio__plain-button event-studio__sort-direction" aria-label="Reverse sort order" title="Reverse sort order" disabled={!sortBy} onClick={() => setSortDescending(value => !value)}>{sortDescending ? '↓' : '↑'}</button>
               <label className="event-studio__toolbar-search"><span className="event-studio__sr-only">Search sheet rows</span><input placeholder="⌕ Search sheet…" aria-label="Search sheet rows" value={query} onChange={e => setQuery(e.target.value)} /></label>
-              <button type="button" className="event-studio__plain-button" onClick={() => window.print()}>⎙ Print</button>
+              <button type="button" className="event-studio__plain-button" onClick={() => void copySheet()} disabled={!rows.length}>Copy sheet</button>
+              <button type="button" className="event-studio__plain-button" onClick={() => window.print()}>⎙ Print sheet</button>
+              <button type="button" className="event-studio__plain-button event-studio__mobile-toggle" onClick={() => setMobileCards(value => !value)} aria-pressed={mobileCards}>{mobileCards ? 'Table view' : 'Card view'}</button>
             </div>
+            {current.id === 'programme' && (
+              <div className="event-studio__programme-tools">
+                <div><strong>Guest programme print design</strong><small>Formal or modern; private production notes stay out of the guest handout.</small></div>
+                <label>Design <select aria-label="Programme print design" value={programmeStyle} onChange={e => setProgrammeStyle(e.target.value as 'formal' | 'modern')}><option value="formal">Formal</option><option value="modern">Modern</option></select></label>
+                <label className="event-studio__logo-picker">Optional logo <input aria-label="Optional programme logo" type="file" accept="image/*" onChange={e => loadPrintLogo(e.target.files?.[0])} /></label>
+                <button type="button" className="event-studio__primary" onClick={printProgramme}>Print guest programme</button>
+              </div>
+            )}
+            {actionMessage && <p className="event-studio__action-message" role="status">{actionMessage}<button type="button" aria-label="Dismiss message" onClick={() => setActionMessage('')}>×</button></p>}
             <div className="event-studio__metrics event-studio__metrics--compact">
               {summary.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
             </div>
-            <div className="event-studio__grid-scroll" role="region" aria-label={`${current.name} editable spreadsheet`} tabIndex={0}>
+            <div className={`event-studio__grid-scroll${mobileCards ? ' event-studio__grid-scroll--mobile-hidden' : ''}`} role="region" aria-label={`${current.name} editable spreadsheet`} tabIndex={0}>
               <table className="event-studio__grid">
-                <thead><tr><th scope="col" className="event-studio__number">#</th>{current.fields.map(field => <th scope="col" key={field.key} style={{ minWidth: field.width || 160 }}>{field.label}</th>)}<th scope="col" className="event-studio__number"><span className="event-studio__sr-only">Remove row</span></th></tr></thead>
+                <thead><tr><th scope="col" className="event-studio__number">#</th>{current.fields.map(field => <th scope="col" key={field.key} style={{ minWidth: columnWidths[`${current.id}:${field.key}`] || field.width || 160, width: columnWidths[`${current.id}:${field.key}`] || field.width || 160 }}>{field.label}<span className="event-studio__resize-grip" role="separator" aria-label={`Resize ${field.label} column`} onMouseDown={e => resizeColumn(e, field.key, field.width || 160)} /></th>)}<th scope="col" className="event-studio__number"><span className="event-studio__sr-only">Remove row</span></th></tr></thead>
                 <tbody>
                   {visibleRows.length ? visibleRows.map(row => {
                     const rowNumber = rows.indexOf(row) + 1
@@ -623,7 +650,7 @@ export function EventStudioWorkspace() {
                       {current.fields.map(field => <td key={field.key}>
                         {field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
                           field.type === 'select' ? <select aria-label={`${field.label} row ${rowNumber}`} value={String(row[field.key] ?? '')} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)}>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
-                          <input aria-label={`${field.label} row ${rowNumber}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
+                          <input aria-label={`${field.label} row ${rowNumber}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onPaste={e => pasteCells(e, row.id, field.key)} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                       </td>)}
                       <td className="event-studio__number"><button type="button" className="event-studio__remove" aria-label={`Remove row ${rowNumber}`} title="Remove row" onClick={() => removeRow(row.id)}>×</button></td>
                     </tr>
@@ -632,14 +659,31 @@ export function EventStudioWorkspace() {
                 <tfoot><tr><td className="event-studio__number">Σ</td>{current.fields.map((field, index) => <td key={field.key}>{field.type === 'number' || field.type === 'computed' ? (isMoneyField(field.key) ? money(sum(field.key)) : String(sum(field.key))) : index === 0 ? 'TOTAL' : ''}</td>)}<td /></tr></tfoot>
               </table>
             </div>
+            {mobileCards && <div className="event-studio__mobile-cards" aria-label={`${current.name} mobile row editor`}>
+              {visibleRows.length ? visibleRows.map(row => <article key={row.id}>
+                <header><strong>Row {rows.indexOf(row) + 1}</strong><button type="button" onClick={() => removeRow(row.id)}>Remove</button></header>
+                <div>{current.fields.map(field => <label key={field.key}>{field.label}
+                  {field.type === 'computed' ? <output>{money(cellNumber(row, field.key))}</output> : field.type === 'select' ?
+                    <select value={String(row[field.key] ?? '')} onChange={e => changeCell(row.id, field.key, e.target.value)} aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`}>{field.options?.map(value => <option key={value}>{value}</option>)}</select> :
+                    <input aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`} type={field.type} value={row[field.key] ?? ''} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
+                </label>)}</div>
+              </article>) : <p>No rows to edit yet.</p>}
+            </div>}
             <footer className="event-studio__sheet-footer">
-              <span>Click a row to select · Enter moves down · Tab moves across · Scroll for more columns</span>
+              <span>Click a row to select · Enter moves down · Tab moves across · Paste Excel cells · Drag header edges to resize</span>
               <span>Edits save automatically</span>
             </footer>
           </div>
         ) : <div className="event-studio__blank">Choose your first tool above to open a spreadsheet.</div>}
       </section>
-      <p className="event-studio__legacy-note">Need earlier event features? <Link to={`/event-planning/${encodeURIComponent(eventId)}/classic`}>Open the previous event workspace</Link>. Existing records are preserved.</p>
+      <section className={`event-studio__print-programme event-studio__print-programme--${programmeStyle}`} aria-hidden={printMode !== 'programme'}>
+        <header>{programmeLogo && <img src={programmeLogo} alt="" />}<small>ORDER OF EVENTS</small><h1>{eventName}</h1>{eventDate && <p>{eventDate}</p>}</header>
+        <table><thead><tr><th>Time</th><th>Programme</th><th>Speaker / Performer</th></tr></thead><tbody>
+          {(studio.sheets.programme || []).map(row => <tr key={row.id}><td>{row.start}</td><td>{row.item}</td><td>{row.person}</td></tr>)}
+        </tbody></table>
+        <footer>Thank you for joining us</footer>
+      </section>
+      <p className="event-studio__legacy-note">Need earlier event features? <Link onClick={confirmLeave} to={`/event-planning/${encodeURIComponent(eventId)}/classic`}>Open the previous event workspace</Link>. Existing records are preserved.</p>
     </main>
   )
 }
