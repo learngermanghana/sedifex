@@ -135,6 +135,10 @@ const EVENT_TYPE_CHECKLISTS: Record<string, ChecklistTemplateItem[]> = {
     { title: 'Confirm donation collection, receipts and responsible team', category: 'Finance', daysBefore: 7, priority: 'high' },
     { title: 'Confirm beneficiaries, partners and public accountability plan', category: 'Program', daysBefore: 5 },
   ],
+  'Conference / seminar': [
+    { title: 'Confirm speakers, presentation slides and AV tests', category: 'Program', daysBefore: 14, priority: 'high' },
+    { title: 'Confirm delegate registration and venue layout', category: 'Production', daysBefore: 7 },
+  ],
   'Corporate event': [
     { title: 'Confirm speakers, presentations and technical requirements', category: 'Program', daysBefore: 14, priority: 'high' },
     { title: 'Confirm sponsors, branding and registration flow', category: 'Production', daysBefore: 10 },
@@ -280,7 +284,7 @@ function callableErrorMessage(error: unknown) {
 function detailsTabLabel(eventType: string) {
   if (['Traditional wedding', 'White wedding', 'Engagement'].includes(eventType)) return 'Wedding Details'
   if (eventType === 'Funeral') return 'Funeral Details'
-  if (eventType === 'Corporate event') return 'Corporate Details'
+  if (['Corporate event', 'Conference / seminar'].includes(eventType)) return 'Conference / Corporate Details'
   if (eventType === 'Charity / community') return 'Donations & Details'
   if (eventType === 'Naming ceremony') return 'Ceremony Details'
   return 'Event Details'
