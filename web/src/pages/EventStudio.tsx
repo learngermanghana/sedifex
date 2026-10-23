@@ -57,6 +57,16 @@ const TOOLS: Tool[] = [
   ] },
 ]
 const DEFAULT_SELECTED: ToolId[] = ['checklist', 'production', 'programme', 'donations', 'gifts']
+const EVENT_TEMPLATES = [
+  { id: 'blank', label: 'Blank event', detail: 'Start with empty sheets', tools: [] as ToolId[], tasks: [] as string[] },
+  { id: 'wedding', label: 'Wedding', detail: 'Ceremony, guests and vendors', tools: ['checklist', 'production', 'programme', 'budget', 'guests', 'vendors'] as ToolId[], tasks: ['Confirm venue', 'Prepare guest invitations', 'Confirm suppliers'] },
+  { id: 'funeral', label: 'Funeral', detail: 'Service and family coordination', tools: ['checklist', 'programme', 'production', 'guests', 'budget'] as ToolId[], tasks: ['Confirm service venue', 'Agree programme with family', 'Coordinate transport'] },
+  { id: 'church', label: 'Church event', detail: 'Worship, programme and volunteers', tools: ['checklist', 'programme', 'production', 'donations', 'budget'] as ToolId[], tasks: ['Confirm event leaders', 'Prepare order of service', 'Test sound equipment'] },
+  { id: 'conference', label: 'Conference', detail: 'Speakers, venue and production', tools: ['checklist', 'production', 'programme', 'guests', 'vendors', 'budget'] as ToolId[], tasks: ['Confirm speakers', 'Arrange registration desk', 'Test presentation equipment'] },
+  { id: 'birthday', label: 'Birthday', detail: 'Guests, gifts and schedule', tools: ['checklist', 'programme', 'guests', 'gifts', 'budget'] as ToolId[], tasks: ['Confirm location', 'Plan entertainment', 'Send invitations'] },
+  { id: 'fundraising', label: 'Fundraising', detail: 'Donations, pledges and guests', tools: ['checklist', 'programme', 'donations', 'guests', 'budget'] as ToolId[], tasks: ['Set fundraising target', 'Contact potential donors', 'Prepare programme'] },
+] as const
+type TemplateId = typeof EVENT_TEMPLATES[number]['id']
 const TOOL_IDS = new Set<string>(TOOLS.map(tool => tool.id))
 const createId = () => `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const number = (value: unknown) => { const n = Number(value); return Number.isFinite(n) ? n : 0 }
@@ -65,6 +75,16 @@ const isMoneyField = (key: string) => ['cost', 'pledged', 'received', 'balance',
 
 function emptyStudio(): Studio {
   return { selected: [...DEFAULT_SELECTED], sheets: Object.fromEntries(TOOLS.map(tool => [tool.id, []])) as Studio['sheets'] }
+}
+
+function studioFromTemplate(id: TemplateId): Studio {
+  const studio = emptyStudio()
+  const template = EVENT_TEMPLATES.find(item => item.id === id) ?? EVENT_TEMPLATES[0]
+  studio.selected = [...template.tools]
+  studio.sheets.checklist = template.tasks.map(task => ({
+    ...makeRow(TOOLS[0]), task, status: 'Not started',
+  }))
+  return studio
 }
 
 function readStudio(value: unknown): Studio {
@@ -128,6 +148,7 @@ export function EventStudioHome() {
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
   const [eventDate, setEventDate] = useState('')
+  const [templateId, setTemplateId] = useState<TemplateId>('blank')
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
 
@@ -154,12 +175,12 @@ export function EventStudioHome() {
     setError('')
     try {
       const result = await addDoc(collection(db, 'stores', storeId, 'events'), {
-        title: title.trim(), eventDate, eventType: 'Event', eventCode: `EVT-${Date.now().toString(36).toUpperCase()}`,
+        title: title.trim(), eventDate, eventType: EVENT_TEMPLATES.find(item => item.id === templateId)?.label ?? 'Event', eventCode: `EVT-${Date.now().toString(36).toUpperCase()}`,
         clientName: '', clientPhone: '', clientEmail: '', startTime: '', venue: '', guestCount: 0,
         planningPackage: 'full_planning', complexity: 'standard', estimatedBudget: null,
         status: 'new', progress: 0, notes: '',
         clientBrief: { requirements: '', themeColours: '', venueRequirements: '', catering: '', decor: '', entertainment: '', photography: '', transport: '', accommodation: '', specialInstructions: '', packageItems: [] },
-        eventStudio: emptyStudio(), createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        eventStudio: studioFromTemplate(templateId), createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       })
       navigate(`/event-planning/${encodeURIComponent(result.id)}`)
     } catch {
@@ -181,9 +202,17 @@ export function EventStudioHome() {
         <form className="event-studio__panel event-studio__new-event" onSubmit={createEvent}>
           <span className="event-studio__step">STEP 01 — START HERE</span>
           <h2>Create an event</h2>
-          <p>Only a name is required. Add more details whenever you are ready.</p>
+          <p>Give the event a name, then choose a starter template. Everything remains editable.</p>
           <label>Event name<input required maxLength={140} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Annual fundraising dinner" /></label>
           <label>Event date <span className="event-studio__optional">(optional)</span><input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} /></label>
+          <fieldset className="event-studio__template-picker"><legend>Start with a template</legend>
+            <div className="event-studio__template-grid">{EVENT_TEMPLATES.map(item => (
+              <label key={item.id} className={templateId === item.id ? 'is-selected' : ''}>
+                <input type="radio" name="event-template" value={item.id} checked={templateId === item.id} onChange={() => setTemplateId(item.id)} />
+                <strong>{item.label}</strong><small>{item.detail}</small>
+              </label>
+            ))}</div>
+          </fieldset>
           <button className="event-studio__primary" type="submit" disabled={creating || !title.trim() || !storeId}>{creating ? 'Creating…' : 'Create event & choose tools →'}</button>
         </form>
         <section className="event-studio__panel event-studio__recent">
