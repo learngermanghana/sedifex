@@ -59,13 +59,13 @@ const TOOLS: Tool[] = [
 ]
 const DEFAULT_SELECTED: ToolId[] = ['checklist', 'production', 'programme', 'donations', 'gifts']
 const EVENT_TEMPLATES = [
-  { id: 'blank', label: 'Blank event', detail: 'Start with empty sheets', tools: [] as ToolId[], tasks: [] as string[] },
-  { id: 'wedding', label: 'Wedding', detail: 'Ceremony, guests and vendors', tools: ['checklist', 'production', 'programme', 'budget', 'guests', 'vendors'] as ToolId[], tasks: ['Confirm venue', 'Prepare guest invitations', 'Confirm suppliers'] },
-  { id: 'funeral', label: 'Funeral', detail: 'Service and family coordination', tools: ['checklist', 'programme', 'production', 'guests', 'budget'] as ToolId[], tasks: ['Confirm service venue', 'Agree programme with family', 'Coordinate transport'] },
-  { id: 'church', label: 'Church event', detail: 'Worship, programme and volunteers', tools: ['checklist', 'programme', 'production', 'donations', 'budget'] as ToolId[], tasks: ['Confirm event leaders', 'Prepare order of service', 'Test sound equipment'] },
-  { id: 'conference', label: 'Conference', detail: 'Speakers, venue and production', tools: ['checklist', 'production', 'programme', 'guests', 'vendors', 'budget'] as ToolId[], tasks: ['Confirm speakers', 'Arrange registration desk', 'Test presentation equipment'] },
-  { id: 'birthday', label: 'Birthday', detail: 'Guests, gifts and schedule', tools: ['checklist', 'programme', 'guests', 'gifts', 'budget'] as ToolId[], tasks: ['Confirm location', 'Plan entertainment', 'Send invitations'] },
-  { id: 'fundraising', label: 'Fundraising', detail: 'Donations, pledges and guests', tools: ['checklist', 'programme', 'donations', 'guests', 'budget'] as ToolId[], tasks: ['Set fundraising target', 'Contact potential donors', 'Prepare programme'] },
+  { id: 'blank', label: 'Blank event', eventType: 'Other', detail: 'Start with empty sheets', tools: [] as ToolId[], tasks: [] as string[] },
+  { id: 'wedding', label: 'Wedding', eventType: 'Traditional wedding', detail: 'Ceremony, guests and vendors', tools: ['checklist', 'production', 'programme', 'budget', 'guests', 'vendors'] as ToolId[], tasks: ['Confirm venue', 'Prepare guest invitations', 'Confirm suppliers'] },
+  { id: 'funeral', label: 'Funeral', eventType: 'Funeral', detail: 'Service and family coordination', tools: ['checklist', 'programme', 'production', 'guests', 'budget'] as ToolId[], tasks: ['Confirm service venue', 'Agree programme with family', 'Coordinate transport'] },
+  { id: 'church', label: 'Church event', eventType: 'Church / religious event', detail: 'Worship, programme and volunteers', tools: ['checklist', 'programme', 'production', 'donations', 'budget'] as ToolId[], tasks: ['Confirm event leaders', 'Prepare order of service', 'Test sound equipment'] },
+  { id: 'conference', label: 'Conference', eventType: 'Conference / seminar', detail: 'Speakers, venue and production', tools: ['checklist', 'production', 'programme', 'guests', 'vendors', 'budget'] as ToolId[], tasks: ['Confirm speakers', 'Arrange registration desk', 'Test presentation equipment'] },
+  { id: 'birthday', label: 'Birthday', eventType: 'Birthday', detail: 'Guests, gifts and schedule', tools: ['checklist', 'programme', 'guests', 'gifts', 'budget'] as ToolId[], tasks: ['Confirm location', 'Plan entertainment', 'Send invitations'] },
+  { id: 'fundraising', label: 'Fundraising', eventType: 'Charity / community', detail: 'Donations, pledges and guests', tools: ['checklist', 'programme', 'donations', 'guests', 'budget'] as ToolId[], tasks: ['Set fundraising target', 'Contact potential donors', 'Prepare programme'] },
 ] as const
 type TemplateId = typeof EVENT_TEMPLATES[number]['id']
 const TOOL_IDS = new Set<string>(TOOLS.map(tool => tool.id))
@@ -150,6 +150,7 @@ export function EventStudioHome() {
   const [title, setTitle] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [templateId, setTemplateId] = useState<TemplateId>('blank')
+  const [weddingType, setWeddingType] = useState<'Traditional wedding' | 'White wedding' | 'Engagement'>('Traditional wedding')
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
 
@@ -176,7 +177,7 @@ export function EventStudioHome() {
     setError('')
     try {
       const result = await addDoc(collection(db, 'stores', storeId, 'events'), {
-        title: title.trim(), eventDate, eventType: EVENT_TEMPLATES.find(item => item.id === templateId)?.label ?? 'Event', eventCode: `EVT-${Date.now().toString(36).toUpperCase()}`,
+        title: title.trim(), eventDate, eventType: templateId === 'wedding' ? weddingType : (EVENT_TEMPLATES.find(item => item.id === templateId)?.eventType ?? 'Other'), eventCode: `EVT-${Date.now().toString(36).toUpperCase()}`,
         clientName: '', clientPhone: '', clientEmail: '', startTime: '', venue: '', guestCount: 0,
         planningPackage: 'full_planning', complexity: 'standard', estimatedBudget: null,
         status: 'new', progress: 0, notes: '',
@@ -214,6 +215,11 @@ export function EventStudioHome() {
               </label>
             ))}</div>
           </fieldset>
+          {templateId === 'wedding' && <label>Wedding ceremony type
+            <select aria-label="Wedding ceremony type" value={weddingType} onChange={event => setWeddingType(event.target.value as typeof weddingType)}>
+              <option>Traditional wedding</option><option>White wedding</option><option>Engagement</option>
+            </select>
+          </label>}
           <button className="event-studio__primary" type="submit" disabled={creating || !title.trim() || !storeId}>{creating ? 'Creating…' : 'Create event & choose tools →'}</button>
         </form>
         <section className="event-studio__panel event-studio__recent">
