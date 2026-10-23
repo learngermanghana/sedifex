@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './EventStudio.css'
+import { copyStudioGrid, pasteStudioGrid, repositionStudioRow, studioOverview } from '../utils/eventStudioGrid'
 
 type ToolId = 'checklist' | 'production' | 'programme' | 'donations' | 'gifts' | 'budget' | 'guests' | 'vendors'
 type Cell = string | number
@@ -239,7 +240,7 @@ export function EventStudioWorkspace() {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
   const [eventName, setEventName] = useState('')
   const [studio, setStudio] = useState<Studio | null>(null)
-  const [active, setActive] = useState<ToolId>('checklist')
+  const [active, setActive] = useState<ToolId | 'overview'>('checklist')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [pageError, setPageError] = useState('')
@@ -250,6 +251,14 @@ export function EventStudioWorkspace() {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState('')
   const [sortDescending, setSortDescending] = useState(false)
+  const [mobileCards, setMobileCards] = useState(false)
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
+  const [eventDate, setEventDate] = useState('')
+  const [printMode, setPrintMode] = useState<'sheet' | 'programme'>('sheet')
+  const [programmeStyle, setProgrammeStyle] = useState<'formal' | 'modern'>('formal')
+  const [programmeLogo, setProgrammeLogo] = useState('')
+  const [actionMessage, setActionMessage] = useState('')
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const undoHistory = useRef<Studio[]>([])
   const savedName = useRef('')
   const revision = useRef(0)
@@ -269,11 +278,13 @@ export function EventStudioWorkspace() {
       setStudio(next)
       const name = String(data.title || 'Untitled event')
       setEventName(name)
+      setEventDate(typeof data.eventDate === 'string' ? data.eventDate : '')
       savedName.current = name
       setActive(next.selected[0] || 'checklist')
       setShowToolPicker(next.selected.length === 0)
       undoHistory.current = []
       setSaveStatus('saved')
+      setLastSavedAt(null)
     }).catch(() => { if (mounted) setPageError('Unable to load this event. Please retry.') })
       .finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false }
@@ -286,7 +297,7 @@ export function EventStudioWorkspace() {
       updateDoc(doc(db, 'stores', storeId, 'events', eventId), { eventStudio: next, updatedAt: serverTimestamp() }))
     writeQueue.current = request
     void request.then(() => {
-      if (revision.current === version) setSaveStatus('saved')
+      if (revision.current === version) { setSaveStatus('saved'); setLastSavedAt(new Date()) }
     }).catch(() => {
       if (revision.current === version) setSaveStatus('error')
     })
@@ -294,7 +305,7 @@ export function EventStudioWorkspace() {
 
   useEffect(() => {
     if (!studio || saveStatus !== 'unsaved') return
-    const timer = window.setTimeout(() => save(studio, revision.current), 900)
+    const timer = window.setTimeout(() => save(studio, revision.current), 1600)
     return () => window.clearTimeout(timer)
   }, [studio, saveStatus, save])
 
@@ -326,6 +337,35 @@ export function EventStudioWorkspace() {
     } catch { setNameError('Could not save the event name. Please retry.'); }
   }
 
+  useEffect(() => {
+    if (saveStatus === 'saved') return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [saveStatus])
+
+  useEffect(() => {
+    if (!storeId || !eventId) return
+    const key = `sedifex-studio-widths-${storeId}-${eventId}`
+    try {
+      const stored = localStorage.getItem(key)
+      if (stored) setColumnWidths(JSON.parse(stored) as Record<string, number>)
+    } catch { setColumnWidths({}) }
+  }, [storeId, eventId])
+
+  useEffect(() => {
+    const reset = () => setPrintMode('sheet')
+    window.addEventListener('afterprint', reset)
+    return () => window.removeEventListener('afterprint', reset)
+  }, [])
+
+  function confirmLeave(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (saveStatus !== 'saved' && !window.confirm('Your spreadsheet has changes that may not be saved. Leave anyway?')) event.preventDefault()
+  }
+
   function toggle(id: ToolId) {
     if (!studio) return
     const selected = studio.selected.includes(id) ? studio.selected.filter(item => item !== id) : [...studio.selected, id]
@@ -337,12 +377,12 @@ export function EventStudioWorkspace() {
   }
 
   function changeCell(rowId: string, key: string, value: Cell) {
-    if (!studio) return
+    if (!studio || active === 'overview') return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].map(row => row.id === rowId ? { ...row, [key]: value } : row) } })
   }
 
   function addRow() {
-    if (!studio) return
+    if (!studio || active === 'overview') return
     const tool = TOOLS.find(item => item.id === active)
     if (!tool) return
     const row = makeRow(tool)
@@ -352,13 +392,13 @@ export function EventStudioWorkspace() {
   }
 
   function removeRow(rowId: string) {
-    if (!studio || !window.confirm('Remove this row from the sheet?')) return
+    if (!studio || active === 'overview' || !window.confirm('Remove this row from the sheet?')) return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].filter(row => row.id !== rowId) } })
     if (selectedRowId === rowId) setSelectedRowId(null)
   }
 
   function duplicateSelected() {
-    if (!studio || !selectedRowId) return
+    if (!studio || active === 'overview' || !selectedRowId) return
     const index = studio.sheets[active].findIndex(row => row.id === selectedRowId)
     if (index < 0) return
     const copy = { ...studio.sheets[active][index], id: createId() }
@@ -367,6 +407,93 @@ export function EventStudioWorkspace() {
     edit({ ...studio, sheets: { ...studio.sheets, [active]: nextRows } })
     setSelectedRowId(copy.id)
     setQuery('')
+  }
+
+  function pasteCells(event: React.ClipboardEvent<HTMLInputElement>, rowId: string, key: string) {
+    if (!studio || active === 'overview') return
+    const text = event.clipboardData.getData('text/plain')
+    if (!/[\t\n\r]/.test(text)) return
+    const tool = TOOLS.find(item => item.id === active)
+    if (!tool) return
+    event.preventDefault()
+    const result = pasteStudioGrid(studio.sheets[active], tool.fields, rowId, key, text, () => makeRow(tool))
+    if (result.changed) {
+      edit({ ...studio, sheets: { ...studio.sheets, [active]: result.rows } })
+      setQuery('')
+      setSortBy('')
+      setActionMessage('Pasted spreadsheet cells. Review the imported values.')
+    }
+  }
+
+  function insertAbove() {
+    if (!studio || active === 'overview' || !selectedRowId) return
+    const index = studio.sheets[active].findIndex(row => row.id === selectedRowId)
+    const tool = TOOLS.find(item => item.id === active)
+    if (index < 0 || !tool) return
+    const newRow = makeRow(tool)
+    const next = [...studio.sheets[active]]
+    next.splice(index, 0, newRow)
+    edit({ ...studio, sheets: { ...studio.sheets, [active]: next } })
+    setSortBy('')
+    setQuery('')
+    setSelectedRowId(newRow.id)
+  }
+
+  function reorderRow(direction: -1 | 1) {
+    if (!studio || active === 'overview' || !selectedRowId) return
+    const next = repositionStudioRow(studio.sheets[active], selectedRowId, direction)
+    if (next !== studio.sheets[active]) edit({ ...studio, sheets: { ...studio.sheets, [active]: next } })
+    setSortBy('')
+    setQuery('')
+  }
+
+  function resizeColumn(event: React.MouseEvent<HTMLSpanElement>, key: string, fallbackWidth: number) {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const id = `${active}:${key}`
+    const base = columnWidths[id] || fallbackWidth
+    let width = base
+    const move = (e: MouseEvent) => {
+      width = Math.max(105, Math.min(650, base + e.clientX - startX))
+      setColumnWidths(previous => ({ ...previous, [id]: width }))
+    }
+    const stop = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', stop)
+      if (!storeId || !eventId) return
+      try {
+        const storageKey = `sedifex-studio-widths-${storeId}-${eventId}`
+        const saved = JSON.parse(localStorage.getItem(storageKey) || '{}') as Record<string, number>
+        localStorage.setItem(storageKey, JSON.stringify({ ...saved, [id]: width }))
+      } catch { /* Browser storage is optional. */ }
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', stop)
+  }
+
+  async function copySheet() {
+    if (!current || !rows.length) return
+    try {
+      await navigator.clipboard.writeText(copyStudioGrid(rows, current.fields))
+      setActionMessage('Sheet copied. Paste it into Excel or another spreadsheet.')
+    } catch { setActionMessage('Clipboard access unavailable. Select and copy cells instead.') }
+  }
+
+  function printProgramme() {
+    setPrintMode('programme')
+    window.setTimeout(() => window.print(), 80)
+  }
+
+  function loadPrintLogo(file?: File) {
+    if (!file) { setProgrammeLogo(''); return }
+    if (!file.type.startsWith('image/') || file.size > 1024 * 1024) {
+      setActionMessage('Choose a logo image smaller than 1 MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setProgrammeLogo(typeof reader.result === 'string' ? reader.result : '')
+    reader.readAsDataURL(file)
   }
 
   function moveDown(event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
@@ -397,6 +524,7 @@ export function EventStudioWorkspace() {
       return sortDescending ? -comparison : comparison
     })
   const summary = current ? summarize(current, rows) : []
+  const overview = studio ? studioOverview(studio.sheets) : null
   const sum = (key: string) => rows.reduce((total, row) => total + cellNumber(row, key), 0)
 
   if (storeLoading || loading) return <main className="event-studio workspace-page"><div className="event-studio__panel">Loading event workspace…</div></main>
