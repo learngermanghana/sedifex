@@ -427,8 +427,10 @@ export function EventStudioWorkspace() {
       edit({ ...studio, sheets: { ...studio.sheets, [active]: result.rows } })
       setQuery('')
       setSortBy('')
-      setActionMessage('Pasted spreadsheet cells. Review the imported values.')
     }
+    setActionMessage(result.rejected
+      ? `${result.applied} cell${result.applied === 1 ? '' : 's'} accepted; ${result.rejected} invalid date, time or other value${result.rejected === 1 ? '' : 's'} skipped. Check the spreadsheet before continuing.`
+      : result.changed ? 'Pasted spreadsheet cells. Review the imported values.' : 'No new spreadsheet values were pasted.')
   }
 
   function insertAbove() {
