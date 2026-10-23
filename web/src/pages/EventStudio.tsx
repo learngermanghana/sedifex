@@ -84,7 +84,7 @@ function readStudio(value: unknown): Studio {
         const clean: SheetRow = { id: typeof values.id === 'string' && values.id ? values.id : `legacy-${tool.id}-${index}` }
         tool.fields.filter(field => field.type !== 'computed').forEach(field => {
           const cell = values[field.key]
-          clean[field.key] = field.type === 'number' ? number(cell) : (typeof cell === 'string' ? cell : '')
+          clean[field.key] = typeof cell === 'number' || typeof cell === 'string' ? cell : ''
         })
         return clean
       })
@@ -96,7 +96,7 @@ function readStudio(value: unknown): Studio {
 function makeRow(tool: Tool): SheetRow {
   const row: SheetRow = { id: createId() }
   tool.fields.filter(field => field.type !== 'computed').forEach(field => {
-    row[field.key] = field.type === 'number' ? 0 : field.type === 'select' ? field.options?.[0] || '' : ''
+    row[field.key] = field.type === 'select' ? field.options?.[0] || '' : ''
   })
   return row
 }
@@ -356,7 +356,7 @@ export function EventStudioWorkspace() {
                       {current.fields.map(field => <td key={field.key}>
                         {field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
                         field.type === 'select' ? <select aria-label={`${field.label} row ${rows.indexOf(row) + 1}`} value={String(row[field.key] ?? '')} onChange={e => changeCell(row.id, field.key, e.target.value)}>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
-                        <input aria-label={`${field.label} row ${rows.indexOf(row) + 1}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onChange={e => changeCell(row.id, field.key, field.type === 'number' ? number(e.target.value) : e.target.value)} />}
+                        <input aria-label={`${field.label} row ${rows.indexOf(row) + 1}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                       </td>)}
                       <td className="event-studio__number"><button type="button" className="event-studio__remove" aria-label={`Remove row ${rows.indexOf(row) + 1}`} title="Remove row" onClick={() => removeRow(row.id)}>×</button></td>
                     </tr>) : <tr><td colSpan={current.fields.length + 2} className="event-studio__no-rows">{query ? 'No matching rows.' : 'Your sheet is empty. Click “Add row” to get started.'}</td></tr>}
