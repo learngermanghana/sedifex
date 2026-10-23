@@ -51,7 +51,7 @@ export function repositionStudioRow(rows: StudioRow[], id: string, direction: -1
   return next
 }
 
-export function studioOverview(sheets: Record<string, StudioRow[]>) {
+export function studioOverview(sheets: { checklist?: StudioRow[]; guests?: StudioRow[]; programme?: StudioRow[]; budget?: StudioRow[]; donations?: StudioRow[] }) {
   const checklist = sheets.checklist ?? []
   const guests = sheets.guests ?? []
   const programme = sheets.programme ?? []
