@@ -216,6 +216,13 @@ export function EventStudioWorkspace() {
   const [pageError, setPageError] = useState('')
   const [nameError, setNameError] = useState('')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
+  const [showToolPicker, setShowToolPicker] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState('')
+  const [sortDescending, setSortDescending] = useState(false)
+  const undoHistory = useRef<Studio[]>([])
+  const savedName = useRef('')
   const revision = useRef(0)
   const writeQueue = useRef<Promise<unknown>>(Promise.resolve())
 
@@ -231,8 +238,12 @@ export function EventStudioWorkspace() {
       const data = snapshot.data()
       const next = readStudio(data.eventStudio)
       setStudio(next)
-      setEventName(String(data.title || 'Untitled event'))
+      const name = String(data.title || 'Untitled event')
+      setEventName(name)
+      savedName.current = name
       setActive(next.selected[0] || 'checklist')
+      setShowToolPicker(next.selected.length === 0)
+      undoHistory.current = []
       setSaveStatus('saved')
     }).catch(() => { if (mounted) setPageError('Unable to load this event. Please retry.') })
       .finally(() => { if (mounted) setLoading(false) })
@@ -258,10 +269,20 @@ export function EventStudioWorkspace() {
     return () => window.clearTimeout(timer)
   }, [studio, saveStatus, save])
 
-  function edit(next: Studio) {
+  function edit(next: Studio, keepHistory = true) {
+    if (keepHistory && studio) undoHistory.current = [...undoHistory.current.slice(-19), studio]
     revision.current += 1
     setStudio(next)
     setSaveStatus('unsaved')
+  }
+
+  function undoChange() {
+    const previous = undoHistory.current.pop()
+    if (previous) {
+      edit(previous, false)
+      setSelectedRowId(null)
+      setQuery('')
+    }
   }
 
   async function saveName() {
@@ -269,8 +290,11 @@ export function EventStudioWorkspace() {
     const name = eventName.trim()
     if (!name) { setNameError('Event name is required.'); return }
     setNameError('')
-    try { await updateDoc(doc(db, 'stores', storeId, 'events', eventId), { title: name, updatedAt: serverTimestamp() }) }
-    catch { setNameError('Could not save the event name. Please retry.'); }
+    if (name === savedName.current) return
+    try {
+      await updateDoc(doc(db, 'stores', storeId, 'events', eventId), { title: name, updatedAt: serverTimestamp() })
+      savedName.current = name
+    } catch { setNameError('Could not save the event name. Please retry.'); }
   }
 
   function toggle(id: ToolId) {
@@ -280,6 +304,7 @@ export function EventStudioWorkspace() {
     if (selected.includes(id)) setActive(id)
     else if (active === id) setActive(selected[0] || 'checklist')
     setQuery('')
+    setSelectedRowId(null)
   }
 
   function changeCell(rowId: string, key: string, value: Cell) {
@@ -291,19 +316,57 @@ export function EventStudioWorkspace() {
     if (!studio) return
     const tool = TOOLS.find(item => item.id === active)
     if (!tool) return
-    edit({ ...studio, sheets: { ...studio.sheets, [active]: [...studio.sheets[active], makeRow(tool)] } })
+    const row = makeRow(tool)
+    edit({ ...studio, sheets: { ...studio.sheets, [active]: [...studio.sheets[active], row] } })
+    setSelectedRowId(row.id)
     setQuery('')
   }
 
   function removeRow(rowId: string) {
     if (!studio || !window.confirm('Remove this row from the sheet?')) return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].filter(row => row.id !== rowId) } })
+    if (selectedRowId === rowId) setSelectedRowId(null)
+  }
+
+  function duplicateSelected() {
+    if (!studio || !selectedRowId) return
+    const index = studio.sheets[active].findIndex(row => row.id === selectedRowId)
+    if (index < 0) return
+    const copy = { ...studio.sheets[active][index], id: createId() }
+    const nextRows = [...studio.sheets[active]]
+    nextRows.splice(index + 1, 0, copy)
+    edit({ ...studio, sheets: { ...studio.sheets, [active]: nextRows } })
+    setSelectedRowId(copy.id)
+    setQuery('')
+  }
+
+  function moveDown(event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
+    if (event.key !== 'Enter' || event.shiftKey) return
+    const cell = event.currentTarget.closest('td')
+    const row = event.currentTarget.closest('tr')
+    const column = row && cell ? Array.from(row.children).indexOf(cell) : -1
+    const next = column >= 0 ? row?.nextElementSibling?.children.item(column)?.querySelector('input, select') : null
+    if (next instanceof HTMLElement) {
+      event.preventDefault()
+      next.focus()
+      if (next instanceof HTMLInputElement && next.type === 'text') next.select()
+    }
   }
 
   const selectedTools = useMemo(() => TOOLS.filter(tool => studio?.selected.includes(tool.id)), [studio?.selected])
   const current = selectedTools.find(tool => tool.id === active) || selectedTools[0]
   const rows = current && studio ? studio.sheets[current.id] : []
-  const visibleRows = rows.filter(row => !query.trim() || Object.values(row).some(cell => String(cell).toLowerCase().includes(query.toLowerCase())))
+  const visibleRows = rows
+    .filter(row => !query.trim() || Object.values(row).some(cell => String(cell).toLowerCase().includes(query.toLowerCase())))
+    .sort((a, b) => {
+      if (!sortBy) return 0
+      const aValue = a[sortBy] ?? ''
+      const bValue = b[sortBy] ?? ''
+      const comparison = current?.fields.find(field => field.key === sortBy)?.type === 'number'
+        ? number(aValue) - number(bValue)
+        : String(aValue).localeCompare(String(bValue), undefined, { numeric: true })
+      return sortDescending ? -comparison : comparison
+    })
   const summary = current ? summarize(current, rows) : []
   const sum = (key: string) => rows.reduce((total, row) => total + cellNumber(row, key), 0)
 
@@ -313,63 +376,113 @@ export function EventStudioWorkspace() {
   }
 
   return (
-    <main className="event-studio workspace-page">
+    <main className={`event-studio event-studio--refined workspace-page${focusMode ? ' event-studio--focus' : ''}`}>
       <div className="event-studio__crumb"><Link to="/event-planning">← All events</Link><span>/</span><span>Event Studio</span></div>
-      <header className="event-studio__intro event-studio__workspace-intro">
-        <div><span className="event-studio__eyebrow">Sedifex · Event Studio</span><h1>Build your event workspace.</h1><p>Choose only what you need. Every selected tool becomes a spreadsheet.</p></div>
-        <div className="event-studio__name"><label htmlFor="event-studio-name">Event name</label><input id="event-studio-name" value={eventName} maxLength={140} onChange={e => setEventName(e.target.value)} onBlur={() => void saveName()} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />{nameError && <small role="alert">{nameError}</small>}</div>
+      <header className="event-studio__workspace-bar">
+        <div className="event-studio__workspace-identity">
+          <span className="event-studio__eyebrow">EVENT WORKSPACE</span>
+          <label className="event-studio__name event-studio__name--compact" htmlFor="event-studio-name">
+            <span className="event-studio__sr-only">Event name</span>
+            <input id="event-studio-name" value={eventName} maxLength={140} onChange={e => setEventName(e.target.value)} onBlur={() => void saveName()} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} aria-label="Event name" />
+          </label>
+          {nameError && <small className="event-studio__field-error" role="alert">{nameError}</small>}
+        </div>
+        <div className="event-studio__workspace-controls">
+          <div className={`event-studio__save-state event-studio__save-state--${saveStatus}`} role="status" aria-live="polite">
+            {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Save failed' : 'Unsaved changes'}
+            {(saveStatus === 'error' || saveStatus === 'unsaved') && <button type="button" onClick={() => save(studio, revision.current)}>Save now</button>}
+          </div>
+          <button type="button" className="event-studio__plain-button event-studio__focus-button" onClick={() => setFocusMode(value => !value)} aria-pressed={focusMode}>
+            {focusMode ? '⊟ Exit full view' : '⛶ Full view'}
+          </button>
+        </div>
       </header>
 
-      <section className="event-studio__panel event-studio__playground" aria-labelledby="event-tools-title">
-        <div className="event-studio__section-head"><div><span className="event-studio__step">STEP 01 — YOUR PLAYGROUND</span><h2 id="event-tools-title">What would you like to plan?</h2><p>Click a card to add or hide its sheet. Hidden sheets keep their existing rows.</p></div><span className="event-studio__count">{studio.selected.length} selected</span></div>
-        <div className="event-studio__tools">
-          {TOOLS.map(tool => { const on = studio.selected.includes(tool.id); return (
-            <button type="button" key={tool.id} aria-pressed={on} className={`event-studio__tool ${on ? 'is-selected' : ''}`} onClick={() => toggle(tool.id)}>
-              <span className="event-studio__tool-icon" aria-hidden="true">{tool.icon}</span>
-              <strong>{tool.name}</strong><span className="event-studio__tool-desc">{tool.description}</span>
-              <span className="event-studio__tool-state">{on ? '✓ Added to workspace' : '+ Add to workspace'}</span>
-            </button>
-          ) })}
-        </div>
-      </section>
-
-      <section className="event-studio__sheets" aria-labelledby="event-sheets-title">
-        <div className="event-studio__section-head event-studio__sheets-heading"><div><span className="event-studio__step">STEP 02 — YOUR SPREADSHEETS</span><h2 id="event-sheets-title">Your Event Workspace</h2></div>
-          <div className={`event-studio__save-state event-studio__save-state--${saveStatus}`} role="status" aria-live="polite">
-            {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Save failed — retry' : 'Unsaved changes'}
-            {(saveStatus === 'error' || saveStatus === 'unsaved') && <button type="button" onClick={() => studio && save(studio, revision.current)}>Save now</button>}
+      <section className="event-studio__panel event-studio__sheet-panel" aria-label="Event spreadsheets">
+        <div className="event-studio__tabs-bar">
+          <div className="event-studio__tabs" role="tablist" aria-label="Event planning sheets">
+            {selectedTools.map(tool => (
+              <button type="button" role="tab" aria-selected={current?.id === tool.id} key={tool.id}
+                className={current?.id === tool.id ? 'is-active' : ''}
+                onClick={() => { setActive(tool.id); setQuery(''); setSelectedRowId(null); setSortBy('') }}>{tool.name}</button>
+            ))}
           </div>
+          <button type="button" className="event-studio__add-tool-button" onClick={() => setShowToolPicker(value => !value)} aria-expanded={showToolPicker} aria-controls="event-studio-tool-picker">
+            {showToolPicker ? 'Close tools' : '+ Add tool'}
+          </button>
         </div>
-        <div className="event-studio__panel event-studio__sheet-panel">
-          {selectedTools.length ? <>
-            <div className="event-studio__tabs" role="tablist" aria-label="Event planning sheets">
-              {selectedTools.map(tool => <button type="button" role="tab" aria-selected={current?.id === tool.id} key={tool.id} className={current?.id === tool.id ? 'is-active' : ''} onClick={() => { setActive(tool.id); setQuery('') }}>{tool.name}</button>)}
+
+        {(showToolPicker || selectedTools.length === 0) && (
+          <div className="event-studio__tool-picker" id="event-studio-tool-picker">
+            <div className="event-studio__tool-picker-head">
+              <div><strong>Choose your tools</strong><p>Add only the sheets this event needs. Removing a tool hides it without deleting its rows.</p></div>
+              <button type="button" className="event-studio__plain-button" onClick={() => setShowToolPicker(false)} disabled={selectedTools.length === 0}>Done choosing</button>
             </div>
-            {current && <div className="event-studio__sheet-inner">
-              <div className="event-studio__sheet-heading"><div><h3>{current.name}</h3><p>{current.caption}</p></div><div className="event-studio__sheet-actions"><input aria-label="Search sheet rows" placeholder="Search rows…" value={query} onChange={e => setQuery(e.target.value)} /><button type="button" className="event-studio__primary" onClick={addRow}>+ Add row</button></div></div>
-              <div className="event-studio__metrics">{summary.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
-              <div className="event-studio__grid-scroll" role="region" aria-label={`${current.name} editable spreadsheet`} tabIndex={0}>
-                <table className="event-studio__grid"><thead><tr><th scope="col" className="event-studio__number">#</th>{current.fields.map(field => <th scope="col" key={field.key} style={{ minWidth: field.width || 160 }}>{field.label}</th>)}<th scope="col" className="event-studio__number"><span className="event-studio__sr-only">Remove row</span></th></tr></thead>
-                  <tbody>
-                    {visibleRows.length ? visibleRows.map(row => <tr key={row.id}>
-                      <td className="event-studio__number">{rows.indexOf(row) + 1}</td>
+            <div className="event-studio__tools">
+              {TOOLS.map(tool => {
+                const on = studio.selected.includes(tool.id)
+                return <button type="button" key={tool.id} aria-pressed={on} className={`event-studio__tool ${on ? 'is-selected' : ''}`} onClick={() => toggle(tool.id)}>
+                  <span className="event-studio__tool-icon" aria-hidden="true">{tool.icon}</span>
+                  <strong>{tool.name}</strong>
+                  <span className="event-studio__tool-desc">{tool.description}</span>
+                  <span className="event-studio__tool-state">{on ? '✓ Included' : '+ Add sheet'}</span>
+                </button>
+              })}
+            </div>
+          </div>
+        )}
+
+        {current ? (
+          <div className="event-studio__sheet-inner">
+            <div className="event-studio__refined-heading">
+              <div><h1>{current.name}</h1><p>{current.caption}</p></div>
+              <span className="event-studio__sheet-count">{rows.length} {rows.length === 1 ? 'row' : 'rows'}</span>
+            </div>
+            <div className="event-studio__toolbar" role="toolbar" aria-label="Spreadsheet actions">
+              <button type="button" className="event-studio__primary" onClick={addRow}>+ Add row</button>
+              <button type="button" className="event-studio__plain-button" onClick={duplicateSelected} disabled={!selectedRowId || !rows.some(row => row.id === selectedRowId)}>⧉ Duplicate</button>
+              <button type="button" className="event-studio__plain-button" onClick={undoChange} disabled={undoHistory.current.length === 0}>↶ Undo</button>
+              <label className="event-studio__sort-label">Sort
+                <select aria-label="Sort rows by" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+                  <option value="">Original order</option>
+                  {current.fields.filter(field => field.type !== 'computed').map(field => <option value={field.key} key={field.key}>{field.label}</option>)}
+                </select>
+              </label>
+              <button type="button" className="event-studio__plain-button event-studio__sort-direction" aria-label="Reverse sort order" title="Reverse sort order" disabled={!sortBy} onClick={() => setSortDescending(value => !value)}>{sortDescending ? '↓' : '↑'}</button>
+              <label className="event-studio__toolbar-search"><span className="event-studio__sr-only">Search sheet rows</span><input placeholder="⌕ Search sheet…" aria-label="Search sheet rows" value={query} onChange={e => setQuery(e.target.value)} /></label>
+              <button type="button" className="event-studio__plain-button" onClick={() => window.print()}>⎙ Print</button>
+            </div>
+            <div className="event-studio__metrics event-studio__metrics--compact">
+              {summary.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+            </div>
+            <div className="event-studio__grid-scroll" role="region" aria-label={`${current.name} editable spreadsheet`} tabIndex={0}>
+              <table className="event-studio__grid">
+                <thead><tr><th scope="col" className="event-studio__number">#</th>{current.fields.map(field => <th scope="col" key={field.key} style={{ minWidth: field.width || 160 }}>{field.label}</th>)}<th scope="col" className="event-studio__number"><span className="event-studio__sr-only">Remove row</span></th></tr></thead>
+                <tbody>
+                  {visibleRows.length ? visibleRows.map(row => {
+                    const rowNumber = rows.indexOf(row) + 1
+                    return <tr key={row.id} className={row.id === selectedRowId ? 'event-studio__selected-row' : ''} onClick={() => setSelectedRowId(row.id)}>
+                      <td className="event-studio__number">{rowNumber}</td>
                       {current.fields.map(field => <td key={field.key}>
                         {field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
-                        field.type === 'select' ? <select aria-label={`${field.label} row ${rows.indexOf(row) + 1}`} value={String(row[field.key] ?? '')} onChange={e => changeCell(row.id, field.key, e.target.value)}>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
-                        <input aria-label={`${field.label} row ${rows.indexOf(row) + 1}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
+                          field.type === 'select' ? <select aria-label={`${field.label} row ${rowNumber}`} value={String(row[field.key] ?? '')} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)}>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
+                          <input aria-label={`${field.label} row ${rowNumber}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                       </td>)}
-                      <td className="event-studio__number"><button type="button" className="event-studio__remove" aria-label={`Remove row ${rows.indexOf(row) + 1}`} title="Remove row" onClick={() => removeRow(row.id)}>×</button></td>
-                    </tr>) : <tr><td colSpan={current.fields.length + 2} className="event-studio__no-rows">{query ? 'No matching rows.' : 'Your sheet is empty. Click “Add row” to get started.'}</td></tr>}
-                  </tbody>
-                  <tfoot><tr><td className="event-studio__number">Σ</td>{current.fields.map((field, index) => <td key={field.key}>{field.type === 'number' || field.type === 'computed' ? (isMoneyField(field.key) ? money(sum(field.key)) : String(sum(field.key))) : index === 0 ? 'TOTAL' : ''}</td>)}<td /></tr></tfoot>
-                </table>
-              </div>
-              <div className="event-studio__sheet-footer"><span>Scroll sideways for more columns · Edit any cell · Totals update automatically</span><span>Changes save to this event</span></div>
-            </div>}
-          </> : <div className="event-studio__blank">Select a tool above to create your first spreadsheet.</div>}
-        </div>
+                      <td className="event-studio__number"><button type="button" className="event-studio__remove" aria-label={`Remove row ${rowNumber}`} title="Remove row" onClick={() => removeRow(row.id)}>×</button></td>
+                    </tr>
+                  }) : <tr><td colSpan={current.fields.length + 2} className="event-studio__no-rows">{query ? 'No matching rows. Clear your search to see all records.' : 'This sheet is empty. Add a row to get started.'}</td></tr>}
+                </tbody>
+                <tfoot><tr><td className="event-studio__number">Σ</td>{current.fields.map((field, index) => <td key={field.key}>{field.type === 'number' || field.type === 'computed' ? (isMoneyField(field.key) ? money(sum(field.key)) : String(sum(field.key))) : index === 0 ? 'TOTAL' : ''}</td>)}<td /></tr></tfoot>
+              </table>
+            </div>
+            <footer className="event-studio__sheet-footer">
+              <span>Click a row to select · Enter moves down · Tab moves across · Scroll for more columns</span>
+              <span>Edits save automatically</span>
+            </footer>
+          </div>
+        ) : <div className="event-studio__blank">Choose your first tool above to open a spreadsheet.</div>}
       </section>
-      <p className="event-studio__legacy-note">Previously saved event details and specialist tools are still available in the <Link to={`/event-planning/${encodeURIComponent(eventId)}/classic`}>previous event workspace</Link>. The new sheets do not overwrite those records.</p>
+      <p className="event-studio__legacy-note">Need earlier event features? <Link to={`/event-planning/${encodeURIComponent(eventId)}/classic`}>Open the previous event workspace</Link>. Existing records are preserved.</p>
     </main>
   )
 }
