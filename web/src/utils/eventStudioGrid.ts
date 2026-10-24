@@ -147,3 +147,14 @@ export function studioOverview(sheets: { checklist?: StudioRow[]; guests?: Studi
     received: sum(donations, 'received'),
   }
 }
+
+export function dropStudioRow(rows: StudioRow[], sourceId: string, targetId: string, after = false): StudioRow[] {
+  const source = rows.findIndex(row => row.id === sourceId)
+  const target = rows.findIndex(row => row.id === targetId)
+  if (source < 0 || target < 0 || source === target) return rows
+  const next = [...rows]
+  const [moving] = next.splice(source, 1)
+  const adjusted = next.findIndex(row => row.id === targetId)
+  next.splice(adjusted + (after ? 1 : 0), 0, moving)
+  return next.every((row, index) => row.id === rows[index].id) ? rows : next
+}
