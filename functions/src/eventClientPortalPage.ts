@@ -192,7 +192,7 @@ export function eventClientPortalHtml(data: EventClientPortalPageData, token: st
   const programBadgeColor = data.program.preparingRevision || (data.program.requireClientApproval && !data.program.clientApproved)
     ? '#9a3412'
     : data.program.status === 'approved' ? '#166534' : '#475569'
-  const sharedPlanHtml = renderSharedStudioHtml(data.sharedStudio)
+  const sharedPlanHtml = renderSharedStudioHtml(data.sharedStudio || { details: null, sheets: { checklist: [], programme: [] } })
   const publishedMeta = data.program.status === 'approved'
     ? `Published revision ${data.program.revision}${data.program.publishedAt ? ` · ${escapeHtml(formatDateTime(data.program.publishedAt))}` : ''}`
     : `Revision ${data.program.revision}`
