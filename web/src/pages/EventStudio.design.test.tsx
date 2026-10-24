@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 
 const mockGetDoc = vi.hoisted(() => vi.fn())
 const mockUpdateDoc = vi.hoisted(() => vi.fn(async () => undefined))
@@ -28,13 +28,11 @@ function mountStudio() {
     exists: () => true,
     data: () => ({ title: 'Annual Fundraiser', eventStudio: { selected: ['checklist'], sheets: { checklist: [] } } }),
   })
-  return render(
-    <MemoryRouter initialEntries={['/event-planning/event-1']}>
-      <Routes>
-        <Route path="/event-planning/:eventId" element={<EventStudioWorkspace />} />
-      </Routes>
-    </MemoryRouter>,
-  )
+  const router = createMemoryRouter([
+    { path: '/event-planning/:eventId', element: <EventStudioWorkspace /> },
+    { path: '/event-planning', element: <div>All events</div> },
+  ], { initialEntries: ['/event-planning/event-1'] })
+  return render(<RouterProvider router={router} />)
 }
 
 describe('Event Studio compact spreadsheet design', () => {
