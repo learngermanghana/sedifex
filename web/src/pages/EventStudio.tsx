@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './EventStudio.css'
@@ -424,9 +424,23 @@ export function EventStudioWorkspace() {
     return () => window.removeEventListener('afterprint', reset)
   }, [])
 
-  function confirmLeave(event: React.MouseEvent<HTMLAnchorElement>) {
-    if ((saveStatus !== 'saved' || detailsStatus !== 'saved') && !window.confirm('Your event has changes that may not be saved. Leave anyway?')) event.preventDefault()
-  }
+  // The shell sidebar, browser Back/Forward and workspace links all use the data
+  // router. Blocking here covers them all instead of guarding only two Links.
+  const navigationBlocked = useBlocker(({ currentLocation, nextLocation }) =>
+    (detailsStatus !== 'saved' || saveStatus !== 'saved') &&
+    (currentLocation.pathname !== nextLocation.pathname ||
+      currentLocation.search !== nextLocation.search)
+  )
+
+  useEffect(() => {
+    if (navigationBlocked.state !== 'blocked') return
+    if (window.confirm('Your event has unsaved changes. Leave without saving them?')) {
+      navigationBlocked.proceed()
+    } else {
+      navigationBlocked.reset()
+    }
+  }, [navigationBlocked])
+
 
   function toggle(id: ToolId) {
     if (!studio) return
@@ -617,7 +631,7 @@ export function EventStudioWorkspace() {
 
   return (
     <main className={`event-studio event-studio--refined workspace-page${focusMode ? ' event-studio--focus' : ''}${printMode !== 'sheet' ? ' event-studio--printing-programme' : ''}`}>
-      <div className="event-studio__crumb"><Link to="/event-planning" onClick={confirmLeave}>← All events</Link><span>/</span><span>Event Studio</span></div>
+      <div className="event-studio__crumb"><Link to="/event-planning">← All events</Link><span>/</span><span>Event Studio</span></div>
       <header className="event-studio__workspace-bar">
         <div className="event-studio__workspace-identity">
           <span className="event-studio__eyebrow">EVENT WORKSPACE</span>
@@ -822,7 +836,7 @@ export function EventStudioWorkspace() {
       </section>
       <section className={`event-studio__print-programme event-studio__print-programme--${programmeStyle}`} aria-hidden={printMode !== 'programme'}>
         <header>{programmeLogo && <img src={programmeLogo} alt="" />}<small>{printMode === 'run-sheet' ? 'INTERNAL PRODUCTION RUN SHEET' : 'ORDER OF EVENTS'}</small><h1>{eventName}</h1>
-          {(details.eventDate || eventDate) && <p>{details.eventDate || eventDate}{details.startTime ? ` · ${details.startTime}` : ''}</p>}
+          {details.eventDate && <p>{details.eventDate}{details.startTime ? ` · ${details.startTime}` : ''}</p>}
           {details.venue && <p>{details.venue}</p>}
           {printMode === 'run-sheet' && <p>Coordinator: {details.eventStudioCoordinator || 'Not assigned'}{details.clientPhone ? ` · Client: ${details.clientPhone}` : ''}</p>}
         </header>
@@ -841,7 +855,7 @@ export function EventStudioWorkspace() {
         )}
         <footer>{printMode === 'run-sheet' ? 'Internal planning document · Do not distribute to guests' : 'Thank you for joining us'}</footer>
       </section>
-      <p className="event-studio__legacy-note">Need earlier event features? <Link onClick={confirmLeave} to={`/event-planning/${encodeURIComponent(eventId)}/classic`}>Open the previous event workspace</Link>. Existing records are preserved.</p>
+      <p className="event-studio__legacy-note">Need earlier event features? <Link to={`/event-planning/${encodeURIComponent(eventId)}/classic`}>Open the previous event workspace</Link>. Existing records are preserved.</p>
     </main>
   )
 }
