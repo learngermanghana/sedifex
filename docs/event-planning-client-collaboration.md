@@ -508,3 +508,46 @@ When changing Event Planning/client collaboration, verify all of the following:
 - Security documentation correctly states that `clientPortal.publicUrl` currently contains a recoverable active bearer token for authorized staff use.
 - Firestore rules continue to deny direct public event writes.
 - Production Firebase Functions deployment completes before claiming a `cloudfunctions.net` portal change is live.
+
+
+## Event Studio shared editing (October 2026)
+
+The new Event Studio workspace offers **Share with client**. This reuses the
+existing token-authenticated Firebase Client Portal; it is not a second public
+database or a new external integration.
+
+- Organisers choose **Create client link** and copy it to WhatsApp. The
+  `shareEventClientPortal` callable accepts `copyOnly: true`, bypasses all
+  email/SMS delivery and does not require the event client email.
+- Link generation rotates the token and invalidates the old one. **Disable link**
+  calls the same callable with `revokeOnly: true` and revokes the current token.
+- Permission flags are stored in `eventStudioClientShare`: `details`,
+  `checklist`, and `programme` (all default to disabled).
+- Each checklist or programme row separately opts in via
+  `studioClientShared: 'yes'`. Existing and newly created rows default to
+  `'no'`. Only opted-in rows in enabled sheets are exposed.
+- The client receives only date, start time and venue when Details is enabled;
+  opted-in checklist rows expose task, owner, due and general activity notes;
+  opted-in working programme rows expose start, item, person, duration, guest
+  notes and general activity notes.
+- The portal's **Shared Plan** tab POSTs individual whitelisted edits as
+  `action: 'studio_edit'`. Server transactions check current token, revocation,
+  expiry, share flags, row visibility and expected prior value.
+- The client never receives direct Firestore access, other event sheets, finance,
+  client contact fields or `internalNotes`. The legacy published programme
+  retains its separate approval/change-request workflow.
+- The staff Studio uses optimistic Firestore transactions, preventing edits to
+  a stale whole-sheet snapshot from overwriting a client's changes. Event
+  Details save only changed fields with the same protection. When a conflict
+  happens, staff can use **Refresh client changes** and consciously discard
+  local unsaved edits.
+- The client portal refreshes when inactive/clean every 30 seconds, not every
+  5 seconds; active unsaved fields stop refresh. No automatic background email,
+  SMS or polling was added to the organiser's new sharing panel.
+
+**Deployment:** Ship both the web frontend and Firebase Functions backend.
+Functions are built and security-tested before the existing Functions deployment
+workflow publishes them. Vercel deployment quotas can block the frontend
+independently. These changes add no new paid third-party dependencies, but
+existing Firebase operations remain subject to usage quotas.
+
