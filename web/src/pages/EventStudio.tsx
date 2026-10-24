@@ -301,6 +301,7 @@ export function EventStudioWorkspace() {
   const [shareMessage, setShareMessage] = useState('')
   const [shareError, setShareError] = useState('')
   const savedStudio = useRef<Studio | null>(null)
+  const savedDetails = useRef<EventDetails>(readEventDetails({}))
   const detailsRevision = useRef(0)
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
   const draggingRow = useRef<string | null>(null)
@@ -331,7 +332,9 @@ export function EventStudioWorkspace() {
       setShareSettings(readClientShareSettings(data.eventStudioClientShare))
       const portal = data.clientPortal && typeof data.clientPortal === 'object' ? data.clientPortal as Record<string, unknown> : {}
       setPortalUrl(portal.status === 'active' && typeof portal.publicUrl === 'string' ? portal.publicUrl : '')
-      setDetails(readEventDetails(data))
+      const loadedDetails = readEventDetails(data)
+      setDetails(loadedDetails)
+      savedDetails.current = loadedDetails
       detailsRevision.current = 0
       setDetailsStatus('saved')
       const name = String(data.title || 'Untitled event')
@@ -389,13 +392,102 @@ export function EventStudioWorkspace() {
     const next = { ...details }
     setDetailsStatus('saving')
     try {
+      const baseline = savedDetails.current
+      const changed = (Object.keys(next) as Array<keyof EventDetails>).filter(key => next[key] !== baseline[key])
+      if (!changed.length) { setDetailsStatus('saved'); return }
       const request = writeQueue.current.catch(() => undefined).then(() =>
-        updateDoc(doc(db, 'stores', storeId, 'events', eventId), { ...next, updatedAt: serverTimestamp() }))
+        runTransaction(db, async transaction => {
+          const reference = doc(db, 'stores', storeId, 'events', eventId)
+          const snapshot = await transaction.get(reference)
+          if (!snapshot.exists()) throw new Error('EVENT_NOT_FOUND')
+          const remote = readEventDetails(snapshot.data())
+          const changes: Record<string, unknown> = {}
+          for (const key of changed) {
+            if (remote[key] !== baseline[key]) throw new Error('DETAIL_CONFLICT')
+            changes[key] = next[key]
+          }
+          transaction.update(reference, { ...changes, updatedAt: serverTimestamp() })
+        }))
       writeQueue.current = request
       await request
+      savedDetails.current = { ...baseline, ...Object.fromEntries(changed.map(key => [key, next[key]])) }
       if (detailsRevision.current === version) setDetailsStatus('saved')
     } catch {
       if (detailsRevision.current === version) setDetailsStatus('error')
+    }
+  }
+
+  async function refreshSharedEdits() {
+    if (!storeId || !eventId || saveStatus !== 'saved' || detailsStatus !== 'saved') {
+      setShareError('Save your changes before refreshing the shared event.')
+      return
+    }
+    setShareError('')
+    try {
+      const latest = await getDoc(doc(db, 'stores', storeId, 'events', eventId))
+      if (!latest.exists()) throw new Error('Missing event')
+      const event = latest.data()
+      const nextStudio = readStudio(event.eventStudio)
+      savedStudio.current = nextStudio
+      setStudio(nextStudio)
+      const nextDetails = readEventDetails(event)
+      savedDetails.current = nextDetails
+      setDetails(nextDetails)
+      setShareSettings(readClientShareSettings(event.eventStudioClientShare))
+      const portal = event.clientPortal && typeof event.clientPortal === 'object' ? event.clientPortal as Record<string, unknown> : {}
+      setPortalUrl(portal.status === 'active' && typeof portal.publicUrl === 'string' ? portal.publicUrl : '')
+      undoHistory.current = []
+      setShareMessage('Latest shared changes loaded.')
+    } catch {
+      setShareError('Could not load the latest event. Check your connection.')
+    }
+  }
+
+  async function setSharedSection(key: keyof ClientShareSettings, enabled: boolean) {
+    if (!storeId || !eventId || shareBusy || saveStatus !== 'saved') {
+      setShareError('Save your spreadsheet changes before changing sharing permissions.')
+      return
+    }
+    const next = { ...shareSettings, [key]: enabled }
+    setShareBusy(true)
+    setShareError('')
+    try {
+      await updateDoc(doc(db, 'stores', storeId, 'events', eventId), { eventStudioClientShare: next, updatedAt: serverTimestamp() })
+      setShareSettings(next)
+      setShareMessage(enabled ? 'Section enabled for clients. Choose specific rows to share.' : 'Section access disabled for clients.')
+    } catch {
+      setShareError('Could not update sharing permissions. Please retry.')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  async function createClientLink() {
+    if (!storeId || !eventId || shareBusy || saveStatus !== 'saved' || detailsStatus !== 'saved') {
+      setShareError('Save your event changes before creating the client link.')
+      return
+    }
+    setShareBusy(true)
+    setShareError('')
+    setShareMessage('')
+    try {
+      const share = httpsCallable<{ storeId: string; eventId: string; copyOnly: boolean }, { portalUrl: string }>(functions, 'shareEventClientPortal')
+      const response = await share({ storeId, eventId, copyOnly: true })
+      setPortalUrl(response.data.portalUrl)
+      setShareMessage('Secure link ready. Copy it and send it through WhatsApp. Regenerating the link invalidates the previous one.')
+    } catch {
+      setShareError('Could not create the client link. Make sure the client portal function is deployed and try again.')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  async function copyClientLink() {
+    try {
+      await navigator.clipboard.writeText(portalUrl)
+      setShareMessage('Client link copied. Send it only to people you trust.')
+    } catch {
+      setShareError('Clipboard unavailable. Select and copy the link shown below.')
     }
   }
 
@@ -486,7 +578,7 @@ export function EventStudioWorkspace() {
   }
 
   function addRow() {
-    if (!studio || active === 'overview' || active === 'details') return
+    if (!studio || active === 'overview' || active === 'details' || active === 'sharing') return
     const tool = TOOLS.find(item => item.id === active)
     if (!tool) return
     const row = makeRow(tool)
@@ -684,6 +776,7 @@ export function EventStudioWorkspace() {
         <div className="event-studio__tabs-bar">
           <div className="event-studio__tabs" role="tablist" aria-label="Event planning sheets">
             <button type="button" role="tab" aria-selected={active === 'details'} className={active === 'details' ? 'is-active' : ''} onClick={() => { setActive('details'); setQuery(''); setExpandedRowId(null) }}>Event Details</button>
+            <button type="button" role="tab" aria-selected={active === 'sharing'} className={active === 'sharing' ? 'is-active' : ''} onClick={() => { setActive('sharing'); setQuery(''); setExpandedRowId(null) }}>Share with client</button>
             <button type="button" role="tab" aria-selected={active === 'overview'} className={active === 'overview' ? 'is-active' : ''} onClick={() => { setActive('overview'); setQuery(''); setSelectedRowId(null) }}>Overview</button>
             {selectedTools.map(tool => (
               <button type="button" role="tab" aria-selected={current?.id === tool.id} key={tool.id}
@@ -716,7 +809,34 @@ export function EventStudioWorkspace() {
           </div>
         )}
 
-        {active === 'details' ? (
+        {active === 'sharing' ? (
+          <section className="event-studio__share" aria-label="Client sharing">
+            <header><span className="event-studio__step">CLIENT COLLABORATION</span><h1>Share your event safely</h1>
+              <p>Create a secure link that clients can open without a Sedifex account. Copy and send it through WhatsApp — no automatic email or SMS.</p></header>
+            <div className="event-studio__share-sections">
+              {([
+                ['details', 'Event date, time and venue'],
+                ['checklist', 'Selected checklist activities'],
+                ['programme', 'Selected working programme items'],
+              ] as const).map(([key,label]) => <label key={key}>
+                <input type="checkbox" checked={shareSettings[key]} disabled={shareBusy} onChange={event => void setSharedSection(key, event.target.checked)} />
+                <span>{label}</span></label>)}
+            </div>
+            <p className="event-studio__share-hint">For checklist and programme sheets, also mark each permitted row “Share”. Other rows remain private. Budgets, donations, vendors, phone numbers and private production notes are never included.</p>
+            <div className="event-studio__share-actions">
+              <button type="button" className="event-studio__primary" disabled={shareBusy} onClick={() => void createClientLink()}>{shareBusy ? 'Working…' : portalUrl ? 'Regenerate client link' : 'Create client link'}</button>
+              {portalUrl && <button type="button" className="event-studio__plain-button" onClick={() => void copyClientLink()}>Copy link</button>}
+              {portalUrl && <a href={portalUrl} target="_blank" rel="noreferrer" className="event-studio__plain-button">Open client view ↗</a>}
+              <button type="button" className="event-studio__plain-button" onClick={() => void refreshSharedEdits()}>Refresh client changes</button>
+            </div>
+            {portalUrl && <label className="event-studio__share-link">Current client link
+              <input readOnly aria-label="Current client link" value={portalUrl} onFocus={event => event.currentTarget.select()} />
+            </label>}
+            {shareMessage && <p className="event-studio__share-success" role="status">{shareMessage}</p>}
+            {shareError && <p className="event-studio__message event-studio__message--error" role="alert">{shareError}</p>}
+            <p className="event-studio__share-hint">Anyone with this link can edit shared fields until the link expires or you regenerate it. The current link expires after 180 days. Client edits are checked against the latest saved value to prevent silent overwrites.</p>
+          </section>
+        ) : active === 'details' ? (
           <form className="event-studio__details" onSubmit={event => { event.preventDefault(); void saveDetails() }}>
             <header><span className="event-studio__step">EVENT INFORMATION</span><h1>Event details & client brief</h1>
               <p>Shared with the older event workspace. Printed programme documents use the public event details.</p></header>
