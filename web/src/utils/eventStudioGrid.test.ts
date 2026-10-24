@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { copyStudioGrid, pasteStudioGrid, repositionStudioRow, studioOverview, normalizePastedDate, normalizePastedTime, type StudioField, type StudioRow } from './eventStudioGrid'
+import { copyStudioGrid, pasteStudioGrid, repositionStudioRow, dropStudioRow, studioOverview, normalizePastedDate, normalizePastedTime, type StudioField, type StudioRow } from './eventStudioGrid'
 
 const fields: StudioField[] = [
   { key: 'task', label: 'Task', type: 'text' },
@@ -98,6 +98,21 @@ describe('Event Studio grid tools', () => {
     expect(source.map(row => row.id)).toEqual(['1', '2', '3'])
     expect(repositionStudioRow(source, '1', -1)).toBe(source)
   })
+  it('drag-drops rows by stable ID, preserving notes and original data', () => {
+    const rows: StudioRow[] = [
+      { id: 'arrival', task: 'Guest arrival', detailNotes: 'Door A', internalNotes: 'Ushers only' },
+      { id: 'opening', task: 'Opening prayer', detailNotes: 'Pastor Michael' },
+      { id: 'welcome', task: 'Welcome', detailNotes: 'Microphone check' },
+    ]
+    const moved = dropStudioRow(rows, 'arrival', 'welcome')
+    expect(moved.map(row => row.id)).toEqual(['opening', 'arrival', 'welcome'])
+    expect(moved[1]).toMatchObject({ task: 'Guest arrival', detailNotes: 'Door A', internalNotes: 'Ushers only' })
+    expect(rows.map(row => row.id)).toEqual(['arrival', 'opening', 'welcome'])
+    expect(dropStudioRow(rows, 'arrival', 'arrival')).toBe(rows)
+    expect(dropStudioRow(rows, 'missing', 'opening')).toBe(rows)
+    expect(dropStudioRow(rows, 'welcome', 'arrival', true).map(row => row.id)).toEqual(['arrival', 'welcome', 'opening'])
+  })
+
   it('derives overview without requesting anything from the database', () => {
     const result = studioOverview({
       checklist: [{ id: '1', status: 'Done' }, { id: '2', status: 'Not started' }],
