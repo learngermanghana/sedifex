@@ -275,6 +275,6 @@ async function startTask(taskId){var ok=await postPortalAction({action:'start',t
 async function completeTask(taskId,needsStart){var checkbox=document.getElementById('done-'+taskId);var button=document.getElementById('submit-'+taskId);if(!checkbox||!checkbox.checked)return;if(button)button.disabled=true;if(needsStart){var started=await postPortalAction({action:'start',taskId:taskId,note:''});if(!started){if(button)button.disabled=false;return}}var note=document.getElementById('note-'+taskId);var ok=await postPortalAction({action:'submit',taskId:taskId,note:note?note.value:''});if(ok){try{sessionStorage.removeItem(draftKey(taskId))}catch(_error){}location.reload()}else if(button)button.disabled=false}
 async function submitTask(taskId){var note=document.getElementById('note-'+taskId);var ok=await postPortalAction({action:'submit',taskId:taskId,note:note?note.value:''});if(ok){try{sessionStorage.removeItem(draftKey(taskId))}catch(_error){}location.reload()}}
 setupTabs();setupDrafts();setupBrief();setupProgramRequest();setupStudioEditing();
-setInterval(function(){var active=document.activeElement;var editing=active&&(active.tagName==='TEXTAREA'||active.tagName==='INPUT');if(!editing&&!hasDirtyDraft()&&!submitting)location.reload()},5000);
+setInterval(function(){var active=document.activeElement;var editing=active&&(active.tagName==='TEXTAREA'||active.tagName==='INPUT');if(!document.hidden&&!editing&&!hasDirtyDraft()&&!submitting)location.reload()},30000);
 </script></body></html>`
 }
