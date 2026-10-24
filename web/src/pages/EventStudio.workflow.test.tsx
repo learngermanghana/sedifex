@@ -9,13 +9,14 @@ const updateDoc = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock('firebase/firestore', () => ({
   getDoc,
   updateDoc,
+  runTransaction: vi.fn(async (_db, callback) => callback({ get: getDoc, update: updateDoc })),
   doc: vi.fn(() => ({})),
   collection: vi.fn(() => ({})),
   getDocs: vi.fn(),
   addDoc: vi.fn(),
   serverTimestamp: vi.fn(() => ({})),
 }))
-vi.mock('../firebase', () => ({ db: {} }))
+vi.mock('../firebase', () => ({ db: {}, functions: {} }))
 vi.mock('../hooks/useActiveStore', () => ({
   useActiveStore: () => ({ storeId: 'test-store', isLoading: false, error: null }),
 }))
