@@ -138,6 +138,11 @@ jobs:
           fi
           echo "FUNCTIONS_ONLY=$(printf '%s' "$FUNCTIONS_LIST" | sed 's/[^,]*/functions:&/g')" >> "$GITHUB_ENV"
 
+      - name: Verify client collaboration before deploying
+        run: |
+          node functions/test/eventClientCollaboration.test.js
+          node functions/test/studioClientSharing.test.js
+
       - name: Deploy Firebase Functions
         run: .github/scripts/deploy-functions-with-retry.sh
 
