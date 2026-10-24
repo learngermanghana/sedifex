@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
-import { db } from '../firebase'
+import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './EventStudio.css'
 import { copyStudioGrid, pasteStudioGrid, repositionStudioRow, dropStudioRow, studioOverview } from '../utils/eventStudioGrid'
@@ -89,6 +90,12 @@ const EVENT_TEMPLATES = [
   { id: 'fundraising', label: 'Fundraising', eventType: 'Charity / community', detail: 'Donations, pledges and guests', tools: ['checklist', 'programme', 'donations', 'guests', 'budget'] as ToolId[], tasks: ['Set fundraising target', 'Contact potential donors', 'Prepare programme'] },
 ] as const
 type TemplateId = typeof EVENT_TEMPLATES[number]['id']
+type ClientShareSettings = { details: boolean; checklist: boolean; programme: boolean }
+const NO_CLIENT_SHARING: ClientShareSettings = { details: false, checklist: false, programme: false }
+function readClientShareSettings(input: unknown): ClientShareSettings {
+  const source = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  return { details: source.details === true, checklist: source.checklist === true, programme: source.programme === true }
+}
 const TOOL_IDS = new Set<string>(TOOLS.map(tool => tool.id))
 const createId = () => `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const number = (value: unknown) => { const n = Number(value); return Number.isFinite(n) ? n : 0 }
@@ -126,6 +133,7 @@ function readStudio(value: unknown): Studio {
         const clean: SheetRow = { id: typeof values.id === 'string' && values.id ? values.id : `legacy-${tool.id}-${index}` }
         // Row-level notes are stored alongside the original columns; do not
         // drop them when hydrating an existing event, reordering or duplicating.
+        clean.studioClientShared = values.studioClientShared === 'yes' ? 'yes' : 'no'
         clean.detailNotes = typeof values.detailNotes === 'string' ? values.detailNotes : ''
         clean.internalNotes = typeof values.internalNotes === 'string' ? values.internalNotes : ''
         tool.fields.filter(field => field.type !== 'computed').forEach(field => {
@@ -140,7 +148,7 @@ function readStudio(value: unknown): Studio {
 }
 
 function makeRow(tool: Tool): SheetRow {
-  const row: SheetRow = { id: createId(), detailNotes: '', internalNotes: '' }
+  const row: SheetRow = { id: createId(), studioClientShared: 'no', detailNotes: '', internalNotes: '' }
   tool.fields.filter(field => field.type !== 'computed').forEach(field => {
     row[field.key] = field.type === 'select' ? field.options?.[0] || '' : ''
   })
@@ -271,7 +279,7 @@ export function EventStudioWorkspace() {
   const { storeId, isLoading: storeLoading, error: storeError } = useActiveStore()
   const [eventName, setEventName] = useState('')
   const [studio, setStudio] = useState<Studio | null>(null)
-  const [active, setActive] = useState<ToolId | 'overview' | 'details'>('checklist')
+  const [active, setActive] = useState<ToolId | 'overview' | 'details' | 'sharing'>('checklist')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [pageError, setPageError] = useState('')
@@ -287,6 +295,12 @@ export function EventStudioWorkspace() {
   const [eventDate, setEventDate] = useState('')
   const [details, setDetails] = useState<EventDetails>(() => readEventDetails({}))
   const [detailsStatus, setDetailsStatus] = useState<SaveStatus>('saved')
+  const [shareSettings, setShareSettings] = useState<ClientShareSettings>(NO_CLIENT_SHARING)
+  const [portalUrl, setPortalUrl] = useState('')
+  const [shareBusy, setShareBusy] = useState(false)
+  const [shareMessage, setShareMessage] = useState('')
+  const [shareError, setShareError] = useState('')
+  const savedStudio = useRef<Studio | null>(null)
   const detailsRevision = useRef(0)
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
   const draggingRow = useRef<string | null>(null)
@@ -313,6 +327,10 @@ export function EventStudioWorkspace() {
       const data = snapshot.data()
       const next = readStudio(data.eventStudio)
       setStudio(next)
+      savedStudio.current = next
+      setShareSettings(readClientShareSettings(data.eventStudioClientShare))
+      const portal = data.clientPortal && typeof data.clientPortal === 'object' ? data.clientPortal as Record<string, unknown> : {}
+      setPortalUrl(portal.status === 'active' && typeof portal.publicUrl === 'string' ? portal.publicUrl : '')
       setDetails(readEventDetails(data))
       detailsRevision.current = 0
       setDetailsStatus('saved')
@@ -333,10 +351,20 @@ export function EventStudioWorkspace() {
   const save = useCallback((next: Studio, version: number) => {
     if (!storeId || !eventId) return
     setSaveStatus('saving')
+    // Reject saves based on an older Studio snapshot rather than overwriting a
+    // client's newer changes. No extra background polling or write traffic.
     const request = writeQueue.current.catch(() => undefined).then(() =>
-      updateDoc(doc(db, 'stores', storeId, 'events', eventId), { eventStudio: next, updatedAt: serverTimestamp() }))
+      runTransaction(db, async transaction => {
+        const reference = doc(db, 'stores', storeId, 'events', eventId)
+        const snapshot = await transaction.get(reference)
+        if (!snapshot.exists()) throw new Error('EVENT_NOT_FOUND')
+        const remote = readStudio(snapshot.data().eventStudio)
+        if (JSON.stringify(remote) !== JSON.stringify(savedStudio.current)) throw new Error('STUDIO_CONFLICT')
+        transaction.update(reference, { eventStudio: next, updatedAt: serverTimestamp() })
+      }))
     writeQueue.current = request
     void request.then(() => {
+      savedStudio.current = next
       if (revision.current === version) { setSaveStatus('saved'); setLastSavedAt(new Date()) }
     }).catch(() => {
       if (revision.current === version) setSaveStatus('error')
@@ -453,7 +481,7 @@ export function EventStudioWorkspace() {
   }
 
   function changeCell(rowId: string, key: string, value: Cell) {
-    if (!studio || active === 'overview' || active === 'details') return
+    if (!studio || active === 'overview' || active === 'details' || active === 'sharing') return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].map(row => row.id === rowId ? { ...row, [key]: value } : row) } })
   }
 
@@ -607,7 +635,7 @@ export function EventStudioWorkspace() {
   }
 
   const selectedTools = useMemo(() => TOOLS.filter(tool => studio?.selected.includes(tool.id)), [studio?.selected])
-  const current = active === 'overview' || active === 'details' ? undefined : (selectedTools.find(tool => tool.id === active) || selectedTools[0])
+  const current = active === 'overview' || active === 'details' || active === 'sharing' ? undefined : (selectedTools.find(tool => tool.id === active) || selectedTools[0])
   const rows = current && studio ? studio.sheets[current.id] : []
   const visibleRows = rows
     .filter(row => !query.trim() || Object.values(row).some(cell => String(cell).toLowerCase().includes(query.toLowerCase())))
@@ -625,7 +653,7 @@ export function EventStudioWorkspace() {
   const sum = (key: string) => rows.reduce((total, row) => total + cellNumber(row, key), 0)
 
   if (storeLoading || loading) return <main className="event-studio workspace-page"><div className="event-studio__panel">Loading event workspace…</div></main>
-  if (storeError || pageError || !studio || (!current && active !== 'overview' && active !== 'details' && studio.selected.length)) {
+  if (storeError || pageError || !studio || (!current && active !== 'overview' && active !== 'details' && active !== 'sharing' && studio.selected.length)) {
     return <main className="event-studio workspace-page"><div className="event-studio__panel"><h1>Unable to open event</h1><p role="alert">{storeError || pageError || 'Workspace unavailable.'}</p><Link to="/event-planning">← Back to events</Link></div></main>
   }
 
