@@ -257,12 +257,16 @@ async function saveStudioEdits(){
   var allSaved=true;
   for(var i=0;i<items.length;i++){
     var el=items[i];
-    var ok=await postPortalAction({action:'studio_edit',edit:{sheet:el.getAttribute('data-studio-sheet'),rowId:el.getAttribute('data-studio-row'),field:el.getAttribute('data-studio-field'),expected:el.getAttribute('data-original'),value:el.value}});
+    // Users can keep typing while a request is in flight. Only the value
+    // actually submitted may become the new saved baseline.
+    var submittedValue=el.value;
+    var expectedValue=el.getAttribute('data-original');
+    var ok=await postPortalAction({action:'studio_edit',edit:{sheet:el.getAttribute('data-studio-sheet'),rowId:el.getAttribute('data-studio-row'),field:el.getAttribute('data-studio-field'),expected:expectedValue,value:submittedValue}});
     if(!ok){allSaved=false;break}
-    el.setAttribute('data-original',el.value)
+    el.setAttribute('data-original',submittedValue)
   }
   studioDirty=Array.prototype.some.call(document.querySelectorAll('[data-studio-field]'),function(el){return el.value!==el.getAttribute('data-original')});
-  if(status)status.textContent=allSaved?'Saved to the shared event.':'Save failed. Refresh to see the latest version before trying again.';
+  if(status)status.textContent=!allSaved?'Save failed. Review the latest version before retrying.':studioDirty?'Some edits were made during saving. Save again to keep them.':'Saved to the shared event.';
   if(button)button.disabled=false;
 }
 function collectBrief(){var brief={};document.querySelectorAll('[data-brief-field]').forEach(function(area){brief[area.getAttribute('data-brief-field')||'']=area.value||''});return brief}
