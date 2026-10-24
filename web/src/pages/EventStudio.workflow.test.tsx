@@ -21,7 +21,7 @@ vi.mock('../hooks/useActiveStore', () => ({
 }))
 import { EventStudioWorkspace } from './EventStudio'
 
-function mountWorkspace() {
+function mountWorkspace(initialEntries = ['/event-planning/test-event']) {
   updateDoc.mockClear()
   getDoc.mockResolvedValue({
     exists: () => true,
@@ -42,7 +42,7 @@ function mountWorkspace() {
     { path: '/event-planning/:eventId', element: <EventStudioWorkspace /> },
     { path: '/event-planning', element: <div>All events</div> },
     { path: '/sell', element: <div>Sidebar destination</div> },
-  ], { initialEntries: ['/event-planning/test-event'] })
+  ], { initialEntries, initialIndex: initialEntries.length - 1 })
   return { ...render(<RouterProvider router={router} />), router }
 }
 
@@ -88,4 +88,59 @@ describe('Event Studio activity workflow', () => {
     await user.click(screen.getByRole('tab', { name: 'Production Outline' }))
     expect(screen.getByRole('button', { name: 'Print production run sheet' })).toBeInTheDocument()
   })
+  it('warns on sidebar route changes and browser Back while event details are unsaved', async () => {
+    const user = userEvent.setup()
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { router } = mountWorkspace(['/sell', '/event-planning/test-event'])
+    try {
+      await screen.findByRole('heading', { name: 'Checklist' })
+      await user.click(screen.getByRole('tab', { name: 'Event Details' }))
+      fireEvent.change(screen.getByRole('textbox', { name: 'Venue' }), { target: { value: 'New Venue' } })
+      void router.navigate('/sell')
+      await waitFor(() => expect(confirmation).toHaveBeenCalled())
+      expect(router.state.location.pathname).toBe('/event-planning/test-event')
+      confirmation.mockClear()
+      void router.navigate(-1)
+      await waitFor(() => expect(confirmation).toHaveBeenCalled())
+      expect(router.state.location.pathname).toBe('/event-planning/test-event')
+      confirmation.mockReturnValue(true)
+      void router.navigate('/sell')
+      await waitFor(() => expect(screen.getByText('Sidebar destination')).toBeInTheDocument())
+    } finally {
+      confirmation.mockRestore()
+    }
+  })
+
+  it('lets saved event details navigate away without a confirmation', async () => {
+    const user = userEvent.setup()
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { router } = mountWorkspace()
+    try {
+      await screen.findByRole('heading', { name: 'Checklist' })
+      await user.click(screen.getByRole('tab', { name: 'Event Details' }))
+      fireEvent.change(screen.getByRole('textbox', { name: 'Venue' }), { target: { value: 'New Venue' } })
+      await user.click(screen.getByRole('button', { name: 'Save event details' }))
+      await waitFor(() => expect(screen.getByText('✓ Details saved')).toBeInTheDocument())
+      void router.navigate('/sell')
+      await waitFor(() => expect(screen.getByText('Sidebar destination')).toBeInTheDocument())
+      expect(confirmation).not.toHaveBeenCalled()
+    } finally {
+      confirmation.mockRestore()
+    }
+  })
+
+  it('removes the printed date after the user clears and saves event date', async () => {
+    const user = userEvent.setup()
+    mountWorkspace()
+    await screen.findByRole('heading', { name: 'Checklist' })
+    const print = document.querySelector('.event-studio__print-programme')
+    expect(print?.textContent).toContain('2026-12-12')
+    await user.click(screen.getByRole('tab', { name: 'Event Details' }))
+    fireEvent.change(screen.getByLabelText('Event date'), { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: 'Save event details' }))
+    await waitFor(() => expect(screen.getByText('✓ Details saved')).toBeInTheDocument())
+    expect(updateDoc.mock.calls.at(-1)?.[1]).toMatchObject({ eventDate: '' })
+    expect(print?.textContent).not.toContain('2026-12-12')
+  })
+
 })
