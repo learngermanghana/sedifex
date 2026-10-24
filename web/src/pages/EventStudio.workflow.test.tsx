@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 
 const getDoc = vi.hoisted(() => vi.fn())
 const updateDoc = vi.hoisted(() => vi.fn(async () => undefined))
@@ -38,9 +38,12 @@ function mountWorkspace() {
       } },
     }),
   })
-  return render(<MemoryRouter initialEntries={['/event-planning/test-event']}>
-    <Routes><Route path="/event-planning/:eventId" element={<EventStudioWorkspace />} /></Routes>
-  </MemoryRouter>)
+  const router = createMemoryRouter([
+    { path: '/event-planning/:eventId', element: <EventStudioWorkspace /> },
+    { path: '/event-planning', element: <div>All events</div> },
+    { path: '/sell', element: <div>Sidebar destination</div> },
+  ], { initialEntries: ['/event-planning/test-event'] })
+  return { ...render(<RouterProvider router={router} />), router }
 }
 
 describe('Event Studio activity workflow', () => {
