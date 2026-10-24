@@ -1,7 +1,7 @@
 /** The public client portal may see and edit only explicitly shared Event Studio fields. */
 type RecordMap = Record<string, unknown>
 export type StudioSheet = 'checklist' | 'programme'
-export type StudioClientField = 'task' | 'owner' | 'due' | 'status' | 'detailNotes' | 'start' | 'item' | 'person' | 'minutes' | 'notes'
+export type StudioClientField = 'task' | 'owner' | 'due' | 'detailNotes' | 'start' | 'item' | 'person' | 'minutes' | 'notes'
 const SHARE_FIELDS: Record<StudioSheet, readonly string[]> = {
   checklist: ['task', 'owner', 'due', 'detailNotes'],
   programme: ['start', 'item', 'person', 'minutes', 'notes', 'detailNotes'],
@@ -12,7 +12,7 @@ function obj(value: unknown): RecordMap {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as RecordMap : {}
 }
 function str(value: unknown, max = 3000) {
-  return typeof value === 'string' ? value.slice(0, max) : ''
+  return typeof value === 'string' ? value.slice(0, max) : typeof value === 'number' && Number.isFinite(value) ? String(value).slice(0, max) : ''
 }
 function hasSheet(value: unknown): value is StudioSheet {
   return value === 'checklist' || value === 'programme'
