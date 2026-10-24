@@ -28,7 +28,7 @@ export function sharedStudioSnapshot(event: RecordMap) {
     if (settings[sheet] !== true) continue
     const rows = sheets[sheet]
     if (!Array.isArray(rows)) continue
-    result[sheet] = rows.filter(row => obj(row).clientVisible === true).map(raw => {
+    result[sheet] = rows.filter(row => obj(row).studioClientShared === 'yes').map(raw => {
       const row = obj(raw)
       const safe: Record<string, string> = { id: str(row.id, 220) }
       for (const field of SHARE_FIELDS[sheet]) safe[field] = str(row[field], field === 'detailNotes' ? 3000 : 300)
@@ -61,7 +61,7 @@ export function applySharedStudioEdit(event: RecordMap, edit: StudioEdit): Recor
   const rows = sheets[edit.sheet]
   if (!Array.isArray(rows)) throw new Error('STUDIO_FORBIDDEN')
   const index = rows.findIndex(item => str(obj(item).id, 220) === edit.rowId)
-  if (index < 0 || obj(rows[index]).clientVisible !== true) throw new Error('STUDIO_FORBIDDEN')
+  if (index < 0 || obj(rows[index]).studioClientShared !== 'yes') throw new Error('STUDIO_FORBIDDEN')
   const old = obj(rows[index])
   const current = str(old[field], field === 'detailNotes' ? 3000 : 300)
   if (current !== edit.expected) throw new Error('STUDIO_CONFLICT')
