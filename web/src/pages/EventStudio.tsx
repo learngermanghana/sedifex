@@ -418,10 +418,11 @@ export function EventStudioWorkspace() {
   }
 
   async function refreshSharedEdits() {
-    if (!storeId || !eventId || saveStatus !== 'saved' || detailsStatus !== 'saved') {
-      setShareError('Save your changes before refreshing the shared event.')
+    if (!storeId || !eventId || detailsStatus !== 'saved' || saveStatus === 'saving' || saveStatus === 'unsaved') {
+      setShareError('Save your pending changes before refreshing the shared event.')
       return
     }
+    if (saveStatus === 'error' && !window.confirm('Your local spreadsheet changes could not be saved, possibly because the client edited the same event. Reload the latest saved data and discard your unsaved edits?')) return
     setShareError('')
     try {
       const latest = await getDoc(doc(db, 'stores', storeId, 'events', eventId))
@@ -429,7 +430,9 @@ export function EventStudioWorkspace() {
       const event = latest.data()
       const nextStudio = readStudio(event.eventStudio)
       savedStudio.current = nextStudio
+      revision.current += 1
       setStudio(nextStudio)
+      setSaveStatus('saved')
       const nextDetails = readEventDetails(event)
       savedDetails.current = nextDetails
       setDetails(nextDetails)
