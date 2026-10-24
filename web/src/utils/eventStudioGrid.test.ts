@@ -110,7 +110,7 @@ describe('Event Studio grid tools', () => {
     expect(rows.map(row => row.id)).toEqual(['arrival', 'opening', 'welcome'])
     expect(dropStudioRow(rows, 'arrival', 'arrival')).toBe(rows)
     expect(dropStudioRow(rows, 'missing', 'opening')).toBe(rows)
-    expect(dropStudioRow(rows, 'welcome', 'arrival', true)).toEqual(rows)
+    expect(dropStudioRow(rows, 'welcome', 'arrival', true).map(row => row.id)).toEqual(['arrival', 'welcome', 'opening'])
   })
 
   it('derives overview without requesting anything from the database', () => {
