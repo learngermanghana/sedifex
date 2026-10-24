@@ -485,6 +485,22 @@ export function EventStudioWorkspace() {
     }
   }
 
+  async function disableClientLink() {
+    if (!storeId || !eventId || shareBusy || !portalUrl || !window.confirm('Disable this client link? The client will no longer be able to access or edit the event with it.')) return
+    setShareBusy(true)
+    setShareError('')
+    try {
+      const share = httpsCallable<{ storeId: string; eventId: string; revokeOnly: boolean }, { ok: boolean }>(functions, 'shareEventClientPortal')
+      await share({ storeId, eventId, revokeOnly: true })
+      setPortalUrl('')
+      setShareMessage('Client link disabled. Generate a new link when you want to share again.')
+    } catch {
+      setShareError('Could not disable the client link. Try again.')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
   async function copyClientLink() {
     try {
       await navigator.clipboard.writeText(portalUrl)
@@ -837,6 +853,7 @@ export function EventStudioWorkspace() {
             <div className="event-studio__share-actions">
               <button type="button" className="event-studio__primary" disabled={shareBusy} onClick={() => void createClientLink()}>{shareBusy ? 'Working…' : portalUrl ? 'Regenerate client link' : 'Create client link'}</button>
               {portalUrl && <button type="button" className="event-studio__plain-button" onClick={() => void copyClientLink()}>Copy link</button>}
+              {portalUrl && <button type="button" className="event-studio__plain-button" onClick={() => void disableClientLink()}>Disable link</button>
               {portalUrl && <a href={portalUrl} target="_blank" rel="noreferrer" className="event-studio__plain-button">Open client view ↗</a>}
               <button type="button" className="event-studio__plain-button" onClick={() => void refreshSharedEdits()}>Refresh client changes</button>
             </div>
