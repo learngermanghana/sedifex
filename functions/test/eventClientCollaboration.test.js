@@ -134,7 +134,9 @@ assert.ok(html.includes('data-tab-button="program"'), 'Program tab should be ren
 assert.ok(html.includes('data-tab-button="tasks"'), 'My Tasks tab should be rendered')
 assert.ok(html.includes('data-tab-button="updates"'), 'Updates tab should be rendered')
 assert.ok(html.includes('function tabFromHash()'), 'selected portal tab should survive automatic page refreshes')
-assert.ok(html.includes("portalTabs=['event','program','tasks','updates']"), 'portal should limit tab navigation to the four supported sections')
+assert.ok(html.includes('data-tab-button="studio"'), 'Shared Plan tab should be rendered')
+assert.ok(html.includes("portalTabs=['event','program','tasks','studio','updates']"), 'portal should limit tab navigation to the five supported sections')
+assert.ok(html.includes("action:'studio_edit'"), 'Studio edits must use the secure server action')
 assert.ok(html.includes('tasks verified'), 'portal progress label must match the verified-only progress calculation')
 assert.ok(!html.includes('tasks completed</span>'), 'portal must not describe verified-only progress as completed tasks')
 
