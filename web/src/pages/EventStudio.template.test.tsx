@@ -12,11 +12,12 @@ vi.mock('firebase/firestore', () => ({
   getDocs: mockGetDocs,
   getDoc: vi.fn(),
   updateDoc: vi.fn(),
+  runTransaction: vi.fn(),
   doc: vi.fn(() => ({})),
   collection: vi.fn(() => ({})),
   serverTimestamp: vi.fn(() => ({})),
 }))
-vi.mock('../firebase', () => ({ db: {} }))
+vi.mock('../firebase', () => ({ db: {}, functions: {} }))
 vi.mock('../hooks/useActiveStore', () => ({
   useActiveStore: () => ({ storeId: 'test-store', isLoading: false, error: null }),
 }))

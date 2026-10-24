@@ -4,18 +4,21 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 
+const shareCallable = vi.hoisted(() => vi.fn(async () => ({ data: { portalUrl: 'https://example.org/client?token=secure' } })))
 const getDoc = vi.hoisted(() => vi.fn())
 const updateDoc = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock('firebase/firestore', () => ({
   getDoc,
   updateDoc,
+  runTransaction: vi.fn(async (_db, callback) => callback({ get: getDoc, update: updateDoc })),
   doc: vi.fn(() => ({})),
   collection: vi.fn(() => ({})),
   getDocs: vi.fn(),
   addDoc: vi.fn(),
   serverTimestamp: vi.fn(() => ({})),
 }))
-vi.mock('../firebase', () => ({ db: {} }))
+vi.mock('../firebase', () => ({ db: {}, functions: {} }))
+vi.mock('firebase/functions', () => ({ httpsCallable: () => shareCallable }))
 vi.mock('../hooks/useActiveStore', () => ({
   useActiveStore: () => ({ storeId: 'test-store', isLoading: false, error: null }),
 }))
@@ -142,5 +145,70 @@ describe('Event Studio activity workflow', () => {
     expect(updateDoc.mock.calls.at(-1)?.[1]).toMatchObject({ eventDate: '' })
     expect(print?.textContent).not.toContain('2026-12-12')
   })
+
+  it('creates a link without triggering email and lets staff opt in to sharing', async () => {
+    const user = userEvent.setup()
+    mountWorkspace()
+    await screen.findByRole('heading', { name: 'Checklist' })
+    await user.click(screen.getByRole('tab', { name: 'Share with client' }))
+    expect(screen.getByRole('heading', { name: 'Share your event safely' })).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Event date, time and venue' }))
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(updateDoc.mock.calls.at(-1)?.[1]).toMatchObject({
+      eventStudioClientShare: { details: true, checklist: false, programme: false },
+    })
+    await user.click(screen.getByRole('button', { name: 'Create client link' }))
+    await waitFor(() => expect(shareCallable).toHaveBeenCalled())
+    expect(shareCallable).toHaveBeenCalledWith({ storeId: 'test-store', eventId: 'test-event', copyOnly: true })
+    expect(screen.getByRole('textbox', { name: 'Current client link' })).toHaveValue('https://example.org/client?token=secure')
+  })
+
+  it('explicitly marks checklist rows for client sharing without sharing their private notes', async () => {
+    const user = userEvent.setup()
+    mountWorkspace()
+    await screen.findByRole('heading', { name: 'Checklist' })
+    await user.click(screen.getByRole('button', { name: 'Share row 1 with client' }))
+    expect(screen.getByRole('button', { name: 'Unshare row 1 with client' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: /Save now/ }))
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(updateDoc.mock.calls.at(-1)?.[1].eventStudio.sheets.checklist[0]).toMatchObject({
+      id: 'arrival', studioClientShared: 'yes', internalNotes: 'Staff briefing',
+    })
+  })
+
+  it('allows confirmed recovery from a stale Event Details save after the client edits that field', async () => {
+    const user = userEvent.setup()
+    mountWorkspace()
+    await screen.findByRole('heading', { name: 'Checklist' })
+    await user.click(screen.getByRole('tab', { name: 'Event Details' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Venue' }), { target: { value: 'Organiser venue' } })
+
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        title: 'Annual Dinner', eventDate: '2026-12-12', venue: 'Venue edited by client',
+        eventStudio: { selected: ['checklist', 'programme', 'production'], sheets: {
+          checklist: [{ id: 'arrival', task: 'Guest arrival', detailNotes: 'Door A', internalNotes: 'Staff briefing' }, { id: 'opening', task: 'Opening prayer' }],
+          programme: [{ id: 'guest-item', start: '09:00', item: 'Welcome', person: 'MC', internalNotes: 'Do not print this instruction' }],
+          production: [{ id: 'staff-item', start: '08:00', segment: 'Sound check', cue: 'Check microphones', lead: 'Technical', internalNotes: 'Backup microphone by the stage' }],
+        } },
+      }),
+    })
+    await user.click(screen.getByRole('button', { name: 'Save event details' }))
+    expect(await screen.findByText('Details could not be saved; retry.')).toBeInTheDocument()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    try {
+      await user.click(screen.getByRole('tab', { name: 'Share with client' }))
+      await user.click(screen.getByRole('button', { name: 'Refresh client changes' }))
+      await waitFor(() => expect(screen.getByText('Latest shared changes loaded.')).toBeInTheDocument())
+      expect(confirm).toHaveBeenCalled()
+      await user.click(screen.getByRole('tab', { name: 'Event Details' }))
+      expect(screen.getByRole('textbox', { name: 'Venue' })).toHaveValue('Venue edited by client')
+      expect(screen.getByText('✓ Details saved')).toBeInTheDocument()
+    } finally {
+      confirm.mockRestore()
+    }
+  })
+
 
 })

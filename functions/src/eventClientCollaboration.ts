@@ -5,6 +5,7 @@ import { sendEventContractEmail } from './eventContractEmail'
 import { hashPublicContractToken } from './eventContractSigningCore'
 import { eventClientPortalHtml, type EventClientPortalPageData } from './eventClientPortalPage'
 import { loadClientProgramForPortal } from './eventProgramCollaboration'
+import { applySharedStudioEdit, sharedStudioSnapshot, type StudioEdit } from './studioClientSharing'
 import { fingerprintProgramSnapshot } from './eventProgramApproval'
 import {
   effectiveClientTaskState,
@@ -204,6 +205,7 @@ async function portalData(rawToken: string): Promise<EventClientPortalPageData &
       brandColor: text(brand.brandColor, 40) || '#4f46e5',
     },
     brief: clientBriefFields(clientBrief),
+    sharedStudio: sharedStudioSnapshot(loaded.eventData),
     briefUpdatedAt: isoDate(clientBrief.clientUpdatedAt),
     program,
     tasks,
@@ -226,6 +228,9 @@ function errorMessage(error: unknown) {
   if (message === 'PROGRAM_CHANGE_REQUIRED') return 'Describe the program change you want the event team to make.'
   if (message === 'PROGRAM_APPROVAL_NOT_REQUIRED') return 'This program does not require client approval.'
   if (message === 'PROGRAM_ALREADY_APPROVED') return 'You already approved this program.'
+  if (message === 'STUDIO_CONFLICT') return 'This item changed since you opened it. Refresh to see the latest version before saving.'
+  if (message === 'STUDIO_FORBIDDEN') return 'The event team has not shared this field for editing.'
+  if (message === 'STUDIO_INVALID') return 'This change was not valid. Check the field and try again.'
   if (message === 'PROGRAM_CHANGED') return 'The program changed after this page loaded. Review the latest version before approving.'
   return 'This client portal link is invalid or no longer available.'
 }
@@ -238,6 +243,21 @@ export const shareEventClientPortal = functions.https.onCall(async (data, contex
 
   const storeData = await assertStoreAccess(storeId, context.auth.uid)
   const eventRef = defaultDb.collection('stores').doc(storeId).collection('events').doc(eventId)
+  if (data?.revokeOnly === true) {
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    await defaultDb.runTransaction(async transaction => {
+      const snapshot = await transaction.get(eventRef)
+      if (!snapshot.exists) throw new functions.https.HttpsError('not-found', 'Event not found')
+      const portal = record(record(snapshot.data()).clientPortal)
+      const hash = text(portal.publicLinkHash, 100)
+      if (hash) {
+        const linkRef = defaultDb.collection('eventClientLinks').doc(hash)
+        transaction.set(linkRef, { status: 'revoked', revokedAt: now, updatedAt: now }, { merge: true })
+      }
+      transaction.update(eventRef, { clientPortal: { status: 'revoked', publicLinkHash: '', publicUrl: '', revokedAt: now }, updatedAt: now })
+    })
+    return { ok: true, portalUrl: '', expiresAt: '', deliveries: 0 }
+  }
   const [eventSnapshot, visibleTasks] = await Promise.all([
     eventRef.get(),
     eventRef.collection('tasks').where('clientVisible', '==', true).get(),
@@ -245,9 +265,10 @@ export const shareEventClientPortal = functions.https.onCall(async (data, contex
   if (!eventSnapshot.exists) throw new functions.https.HttpsError('not-found', 'Event not found')
 
   const eventData = eventSnapshot.data() as RecordMap
+  const copyOnly = data?.copyOnly === true
   const recipientEmail = email(eventData.clientEmail)
   const recipientName = text(eventData.clientName, 180) || 'Client'
-  if (!recipientEmail) throw new functions.https.HttpsError('failed-precondition', 'Add the client email before sharing the client portal')
+  if (!recipientEmail && !copyOnly) throw new functions.https.HttpsError('failed-precondition', 'Add the client email before emailing the client portal')
 
   const token = createToken()
   const tokenHash = hashPublicContractToken(token)
@@ -296,7 +317,7 @@ export const shareEventClientPortal = functions.https.onCall(async (data, contex
     })
   })
 
-  const delivery = await sendEventContractEmail({
+  const delivery = copyOnly ? { ok: false } : await sendEventContractEmail({
     storeId,
     eventType: 'event.client_portal_shared',
     reference: `${eventId}-client-portal-${tokenHash.slice(0, 12)}`,
@@ -337,6 +358,29 @@ export const eventClientPortal = functions.https.onRequest(async (req, res) => {
       const action = text(req.body?.action, 40)
       const loaded = await loadPortalLink(rawToken)
       const now = admin.firestore.FieldValue.serverTimestamp()
+
+      if (action === 'studio_edit') {
+        const edit = req.body?.edit as StudioEdit | undefined
+        if (!edit || typeof edit !== 'object' || typeof edit.sheet !== 'string'
+            || typeof edit.field !== 'string' || typeof edit.expected !== 'string'
+            || typeof edit.value !== 'string'
+            || (edit.sheet !== 'details' && typeof edit.rowId !== 'string')) throw new Error('STUDIO_INVALID')
+        if (edit.expected.length > 3000 || edit.value.length > 3000) throw new Error('STUDIO_INVALID')
+        await defaultDb.runTransaction(async transaction => {
+          const linkSnapshot = await transaction.get(loaded.linkRef)
+          const eventSnapshot = await transaction.get(loaded.eventRef)
+          if (!linkSnapshot.exists || !eventSnapshot.exists) throw new Error('INVALID_LINK')
+          const link = linkSnapshot.data() as unknown as ClientPortalLink
+          if (link.status !== 'active' || link.expiresAt.toMillis() < Date.now()) throw new Error('LINK_EXPIRED')
+          const eventData = eventSnapshot.data() as RecordMap
+          const livePortal = record(eventData.clientPortal)
+          if (text(livePortal.publicLinkHash, 100) !== linkSnapshot.id || text(livePortal.status, 40) !== 'active') throw new Error('LINK_REVOKED')
+          const changes = applySharedStudioEdit(eventData, edit)
+          transaction.update(loaded.eventRef, { ...changes, updatedAt: now })
+        })
+        res.json({ ok: true })
+        return
+      }
 
       if (action === 'save_brief') {
         const brief = clientBriefFields(req.body?.brief)

@@ -1,0 +1,36 @@
+name: Client Studio Sharing Security CI
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'functions/src/eventClientCollaboration.ts'
+      - 'functions/src/eventClientPortalPage.ts'
+      - 'functions/src/studioClientSharing.ts'
+      - 'functions/src/studioClientSharingHtml.ts'
+      - 'functions/test/studioClientSharing.test.js'
+      - '.github/workflows/studio-client-sharing-ci.yml'
+
+jobs:
+  test-client-sharing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - name: Install Firebase Functions packages
+        run: npm ci
+        working-directory: functions
+      - name: Typecheck and compile secure client portal
+        run: npm run build
+        working-directory: functions
+      - name: Test existing portal collaboration
+        run: node test/eventClientCollaboration.test.js
+        working-directory: functions
+      - name: Test shared-row permission boundaries and safe rendering
+        run: node test/studioClientSharing.test.js
+        working-directory: functions
