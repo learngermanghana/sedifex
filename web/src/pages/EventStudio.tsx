@@ -418,11 +418,11 @@ export function EventStudioWorkspace() {
   }
 
   async function refreshSharedEdits() {
-    if (!storeId || !eventId || detailsStatus !== 'saved' || saveStatus === 'saving' || saveStatus === 'unsaved') {
+    if (!storeId || !eventId || saveStatus === 'saving' || saveStatus === 'unsaved' || detailsStatus === 'saving' || detailsStatus === 'unsaved') {
       setShareError('Save your pending changes before refreshing the shared event.')
       return
     }
-    if (saveStatus === 'error' && !window.confirm('Your local spreadsheet changes could not be saved, possibly because the client edited the same event. Reload the latest saved data and discard your unsaved edits?')) return
+    if ((saveStatus === 'error' || detailsStatus === 'error') && !window.confirm('Some local edits could not be saved, possibly because the client changed the event. Reload the latest saved version and discard your unsaved edits?')) return
     setShareError('')
     try {
       const latest = await getDoc(doc(db, 'stores', storeId, 'events', eventId))
@@ -435,7 +435,9 @@ export function EventStudioWorkspace() {
       setSaveStatus('saved')
       const nextDetails = readEventDetails(event)
       savedDetails.current = nextDetails
+      detailsRevision.current += 1
       setDetails(nextDetails)
+      setDetailsStatus('saved')
       setShareSettings(readClientShareSettings(event.eventStudioClientShare))
       const portal = event.clientPortal && typeof event.clientPortal === 'object' ? event.clientPortal as Record<string, unknown> : {}
       setPortalUrl(portal.status === 'active' && typeof portal.publicUrl === 'string' ? portal.publicUrl : '')
