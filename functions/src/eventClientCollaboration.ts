@@ -243,6 +243,21 @@ export const shareEventClientPortal = functions.https.onCall(async (data, contex
 
   const storeData = await assertStoreAccess(storeId, context.auth.uid)
   const eventRef = defaultDb.collection('stores').doc(storeId).collection('events').doc(eventId)
+  if (data?.revokeOnly === true) {
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    await defaultDb.runTransaction(async transaction => {
+      const snapshot = await transaction.get(eventRef)
+      if (!snapshot.exists) throw new functions.https.HttpsError('not-found', 'Event not found')
+      const portal = record(record(snapshot.data()).clientPortal)
+      const hash = text(portal.publicLinkHash, 100)
+      if (hash) {
+        const linkRef = defaultDb.collection('eventClientLinks').doc(hash)
+        transaction.set(linkRef, { status: 'revoked', revokedAt: now, updatedAt: now }, { merge: true })
+      }
+      transaction.update(eventRef, { clientPortal: { status: 'revoked', publicLinkHash: '', publicUrl: '', revokedAt: now }, updatedAt: now })
+    })
+    return { ok: true, portalUrl: '', expiresAt: '', deliveries: 0 }
+  }
   const [eventSnapshot, visibleTasks] = await Promise.all([
     eventRef.get(),
     eventRef.collection('tasks').where('clientVisible', '==', true).get(),
