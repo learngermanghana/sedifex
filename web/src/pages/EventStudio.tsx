@@ -855,7 +855,7 @@ export function EventStudioWorkspace() {
             <div className="event-studio__share-actions">
               <button type="button" className="event-studio__primary" disabled={shareBusy} onClick={() => void createClientLink()}>{shareBusy ? 'Working…' : portalUrl ? 'Regenerate client link' : 'Create client link'}</button>
               {portalUrl && <button type="button" className="event-studio__plain-button" onClick={() => void copyClientLink()}>Copy link</button>}
-              {portalUrl && <button type="button" className="event-studio__plain-button" onClick={() => void disableClientLink()}>Disable link</button>
+              {portalUrl && <button type="button" className="event-studio__plain-button" onClick={() => void disableClientLink()}>Disable link</button>}
               {portalUrl && <a href={portalUrl} target="_blank" rel="noreferrer" className="event-studio__plain-button">Open client view ↗</a>}
               <button type="button" className="event-studio__plain-button" onClick={() => void refreshSharedEdits()}>Refresh client changes</button>
             </div>
