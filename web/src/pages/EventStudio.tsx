@@ -572,6 +572,14 @@ export function EventStudioWorkspace() {
     setSelectedRowId(null)
   }
 
+  function toggleSharedRow(rowId: string) {
+    if (!studio || (active !== 'checklist' && active !== 'programme')) return
+    const next = studio.sheets[active].map(row => row.id === rowId
+      ? { ...row, studioClientShared: row.studioClientShared === 'yes' ? 'no' : 'yes' }
+      : row)
+    edit({ ...studio, sheets: { ...studio.sheets, [active]: next } })
+  }
+
   function changeCell(rowId: string, key: string, value: Cell) {
     if (!studio || active === 'overview' || active === 'details' || active === 'sharing') return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].map(row => row.id === rowId ? { ...row, [key]: value } : row) } })
@@ -763,7 +771,7 @@ export function EventStudioWorkspace() {
         </div>
         <div className="event-studio__workspace-controls">
           <div className={`event-studio__save-state event-studio__save-state--${saveStatus}`} role="status" aria-live="polite">
-            {saveStatus === 'saved' ? (lastSavedAt ? `✓ Saved at ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '✓ Saved') : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Save failed — retry' : 'Unsaved changes'}
+            {saveStatus === 'saved' ? (lastSavedAt ? `✓ Saved at ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '✓ Saved') : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Remote changes detected or save failed — refresh shared changes' : 'Unsaved changes'}
             {(saveStatus === 'error' || saveStatus === 'unsaved') && <button type="button" onClick={() => save(studio, revision.current)}>Save now</button>}
           </div>
           <button type="button" className="event-studio__plain-button event-studio__focus-button" onClick={() => setFocusMode(value => !value)} aria-pressed={focusMode}>
@@ -933,6 +941,7 @@ export function EventStudioWorkspace() {
                           <input aria-label={`${field.label} row ${rowNumber}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onPaste={e => pasteCells(e, row.id, field.key)} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                       </td>)}
                       <td className="event-studio__number event-studio__row-actions">
+                        {(current.id === 'checklist' || current.id === 'programme') && <button type="button" className={`event-studio__share-row${row.studioClientShared === 'yes' ? ' is-shared' : ''}`} aria-label={`${row.studioClientShared === 'yes' ? 'Unshare' : 'Share'} row ${rowNumber} with client`} aria-pressed={row.studioClientShared === 'yes'} onClick={() => toggleSharedRow(row.id)}>{row.studioClientShared === 'yes' ? 'Shared' : 'Share'}</button>}
                         <button type="button" className={`event-studio__note-toggle${row.detailNotes || row.internalNotes ? ' has-notes' : ''}`} aria-expanded={expandedRowId === row.id} aria-label={`Notes for row ${rowNumber}`} title="Activity notes" onClick={() => { setSelectedRowId(row.id); setExpandedRowId(expandedRowId === row.id ? null : row.id) }}>✎</button>
                         <button type="button" className="event-studio__remove" aria-label={`Remove row ${rowNumber}`} title="Remove row" onClick={() => removeRow(row.id)}>×</button>
                       </td>
@@ -964,6 +973,7 @@ export function EventStudioWorkspace() {
                   <div className="event-studio__mobile-row-actions">
                     <button type="button" disabled={Boolean(sortBy || query.trim()) || rows[0]?.id === row.id} onClick={() => { setSelectedRowId(row.id); const next = repositionStudioRow(rows, row.id, -1); if (next !== rows && studio) edit({ ...studio, sheets: { ...studio.sheets, [current.id]: next } }) }}>↑</button>
                     <button type="button" disabled={Boolean(sortBy || query.trim()) || rows[rows.length - 1]?.id === row.id} onClick={() => { setSelectedRowId(row.id); const next = repositionStudioRow(rows, row.id, 1); if (next !== rows && studio) edit({ ...studio, sheets: { ...studio.sheets, [current.id]: next } }) }}>↓</button>
+                    {(current.id === 'checklist' || current.id === 'programme') && <button type="button" onClick={() => toggleSharedRow(row.id)}>{row.studioClientShared === 'yes' ? 'Shared ✓' : 'Share'}</button>}
                     <button type="button" onClick={() => { setSelectedRowId(row.id); setExpandedRowId(expandedRowId === row.id ? null : row.id) }}>Notes{row.detailNotes || row.internalNotes ? ' ●' : ''}</button>
                     <button type="button" onClick={() => removeRow(row.id)}>Remove</button>
                   </div>
@@ -977,7 +987,7 @@ export function EventStudioWorkspace() {
             </div>}
             <footer className="event-studio__sheet-footer">
               <span>Drag ⠿ to reorder rows · Use Notes for instructions · Enter moves down · Paste Excel cells</span>
-              <span>Edits save automatically</span>
+              <span>Edits save automatically · Refresh shared client changes from the sharing tab</span>
             </footer>
           </div>
         ) : <div className="event-studio__blank">Choose your first tool above to open a spreadsheet.</div>}
