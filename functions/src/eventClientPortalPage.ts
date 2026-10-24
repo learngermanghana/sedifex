@@ -209,7 +209,7 @@ export function eventClientPortalHtml(data: EventClientPortalPageData, token: st
 <button id="portal-tab-event" class="portal-tab" type="button" role="tab" aria-selected="true" aria-controls="portal-panel-event" data-tab-button="event" onclick="setPortalTab('event')">My Event</button>
 <button id="portal-tab-program" class="portal-tab" type="button" role="tab" aria-selected="false" aria-controls="portal-panel-program" data-tab-button="program" onclick="setPortalTab('program')">Program</button>
 <button id="portal-tab-tasks" class="portal-tab" type="button" role="tab" aria-selected="false" aria-controls="portal-panel-tasks" data-tab-button="tasks" onclick="setPortalTab('tasks')">My Tasks</button>
-<button id="portal-tab-studio" class="portal-tab" type="button" role="tab" aria-selected="false" aria-controls="portal-panel-studio" data-tab-button="studio">Shared Plan</button>
+<button id="portal-tab-studio" class="portal-tab" type="button" role="tab" aria-selected="false" aria-controls="portal-panel-studio" data-tab-button="studio" onclick="setPortalTab('studio')">Shared Plan</button>
 <button id="portal-tab-updates" class="portal-tab" type="button" role="tab" aria-selected="false" aria-controls="portal-panel-updates" data-tab-button="updates" onclick="setPortalTab('updates')">Updates</button>
 </nav>
 <section id="portal-panel-event" class="tab-panel" data-tab-panel="event" role="tabpanel" aria-labelledby="portal-tab-event">
