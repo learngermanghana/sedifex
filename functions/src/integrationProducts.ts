@@ -329,8 +329,8 @@ function withCurrencyConversion(item: IntegrationProductItem, rates: CurrencyRat
 function dedupeItems(items: IntegrationProductItem[], canonicalItems: IntegrationProductItem[] = []) {
   // Public listings and store-scoped copies can lag behind edits to root catalog items.
   // For matching tour IDs, prefer the original product/service document to its mirror.
-  const canonicalTours = new Map(
-    canonicalItems.filter(item => item.tour !== null).map(item => [`${item.itemType}:${item.id}`, item]),
+  const canonicalTours = new Map<string, IntegrationProductItem>(
+    canonicalItems.filter(item => item.tour !== null).map(item => [`${item.itemType}:${item.id}`, item] as const),
   )
   const seen = new Set<string>()
   const output: IntegrationProductItem[] = []
