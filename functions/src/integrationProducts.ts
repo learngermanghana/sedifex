@@ -163,10 +163,11 @@ function itineraryValue(value: unknown): Array<{ day: number; title: string; des
       return {
         day: Math.max(1, Math.floor(numberValue(record.day) ?? index + 1)),
         title: cleanIntegrationText(record.title, 220),
-        description: cleanIntegrationText(record.description, 1200),
+        description: cleanIntegrationText(record.description, 8000),
       }
     })
     .filter(entry => entry.title || entry.description)
+    .sort((a, b) => a.day - b.day)
 }
 
 function itemTypeFromCatalogType(type: CatalogType) {
@@ -325,7 +326,12 @@ function withCurrencyConversion(item: IntegrationProductItem, rates: CurrencyRat
   }
 }
 
-function dedupeItems(items: IntegrationProductItem[]) {
+function dedupeItems(items: IntegrationProductItem[], canonicalItems: IntegrationProductItem[] = []) {
+  // Public listings and store-scoped copies can lag behind edits to root catalog items.
+  // For matching tour IDs, prefer the original product/service document to its mirror.
+  const canonicalTours = new Map<string, IntegrationProductItem>(
+    canonicalItems.filter(item => item.tour !== null).map(item => [`${item.itemType}:${item.id}`, item] as const),
+  )
   const seen = new Set<string>()
   const output: IntegrationProductItem[] = []
 
@@ -333,7 +339,7 @@ function dedupeItems(items: IntegrationProductItem[]) {
     const key = `${item.itemType}:${item.id}`
     if (seen.has(key)) continue
     seen.add(key)
-    output.push(item)
+    output.push(canonicalTours.get(key) ?? item)
   }
 
   return output
@@ -379,7 +385,7 @@ async function getStoreItems(storeId: string) {
       ...rootProducts,
       ...rootServices,
       ...rootCourses,
-    ]),
+    ], [...rootProducts, ...rootServices, ...rootCourses]),
   ).slice(0, MAX_RETURN_ITEMS)
 }
 
