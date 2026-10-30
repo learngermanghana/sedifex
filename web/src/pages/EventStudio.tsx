@@ -369,7 +369,7 @@ export function EventStudioWorkspace() {
         const snapshot = await transaction.get(reference)
         if (!snapshot.exists()) throw new Error('EVENT_NOT_FOUND')
         const remote = readStudio(snapshot.data().eventStudio)
-        if (JSON.stringify(remote) !== JSON.stringify(readStudio(savedStudio.current))) throw new Error('STUDIO_CONFLICT')
+        if (JSON.stringify(readStudio(remote)) !== JSON.stringify(readStudio(savedStudio.current))) throw new Error('STUDIO_CONFLICT')
         transaction.update(reference, { eventStudio: next, updatedAt: serverTimestamp() })
       }))
     writeQueue.current = request
