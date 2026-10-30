@@ -205,3 +205,25 @@
   .event-pdf-dock__actions { align-items: stretch; flex-direction: column; }
   .event-pdf-dock__actions .button { justify-content: center; width: 100%; }
 }
+
+
+.event-pdf-dock__download-ready {
+  display: block;
+  margin: 12px 20px 0;
+  padding: 13px 16px;
+  border: 1px solid #0f766e;
+  border-radius: 12px;
+  background: #f0fdfa;
+  color: #115e59;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  font-size: .87rem;
+  font-weight: 800;
+  text-align: center;
+}
+.event-pdf-dock__download-ready:hover,
+.event-pdf-dock__download-ready:focus-visible {
+  background: #ccfbf1;
+  outline-offset: 2px;
+}
