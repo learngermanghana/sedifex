@@ -1,4 +1,5 @@
 import React from 'react'
+import invoicePrintCss from './DocumentsGenerator.css?raw'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -75,4 +76,46 @@ describe('Event Studio compact spreadsheet design', () => {
     await user.click(screen.getByRole('button', { name: '⊟ Exit full view' }))
     expect(document.querySelector('.event-studio--focus')).not.toBeInTheDocument()
   })
+
+  it('renders a complete print-only checklist with values rather than editable controls', async () => {
+    const user = userEvent.setup()
+    const view = mountStudio()
+    expect(await screen.findByRole('heading', { name: 'Checklist' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '+ Add row' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Task row 1' }), { target: { value: 'Confirm event venue' } })
+    const printSheet = view.container.querySelector('.event-studio__print-sheet')
+    expect(printSheet).toBeInTheDocument()
+    expect(printSheet?.querySelector('input')).toBeNull()
+    expect(printSheet?.textContent).toContain('Annual Fundraiser')
+    expect(printSheet?.textContent).toContain('Checklist')
+    expect(printSheet?.textContent).toContain('Confirm event venue')
+    expect(printSheet?.querySelectorAll('tbody tr')).toHaveLength(1)
+  })
+
+  it('includes all budget amounts and totals in the printable sheet', async () => {
+    const user = userEvent.setup()
+    const view = mountStudio()
+    await screen.findByRole('heading', { name: 'Checklist' })
+    await user.click(screen.getByRole('button', { name: '+ Add tool' }))
+    await user.click(screen.getByRole('button', { name: /Budget & Expenses/ }))
+    await user.click(screen.getByRole('button', { name: 'Done choosing' }))
+    await user.click(screen.getByRole('tab', { name: 'Budget & Expenses' }))
+    await user.click(screen.getByRole('button', { name: '+ Add row' }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Budgeted (GHS) row 1' }), { target: { value: '500' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' }), { target: { value: '150' } })
+    const printSheet = view.container.querySelector('.event-studio__print-sheet')
+    const printText = printSheet?.textContent || ''
+    expect(printText).toContain('Budget & Expenses')
+    expect(printText).toContain('GHS 500.00')
+    expect(printText).toContain('GHS 150.00')
+    expect(printText).toContain('GHS 350.00')
+    expect(printSheet?.querySelectorAll('tbody tr')).toHaveLength(1)
+  })
+
+  it('does not let invoice print CSS hide the Event Workspace', () => {
+    const css = invoicePrintCss
+    expect(css).not.toMatch(/@media print\s*\{\s*body \*\s*\{/)
+    expect(css).toContain('body:has(.documents-builder) *')
+  })
+
 })

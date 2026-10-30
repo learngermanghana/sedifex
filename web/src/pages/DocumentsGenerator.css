@@ -603,12 +603,14 @@
 }
 
 @media print {
-  body * {
+  /* Invoice preview isolation must NEVER hide other Sedifex pages.
+     This stylesheet is bundled globally even when Event Studio is open. */
+  body:has(.documents-builder) * {
     visibility: hidden;
   }
 
-  .documents-builder__preview,
-  .documents-builder__preview * {
+  body:has(.documents-builder) .documents-builder__preview,
+  body:has(.documents-builder) .documents-builder__preview * {
     visibility: visible;
   }
 
@@ -725,7 +727,7 @@
   white-space: normal;
 }
 @media print {
-  @page { size: A4; margin: 12mm; }
+  /* Page size is controlled by the active document or Event Studio print view. */
   .documents-builder__saved { display: none !important; }
   .documents-builder__preview {
     position: absolute !important;

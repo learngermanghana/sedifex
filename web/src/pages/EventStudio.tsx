@@ -726,10 +726,13 @@ export function EventStudioWorkspace() {
     } catch { setActionMessage('Clipboard access unavailable. Select and copy cells instead.') }
   }
 
-  function printDocument(mode: 'programme' | 'run-sheet') {
+  function printDocument(mode: 'sheet' | 'programme' | 'run-sheet') {
+    // Print after the correct document has rendered (rather than printing the
+    // previous tab's hidden content or the mobile editor).
     setPrintMode(mode)
-    window.setTimeout(() => window.print(), 80)
+    window.setTimeout(() => window.print(), 160)
   }
+
 
   function loadPrintLogo(file?: File) {
     if (!file) { setProgrammeLogo(''); return }
@@ -917,7 +920,7 @@ export function EventStudioWorkspace() {
               <button type="button" className="event-studio__plain-button event-studio__sort-direction" aria-label="Reverse sort order" title="Reverse sort order" disabled={!sortBy} onClick={() => setSortDescending(value => !value)}>{sortDescending ? '↓' : '↑'}</button>
               <label className="event-studio__toolbar-search"><span className="event-studio__sr-only">Search sheet rows</span><input placeholder="⌕ Search sheet…" aria-label="Search sheet rows" value={query} onChange={e => setQuery(e.target.value)} /></label>
               <button type="button" className="event-studio__plain-button" onClick={() => void copySheet()} disabled={!rows.length}>Copy sheet</button>
-              <button type="button" className="event-studio__plain-button" onClick={() => window.print()}>⎙ Print sheet</button>
+              <button type="button" className="event-studio__plain-button" onClick={() => printDocument('sheet')}>⎙ Print sheet</button>
               <button type="button" className="event-studio__plain-button event-studio__mobile-toggle" onClick={() => setMobileCards(value => !value)} aria-pressed={mobileCards}>{mobileCards ? 'Table view' : 'Card view'}</button>
             </div>
             {current.id === 'programme' && (
@@ -1014,7 +1017,52 @@ export function EventStudioWorkspace() {
           </div>
         ) : <div className="event-studio__blank">Choose your first tool above to open a spreadsheet.</div>}
       </section>
-      <section className={`event-studio__print-programme event-studio__print-programme--${programmeStyle}`} aria-hidden={printMode !== 'programme'}>
+      {current ? (
+        <section className="event-studio__print-sheet" aria-hidden="true" aria-label={`${current.name} printable sheet`}>
+          <header className="event-studio__print-sheet-header">
+            <small>SEDIFEX · EVENT WORKSPACE</small>
+            <h1>{eventName || 'Event'}</h1>
+            <h2>{current.name}</h2>
+            <p>{[details.eventDate, details.venue].filter(Boolean).join(' · ')}</p>
+            <p>{rows.length} {rows.length === 1 ? 'record' : 'records'}</p>
+          </header>
+          <table className="event-studio__print-sheet-table">
+            <thead>
+              <tr><th scope="col">#</th>{current.fields.map(field => <th key={field.key} scope="col">{field.label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={row.id}>
+                  <td>{index + 1}</td>
+                  {current.fields.map(field => {
+                    const value = field.type === 'computed'
+                      ? money(cellNumber(row, field.key))
+                      : field.type === 'number' && isMoneyField(field.key)
+                        ? money(cellNumber(row, field.key))
+                        : String(row[field.key] ?? '')
+                    return <td key={field.key}>{value}</td>
+                  })}
+                </tr>
+              ))}
+              {!rows.length ? <tr><td colSpan={current.fields.length + 1}>No records in this sheet.</td></tr> : null}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                {current.fields.map((field, index) => (
+                  <td key={field.key}>
+                    {field.type === 'number' || field.type === 'computed'
+                      ? isMoneyField(field.key) ? money(sum(field.key)) : String(sum(field.key))
+                      : index === 0 ? 'TOTAL' : ''}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+          <footer>Generated from Sedifex Event Workspace</footer>
+        </section>
+      ) : null}
+      <section className={`event-studio__print-programme event-studio__print-programme--${programmeStyle}`} aria-hidden={printMode === 'sheet'}>
         <header>{programmeLogo && <img src={programmeLogo} alt="" />}<small>{printMode === 'run-sheet' ? 'INTERNAL PRODUCTION RUN SHEET' : 'ORDER OF EVENTS'}</small><h1>{eventName}</h1>
           {details.eventDate && <p>{details.eventDate}{details.startTime ? ` · ${details.startTime}` : ''}</p>}
           {details.venue && <p>{details.venue}</p>}

@@ -358,3 +358,125 @@
 .event-studio__row-actions{min-width:160px!important;width:160px!important}
 @media(max-width:600px){.event-studio__share{padding:13px}.event-studio__share-actions>*{flex:1 0 100%}.event-studio__share-sections label{padding:11px}}
 @media print{.event-studio__share,.event-studio__share-row{display:none!important}}
+
+
+/* A stable, read-only print version of the selected Event Studio spreadsheet.
+   Prevents blank/clipped printouts caused by editable inputs, scroll areas,
+   mobile card layouts and document-specific global print rules. */
+.event-studio__print-sheet { display: none; }
+
+@page event-studio-sheet {
+  size: A4 landscape;
+  margin: 12mm;
+}
+
+@media print {
+  .event-studio:not(.event-studio--printing-programme) > :not(.event-studio__print-sheet),
+  .event-studio--printing-programme > :not(.event-studio__print-programme) {
+    display: none !important;
+  }
+
+  .event-studio:not(.event-studio--printing-programme) > .event-studio__print-sheet {
+    display: block !important;
+    page: event-studio-sheet;
+  }
+
+  .event-studio:not(.event-studio--printing-programme) > .event-studio__print-programme {
+    display: none !important;
+  }
+
+  body:has(.event-studio) .shell__footer,
+  body:has(.event-studio) .shell__bottom-nav {
+    display: none !important;
+  }
+
+  .event-studio,
+  .event-studio__print-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #111827 !important;
+    background: #fff !important;
+  }
+
+  .event-studio__print-sheet-header {
+    border-bottom: 2px solid #263b61;
+    margin: 0 0 14px;
+    padding: 0 0 12px;
+    break-after: avoid;
+  }
+
+  .event-studio__print-sheet-header small {
+    display: block;
+    font-size: 9px;
+    font-weight: 750;
+    letter-spacing: .12em;
+    color: #52617a;
+  }
+
+  .event-studio__print-sheet-header h1 {
+    margin: 8px 0 2px;
+    font-size: 21px;
+    font-weight: 800;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .event-studio__print-sheet-header h2 {
+    margin: 0 0 5px;
+    font-size: 15px;
+    color: #263b61;
+  }
+
+  .event-studio__print-sheet-header p {
+    margin: 2px 0;
+    font-size: 10px;
+    color: #374151;
+  }
+
+  .event-studio__print-sheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 9px;
+    color: #111827;
+  }
+
+  .event-studio__print-sheet-table thead { display: table-header-group; }
+  .event-studio__print-sheet-table tfoot { display: table-footer-group; }
+
+  .event-studio__print-sheet-table th,
+  .event-studio__print-sheet-table td {
+    border: 1px solid #cbd5e1;
+    padding: 7px 6px;
+    vertical-align: top;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .event-studio__print-sheet-table th {
+    background: #eaf0fa !important;
+    font-weight: 750;
+    print-color-adjust: exact;
+  }
+
+  .event-studio__print-sheet-table tfoot td {
+    background: #f1f5f9 !important;
+    font-weight: 750;
+    print-color-adjust: exact;
+  }
+
+  .event-studio__print-sheet-table tr { break-inside: avoid; }
+
+  .event-studio__print-sheet footer {
+    font-size: 9px;
+    color: #64748b;
+    border-top: 1px solid #cbd5e1;
+    margin-top: 18px;
+    padding-top: 10px;
+  }
+}
