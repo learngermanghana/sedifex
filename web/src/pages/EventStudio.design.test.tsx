@@ -118,4 +118,45 @@ describe('Event Studio compact spreadsheet design', () => {
     expect(css).toContain('body:has(.documents-builder) *')
   })
 
+
+  it('shows Checklist entries in Budget automatically and keeps Spent independently editable', async () => {
+    const user = userEvent.setup()
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        title: 'Annual Fundraiser',
+        eventStudio: {
+          selected: ['checklist'],
+          sheets: {
+            checklist: [{ id: 'venue', task: 'Book event hall', owner: 'Ama', due: '2026-12-05',
+              status: 'Not started', cost: '800' }],
+            budget: [],
+          },
+        },
+      }),
+    })
+    const router = createMemoryRouter([
+      { path: '/event-planning/:eventId', element: <EventStudioWorkspace /> },
+      { path: '/event-planning', element: <div>All events</div> },
+    ], { initialEntries: ['/event-planning/event-1'] })
+    render(<RouterProvider router={router} />)
+    expect(await screen.findByRole('tab', { name: 'Budget & Expenses' })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Budget & Expenses' }))
+    expect(screen.getByText('Book event hall')).toBeInTheDocument()
+    expect(screen.getByText('Ama')).toBeInTheDocument()
+    expect(screen.getAllByText('GHS 800.00').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('textbox', { name: 'Expense row 1' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' }),
+      { target: { value: '200' } })
+    await user.click(screen.getByRole('tab', { name: 'Checklist' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Task row 1' }),
+      { target: { value: 'Reserve conference hall' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Est. cost (GHS) row 1' }),
+      { target: { value: '950' } })
+    await user.click(screen.getByRole('tab', { name: 'Budget & Expenses' }))
+    expect(screen.getByText('Reserve conference hall')).toBeInTheDocument()
+    expect(screen.getAllByText('GHS 950.00').length).toBeGreaterThan(0)
+    expect(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' })).toHaveValue(200)
+  })
+
 })
