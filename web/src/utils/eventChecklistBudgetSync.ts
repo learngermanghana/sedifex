@@ -49,7 +49,21 @@ export function syncEventChecklistBudget<T extends LinkableStudio>(studio: T): T
       if (index >= 0) availableManual.set(taskKey(task.task), candidates)
     }
 
-    const existing: EventStudioSyncRow = index >= 0 ? updated[index] : { id: `budget-for-${task.id}` }
+    const existing: EventStudioSyncRow = index >= 0 ? updated[index] : {
+      id: `budget-for-${task.id}`,
+      studioClientShared: 'no',
+      detailNotes: '',
+      internalNotes: '',
+      sourceChecklistId: '',
+      estimateOrigin: 'checklist',
+      item: '',
+      owner: '',
+      due: '',
+      status: '',
+      category: '',
+      estimate: '',
+      actual: '',
+    }
     const hadManualAmount = !alreadyLinked && index >= 0 &&
       String(existing.estimate ?? '').trim() !== '' && String(task.cost ?? '').trim() === ''
     const source = String(task.cost ?? '').trim() !== '' || !hadManualAmount && existing.estimateOrigin !== 'manual'
