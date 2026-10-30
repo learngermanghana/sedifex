@@ -208,6 +208,6 @@ export async function downloadEventClientPackPdf(args: { storeId: string; eventI
     sections,
   })
   const fileName = `${slug(title)}-client-pack.pdf`
-  downloadEventPdfBytes(bytes, fileName)
-  return { fileName, sectionCount: sections.length }
+  const downloadUrl = downloadEventPdfBytes(bytes, fileName)
+  return { fileName, sectionCount: sections.length, downloadUrl }
 }
