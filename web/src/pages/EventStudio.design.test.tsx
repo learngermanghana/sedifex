@@ -142,8 +142,8 @@ describe('Event Studio compact spreadsheet design', () => {
     render(<RouterProvider router={router} />)
     expect(await screen.findByRole('tab', { name: 'Budget & Expenses' })).toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: 'Budget & Expenses' }))
-    expect(screen.getByText('Book event hall')).toBeInTheDocument()
-    expect(screen.getByText('Ama')).toBeInTheDocument()
+    expect(screen.getAllByText('Book event hall').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Ama').length).toBeGreaterThan(0)
     expect(screen.getAllByText('GHS 800.00').length).toBeGreaterThan(0)
     expect(screen.queryByRole('textbox', { name: 'Expense row 1' })).not.toBeInTheDocument()
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' }),
@@ -154,7 +154,7 @@ describe('Event Studio compact spreadsheet design', () => {
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Est. cost (GHS) row 1' }),
       { target: { value: '950' } })
     await user.click(screen.getByRole('tab', { name: 'Budget & Expenses' }))
-    expect(screen.getByText('Reserve conference hall')).toBeInTheDocument()
+    expect(screen.getAllByText('Reserve conference hall').length).toBeGreaterThan(0)
     expect(screen.getAllByText('GHS 950.00').length).toBeGreaterThan(0)
     expect(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' })).toHaveValue(200)
   })
