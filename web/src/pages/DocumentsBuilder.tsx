@@ -1,7 +1,7 @@
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import {
@@ -28,7 +28,14 @@ type SavedInvoice = {
   items?: DocumentItem[]
   total?: number
   invoiceDate?: string
+  dueDate?: string
   status?: InvoiceStatus
+  storeSnapshot?: BusinessStoreSnapshot
+  subtotal?: number
+  discount?: number
+  tax?: number
+  notes?: string
+  paymentInstructions?: string
 }
 
 type GeneratedDocument = { url: string; fileName: string }
@@ -78,6 +85,10 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
   const [paymentReference, setPaymentReference] = useState('')
   const [amountPaid, setAmountPaid] = useState('')
   const [paidInvoices, setPaidInvoices] = useState<SavedInvoice[]>([])
+  const [savedInvoices, setSavedInvoices] = useState<SavedInvoice[]>([])
+  const [invoiceSearch, setInvoiceSearch] = useState('')
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
+  const [savedInvoicesError, setSavedInvoicesError] = useState('')
   const [sourceInvoiceId, setSourceInvoiceId] = useState('')
   const [savedInvoiceId, setSavedInvoiceId] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -89,6 +100,11 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
   const totals = useMemo(() => calculateDocumentTotals(normalizedItems, discount, tax), [discount, normalizedItems, tax])
   const activeNumber = mode === 'invoice' ? invoiceNumber : receiptNumber
   const documentDate = mode === 'invoice' ? invoiceDate : receiptDate
+  const filteredInvoices = useMemo(() => savedInvoices.filter(invoice => {
+    const needle = invoiceSearch.trim().toLowerCase()
+    return !needle || [invoice.invoiceNumber, invoice.customer?.name, invoice.status]
+      .some(value => String(value || '').toLowerCase().includes(needle))
+  }), [invoiceSearch, savedInvoices])
 
   useEffect(() => () => {
     if (generated?.url) URL.revokeObjectURL(generated.url)
@@ -124,6 +140,91 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
       cancelled = true
     }
   }, [storeId])
+
+  useEffect(() => {
+    if (!storeId || mode !== 'invoice') {
+      setSavedInvoices([])
+      return
+    }
+    setLoadingInvoices(true)
+    setSavedInvoicesError('')
+    // Store-scoped query; sort in the UI so no composite Firestore index is required.
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'stores', storeId, 'invoices'), limit(200)),
+      snapshot => {
+        const records: SavedInvoice[] = snapshot.docs.map(invoiceDoc => {
+          const data = invoiceDoc.data()
+          return {
+            id: invoiceDoc.id,
+            invoiceNumber: typeof data.invoiceNumber === 'string' ? data.invoiceNumber : invoiceDoc.id,
+            customer: data.customer as DocumentCustomer | undefined,
+            storeSnapshot: data.storeSnapshot as BusinessStoreSnapshot | undefined,
+            items: Array.isArray(data.items) ? data.items as DocumentItem[] : [],
+            total: typeof data.total === 'number' ? data.total : undefined,
+            subtotal: typeof data.subtotal === 'number' ? data.subtotal : undefined,
+            discount: typeof data.discount === 'number' ? data.discount : undefined,
+            tax: typeof data.tax === 'number' ? data.tax : undefined,
+            invoiceDate: typeof data.invoiceDate === 'string' ? data.invoiceDate : undefined,
+            dueDate: typeof data.dueDate === 'string' ? data.dueDate : undefined,
+            status: data.status as InvoiceStatus | undefined,
+            notes: typeof data.notes === 'string' ? data.notes : undefined,
+            paymentInstructions: typeof data.paymentInstructions === 'string' ? data.paymentInstructions : undefined,
+          }
+        })
+        setSavedInvoices(records.sort((a, b) => (b.invoiceDate || '').localeCompare(a.invoiceDate || '')
+          || b.invoiceNumber.localeCompare(a.invoiceNumber)))
+        setLoadingInvoices(false)
+      },
+      loadError => {
+        console.warn('[documents] Unable to list invoices', loadError)
+        setSavedInvoicesError('Could not load saved invoices for this workspace.')
+        setLoadingInvoices(false)
+      },
+    )
+    return () => unsubscribe()
+  }, [mode, storeId])
+
+  function openSavedInvoice(invoice: SavedInvoice) {
+    setSavedInvoiceId(invoice.id)
+    setInvoiceNumber(invoice.invoiceNumber)
+    setInvoiceDate(invoice.invoiceDate || today())
+    setDueDate(invoice.dueDate || '')
+    setStatus(invoice.status || 'draft')
+    setCustomer(invoice.customer || { name: '', phone: '', email: '', address: '' })
+    if (invoice.storeSnapshot) setStoreSnapshot(invoice.storeSnapshot)
+    setItems((invoice.items || []).length
+      ? (invoice.items || []).map(item => ({
+          id: Math.random().toString(36).slice(2),
+          description: item.description,
+          quantity: String(item.quantity),
+          unitPrice: String(item.unitPrice),
+        }))
+      : [createItemRow()])
+    setDiscount(String(invoice.discount ?? 0))
+    setTax(String(invoice.tax ?? 0))
+    setNotes(invoice.notes || '')
+    setPaymentInstructions(invoice.paymentInstructions || '')
+    resetGenerated()
+    setError(null)
+    setMessage('Opened invoice ' + invoice.invoiceNumber + '. You can edit, print or prepare its PDF.')
+  }
+
+  function startNewInvoice() {
+    setSavedInvoiceId('')
+    setInvoiceNumber(generateDocumentNumber('INV'))
+    setInvoiceDate(today())
+    setDueDate('')
+    setStatus('draft')
+    setCustomer({ name: '', phone: '', email: '', address: '' })
+    setItems([createItemRow()])
+    setDiscount('0')
+    setTax('0')
+    setNotes('')
+    setPaymentInstructions('')
+    resetGenerated()
+    setError(null)
+    setMessage('New invoice started. Your previous invoices remain saved.')
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -221,7 +322,7 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
         invoiceDate,
         dueDate,
         notes: notes.trim(),
-        paymentInstructions: paymentInstructions.trim(),
+        paymentInstructions,
         updatedAt: serverTimestamp(),
       }
       const ref = savedInvoiceId
@@ -385,6 +486,47 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
         </div>
       </header>
 
+      {mode === 'invoice' ? (
+        <section className="card documents-builder__saved" aria-label="Saved invoices">
+          <div className="documents-builder__saved-header">
+            <div>
+              <h3>Saved invoices</h3>
+              <p>Open an existing invoice to edit, print or export it again.</p>
+            </div>
+            <button type="button" className="button button--ghost" onClick={startNewInvoice}>+ New invoice</button>
+          </div>
+          <label className="form__field documents-builder__saved-search">
+            <span className="form__hint">Find an invoice</span>
+            <input className="input" value={invoiceSearch} onChange={event => setInvoiceSearch(event.target.value)}
+              placeholder="Search invoice number, customer or status" />
+          </label>
+          {loadingInvoices ? <p>Loading saved invoices…</p> : null}
+          {savedInvoicesError ? <p className="status status--error" role="alert">{savedInvoicesError}</p> : null}
+          {!loadingInvoices && !savedInvoicesError && !filteredInvoices.length
+            ? <p className="documents-builder__saved-empty">{invoiceSearch ? 'No matching invoices found.' : 'No saved invoices yet. Save your first invoice below.'}</p>
+            : null}
+          {filteredInvoices.length ? (
+            <div className="documents-builder__saved-scroll">
+              <table className="documents-builder__saved-table">
+                <thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>{filteredInvoices.map(invoice => (
+                  <tr key={invoice.id}>
+                    <td><strong>{invoice.invoiceNumber}</strong></td>
+                    <td>{invoice.customer?.name || 'Customer'}</td>
+                    <td>{invoice.invoiceDate || '—'}</td>
+                    <td>{formatDocumentCurrency(invoice.total ?? 0)}</td>
+                    <td><span className="documents-builder__invoice-status">{invoice.status || 'draft'}</span></td>
+                    <td><button type="button" className="button button--ghost button--small"
+                      onClick={() => openSavedInvoice(invoice)}>{savedInvoiceId === invoice.id ? 'Opened' : 'Open / edit'}</button></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          ) : null}
+          {savedInvoices.length >= 200 ? <p className="documents-builder__saved-empty">Showing up to 200 invoices. Contact support if you need an older record beyond this list.</p> : null}
+        </section>
+      ) : null}
+
       <section className="card documents-builder__layout">
         <div className="documents-builder__form form">
           <h3 className="card__title">Business details</h3>
@@ -448,19 +590,19 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
           <button type="button" className="button button--ghost button--small documents-generator__add" onClick={addItem}>Add item</button>
 
           {mode === 'invoice' ? <div className="documents-generator__row"><label className="form__field"><span className="form__hint">Discount (GHS)</span><input className="input" inputMode="decimal" value={discount} onChange={event => setDiscount(event.target.value)} /></label><label className="form__field"><span className="form__hint">Tax/VAT amount (GHS)</span><input className="input" inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} /></label></div> : <label className="form__field"><span className="form__hint">Amount paid</span><input className="input" inputMode="decimal" value={amountPaid} onChange={event => setAmountPaid(event.target.value)} placeholder={formatDocumentCurrency(totals.total)} /></label>}
-          {mode === 'invoice' ? <label className="form__field"><span className="form__hint">Payment instructions</span><textarea className="input documents-generator__notes" value={paymentInstructions} onChange={event => setPaymentInstructions(event.target.value)} placeholder="Bank, mobile money, payment terms..." /></label> : null}
+          {mode === 'invoice' ? <label className="form__field"><span className="form__hint">Payment instructions</span><textarea className="input documents-generator__notes" value={paymentInstructions} onChange={event => setPaymentInstructions(event.target.value)} placeholder={'Bank: ...\nAccount name: ...\nAccount number: ...\n\nPayment terms: ...'} /><small className="form__hint">Your line breaks and blank lines will be kept in the invoice and PDF.</small></label> : null}
           <label className="form__field"><span className="form__hint">Notes</span><textarea className="input documents-generator__notes" value={notes} onChange={event => setNotes(event.target.value)} /></label>
 
           <div className="documents-generator__actions">
             {mode === 'invoice' ? <button type="button" className="button button--primary" disabled={saving} onClick={() => void saveInvoice()}>{saving ? 'Saving…' : 'Save invoice'}</button> : <button type="button" className="button button--primary" disabled={saving} onClick={() => void saveReceipt()}>{saving ? 'Saving…' : 'Save receipt'}</button>}
+            <button type="button" className="button button--ghost" onClick={generatePdf}>Prepare PDF</button>
+            {generated ? <a className="button button--ghost" href={generated.url} download={generated.fileName}>Download PDF</a> : null}
             <details className="documents-generator__more">
               <summary className="button button--ghost">More</summary>
               <div className="documents-generator__more-panel">
                 <button type="button" onClick={printPreview}>Print {mode}</button>
-                <button type="button" onClick={generatePdf}>Prepare PDF</button>
                 {mode === 'invoice' ? <button type="button" disabled={saving} onClick={() => void markPaid()}>Mark as paid</button> : null}
                 {mode === 'invoice' ? <button type="button" disabled={saving} onClick={() => void createReceiptFromPaidInvoice()}>Create receipt from paid invoice</button> : null}
-                {generated ? <a href={generated.url} download={generated.fileName}>Download {generated.fileName}</a> : null}
               </div>
             </details>
           </div>
@@ -483,8 +625,8 @@ export default function DocumentsBuilder({ mode }: { mode: BuilderMode }) {
             <div className="documents-builder__two-col"><div><strong>Customer</strong><p>{customer.name || 'Customer name'}</p><p>{customer.phone}</p><p>{customer.email}</p><p>{customer.address}</p></div><div><strong>Date</strong><p>{documentDate}</p>{mode === 'invoice' ? <><strong>Due</strong><p>{dueDate || '—'}</p><strong>Status</strong><p>{status}</p></> : <><strong>Payment</strong><p>{paymentMethod}</p><p>{paymentReference}</p></>}</div></div>
             <table className="documents-builder__table"><thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>{normalizedItems.map((item, index) => <tr key={`${item.description}-${index}`}><td>{item.description || 'Item'}</td><td>{item.quantity}</td><td>{formatDocumentCurrency(item.unitPrice)}</td><td>{formatDocumentCurrency(item.total)}</td></tr>)}</tbody></table>
             <div className="documents-builder__totals">{mode === 'invoice' ? <><p><span>Subtotal</span><strong>{formatDocumentCurrency(totals.subtotal)}</strong></p><p><span>Discount</span><strong>{formatDocumentCurrency(totals.discount)}</strong></p><p><span>Tax/VAT</span><strong>{formatDocumentCurrency(totals.tax)}</strong></p><p><span>Total</span><strong>{formatDocumentCurrency(totals.total)}</strong></p></> : <p><span>Amount paid</span><strong>{formatDocumentCurrency(Number(amountPaid || totals.total))}</strong></p>}</div>
-            {paymentInstructions ? <div><strong>Payment instructions</strong><p>{paymentInstructions}</p></div> : null}
-            {notes ? <div><strong>Notes</strong><p>{notes}</p></div> : null}
+            {mode === 'invoice' && paymentInstructions ? <div className="documents-builder__message"><strong>Payment instructions</strong><p className="documents-builder__multiline">{paymentInstructions}</p></div> : null}
+            {notes ? <div className="documents-builder__message"><strong>Notes</strong><p className="documents-builder__multiline">{notes}</p></div> : null}
             <footer>Generated with Sedifex</footer>
           </div>
         </aside>
