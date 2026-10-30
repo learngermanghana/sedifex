@@ -45,7 +45,7 @@ describe('business invoice PDF', () => {
     expect(content.startsWith('%PDF-1.4')).toBe(true)
     expect(content).toContain('INV-2026-1234')
     expect(content).toContain('GHS 500.00')
-    expect(content).toContain('PAYMENT INSTRUCTIONS')
+    expect(content).toContain('PAYMENT INFORMATION')
     expect(content).toContain('Mobile money:')
     expect(content).toContain('Name: Accra Services')
     expect(content).toContain('/Count 1')
