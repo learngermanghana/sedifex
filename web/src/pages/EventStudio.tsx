@@ -6,6 +6,7 @@ import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './EventStudio.css'
 import { copyStudioGrid, pasteStudioGrid, repositionStudioRow, dropStudioRow, studioOverview } from '../utils/eventStudioGrid'
+import { syncEventChecklistBudget } from '../utils/eventChecklistBudgetSync'
 
 type EventDetails = {
   eventDate: string; startTime: string; venue: string; clientName: string; clientPhone: string;
@@ -64,7 +65,9 @@ const TOOLS: Tool[] = [
     { key: 'thanks', label: 'Thank-you sent', type: 'select', options: ['No', 'Yes'], width: 170 }, { key: 'notes', label: 'Notes', type: 'text', width: 220 },
   ] },
   { id: 'budget', name: 'Budget & Expenses', icon: '₵', description: 'Compare estimated costs with actual spending.', caption: 'Plan and monitor event costs', fields: [
-    { key: 'item', label: 'Expense', type: 'text', width: 250 }, { key: 'category', label: 'Category', type: 'text', width: 190 },
+    { key: 'item', label: 'Expense', type: 'text', width: 250 },
+    { key: 'owner', label: 'Assigned to', type: 'text', width: 160 }, { key: 'due', label: 'Due date', type: 'date', width: 155 },
+    { key: 'status', label: 'Status', type: 'text', width: 150 }, { key: 'category', label: 'Category', type: 'text', width: 190 },
     { key: 'estimate', label: 'Budgeted (GHS)', type: 'number', width: 170 }, { key: 'actual', label: 'Spent (GHS)', type: 'number', width: 160 },
     { key: 'difference', label: 'Remaining (GHS)', type: 'computed', width: 170 },
   ] },
@@ -113,7 +116,7 @@ function studioFromTemplate(id: TemplateId): Studio {
   studio.sheets.checklist = template.tasks.map(task => ({
     ...makeRow(TOOLS[0]), task, status: 'Not started',
   }))
-  return studio
+  return syncEventChecklistBudget(studio)
 }
 
 function readStudio(value: unknown): Studio {
@@ -136,6 +139,10 @@ function readStudio(value: unknown): Studio {
         clean.studioClientShared = values.studioClientShared === 'yes' ? 'yes' : 'no'
         clean.detailNotes = typeof values.detailNotes === 'string' ? values.detailNotes : ''
         clean.internalNotes = typeof values.internalNotes === 'string' ? values.internalNotes : ''
+        if (tool.id === 'budget') {
+          clean.sourceChecklistId = typeof values.sourceChecklistId === 'string' ? values.sourceChecklistId : ''
+          clean.estimateOrigin = values.estimateOrigin === 'manual' ? 'manual' : 'checklist'
+        }
         tool.fields.filter(field => field.type !== 'computed').forEach(field => {
           const cell = values[field.key]
           clean[field.key] = typeof cell === 'number' || typeof cell === 'string' ? cell : ''
@@ -144,7 +151,7 @@ function readStudio(value: unknown): Studio {
       })
     })
   }
-  return base
+  return syncEventChecklistBudget(base)
 }
 
 function makeRow(tool: Tool): SheetRow {
@@ -362,7 +369,7 @@ export function EventStudioWorkspace() {
         const snapshot = await transaction.get(reference)
         if (!snapshot.exists()) throw new Error('EVENT_NOT_FOUND')
         const remote = readStudio(snapshot.data().eventStudio)
-        if (JSON.stringify(remote) !== JSON.stringify(savedStudio.current)) throw new Error('STUDIO_CONFLICT')
+        if (JSON.stringify(remote) !== JSON.stringify(readStudio(savedStudio.current))) throw new Error('STUDIO_CONFLICT')
         transaction.update(reference, { eventStudio: next, updatedAt: serverTimestamp() })
       }))
     writeQueue.current = request
@@ -515,7 +522,7 @@ export function EventStudioWorkspace() {
   function edit(next: Studio, keepHistory = true) {
     if (keepHistory && studio) undoHistory.current = [...undoHistory.current.slice(-19), studio]
     revision.current += 1
-    setStudio(next)
+    setStudio(syncEventChecklistBudget(next))
     setSaveStatus('unsaved')
   }
 
@@ -603,6 +610,8 @@ export function EventStudioWorkspace() {
 
   function changeCell(rowId: string, key: string, value: Cell) {
     if (!studio || active === 'overview' || active === 'details' || active === 'sharing') return
+    if (active === 'budget' && ['item', 'owner', 'due', 'status', 'estimate'].includes(key) &&
+      studio.sheets.budget.some(row => row.id === rowId && row.sourceChecklistId)) return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].map(row => row.id === rowId ? { ...row, [key]: value } : row) } })
   }
 
@@ -617,7 +626,12 @@ export function EventStudioWorkspace() {
   }
 
   function removeRow(rowId: string) {
-    if (!studio || active === 'overview' || active === 'details' || !window.confirm('Remove this row from the sheet?')) return
+    if (!studio || active === 'overview' || active === 'details') return
+    if (active === 'budget' && studio.sheets.budget.some(row => row.id === rowId && row.sourceChecklistId)) {
+      setActionMessage('This budget row follows the checklist. Remove its checklist task to unlink it without losing its expense history.')
+      return
+    }
+    if (!window.confirm('Remove this row from the sheet?')) return
     edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].filter(row => row.id !== rowId) } })
     if (selectedRowId === rowId) setSelectedRowId(null)
     if (expandedRowId === rowId) setExpandedRowId(null)
@@ -627,7 +641,8 @@ export function EventStudioWorkspace() {
     if (!studio || active === 'overview' || active === 'details' || !selectedRowId) return
     const index = studio.sheets[active].findIndex(row => row.id === selectedRowId)
     if (index < 0) return
-    const copy = { ...studio.sheets[active][index], id: createId() }
+    const copy = { ...studio.sheets[active][index], id: createId(),
+      ...(active === 'budget' ? { sourceChecklistId: '', estimateOrigin: 'manual' } : {}) }
     const nextRows = [...studio.sheets[active]]
     nextRows.splice(index + 1, 0, copy)
     edit({ ...studio, sheets: { ...studio.sheets, [active]: nextRows } })
@@ -644,6 +659,10 @@ export function EventStudioWorkspace() {
     event.preventDefault()
     const result = pasteStudioGrid(studio.sheets[active], tool.fields, rowId, key, text, () => makeRow(tool))
     if (result.changed) {
+      if (active === 'budget' && studio.sheets.budget.some(row => row.sourceChecklistId)) {
+        setActionMessage('Edit linked descriptions, owners, dates and estimates in Checklist. Paste expense amounts or categories into individual budget cells.')
+        return
+      }
       edit({ ...studio, sheets: { ...studio.sheets, [active]: result.rows } })
       setQuery('')
       setSortBy('')
@@ -904,6 +923,9 @@ export function EventStudioWorkspace() {
               <div><h1>{current.name}</h1><p>{current.caption}</p></div>
               <span className="event-studio__sheet-count">{rows.length} {rows.length === 1 ? 'row' : 'rows'}</span>
             </div>
+            {current.id === 'budget' && studio.sheets.budget.some(row => row.sourceChecklistId) ? (
+              <p className="event-studio__sync-note">Checklist items are linked automatically. Edit task details and estimated costs in Checklist; enter Category and Spent (GHS) here. Existing expenses are preserved.</p>
+            ) : null}
             <div className="event-studio__toolbar" role="toolbar" aria-label="Spreadsheet actions">
               <button type="button" className="event-studio__primary" onClick={addRow}>+ Add row</button>
               <button type="button" className="event-studio__plain-button" onClick={duplicateSelected} disabled={!selectedRowId || !rows.some(row => row.id === selectedRowId)}>⧉ Duplicate</button>
@@ -961,7 +983,9 @@ export function EventStudioWorkspace() {
                         <span>{rowNumber}</span>
                       </td>
                       {current.fields.map(field => <td key={field.key}>
-                        {field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
+                        {current.id === 'budget' && row.sourceChecklistId && ['item', 'owner', 'due', 'status', 'estimate'].includes(field.key)
+                          ? <output className="event-studio__computed event-studio__linked-field" title="Synced from Checklist; edit there">{field.key === 'estimate' ? money(cellNumber(row, field.key)) : String(row[field.key] ?? '')}</output> :
+                        field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
                           field.type === 'select' ? <select aria-label={`${field.label} row ${rowNumber}`} value={String(row[field.key] ?? '')} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)}>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
                           <input aria-label={`${field.label} row ${rowNumber}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onPaste={e => pasteCells(e, row.id, field.key)} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                       </td>)}
@@ -1004,7 +1028,9 @@ export function EventStudioWorkspace() {
                   </div>
                 </header>
                 <div>{current.fields.map(field => <label key={field.key}>{field.label}
-                  {field.type === 'computed' ? <output>{money(cellNumber(row, field.key))}</output> : field.type === 'select' ?
+                  {current.id === 'budget' && row.sourceChecklistId && ['item', 'owner', 'due', 'status', 'estimate'].includes(field.key)
+                    ? <output title="Synced from Checklist">{field.key === 'estimate' ? money(cellNumber(row, field.key)) : String(row[field.key] ?? '')}</output> :
+                  field.type === 'computed' ? <output>{money(cellNumber(row, field.key))}</output> : field.type === 'select' ?
                     <select value={String(row[field.key] ?? '')} onChange={e => changeCell(row.id, field.key, e.target.value)} aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`}>{field.options?.map(value => <option key={value}>{value}</option>)}</select> :
                     <input aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`} type={field.type} value={row[field.key] ?? ''} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                 </label>)}</div>
