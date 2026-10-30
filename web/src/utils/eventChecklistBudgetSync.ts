@@ -93,5 +93,5 @@ export function syncEventChecklistBudget<T extends LinkableStudio>(studio: T): T
     ? [...studio.selected, 'budget'] : studio.selected
 
   if (!changed && selected === studio.selected) return studio
-  return { ...studio, selected, sheets: { ...studio.sheets, budget: updated } }
+  return { ...studio, selected, sheets: { ...studio.sheets, budget: updated } } as T
 }
