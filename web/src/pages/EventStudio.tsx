@@ -733,13 +733,6 @@ export function EventStudioWorkspace() {
     window.setTimeout(() => window.print(), 160)
   }
 
-  useEffect(() => {
-    // Browsers may leave the special programme layout selected after printing.
-    // Reset it so subsequent "Print sheet" clicks always show the current sheet.
-    const restore = () => setPrintMode('sheet')
-    window.addEventListener('afterprint', restore)
-    return () => window.removeEventListener('afterprint', restore)
-  }, [])
 
   function loadPrintLogo(file?: File) {
     if (!file) { setProgrammeLogo(''); return }
