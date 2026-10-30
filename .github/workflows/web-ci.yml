@@ -63,7 +63,7 @@ jobs:
           npm exec vitest run src/pages/EventStudio.design.test.tsx
           npm exec vitest run src/pages/EventStudio.template.test.tsx
           npm exec vitest run src/pages/EventStudio.workflow.test.tsx
-          npm exec vitest run src/utils/eventStudioGrid.test.ts
+          npm exec vitest run src/utils/eventStudioGrid.test.ts src/utils/eventChecklistBudgetSync.test.ts
         working-directory: web
 
       - name: Test shared Tailwind utility runtime
