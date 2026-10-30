@@ -285,7 +285,7 @@ export function buildBusinessDocumentPdf(input: BusinessDocumentPdfInput): Uint8
   }
 
   if (input.paymentInstructions?.trim()) {
-    heading('Payment instructions')
+    heading('Payment information')
     paragraph(input.paymentInstructions, { size: 10, leading: 16 })
     y -= 9
   }
