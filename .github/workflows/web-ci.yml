@@ -87,7 +87,7 @@ jobs:
         working-directory: web
 
       - name: Test Event Workspace PDF builder
-        run: npm exec vitest run src/utils/eventPdfDocument.test.ts
+        run: npm exec vitest run src/utils/eventPdfDocument.test.ts src/utils/businessDocumentPdf.test.ts
         working-directory: web
 
       - name: Test Event Planning Firestore rules
