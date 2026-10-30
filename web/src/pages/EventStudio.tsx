@@ -1025,7 +1025,7 @@ export function EventStudioWorkspace() {
         ) : <div className="event-studio__blank">Choose your first tool above to open a spreadsheet.</div>}
       </section>
       {current ? (
-        <section className="event-studio__print-sheet" aria-label={`${current.name} printable sheet`}>
+        <section className="event-studio__print-sheet" aria-hidden="true" aria-label={`${current.name} printable sheet`}>
           <header className="event-studio__print-sheet-header">
             <small>SEDIFEX · EVENT WORKSPACE</small>
             <h1>{eventName || 'Event'}</h1>
