@@ -1,4 +1,4 @@
-import { buildSimplePdf } from './pdf'
+import { buildBusinessDocumentPdf } from './businessDocumentPdf'
 
 export type DocumentPrefix = 'INV' | 'RCP'
 
@@ -117,50 +117,7 @@ export function buildDocumentPdf(options: {
   paymentMethod?: string
   paymentReference?: string
 }) {
-  const store = options.storeSnapshot
-  const lines = [
-    store.businessName || 'Sedifex Store',
-    store.phone,
-    store.email,
-    store.addressLine1,
-    store.addressLine2,
-    store.website,
-    store.taxId ? `Tax/Registration ID: ${store.taxId}` : '',
-    '────────────────────────────────────────',
-    options.type.toUpperCase(),
-    `Number: ${options.number}`,
-    `Date: ${options.date}`,
-    options.dueDate ? `Due: ${options.dueDate}` : '',
-    options.status ? `Status: ${options.status}` : '',
-    ' ',
-    `Customer: ${options.customer.name || 'Customer'}`,
-    options.customer.phone,
-    options.customer.email,
-    options.customer.address ?? '',
-    '────────────────────────────────────────',
-    'Items:',
-  ].filter(Boolean)
-
-  options.items.forEach(item => {
-    lines.push(item.description || 'Item')
-    lines.push(`  ${item.quantity} × ${formatDocumentCurrency(item.unitPrice)} = ${formatDocumentCurrency(item.total)}`)
-  })
-
-  lines.push('────────────────────────────────────────')
-  if (options.totals) {
-    lines.push(`Subtotal: ${formatDocumentCurrency(options.totals.subtotal)}`)
-    lines.push(`Discount: ${formatDocumentCurrency(options.totals.discount)}`)
-    lines.push(`Tax/VAT: ${formatDocumentCurrency(options.totals.tax)}`)
-    lines.push(`Total: ${formatDocumentCurrency(options.totals.total)}`)
-  }
-  if (typeof options.amountPaid === 'number') lines.push(`Amount paid: ${formatDocumentCurrency(options.amountPaid)}`)
-  if (options.paymentMethod) lines.push(`Payment method: ${options.paymentMethod}`)
-  if (options.paymentReference) lines.push(`Payment reference: ${options.paymentReference}`)
-  if (options.paymentInstructions) lines.push(`Payment instructions: ${options.paymentInstructions}`)
-  if (options.notes) lines.push(`Notes: ${options.notes}`)
-  lines.push('Generated with Sedifex')
-
-  const pdfBytes = buildSimplePdf(options.type, lines)
+  const pdfBytes = buildBusinessDocumentPdf(options)
   const blob = new Blob([pdfBytes], { type: 'application/pdf' })
   return { url: URL.createObjectURL(blob), fileName: `${options.number}.pdf` }
 }
