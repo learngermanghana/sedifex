@@ -164,7 +164,8 @@ async function loadData(storeId: string, eventId: string, requested: Set<EventPd
   ])
   if (!eventSnapshot.exists()) throw new Error('EVENT_NOT_FOUND')
 
-  const needsContacts = requested.has('vendors') || requested.has('staff') || requested.has('finance')
+  const needsVendors = requested.has('vendors')
+  const needsStaff = requested.has('staff')
   const needsFinance = requested.has('finance')
 
   const [tasks, timeline, productionTimeline, program, guests, giftRegister, evaluations, customers, staffMembers, invoices, receipts, expenses] = await Promise.all([
@@ -175,8 +176,8 @@ async function loadData(storeId: string, eventId: string, requested: Set<EventPd
     requested.has('guestList') ? docsOf(collection(eventRef, 'guests')) : Promise.resolve([]),
     requested.has('giftRegister') ? docsOf(collection(eventRef, 'giftRegister')) : Promise.resolve([]),
     requested.has('evaluation') ? docsOf(collection(eventRef, 'postEventEvaluations')) : Promise.resolve([]),
-    needsContacts ? getDocs(query(collection(db, 'customers'), where('storeId', '==', storeId))).then(snapshot => snapshot.docs.map(item => ({ id: item.id, data: item.data() as RecordMap }))) : Promise.resolve([]),
-    needsContacts ? getDocs(query(collection(db, 'teamMembers'), where('storeId', '==', storeId))).then(snapshot => snapshot.docs.map(item => ({ id: item.id, data: item.data() as RecordMap }))) : Promise.resolve([]),
+    needsVendors ? getDocs(query(collection(db, 'customers'), where('storeId', '==', storeId))).then(snapshot => snapshot.docs.map(item => ({ id: item.id, data: item.data() as RecordMap }))) : Promise.resolve([]),
+    needsStaff ? getDocs(query(collection(db, 'teamMembers'), where('storeId', '==', storeId))).then(snapshot => snapshot.docs.map(item => ({ id: item.id, data: item.data() as RecordMap }))) : Promise.resolve([]),
     needsFinance ? docsOf(collection(db, 'stores', storeId, 'invoices')) : Promise.resolve([]),
     needsFinance ? docsOf(collection(db, 'stores', storeId, 'receipts')) : Promise.resolve([]),
     needsFinance ? getDocs(query(collection(db, 'expenses'), where('storeId', '==', storeId))).then(snapshot => snapshot.docs.map(item => ({ id: item.id, data: item.data() as RecordMap }))) : Promise.resolve([]),
@@ -547,6 +548,6 @@ export async function downloadEventWorkspacePdf(args: {
   })
   const suffix = args.pack ? 'event-pack' : slug(EVENT_PDF_SECTION_OPTIONS.find(option => option.key === unique[0])?.label || 'event-document')
   const fileName = `${slug(title)}-${suffix}.pdf`
-  downloadEventPdfBytes(bytes, fileName)
-  return { fileName, title, reference: code }
+  const downloadUrl = downloadEventPdfBytes(bytes, fileName)
+  return { fileName, title, reference: code, downloadUrl }
 }
