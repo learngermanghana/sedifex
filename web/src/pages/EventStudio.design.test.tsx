@@ -1,5 +1,5 @@
 import React from 'react'
-import { readFileSync } from 'node:fs'
+import invoicePrintCss from './DocumentsGenerator.css?raw'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -113,7 +113,7 @@ describe('Event Studio compact spreadsheet design', () => {
   })
 
   it('does not let invoice print CSS hide the Event Workspace', () => {
-    const css = readFileSync(new URL('./DocumentsGenerator.css', import.meta.url), 'utf8')
+    const css = invoicePrintCss
     expect(css).not.toMatch(/@media print\s*\{\s*body \*\s*\{/)
     expect(css).toContain('body:has(.documents-builder) *')
   })
