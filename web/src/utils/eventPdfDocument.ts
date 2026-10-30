@@ -160,7 +160,7 @@ function bodyLines(entry: EventPdfEntry): RenderLine[] {
 }
 
 function textCommand(line: RenderLine, y: number) {
-  return `BT /${line.font} ${line.size} Tf 1 0 0 1 ${line.x} ${y} Tm (${escapePdfText(line.text)}) Tj ET\n`
+  return `0.14 0.20 0.29 rg BT /${line.font} ${line.size} Tf 1 0 0 1 ${line.x} ${y} Tm (${escapePdfText(line.text)}) Tj ET\n`
 }
 
 function headerCommand(title: string, reference: string) {
