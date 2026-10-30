@@ -47,18 +47,24 @@ export default function EventPdfExportDock() {
   const [inlineTarget, setInlineTarget] = useState<HTMLElement | null>(null)
   const eventId = routeEventId || selectedEventId
   const tab = eventRouteMatch ? new URLSearchParams(location.search).get('tab') || 'overview' : 'overview'
-  const currentExport = TAB_EXPORTS[tab] ?? TAB_EXPORTS.overview
+  const currentExport = Object.prototype.hasOwnProperty.call(TAB_EXPORTS, tab) ? TAB_EXPORTS[tab] : TAB_EXPORTS.overview
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<EventPdfSectionKey[]>(DEFAULT_PACK_SECTIONS)
   const [busy, setBusy] = useState(false)
   const [busyLabel, setBusyLabel] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [readyDownload, setReadyDownload] = useState<{ url: string; fileName: string } | null>(null)
+
+  useEffect(() => () => {
+    if (readyDownload?.url) URL.revokeObjectURL(readyDownload.url)
+  }, [readyDownload])
 
   useEffect(() => {
     setOpen(false)
     setMessage(null)
     setError(null)
+    setReadyDownload(null)
   }, [location.pathname, routeEventId])
 
   useEffect(() => {
@@ -146,9 +152,11 @@ export default function EventPdfExportDock() {
     setBusyLabel(label)
     setError(null)
     setMessage(null)
+    setReadyDownload(null)
     try {
       const result = await downloadEventWorkspacePdf({ storeId, eventId, sections, pack })
-      setMessage(`${result.fileName} downloaded.`)
+      setReadyDownload({ url: result.downloadUrl, fileName: result.fileName })
+      setMessage(`${result.fileName} is ready. If the browser did not start downloading, use Save PDF below.`)
     } catch (downloadError) {
       console.error('[event-pdf] Unable to export event PDF', downloadError)
       setError(downloadError instanceof Error ? downloadError.message : 'The event PDF could not be created.')
@@ -167,9 +175,11 @@ export default function EventPdfExportDock() {
     setBusyLabel('Client Pack')
     setError(null)
     setMessage(null)
+    setReadyDownload(null)
     try {
       const result = await downloadEventClientPackPdf({ storeId, eventId })
-      setMessage(`${result.fileName} downloaded. Client Pack contains only client-shareable event information.`)
+      setReadyDownload({ url: result.downloadUrl, fileName: result.fileName })
+      setMessage(`${result.fileName} is ready. Client Pack contains only client-shareable event information.`)
     } catch (downloadError) {
       console.error('[event-pdf] Unable to export Client Pack', downloadError)
       setError(downloadError instanceof Error ? downloadError.message : 'The Client Pack could not be created.')
@@ -208,6 +218,10 @@ export default function EventPdfExportDock() {
 
           {error ? <p className="event-pdf-dock__message event-pdf-dock__message--error">{error}</p> : null}
           {message ? <p className="event-pdf-dock__message event-pdf-dock__message--success">{message}</p> : null}
+          {readyDownload ? (
+            <a className="event-pdf-dock__download-ready" href={readyDownload.url}
+              download={readyDownload.fileName}>Save PDF — {readyDownload.fileName}</a>
+          ) : null}
 
           {isListRoute ? (
             <div className="event-pdf-dock__current">

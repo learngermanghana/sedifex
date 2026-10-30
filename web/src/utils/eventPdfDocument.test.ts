@@ -35,4 +35,45 @@ describe('event PDF document builder', () => {
     expect(text).toContain('PLANNING CHECKLIST')
     expect(text).toMatch(/\/Count [2-9]/)
   })
+
+  test('paginates large event packs and labels each page with its total', () => {
+    const pdf = buildEventPdfDocument({
+      title: 'Annual Corporate Celebration and Fundraising Gala',
+      reference: 'EVENT-2026-WITH-A-VERY-LONG-REFERENCE-NUMBER',
+      sections: [
+        {
+          title: 'Planning checklist',
+          entries: Array.from({ length: 160 }, (_, i) => ({
+            text: String(i + 1) + '. Confirm guest arrangements, supplies, vendors and schedule before opening',
+            style: 'bullet' as const,
+          })),
+          pageBreakBefore: true,
+        },
+        { title: 'Event program', entries: [{ text: '10:00 - Guest arrival' }] },
+      ],
+    })
+    const content = new TextDecoder('latin1').decode(pdf)
+    const totalPages = Number(content.match(/\/Count (\d+)/)?.[1] || 0)
+    expect(totalPages).toBeGreaterThan(2)
+    expect(content).toContain('Page 1 of ' + totalPages)
+    expect(content).toContain('Page ' + totalPages + ' of ' + totalPages)
+    expect(content).toContain('EVENT PROGRAM')
+    expect(content).toContain('PLANNING CHECKLIST')
+  })
+
+  test('keeps short sections compact without forcing each onto a new page', () => {
+    const pdf = buildEventPdfDocument({
+      title: 'Small Event',
+      sections: [
+        { title: 'Event summary', entries: [{ text: 'Event: Small Event' }] },
+        { title: 'Client brief', entries: [{ text: 'Venue: Accra' }], pageBreakBefore: true },
+        { title: 'Package', entries: [{ text: 'Tables and catering' }], pageBreakBefore: true },
+      ],
+    })
+    const content = new TextDecoder('latin1').decode(pdf)
+    expect(content).toContain('/Count 1')
+    expect(content).toContain('CLIENT BRIEF')
+    expect(content).toContain('Tables and catering')
+  })
+
 })
