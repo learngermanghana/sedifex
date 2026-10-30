@@ -480,3 +480,27 @@
     padding-top: 10px;
   }
 }
+
+
+/* Linked checklist information stays read-only in Budget, while categories and
+   actual spending remain independent editable fields. */
+.event-studio__sync-note {
+  margin: 12px 16px 4px;
+  padding: 10px 13px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  border-radius: 9px;
+  color: #3546a0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.event-studio__linked-field {
+  background: #f0f4fc !important;
+  color: #3546a0 !important;
+  text-align: left !important;
+  overflow-wrap: anywhere;
+  min-height: 42px;
+}
+@media print {
+  .event-studio__sync-note { display: none !important; }
+}
