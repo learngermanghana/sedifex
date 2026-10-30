@@ -164,14 +164,18 @@ function textCommand(line: RenderLine, y: number) {
 }
 
 function headerCommand(title: string, reference: string) {
-  const commands = [`BT /F2 8 Tf 1 0 0 1 ${MARGIN_X} 765 Tm (${escapePdfText(title)}) Tj ET\n`]
-  if (reference) commands.push(`BT /F1 8 Tf 1 0 0 1 430 765 Tm (${escapePdfText(reference)}) Tj ET\n`)
+  // The running title and reference have separate reserved columns.
+  // Truncation here never changes the full title in the document body.
+  const shortTitle = title.length > 52 ? title.slice(0, 49) + '...' : title
+  const shortReference = reference.length > 22 ? reference.slice(0, 19) + '...' : reference
+  const commands = [`BT /F2 8 Tf 1 0 0 1 ${MARGIN_X} 765 Tm (${escapePdfText(shortTitle)}) Tj ET\n`]
+  if (shortReference) commands.push(`BT /F1 8 Tf 1 0 0 1 438 765 Tm (${escapePdfText(shortReference)}) Tj ET\n`)
   commands.push(`0.88 G ${MARGIN_X} 754 m ${PAGE_WIDTH - MARGIN_X} 754 l S\n`)
   return commands.join('')
 }
 
 function footerCommand(pageNumber: number) {
-  return `0.88 G ${MARGIN_X} 43 m ${PAGE_WIDTH - MARGIN_X} 43 l S\nBT /F1 8 Tf 1 0 0 1 ${MARGIN_X} 28 Tm (Generated with Sedifex) Tj ET\nBT /F1 8 Tf 1 0 0 1 520 28 Tm (Page ${pageNumber}) Tj ET\n`
+  return `0.88 G ${MARGIN_X} 43 m ${PAGE_WIDTH - MARGIN_X} 43 l S\nBT /F1 8 Tf 1 0 0 1 ${MARGIN_X} 28 Tm (Generated with Sedifex) Tj ET\nBT /F1 8 Tf 1 0 0 1 490 28 Tm (Page ${pageNumber} PAGE_TOTAL) Tj ET\n`
 }
 
 function newPage(headerTitle: string, reference: string, pageNumber: number) {
@@ -219,19 +223,38 @@ export function buildEventPdfDocument(input: EventPdfDocumentInput): Uint8Array 
   draw({ text: generatedLabel, font: 'F1', size: 9, x: MARGIN_X, leading: 14, before: 0, after: 10 })
 
   for (const section of input.sections) {
-    if (section.pageBreakBefore && page.y < TOP_Y - 30) flushPage()
-    ensureSpace(36)
-    draw({ text: section.title.toUpperCase(), font: 'F2', size: 14, x: MARGIN_X, leading: 20, before: 10, after: 4 })
+    // Keep sections together where practical, but do not waste a whole page
+    // for every short section in a combined Event Pack.
+    if (section.pageBreakBefore && page.y < TOP_Y - 300) flushPage()
+    ensureSpace(78)
+
+    // A shaded section heading makes multi-section event packs easy to scan.
+    const barY = page.y - 26
+    page.content += `0.92 0.95 0.99 rg ${MARGIN_X} ${barY} ${BODY_WIDTH} 29 re f\n`
+    page.content += textCommand({
+      text: section.title.toUpperCase(), font: 'F2', size: 12,
+      x: MARGIN_X + 11, leading: 16, before: 0, after: 0,
+    }, page.y - 17)
+    page.y -= 42
+
     if (!section.entries.length) {
-      draw({ text: 'No records yet.', font: 'F1', size: 10, x: MARGIN_X, leading: 14, before: 0, after: 4 })
+      draw({ text: 'No records yet.', font: 'F1', size: 10, x: MARGIN_X + 4, leading: 14, before: 0, after: 6 })
       continue
     }
     for (const entry of section.entries) {
-      for (const line of bodyLines(entry)) draw(line)
+      // Avoid a lonely subheading at the foot of a page.
+      if (entry.style === 'subheading') ensureSpace(48)
+      const lines = bodyLines(entry)
+      lines.forEach((line, index) => {
+        const inset = entry.style === 'subheading' ? 4 : 0
+        draw({ ...line, x: line.x + inset, after: index === lines.length - 1 ? 3 : line.after })
+      })
     }
+    page.y -= 7
   }
 
   pages.push(page.content)
+  const completedPages = pages.map(content => content.replace(/PAGE_TOTAL/g, `of ${pages.length}`))
 
   const encoder = new TextEncoder()
   const objects = new Map<number, Uint8Array>()
@@ -244,7 +267,7 @@ export function buildEventPdfDocument(input: EventPdfDocumentInput): Uint8Array 
   objects.set(regularFontId, encoder.encode(`${regularFontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`))
   objects.set(boldFontId, encoder.encode(`${boldFontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`))
 
-  pages.forEach((content, index) => {
+  completedPages.forEach((content, index) => {
     const pageId = 5 + index * 2
     const contentId = pageId + 1
     pageObjectIds.push(pageId)
@@ -256,7 +279,7 @@ export function buildEventPdfDocument(input: EventPdfDocumentInput): Uint8Array 
   objects.set(pagesId, encoder.encode(`${pagesId} 0 obj\n<< /Type /Pages /Kids [${pageObjectIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>\nendobj\n`))
   objects.set(catalogId, encoder.encode(`${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`))
 
-  const maxObjectId = 4 + pages.length * 2
+  const maxObjectId = 4 + completedPages.length * 2
   const header = encoder.encode('%PDF-1.4\n')
   const ordered: Uint8Array[] = []
   const offsets = new Array(maxObjectId + 1).fill(0)
@@ -297,5 +320,8 @@ export function downloadEventPdfBytes(bytes: Uint8Array, fileName: string) {
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  // Keep the Blob URL alive long enough for slow/mobile browsers and for
+  // the explicit fallback download link shown by EventPdfExportDock.
+  window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000)
+  return url
 }
