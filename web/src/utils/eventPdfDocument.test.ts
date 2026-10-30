@@ -53,7 +53,7 @@ describe('event PDF document builder', () => {
       ],
     })
     const content = new TextDecoder('latin1').decode(pdf)
-    const totalPages = Number(content.match(/\\/Count (\\d+)/)?.[1] || 0)
+    const totalPages = Number(content.match(/\/Count (\d+)/)?.[1] || 0)
     expect(totalPages).toBeGreaterThan(2)
     expect(content).toContain('Page 1 of ' + totalPages)
     expect(content).toContain('Page ' + totalPages + ' of ' + totalPages)
