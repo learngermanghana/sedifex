@@ -46,6 +46,10 @@ jobs:
         run: node test/bookingSmsStoreAlertStatus.test.js
         working-directory: functions
 
+      - name: Test store-scoped hashed integration keys
+        run: node test/integrationHashedAuth.test.js
+        working-directory: functions
+
       - name: Test event audit
         run: npm run test:event-audit
         working-directory: functions
