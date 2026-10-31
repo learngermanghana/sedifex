@@ -1,3 +1,4 @@
+import * as crypto from 'crypto'
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { defaultDb } from './firestore'
@@ -77,6 +78,24 @@ export async function isIntegrationRequestAuthorized(req: functions.https.Reques
   if (master && apiKey === master) return true
 
   try {
+    // Admin-issued keys are stored as SHA-256 hashes only, scoped to the selected store.
+    // Check the authoritative key record before legacy plaintext fallbacks. This also
+    // ensures revoking an older hashed key denies access even if plaintext mirrors remain.
+    const tokenHash = crypto.createHash('sha256').update(apiKey).digest('hex')
+    const hashedKeys = await defaultDb.collection('integrationApiKeys')
+      .where('tokenHash', '==', tokenHash)
+      .limit(5)
+      .get()
+
+    if (!hashedKeys.empty) {
+      return hashedKeys.docs.some(keyDoc => {
+        const key = (keyDoc.data() ?? {}) as Record<string, unknown>
+        const keyStore = cleanIntegrationText(key.storeId, 180)
+        const status = cleanIntegrationText(key.status, 40).toLowerCase()
+        return keyStore === storeId && status !== 'revoked' && status !== 'disabled'
+      })
+    }
+
     const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
     const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
     if (recordContainsKey(storeData, apiKey)) return true
