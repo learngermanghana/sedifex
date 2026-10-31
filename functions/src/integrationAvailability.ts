@@ -1,3 +1,4 @@
+import { getHashedIntegrationApiKeyAuthorization } from './integrationAuth'
 import * as functions from 'firebase-functions/v1'
 import { defineString } from 'firebase-functions/params'
 import { defaultDb } from './firestore'
@@ -142,6 +143,10 @@ async function isAuthorized(req: functions.https.Request, storeId: string) {
   if (master && apiKey === master) return true
 
   try {
+    // Resolve active hashed keys before the legacy plaintext-key fallback.
+    const hashedAuthorization = await getHashedIntegrationApiKeyAuthorization(req, storeId)
+    if (hashedAuthorization !== null) return hashedAuthorization
+
     const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
     const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
     if (recordContainsKey(storeData, apiKey)) return true
