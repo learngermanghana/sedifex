@@ -92,7 +92,7 @@ export async function isIntegrationRequestAuthorized(req: functions.https.Reques
         const key = (keyDoc.data() ?? {}) as Record<string, unknown>
         const keyStore = cleanIntegrationText(key.storeId, 180)
         const status = cleanIntegrationText(key.status, 40).toLowerCase()
-        return keyStore === storeId && status !== 'revoked' && status !== 'disabled'
+        return keyStore === storeId && status === 'active'
       })
     }
 
