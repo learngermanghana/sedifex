@@ -70,6 +70,35 @@ export function redactIntegrationApiKey(apiKey: string) {
   return `${apiKey.slice(0, 4)}***${apiKey.slice(-4)}`
 }
 
+/**
+ * null: no hashed key record found (allow legacy lookup)
+ * true: active key scoped to this store
+ * false: a known hashed key is revoked, disabled, or belongs to another store.
+ *
+ * Must be consulted before legacy plaintext lookups, including legacy endpoints.
+ */
+export async function getHashedIntegrationApiKeyAuthorization(
+  req: functions.https.Request,
+  storeId: string,
+): Promise<boolean | null> {
+  const apiKey = resolveIntegrationApiKey(req)
+  if (!apiKey) return null
+
+  const tokenHash = crypto.createHash('sha256').update(apiKey).digest('hex')
+  const hashedKeys = await defaultDb.collection('integrationApiKeys')
+    .where('tokenHash', '==', tokenHash)
+    .limit(5)
+    .get()
+
+  if (hashedKeys.empty) return null
+  return hashedKeys.docs.some(keyDoc => {
+    const key = (keyDoc.data() ?? {}) as Record<string, unknown>
+    const keyStore = cleanIntegrationText(key.storeId, 180)
+    const status = cleanIntegrationText(key.status, 40).toLowerCase()
+    return keyStore === storeId && status === 'active'
+  })
+}
+
 export async function isIntegrationRequestAuthorized(req: functions.https.Request, storeId: string) {
   const apiKey = resolveIntegrationApiKey(req)
   if (!apiKey) return false
@@ -78,23 +107,8 @@ export async function isIntegrationRequestAuthorized(req: functions.https.Reques
   if (master && apiKey === master) return true
 
   try {
-    // Admin-issued keys are stored as SHA-256 hashes only, scoped to the selected store.
-    // Check the authoritative key record before legacy plaintext fallbacks. This also
-    // ensures revoking an older hashed key denies access even if plaintext mirrors remain.
-    const tokenHash = crypto.createHash('sha256').update(apiKey).digest('hex')
-    const hashedKeys = await defaultDb.collection('integrationApiKeys')
-      .where('tokenHash', '==', tokenHash)
-      .limit(5)
-      .get()
-
-    if (!hashedKeys.empty) {
-      return hashedKeys.docs.some(keyDoc => {
-        const key = (keyDoc.data() ?? {}) as Record<string, unknown>
-        const keyStore = cleanIntegrationText(key.storeId, 180)
-        const status = cleanIntegrationText(key.status, 40).toLowerCase()
-        return keyStore === storeId && status === 'active'
-      })
-    }
+    const hashedAuthorization = await getHashedIntegrationApiKeyAuthorization(req, storeId)
+    if (hashedAuthorization !== null) return hashedAuthorization
 
     const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
     const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>
