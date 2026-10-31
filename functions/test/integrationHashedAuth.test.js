@@ -60,7 +60,7 @@ async function run() {
   assert.equal(await getHashedIntegrationApiKeyAuthorization(req('unknown'), 'store-a'), null)
   assert.equal(await isIntegrationRequestAuthorized(req('unknown'), 'store-a'), false)
 
-  db = new MockFirestore({
+  Object.entries({
     'stores/store-legacy': { integrationApiKey: 'old-plain-key' },
   }).forEach(([path, value]) => db.setRaw(path, value))
   assert.equal(await isIntegrationRequestAuthorized(req('old-plain-key'), 'store-legacy'), true)
