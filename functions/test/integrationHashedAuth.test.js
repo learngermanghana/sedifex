@@ -3,7 +3,7 @@ const { createHash } = require('node:crypto')
 const Module = require('node:module')
 const { MockFirestore } = require('./helpers/mockFirestore')
 
-let db
+const db = new MockFirestore()
 const originalLoad = Module._load
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === './firestore' && parent?.filename?.endsWith('/integrationAuth.js')) {
@@ -35,7 +35,7 @@ function hash(key) {
 async function run() {
   const activeKey = 'sedx_active_test_key'
   const revokedKey = 'sedx_revoked_test_key'
-  db = new MockFirestore({
+  Object.entries({
     'integrationApiKeys/active-key': {
       storeId: 'store-a',
       tokenHash: hash(activeKey),
@@ -50,7 +50,7 @@ async function run() {
     'stores/store-a': {
       integrationApiKey: revokedKey,
     },
-  })
+  }).forEach(([path, value]) => db.setRaw(path, value))
 
   assert.equal(await getHashedIntegrationApiKeyAuthorization(req(activeKey), 'store-a'), true)
   assert.equal(await isIntegrationRequestAuthorized(req(activeKey), 'store-a'), true)
@@ -62,7 +62,7 @@ async function run() {
 
   db = new MockFirestore({
     'stores/store-legacy': { integrationApiKey: 'old-plain-key' },
-  })
+  }).forEach(([path, value]) => db.setRaw(path, value))
   assert.equal(await isIntegrationRequestAuthorized(req('old-plain-key'), 'store-legacy'), true)
   assert.equal(await isIntegrationRequestAuthorized(req('old-plain-key'), 'store-other'), false)
 
