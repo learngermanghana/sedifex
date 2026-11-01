@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHash, randomBytes } from 'node:crypto'
-import { db, getAdmin } from './_firebase-admin.js'
+import { db, getAdmin } from '../../api/_firebase-admin.js'
 import { getAuth } from 'firebase-admin/auth'
 
 // Private-pilot authorization-code issuer. Requires an authenticated Firebase ID token.

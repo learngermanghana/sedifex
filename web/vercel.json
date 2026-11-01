@@ -4,11 +4,43 @@
   "rewrites": [
     {
       "source": "/.well-known/oauth-authorization-server",
-      "destination": "/api/chatgpt-oauth-metadata"
+      "destination": "/api/chatgpt?endpoint=oauth-metadata"
     },
     {
       "source": "/.well-known/oauth-protected-resource",
-      "destination": "/api/chatgpt-oauth-resource"
+      "destination": "/api/chatgpt?endpoint=oauth-resource"
+    },
+    {
+      "source": "/api/chatgpt-create-service",
+      "destination": "/api/chatgpt?endpoint=create-service"
+    },
+    {
+      "source": "/api/chatgpt-list-services",
+      "destination": "/api/chatgpt?endpoint=list-services"
+    },
+    {
+      "source": "/api/chatgpt-mcp",
+      "destination": "/api/chatgpt?endpoint=mcp"
+    },
+    {
+      "source": "/api/chatgpt-oauth-authorize",
+      "destination": "/api/chatgpt?endpoint=oauth-authorize"
+    },
+    {
+      "source": "/api/chatgpt-oauth-jwks",
+      "destination": "/api/chatgpt?endpoint=oauth-jwks"
+    },
+    {
+      "source": "/api/chatgpt-oauth-metadata",
+      "destination": "/api/chatgpt?endpoint=oauth-metadata"
+    },
+    {
+      "source": "/api/chatgpt-oauth-resource",
+      "destination": "/api/chatgpt?endpoint=oauth-resource"
+    },
+    {
+      "source": "/api/chatgpt-oauth-token",
+      "destination": "/api/chatgpt?endpoint=oauth-token"
     },
     {
       "source": "/__/auth/:path*",

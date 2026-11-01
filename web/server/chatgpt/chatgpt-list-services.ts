@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getAuth } from 'firebase-admin/auth'
-import { db, getAdmin } from './_firebase-admin.js'
+import { db, getAdmin } from '../../api/_firebase-admin.js'
 
 // Owner-scoped read-only catalog API for future OAuth-backed ChatGPT tools.
 // Firebase ID tokens are only for internal authenticated Sedifex clients.
