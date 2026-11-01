@@ -37,8 +37,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('WWW-Authenticate', challenge)
     return res.status(401).json(error(body.id, -32001, 'Authentication required'))
   }
+  let payload: Awaited<ReturnType<typeof jwtVerify>>['payload']
   try {
-    const { payload } = await jwtVerify(bearer[1], keys, { issuer, audience, algorithms: ['RS256', 'ES256'] })
+    payload = (await jwtVerify(bearer[1], keys, { issuer, audience, algorithms: ['RS256', 'ES256'] })).payload
+  } catch {
+    res.setHeader('WWW-Authenticate', challenge)
+    return res.status(401).json(error(body.id, -32001, 'Invalid or expired access token'))
+  }
+  try {
     const tool = body.params?.name
     const scope = tool === 'create_service' ? 'services:write' : 'services:read'
     const granted = typeof payload.scope === 'string' ? payload.scope.split(' ') : []
