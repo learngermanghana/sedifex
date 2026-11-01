@@ -31,4 +31,8 @@ Configure these deployment environment variables before testing:
 
 The issuer must implement OAuth 2.1 authorization-code + PKCE, consent, refresh/revocation and metadata discovery. **Its token `sub` must equal the Sedifex Firebase UID** and the token `aud` must equal the MCP resource URL. Do not configure an unrelated provider whose subject is a different identifier.
 
-**Release blockers:** update `web/package-lock.json` after installing the added `jose` dependency, run TypeScript build and integration tests, add rate limiting and idempotency, validate ChatGPT OAuth metadata and write-action confirmation, and verify end-to-end with a test merchant. This PR must remain unmerged until those steps pass.
+**Release blockers:** update `web/package-lock.json` after installing the added `jose` dependency, run TypeScript build and integration tests, add rate limiting and test idempotency, validate ChatGPT OAuth metadata and write-action confirmation, and verify end-to-end with a test merchant. This PR must remain unmerged until those steps pass.
+
+## Retry safety
+
+The MCP `create_service` tool requires a `requestId` (8–100 letters, digits, underscores or hyphens). The caller must reuse the same ID when retrying the same creation. A Firestore transaction writes the service and its deduplication record atomically. This prevents duplicate creation from concurrent retries. The request ID is scoped to the authenticated merchant UID. Verify payload consistency for reused IDs before production.
