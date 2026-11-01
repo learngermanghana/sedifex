@@ -22,6 +22,18 @@ const handlers: Record<string, (req: VercelRequest, res: VercelResponse) => unkn
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.query.endpoint === 'openai-domain-challenge') {
+    // The OpenAI submission portal requires the *exact* generated token as
+    // plain text at /.well-known/openai-apps-challenge on the MCP domain.
+    // Reuse this function so the Vercel Hobby function count does not grow.
+    if (req.method !== 'GET') return res.status(405).end()
+    const token = process.env.SEDIFEX_OPENAI_DOMAIN_CHALLENGE
+    if (!token || /[\r\n]/.test(token)) return res.status(404).end()
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    return res.status(200).send(token)
+  }
   const endpoint = typeof req.query.endpoint === 'string' ? req.query.endpoint : ''
   const selected = Object.prototype.hasOwnProperty.call(handlers, endpoint) ? handlers[endpoint] : undefined
   if (!selected) return res.status(404).json({ error: 'Unknown Sedifex integration endpoint' })
