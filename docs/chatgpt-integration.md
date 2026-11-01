@@ -7,7 +7,7 @@ Authenticate with a valid **Firebase ID token** for the Sedifex merchant owner, 
 ```json
 {"storeId":"<store-id>","name":"Home Cleaning","description":"Standard cleaning","price":300,"currency":"GHS","durationMinutes":120}
 ```
-The server verifies the token, checks the store owner UID, validates input and creates a document under `stores/{storeId}/services`. It rejects other store users. No website integration API keys are accepted.
+The server verifies the token, checks the store owner UID, validates input and creates a document in the canonical top-level `products` collection, initially unpublished and hidden from the website. It rejects other store users. No website integration API keys are accepted.
 
 ## Required before ChatGPT release
 1. Implement OAuth 2.1 account linking with PKCE, authorization-code exchange, refresh/revocation and audience/scope validation. Do not expose Firebase ID tokens to ChatGPT or use a global integration API key for merchant writes.
