@@ -68,7 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await ref.create({ storeId, name, description, price, currency: args.currency || 'GHS', durationMinutes: duration, itemType: 'service', type: 'SERVICE', category: 'General Services', isPublished: false, isWebsiteVisible: false, stockCount: null, source: 'chatgpt-mcp', createdBy: uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
     return res.json({ jsonrpc: '2.0', id: body.id ?? null, result: result({ ok: true, serviceId: ref.id, name, published: false }) })
   } catch {
-    res.setHeader('WWW-Authenticate', challenge)
-    return res.status(401).json(error(body.id, -32001, 'Authentication failed'))
+    return res.status(503).json(error(body.id, -32000, 'Tool temporarily unavailable'))
   }
 }
