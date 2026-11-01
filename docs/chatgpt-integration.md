@@ -36,3 +36,7 @@ The issuer must implement OAuth 2.1 authorization-code + PKCE, consent, refresh/
 ## Retry safety
 
 The MCP `create_service` tool requires a `requestId` (8–100 letters, digits, underscores or hyphens). The caller must reuse the same ID when retrying the same creation. A Firestore transaction writes the service and its deduplication record atomically. This prevents duplicate creation from concurrent retries. The request ID is scoped to the authenticated merchant UID. Verify payload consistency for reused IDs before production.
+
+## Private email/password account pilot
+
+Set `SEDIFEX_MCP_TEST_UIDS` to a comma-separated list of **Firebase Authentication UIDs**, not email addresses. Leave unset to deny all MCP service actions. Add the test merchant UID only after the OAuth issuer is configured to emit that verified UID as `sub`. Email/password sign-in remains on the existing Sedifex Firebase login; never ask the tester for their password. The allowlist applies to MCP tool calls, not the legacy internal Firebase-token endpoints. Before any production deployment, remove or separately protect the legacy endpoints and verify OAuth issuer, audience, consent, scopes and revocation end to end.
