@@ -10,10 +10,15 @@ const hash = (s: string) => createHash('sha256').update(s).digest('base64url')
 const permitted = (uid: string) => (process.env.SEDIFEX_MCP_TEST_UIDS || '').split(',').map(x => x.trim()).includes(uid)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store')
+  if (req.method === 'GET') {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(req.query)) if (typeof value === 'string') query.set(key, value)
+    return res.redirect(302, '/chatgpt/connect?' + query.toString())
+  }
   if (req.method !== 'POST') return res.status(405).end()
   const { client_id, redirect_uri, code_challenge, code_challenge_method, scope, state, resource } = req.body || {}
   if (!origin() || !process.env.SEDIFEX_OAUTH_CLIENT_ID || !process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(503).json({error:'OAuth not configured'})
-  if (client_id !== process.env.SEDIFEX_OAUTH_CLIENT_ID || typeof redirect_uri !== 'string' || !redirect_uri.startsWith('https://chatgpt.com/connector/oauth/') || !/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge || '') || code_challenge_method !== 'S256' || typeof state !== 'string' || !state || resource !== process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(400).json({error:'invalid_request'})
+  if (client_id !== process.env.SEDIFEX_OAUTH_CLIENT_ID || typeof redirect_uri !== 'string' || redirect_uri !== process.env.SEDIFEX_OAUTH_REDIRECT_URI || !/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge || '') || code_challenge_method !== 'S256' || typeof state !== 'string' || !state || resource !== process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(400).json({error:'invalid_request'})
   const scopes = String(scope || '').split(' ').filter(Boolean)
   if (!scopes.length || scopes.some(s => !['services:read','services:write'].includes(s))) return res.status(400).json({error:'invalid_scope'})
   const match = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))
