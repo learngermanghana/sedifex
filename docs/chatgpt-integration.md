@@ -17,3 +17,18 @@ The server verifies the token, checks the store owner UID, validates input and c
 5. Verify production deployment environment and publish the ChatGPT app only after security review.
 
 This work does **not** change the canonical website integration contract; see [integration-contract.md](./integration-contract.md).
+
+
+## MCP adapter (development only)
+
+The new `POST /api/chatgpt-mcp` exposes `list_services` and `create_service` via JSON-RPC, with JWT validation using `jose`. The protected-resource metadata is at `/.well-known/oauth-protected-resource`.
+
+Configure these deployment environment variables before testing:
+
+- `SEDIFEX_MCP_RESOURCE_URL`: exact HTTPS URL of the MCP endpoint (e.g. `https://your-domain.example/api/chatgpt-mcp`)
+- `SEDIFEX_MCP_OAUTH_ISSUER`: trusted OAuth issuer URL
+- `SEDIFEX_MCP_JWKS_URL`: trusted HTTPS JWKS endpoint for that issuer
+
+The issuer must implement OAuth 2.1 authorization-code + PKCE, consent, refresh/revocation and metadata discovery. **Its token `sub` must equal the Sedifex Firebase UID** and the token `aud` must equal the MCP resource URL. Do not configure an unrelated provider whose subject is a different identifier.
+
+**Release blockers:** update `web/package-lock.json` after installing the added `jose` dependency, run TypeScript build and integration tests, add rate limiting and idempotency, validate ChatGPT OAuth metadata and write-action confirmation, and verify end-to-end with a test merchant. This PR must remain unmerged until those steps pass.
