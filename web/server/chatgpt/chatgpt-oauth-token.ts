@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHash, createPrivateKey } from 'node:crypto'
 import { SignJWT } from 'jose'
-import { db } from './_firebase-admin.js'
+import { db } from '../../api/_firebase-admin.js'
 const hash = (s:string) => createHash('sha256').update(s).digest('base64url')
 export default async function handler(req:VercelRequest,res:VercelResponse) {
  res.setHeader('Cache-Control','no-store')

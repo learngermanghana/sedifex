@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { FieldValue } from 'firebase-admin/firestore'
-import { db } from './_firebase-admin.js'
+import { db } from '../../api/_firebase-admin.js'
 
 // Configure a trusted OAuth 2.1/OIDC issuer with a JWT JWKS endpoint.
 // No configuration means all account-specific tools fail closed.
@@ -32,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (body.method !== 'tools/call') return res.status(400).json(error(body.id, -32601, 'Unknown method'))
   if (!issuer || !audience || !keys) return res.status(503).json(error(body.id, -32000, 'OAuth provider not configured'))
   const bearer = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ''))
-  const challenge = 'Bearer resource_metadata="' + audience + '/.well-known/oauth-protected-resource"'
+  const challenge = 'Bearer resource_metadata="' + new URL('/.well-known/oauth-protected-resource', audience).toString() + '"'
   if (!bearer) {
     res.setHeader('WWW-Authenticate', challenge)
     return res.status(401).json(error(body.id, -32001, 'Authentication required'))

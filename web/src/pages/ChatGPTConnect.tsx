@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { auth } from '../firebase'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
 
 export default function ChatGPTConnect() {
  const params = new URLSearchParams(window.location.search)
+ const [signedIn,setSignedIn]=useState(Boolean(auth.currentUser))
+ useEffect(()=>onAuthStateChanged(auth,user=>setSignedIn(Boolean(user))),[])
  const [email,setEmail]=useState('')
  const [password,setPassword]=useState('')
  const [error,setError]=useState('')
@@ -32,12 +34,12 @@ export default function ChatGPTConnect() {
   <p>ChatGPT requests access to your Sedifex services.</p>
   <p><strong>Permissions:</strong> {scope.includes('services:read')?'View services. ':''}{scope.includes('services:write')?'Create unpublished services.':''}</p>
   <p>Your password is sent only to Firebase Authentication, never to ChatGPT.</p>
-  {!auth.currentUser&&<form onSubmit={e=>{e.preventDefault();void approve()}}>
+  {!signedIn&&<form onSubmit={e=>{e.preventDefault();void approve()}}>
    <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>
    <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></label>
    <button disabled={busy||!valid} type="submit">Sign in and approve</button>
   </form>}
-  {auth.currentUser&&<button disabled={busy||!valid} onClick={()=>void approve()}>Approve connection</button>}
+  {signedIn&&<button disabled={busy||!valid} onClick={()=>void approve()}>Approve connection</button>}
   <button type="button" onClick={()=>window.location.assign('/dashboard')}>Cancel</button>
   {!valid&&<p>Invalid authorization request.</p>}
   {error&&<p role="alert">{error}</p>}

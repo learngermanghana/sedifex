@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
-import { db, getAdmin } from './_firebase-admin.js'
+import { db, getAdmin } from '../../api/_firebase-admin.js'
 
 /**
  * Authenticated merchant service API. This is NOT an OAuth endpoint:

@@ -2,6 +2,7 @@ import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import App from './App'
+import ChatGPTConnect from './pages/ChatGPTConnect'
 import ShellLayout from './layout/ShellLayout'
 import Dashboard from './pages/Dashboard'
 import DashboardHub from './pages/DashboardHub'
@@ -100,6 +101,7 @@ function LazyPage({ children }: { children: React.ReactNode }) {
 }
 
 const router = createBrowserRouter([
+  { path: '/chatgpt/connect', element: <ChatGPTConnect /> },
   { path: '/receipt/:saleId', element: <ReceiptView /> },
   { path: '/quick-pay/receipt/:storeId/:reference', element: <PublicQuickPayReceipt /> },
   { path: '/event-contract/:token', element: <PublicEventContractPage /> },
