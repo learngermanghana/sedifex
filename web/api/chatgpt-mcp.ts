@@ -18,7 +18,7 @@ function error(id: unknown, code: number, message: string) {
 }
 const tools = [
   { name: 'list_services', description: 'List services owned by the connected Sedifex merchant.', inputSchema: { type: 'object', properties: { storeId: { type: 'string' } }, required: ['storeId'], additionalProperties: false }, securitySchemes: [{ type: 'oauth2', scopes: ['services:read'] }] },
-  { name: 'create_service', description: 'Create an unpublished service in the connected Sedifex merchant account. Ask for user confirmation before invoking.', inputSchema: { type: 'object', properties: { storeId: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, price: { type: 'number' }, currency: { type: 'string', enum: ['GHS', 'USD'] }, durationMinutes: { type: 'integer' } }, required: ['storeId', 'name', 'price', 'durationMinutes'], additionalProperties: false }, securitySchemes: [{ type: 'oauth2', scopes: ['services:write'] }] },
+  { name: 'create_service', description: 'Create an unpublished service in the connected Sedifex merchant account. Ask for user confirmation before invoking.', inputSchema: { type: 'object', properties: { storeId: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, price: { type: 'number' }, currency: { type: 'string', enum: ['GHS', 'USD'] }, durationMinutes: { type: 'integer' }, requestId: { type: 'string', description: 'Unique stable identifier for this creation; reuse on retries' } }, required: ['storeId', 'name', 'price', 'durationMinutes', 'requestId'], additionalProperties: false }, securitySchemes: [{ type: 'oauth2', scopes: ['services:write'] }] },
 ]
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store')
@@ -70,9 +70,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const price = args.price
     const duration = args.durationMinutes
     if (!name || name.length > 120 || description.length > 2000 || typeof price !== 'number' || !Number.isFinite(price) || price < 0 || price > 100000000 || typeof duration !== 'number' || !Number.isInteger(duration) || duration < 1 || duration > 10080 || (args.currency !== undefined && args.currency !== 'GHS' && args.currency !== 'USD')) return res.json(error(body.id, -32602, 'Invalid service details'))
+    const requestId = typeof args.requestId === 'string' ? args.requestId.trim() : ''
+    if (!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) return res.json(error(body.id, -32602, 'Valid requestId required'))
     const ref = firestore.collection('products').doc()
-    await ref.create({ storeId, name, description, price, currency: args.currency || 'GHS', durationMinutes: duration, itemType: 'service', type: 'SERVICE', category: 'General Services', isPublished: false, isWebsiteVisible: false, stockCount: null, source: 'chatgpt-mcp', createdBy: uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
-    return res.json({ jsonrpc: '2.0', id: body.id ?? null, result: result({ ok: true, serviceId: ref.id, name, published: false }) })
+    const dedupe = firestore.collection('chatgpt_service_requests').doc(uid + '_' + requestId)
+    const existingId = await firestore.runTransaction(async tx => {
+      const previous = await tx.get(dedupe)
+      if (previous.exists) return String(previous.data()?.serviceId || '')
+      tx.create(ref,{ storeId, name, description, price, currency: args.currency || 'GHS', durationMinutes: duration, itemType: 'service', type: 'SERVICE', category: 'General Services', isPublished: false, isWebsiteVisible: false, stockCount: null, source: 'chatgpt-mcp', createdBy: uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
+      tx.create(dedupe, { serviceId: ref.id, uid, storeId, createdAt: FieldValue.serverTimestamp() })
+      return ''
+    })
+    return res.json({ jsonrpc: '2.0', id: body.id ?? null, result: result({ ok: true, serviceId: existingId || ref.id, name, published: false, duplicate: Boolean(existingId) }) })
   } catch {
     return res.status(503).json(error(body.id, -32000, 'Tool temporarily unavailable'))
   }
