@@ -42,10 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (storeId === identity.uid)
     if (!owner) return res.status(403).json({ error: 'Store owner access required' })
 
-    const serviceRef = storeRef.collection('services').doc()
+    // The merchant Items dashboard reads the top-level products collection.\n    // Keep new AI-created services private until the merchant publishes them.\n    const serviceRef = firestore.collection('products').doc()
     await serviceRef.create({
       storeId, name, description, price, currency,
-      durationMinutes, itemType: 'service', type: 'SERVICE',
+      durationMinutes, itemType: 'service', type: 'SERVICE',\n      category: 'General Services', isPublished: false, isWebsiteVisible: false,\n      stockCount: null,
       createdBy: identity.uid, source: 'chatgpt-integration',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
