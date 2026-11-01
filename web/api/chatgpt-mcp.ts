@@ -59,6 +59,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const owner = store.data() ?? {}
     // OAuth subject MUST be the verified Sedifex Firebase UID, not an email.
     const uid = payload.sub
+    // Private pilot: deny everyone until an explicit Firebase UID allowlist is configured.
+    const allowedUids = (process.env.SEDIFEX_MCP_TEST_UIDS || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (!allowedUids.includes(uid)) return res.status(403).json(error(body.id, -32003, 'Account not enrolled in private pilot'))
     if (owner.ownerUid !== uid && owner.ownerId !== uid && storeId !== uid) return res.status(403).json(error(body.id, -32003, 'Store owner required'))
     if (tool === 'list_services') {
       const snapshot = await firestore.collection('products').where('storeId', '==', storeId).limit(250).get()
