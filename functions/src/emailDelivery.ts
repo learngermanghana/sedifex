@@ -1,6 +1,7 @@
 import { defineString } from 'firebase-functions/params'
 import { defaultDb } from './firestore'
 import { isEmailAutomationEnabled, loadAutomationSettings } from './automationSettings'
+import { bookingStoreRecipients } from './bookingNotificationRecipients'
 
 const SEDIFEX_NOTIFICATION_WEBHOOK_URL = defineString('SEDIFEX_NOTIFICATION_WEBHOOK_URL', { default: '' })
 const SEDIFEX_NOTIFICATION_SHARED_SECRET = defineString('SEDIFEX_NOTIFICATION_SHARED_SECRET', { default: '' })
@@ -245,10 +246,16 @@ async function sendWebhook(
   url: string,
   channel: 'custom_webhook' | 'sedifex_notification',
 ): Promise<TransactionalEmailDeliveryResult> {
+  // A store's legacy reply-to setting may have been copied from a different
+  // workspace. For transactional booking messages only use an authenticated,
+  // email-verified owner address; otherwise omit Reply-To entirely.
+  const isBooking = input.eventType.startsWith('booking.')
+  const bookingOwners = isBooking ? await bookingStoreRecipients(input.storeId, []) : []
+  const safeReplyTo = isBooking ? (bookingOwners[0] || '') : settings.replyToEmail
   const payload: RecordMap = {
     ...(input.webhookPayload ? record(input.webhookPayload) : buildCompatibleWebhookPayload(input)),
     senderName: settings.storeName,
-    replyToEmail: settings.replyToEmail || null,
+    replyToEmail: safeReplyTo || null,
   }
 
   try {
@@ -309,6 +316,20 @@ export async function deliverTransactionalEmail(
   }
 
   const preference = settings.deliveryPreference
+
+  // Immediate booking emails are handled centrally when the business uses
+  // Automatic or Sedifex Email. The existing spreadsheet Apps Script remains
+  // independent and may continue its own scheduled reminder triggers.
+  // Do not fall back to another store's script if the central sender fails.
+  const isImmediateBooking = input.eventType.startsWith('booking.')
+    && !input.eventType.startsWith('booking.reminder_')
+  if (isImmediateBooking && (preference === 'automatic' || preference === 'sedifex')) {
+    if (!settings.centralUrl) {
+      return noSenderResult(settings, 'central-booking-sender-not-configured')
+    }
+    return sendWebhook(input, settings, settings.centralUrl, 'sedifex_notification')
+  }
+
   let lastFailure: TransactionalEmailDeliveryResult | null = null
   let attemptedCustomUrl = ''
 
