@@ -67,7 +67,7 @@ function presentSale(snapshot: FirebaseFirestore.QueryDocumentSnapshot | Firebas
   const status = asText(data.status).toLowerCase() === 'voided'
     ? 'voided'
     : hasVerifiedProviderPayment ? 'verified'
-    : method === 'cash' ? 'cash_recorded' : 'recorded_unverified'
+    : isCashOnly ? 'cash_recorded' : 'recorded_unverified'
 
   return {
     id: snapshot.id,
