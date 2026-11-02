@@ -189,7 +189,7 @@ describe('resolveNavigation', () => {
       workspaceProfile: { industry: 'cleaning', labelPolicy: 'industry_aliases' },
     })
     expect(staff.map(item => item.id)).toEqual([
-      'reports', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses',
+      'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
     ])
   })
 
@@ -202,7 +202,7 @@ describe('resolveNavigation', () => {
         customLabels: { '/customers': 'Property clients' },
       },
     })
-    expect(owner.map(item => item.id)).toEqual(['customers', 'bookings', 'settlement', 'bulk-email', 'account'])
+    expect(owner.map(item => item.id)).toEqual(['customers', 'bookings', 'bulk-email', 'settlement', 'account'])
     expect(owner.find(item => item.id === 'customers')?.label).toBe('Property clients')
   })
 
