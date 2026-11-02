@@ -269,14 +269,16 @@ const COLS = [
 
 function doPost(e) {
   try {
-    if (CONFIG.requireSecret) {
-      const expected = PropertiesService.getScriptProperties().getProperty(CONFIG.secretProperty) || '';
-      const got = getWebhookSecret_(e);
-      if (!expected || got !== expected) return json_(401, { ok: false, error: 'unauthorized' });
-    }
-
     const body = parseJsonBody_(e);
     if (!body) return json_(400, { ok: false, error: 'invalid-json-body' });
+
+    if (CONFIG.requireSecret) {
+      const expected = PropertiesService.getScriptProperties().getProperty(CONFIG.secretProperty) || '';
+      // Apps Script Web Apps cannot reliably read arbitrary request headers.
+      // The Sedifex server sends this unique secret inside the JSON body.
+      const got = str_(body.secret || '');
+      if (!expected || got !== expected) return json_(401, { ok: false, error: 'unauthorized' });
+    }
 
     const p = normalizePayload_(body);
     const expectedStoreId = str_(PropertiesService.getScriptProperties().getProperty('SEDIFEX_EXPECTED_STORE_ID'));
