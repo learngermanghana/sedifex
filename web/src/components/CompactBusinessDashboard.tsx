@@ -71,6 +71,7 @@ const DEFAULT_WIDGETS_BY_INDUSTRY: Record<Industry, WidgetId[]> = {
   ngo: ['needs-attention', 'recent-leads', 'payments-due', 'staff-activity'],
   school: ['needs-attention', 'upcoming', 'booking-payments', 'recent-leads'],
   event: ['needs-attention', 'upcoming', 'payments-due', 'pending-client-tasks', 'recent-leads'],
+  cleaning: ['needs-attention', 'upcoming', 'booking-payments', 'outstanding-invoices'],
 }
 
 function asRecord(value: unknown): RecordData {
@@ -559,6 +560,16 @@ export default function CompactBusinessDashboard() {
         { id: 'client-tasks', label: 'Client tasks', value: String(pendingClientTasks), hint: 'Open event/client actions' },
       ]
     }
+    if (industry === 'cleaning') {
+      // Only reuse data already loaded for the regular dashboard. These counts
+      // describe saved bookings/invoices, not automated cleaning-job tracking.
+      return [
+        { id: 'bookings-today', label: 'Bookings added today', value: String(todayBookings.length), hint: 'Booking records created today' },
+        { id: 'upcoming', label: 'Upcoming bookings', value: String(bookingEntries.length), hint: 'Future scheduled appointments' },
+        { id: 'unpaid', label: 'Outstanding invoices', value: String(outstandingInvoices.length), hint: outstandingBalance > 0 ? `${formatMoney(outstandingBalance)} unpaid` : 'No outstanding invoice balance' },
+        { id: 'clients', label: 'Clients', value: String(customers.length), hint: 'Saved customer records' },
+      ]
+    }
     if (industry === 'travel' || industry === 'school') {
       return [
         { id: 'bookings-today', label: industry === 'school' ? 'Classes/bookings today' : 'Bookings today', value: String(todayBookings.length), hint: 'New booking records today' },
@@ -609,10 +620,10 @@ export default function CompactBusinessDashboard() {
       case 'upcoming':
         return {
           id,
-          title: 'Upcoming appointments/events',
+          title: industry === 'cleaning' ? 'Upcoming cleaning bookings' : 'Upcoming appointments/events',
           eyebrow: 'Schedule',
           summary: String(upcomingEntries.length),
-          description: 'Future bookings, classes and events in one compact list.',
+          description: industry === 'cleaning' ? 'Future cleaning appointments from existing bookings.' : 'Future bookings, classes and events in one compact list.',
           to: industry === 'event' ? '/event-planning' : '/upcoming-events',
           linkLabel: 'View schedule',
           items: upcomingEntries.slice(0, 3).map(item => ({ id: `${item.to}-${item.id}`, title: item.title, meta: `${item.customer} · ${formatCompactDate(item.date)}`, to: item.to })),

@@ -125,7 +125,7 @@ function mergePreferences(raw: Record<string, unknown> | undefined | null): Stor
       DEFAULT_PREFERENCES.productDefaults.enableNonInventoryMode,
   }
 
-  const allowedIndustries: Industry[] = ['shop', 'travel', 'ngo', 'school', 'event']
+  const allowedIndustries: Industry[] = ['shop', 'travel', 'ngo', 'school', 'event', 'cleaning']
   const explicitIndustry =
     navigation &&
     typeof navigation.industry === 'string' &&

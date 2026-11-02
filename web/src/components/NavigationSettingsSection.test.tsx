@@ -15,3 +15,28 @@ it('searches pages without losing selected modules and reports save failures', a
   expect(save.mock.calls[0][0].enabledModules).toContain('account')
   expect(await screen.findByText('Save failed')).toBeVisible()
 })
+
+
+it('applies the Cleaning Services industry preset and saves its labels without turning on unrelated modules', async () => {
+  const save = vi.fn().mockResolvedValue(undefined)
+  const user = userEvent.setup()
+  render(<NavigationSettingsSection
+    preferences={{ industry: 'shop', labelPolicy: 'shared', enabledModules: ['dashboard', 'sell'], customNavItems: [] }}
+    onSave={save}
+    canEdit
+  />)
+
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Business type' }), 'cleaning')
+  expect(screen.getAllByText('Recommended for Cleaning Services')).toHaveLength(8)
+  await user.click(screen.getByRole('button', { name: 'Save navigation settings' }))
+
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({
+    industry: 'cleaning',
+    labelPolicy: 'industry_aliases',
+    enabledModules: ['dashboard', 'products', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports'],
+  }))
+  const saved = save.mock.calls[0][0]
+  expect(saved.enabledModules).not.toContain('events')
+  expect(saved.enabledModules).not.toContain('automations')
+  expect(await screen.findByText('Navigation saved. Your sidebar is up to date.')).toBeVisible()
+})

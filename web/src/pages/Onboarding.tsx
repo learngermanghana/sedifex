@@ -17,6 +17,7 @@ const TYPES: { id: Industry; title: string; description: string; action: string;
   { id: 'ngo', title: 'NGO, church or foundation', description: 'Supporters and activities', action: 'Add your first customer or supporter', target: '/customers' },
   { id: 'school', title: 'School or training centre', description: 'Courses and registrations', action: 'Add your first course', target: '/products/new?itemType=course' },
   { id: 'event', title: 'Event planning', description: 'Events, clients and coordination', action: 'Plan your first event', target: '/event-planning' },
+  { id: 'cleaning', title: 'Cleaning Services', description: 'Services, clients and cleaning appointments', action: 'Add your first cleaning service', target: '/products/new?itemType=service' },
 ]
 const empty: Draft = { name: '', industry: 'shop', phone: '', country: '', city: '', address: '' }
 export default function Onboarding() {
@@ -67,7 +68,17 @@ export default function Onboarding() {
     inFlight.current = true; setBusy(true); setError('')
     try {
       if (requireProfile) {
-        const navigation = { ...preferences.navigation, industry: draft.industry, enabledModules: navigationConfigured ? preferences.navigation.enabledModules : INDUSTRY_ENABLED_MODULE_PRESETS[draft.industry] }
+        const selectingCleaning = draft.industry === 'cleaning' && preferences.navigation.industry !== 'cleaning'
+        const navigation = {
+          ...preferences.navigation,
+          industry: draft.industry,
+          // Apply the cleaning starter pages and labels on first selection; keep
+          // saved custom navigation intact for already-configured cleaning stores.
+          ...(draft.industry === 'cleaning' ? { labelPolicy: 'industry_aliases' as const } : {}),
+          enabledModules: !navigationConfigured || selectingCleaning
+            ? INDUSTRY_ENABLED_MODULE_PRESETS[draft.industry]
+            : preferences.navigation.enabledModules,
+        }
         await Promise.all([
           updatePreferences({ navigation }),
           setDoc(doc(db, 'stores', storeId), { displayName: draft.name.trim(), name: draft.name.trim(), industry: draft.industry, phone: draft.phone.trim(), country: draft.country.trim(), city: draft.city.trim(), addressLine1: draft.address.trim(), updatedAt: serverTimestamp() }, { merge: true }),

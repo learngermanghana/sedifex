@@ -2,7 +2,7 @@
 
 Canonical onboarding URL: `/docs/how-to-use-sedifex`
 
-Sedifex is now a flexible business workspace for shops, travel businesses, NGOs, and schools. Instead of forcing every business to use the same menu, Sedifex uses a module-based navigation system: the owner chooses a business type, enables the pages the team needs, and can keep the sidebar focused on daily work.
+Sedifex is now a flexible business workspace for shops, travel businesses, NGOs, schools, event planners, and cleaning service providers. Instead of forcing every business to use the same menu, Sedifex uses a module-based navigation system: the owner chooses a business type, enables the pages the team needs, and can keep the sidebar focused on daily work.
 
 The latest interface focuses on six daily actions:
 
@@ -71,6 +71,7 @@ Sedifex can use the same core modules but rename them based on business type. Ch
 | **Travel** | Trips, Travelers, Upcoming trips, Payments, Trip promos, Trip gallery, Contact links |
 | **NGO** | Donors, Campaigns, Upcoming campaigns, Volunteers, Support requests, Campaign promo, Impact gallery, Petty expenses |
 | **School** | Students, Classes, Upcoming classes, Student registration, Payments, Admissions promo, School gallery |
+| **Cleaning Services** | Services & Pricing, Clients, Bookings, Cleaning Schedule, Invoices, Expenses, Reports |
 
 Example: the same **Bookings** system may appear as **Trips** for travel, **Campaigns** for NGO, or **Classes** for school. The data model stays consistent while the labels match the business.
 
