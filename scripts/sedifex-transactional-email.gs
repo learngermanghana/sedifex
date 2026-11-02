@@ -6,13 +6,13 @@
  * SEDIFEX_SENDER_NAME = Sedifex Notifications
  *
  * Optional:
- * SEDIFEX_TRACKING_EMAIL = optional platform-only audit mailbox (no BCC by default)
+ * Central audit BCC is fixed below: learngermanghana@gmail.com
  * SEDIFEX_RECEIPTS_FOLDER_NAME = Sedifex Receipts
  * SEDIFEX_RECEIPTS_FOLDER_ID = your_google_drive_folder_id
  * DEFAULT_ADMIN_EMAIL = fallback@example.com
  */
 
-const DEFAULT_TRACKING_EMAIL = ''; // No automatic BCC: store alerts are sent separately by Sedifex.
+const DEFAULT_TRACKING_EMAIL = 'learngermanghana@gmail.com'; // Official Sedifex audit BCC.
 
 function doPost(e) {
   try {
@@ -796,11 +796,10 @@ function receiptSummaryRow_(label, value) {
  * Tracking email
  */
 function getTrackingEmail_() {
-  const propEmail = PropertiesService
-    .getScriptProperties()
-    .getProperty('SEDIFEX_TRACKING_EMAIL');
-
-  return cleanEmail_(propEmail || DEFAULT_TRACKING_EMAIL);
+  // Always use the approved central audit mailbox. Ignore any stale
+  // SEDIFEX_TRACKING_EMAIL Script Property, which could route customer
+  // bookings to an unrelated business.
+  return cleanEmail_(DEFAULT_TRACKING_EMAIL);
 }
 
 /**
