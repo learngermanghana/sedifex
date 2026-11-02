@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const editor = readFileSync(new URL('./BookingEditor.tsx', import.meta.url), 'utf8')
-const bookingSync = readFileSync(new URL('../../../functions/src/integrationBookingSync.ts', import.meta.url), 'utf8')
-const appsScriptTemplate = readFileSync(new URL('../../../docs/booking-apps-script-template.md', import.meta.url), 'utf8')
+const editor = readFileSync('src/pages/BookingEditor.tsx', 'utf8')
+const bookingSync = readFileSync('../functions/src/integrationBookingSync.ts', 'utf8')
+const appsScriptTemplate = readFileSync('../docs/booking-apps-script-template.md', 'utf8')
 
 describe('store-isolated booking Apps Script delivery', () => {
   it('never posts booking/customer data to a shared Apps Script URL from the client', () => {
