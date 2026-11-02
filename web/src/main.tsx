@@ -137,7 +137,7 @@ const router = createBrowserRouter([
       { path: 'products', element: <Products /> },
       { path: 'products/new', element: <Products /> },
       { path: 'sell', element: <Sell /> },
-      { path: 'activity', element: <SalesActivity /> }
+      { path: 'activity', element: <SalesActivity /> },
       { path: 'quick-pay', element: <QuickPay /> },
       { path: 'quick-pay/print', element: <QuickPayPrint /> },
       { path: 'customers', element: <CustomerCRM /> },
