@@ -166,6 +166,46 @@ describe('resolveNavigation', () => {
     ])
   })
 
+  it('shows the cleaning business pages in a practical order with cleaning-specific labels', () => {
+    const owner = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: { industry: 'cleaning', labelPolicy: 'industry_aliases' },
+    })
+    expect(INDUSTRY_ENABLED_MODULE_PRESETS.cleaning).toEqual([
+      'dashboard', 'products', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
+    ])
+    expect(owner.map(item => item.id)).toEqual([
+      'dashboard', 'products', 'customers', 'bookings', 'upcoming-events',
+      'invoices', 'expenses', 'reports', 'settlement', 'account',
+    ])
+    expect(owner.find(item => item.id === 'products')).toMatchObject({ label: 'Services & Pricing', target: '/products' })
+    expect(owner.find(item => item.id === 'customers')).toMatchObject({ label: 'Clients', target: '/customers' })
+    expect(owner.find(item => item.id === 'upcoming-events')).toMatchObject({ label: 'Cleaning Schedule', target: '/upcoming-events' })
+    expect(owner.map(item => item.id)).not.toContain('events')
+    expect(owner.map(item => item.id)).not.toContain('automations')
+
+    const staff = resolveNavigation({
+      role: 'staff',
+      workspaceProfile: { industry: 'cleaning', labelPolicy: 'industry_aliases' },
+    })
+    expect(staff.map(item => item.id)).toEqual([
+      'reports', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses',
+    ])
+  })
+
+  it('respects custom module choices and custom labels for cleaning businesses', () => {
+    const owner = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: {
+        industry: 'cleaning', labelPolicy: 'industry_aliases',
+        enabledModules: ['customers', 'bookings', 'bulk-email'],
+        customLabels: { '/customers': 'Property clients' },
+      },
+    })
+    expect(owner.map(item => item.id)).toEqual(['customers', 'bookings', 'settlement', 'bulk-email', 'account'])
+    expect(owner.find(item => item.id === 'customers')?.label).toBe('Property clients')
+  })
+
   it('leaves advanced pages available for opt-in instead of enabling them at signup', () => {
     for (const industry of ['shop', 'travel', 'ngo', 'school'] as const) {
       expect(INDUSTRY_ENABLED_MODULE_PRESETS[industry]).not.toContain('reports')
