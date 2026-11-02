@@ -423,7 +423,7 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
       {tab === 'booking' && (
         <div className="account-overview__website-sync">
           <h2>Booking sheet sync</h2>
-          <p className="account-overview__hint">This is only for sending Sedifex booking records into a Google Sheet through Apps Script. Website booking forms use the Website API key.</p>
+          <p className="account-overview__hint">Merchant booking scripts are paused by default because older scripts may email or BCC customers when a booking is synced. Sedifex now sends transactional emails and reminders itself. To resume sheet syncing, the merchant script must first be audited as sheet-only (no email actions) and explicitly enabled by an administrator. Website booking forms still use the Website API key.</p>
           <div className="account-overview__form-grid">
             <label><span>Booking Apps Script Web App URL</span><input value={draft.bookingWebAppUrl} onChange={event => update('bookingWebAppUrl', event.target.value)} placeholder="https://script.google.com/macros/s/.../exec" /></label>
             <label><span>Booking webhook secret (optional)</span><input type="password" value={draft.bookingSecret} onChange={event => update('bookingSecret', event.target.value)} placeholder="Optional shared secret" /></label>
@@ -436,13 +436,14 @@ export default function IntegrationSettingsHub({ defaultTab = 'website' }: Props
 
       {tab === 'email' && (
         <div className="account-overview__website-sync">
-          <h2>Email Apps Script</h2>
+          <h2>Bulk campaign email Apps Script</h2>
+          <p className="account-overview__hint">This optional business Gmail integration is for bulk marketing campaigns only. It does not send Sedifex booking confirmations, receipts, reminders or other transactional notifications, which now use the central Sedifex sender.</p>
           <div className="account-overview__form-grid">
             <label><span>Email Apps Script Web App URL</span><input value={draft.emailWebAppUrl} onChange={event => update('emailWebAppUrl', event.target.value)} placeholder="https://script.google.com/macros/s/.../exec" /></label>
             <label><span>Shared token</span><input type="password" value={draft.emailSharedToken} onChange={event => update('emailSharedToken', event.target.value)} /></label>
             <label><span>From name</span><input value={draft.emailFromName} onChange={event => update('emailFromName', event.target.value)} /></label>
           </div>
-          <button type="button" className="button" onClick={saveEmail} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save email integration'}</button>
+          <button type="button" className="button" onClick={saveEmail} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save campaign email integration'}</button>
         </div>
       )}
 
