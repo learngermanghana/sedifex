@@ -5,6 +5,8 @@ import { bookingStoreRecipients } from './bookingNotificationRecipients'
 
 const SEDIFEX_NOTIFICATION_WEBHOOK_URL = defineString('SEDIFEX_NOTIFICATION_WEBHOOK_URL', { default: '' })
 const SEDIFEX_NOTIFICATION_SHARED_SECRET = defineString('SEDIFEX_NOTIFICATION_SHARED_SECRET', { default: '' })
+const SEDIFEX_EMAIL_APPS_SCRIPT_URL = defineString('SEDIFEX_EMAIL_APPS_SCRIPT_URL', { default: '' })
+const SEDIFEX_EMAIL_APPS_SCRIPT_SECRET = defineString('SEDIFEX_EMAIL_APPS_SCRIPT_SECRET', { default: '' })
 
 type RecordMap = Record<string, unknown>
 
@@ -12,6 +14,7 @@ type DeliveryChannel =
   | 'apps_script_gmail'
   | 'custom_webhook'
   | 'sedifex_notification'
+  | 'sedifex_apps_script'
   | 'outbox_only'
 
 export type TransactionalEmailDeliveryInput = {
@@ -121,13 +124,11 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-/** Centralize immediate booking emails; leave scheduled reminders on their
- * configured route so existing Google Sheets reminder schedules can continue.
+/** All Sedifex transactional emails use our own authenticated sender.
+ * Merchant Gmail/Apps Script credentials never determine the mail route.
  */
-export function useCentralBookingSender(eventType: string, preference: string): boolean {
-  return eventType.startsWith('booking.')
-    && !eventType.startsWith('booking.reminder_')
-    && (preference === 'automatic' || preference === 'sedifex')
+export function useCentralBookingSender(eventType: string, _preference?: string): boolean {
+  return Boolean(eventType.trim())
 }
 
 async function resolveSettings(storeId: string) {
@@ -302,6 +303,77 @@ async function sendWebhook(
   }
 }
 
+/**
+ * Post to the one Apps Script deployed under Sedifex's own Google account.
+ * The backend is the only caller. A failed/missing sender is NOT a reason
+ * to fall back to a merchant's script.
+ */
+async function sendSedifexAppsScript(
+  input: TransactionalEmailDeliveryInput,
+  settings: Awaited<ReturnType<typeof resolveSettings>>,
+): Promise<TransactionalEmailDeliveryResult> {
+  const url = SEDIFEX_EMAIL_APPS_SCRIPT_URL.value()?.trim()
+    || process.env.SEDIFEX_EMAIL_APPS_SCRIPT_URL?.trim() || ''
+  const secret = SEDIFEX_EMAIL_APPS_SCRIPT_SECRET.value()?.trim()
+    || process.env.SEDIFEX_EMAIL_APPS_SCRIPT_SECRET?.trim() || ''
+  const configured = /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/i.test(url)
+    && secret.length >= 32
+
+  const replyTo = (await bookingStoreRecipients(input.storeId, []))[0] || ''
+  const base: TransactionalEmailDeliveryResult = {
+    attempted: false,
+    ok: false,
+    status: null,
+    channel: 'sedifex_apps_script',
+    deliveryStatus: 'failed',
+    senderName: `Sedifex · ${settings.storeName}`,
+    senderEmail: '',
+    replyToEmail: replyTo,
+  }
+  if (!configured) return { ...base, reason: 'sedifex-apps-script-not-configured' }
+  if (!input.storeId || !input.to || !input.eventType || !input.reference || !input.subject) {
+    return { ...base, reason: 'missing-required-transactional-email-fields' }
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        secret,
+        storeId: input.storeId,
+        eventType: input.eventType,
+        reference: input.reference,
+        recipientType: input.recipientType,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+        storeName: settings.storeName,
+        replyTo: replyTo || null,
+      }),
+    })
+    const body = await response.json().catch(() => ({})) as RecordMap
+    const duplicate = body.duplicate === true
+    const sent = Number(body.sent) === 1
+    const accepted = response.ok && body.ok === true && (sent || duplicate)
+    return {
+      ...base,
+      attempted: true,
+      ok: accepted,
+      status: response.status,
+      deliveryStatus: accepted ? (duplicate ? 'duplicate' : 'sent') : 'failed',
+      reason: accepted ? undefined : text(body.error, 180) || `sedifex-apps-script-http-${response.status}`,
+    }
+  } catch (error) {
+    return {
+      ...base,
+      attempted: true,
+      reason: error instanceof Error ? error.message : 'sedifex-apps-script-network-failure',
+    }
+  }
+}
+
 function noSenderResult(settings: Awaited<ReturnType<typeof resolveSettings>>, reason: string): TransactionalEmailDeliveryResult {
   return {
     attempted: false,
@@ -324,55 +396,7 @@ export async function deliverTransactionalEmail(
     return noSenderResult(settings, 'automation-disabled')
   }
 
-  const preference = settings.deliveryPreference
-
-  // Immediate booking emails are handled centrally when the business uses
-  // Automatic or Sedifex Email. The existing spreadsheet Apps Script remains
-  // independent and may continue its own scheduled reminder triggers.
-  // Do not fall back to another store's script if the central sender fails.
-  if (useCentralBookingSender(input.eventType, preference)) {
-    if (!settings.centralUrl) {
-      return noSenderResult(settings, 'central-booking-sender-not-configured')
-    }
-    return sendWebhook(input, settings, settings.centralUrl, 'sedifex_notification')
-  }
-
-  let lastFailure: TransactionalEmailDeliveryResult | null = null
-  let attemptedCustomUrl = ''
-
-  const shouldTryStoreEmail = preference === 'automatic' || preference === 'store_email'
-  if (shouldTryStoreEmail && settings.appsScript.configured) {
-    const appsScript = await sendAppsScript(input, settings)
-    if (appsScript.ok || appsScript.deliveryStatus === 'duplicate') return appsScript
-    lastFailure = appsScript
-  }
-
-  if (preference === 'store_email' && !settings.fallbackToSedifex) {
-    return lastFailure || noSenderResult(settings, 'store-email-not-configured')
-  }
-
-  const shouldTryCustom = preference === 'automatic' || preference === 'custom_webhook'
-  if (shouldTryCustom && settings.customUrl) {
-    attemptedCustomUrl = settings.customUrl
-    const custom = await sendWebhook(input, settings, settings.customUrl, 'custom_webhook')
-    if (custom.ok) return custom
-    lastFailure = custom
-  }
-
-  if (preference === 'custom_webhook' && !settings.fallbackToSedifex) {
-    return lastFailure || noSenderResult(settings, 'custom-webhook-not-configured')
-  }
-
-  const shouldTrySedifex = preference === 'sedifex' || settings.fallbackToSedifex
-  if (shouldTrySedifex && settings.centralUrl && settings.centralUrl !== attemptedCustomUrl) {
-    const sedifex = await sendWebhook(input, settings, settings.centralUrl, 'sedifex_notification')
-    if (sedifex.ok) return sedifex
-    lastFailure = sedifex
-  }
-
-  if (lastFailure) return lastFailure
-  return noSenderResult(
-    settings,
-    preference === 'sedifex' ? 'sedifex-live-sender-not-configured' : 'no-live-email-sender-configured',
-  )
+  // Only the central Sedifex-owned Apps Script is authorized for
+  // transactional email. Merchant scripts remain separate from mail routing.
+  return sendSedifexAppsScript(input, settings)
 }
