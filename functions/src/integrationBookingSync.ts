@@ -7,6 +7,7 @@ type BookingSyncConfig = {
   enabled: boolean
   url: string
   secret: string
+  reason: string
 }
 
 const PAID_STATUSES = new Set(['paid', 'confirmed', 'success', 'succeeded', 'complete', 'completed', 'captured'])
@@ -95,7 +96,18 @@ async function loadBookingSyncConfig(storeId: string): Promise<BookingSyncConfig
     settingsData.appScriptBookingSyncEnabled,
   ].some(isExplicitlyDisabled)
 
-  return { enabled: Boolean(url) && !disabled, url, secret }
+  // Legacy scripts often send confirmations and BCC automatically when they
+  // receive booking updates. Merely selecting a merchant-specific URL cannot
+  // guarantee sheet-only behaviour. Fail closed until the merchant script has
+  // been explicitly audited and converted to no-email (sheet_only) mode.
+  const sheetOnly = config.syncMode === 'sheet_only'
+    && config.emailNotificationsDisabled === true
+  const enabled = Boolean(url) && !disabled && sheetOnly
+  const reason = !url ? 'booking-sync-not-configured'
+    : disabled ? 'booking-sync-disabled'
+    : !sheetOnly ? 'legacy-booking-script-email-side-effects-blocked'
+    : ''
+  return { enabled, url, secret, reason }
 }
 
 function buildBookingSyncPayload(bookingId: string, storeId: string, data: PlainRecord, config: BookingSyncConfig): PlainRecord {
@@ -283,8 +295,8 @@ export const syncIntegrationBookingToAppsScript = functions.firestore
         syncStatus: 'not_ready',
         sync_status: 'not_ready',
         syncConfigDetected: false,
-        lastSyncError: 'booking-sync-not-configured',
-        syncError: 'booking-sync-not-configured',
+        lastSyncError: config.reason,
+        syncError: config.reason,
       }, change.after.ref)
       return null
     }
