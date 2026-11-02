@@ -8,7 +8,6 @@ import Dashboard from './pages/Dashboard'
 import DashboardHub from './pages/DashboardHub'
 import Products from './pages/ProductsWorkspace'
 import Sell from './pages/Sell'
-import SalesActivity from './pages/SalesActivity'
 import QuickPay from './pages/QuickPay'
 import QuickPayPrint from './pages/QuickPayPrint'
 import PublicQuickPayCheckout from './pages/PublicQuickPayCheckout'
@@ -137,7 +136,6 @@ const router = createBrowserRouter([
       { path: 'products', element: <Products /> },
       { path: 'products/new', element: <Products /> },
       { path: 'sell', element: <Sell /> },
-      { path: 'activity', element: <SalesActivity /> },
       { path: 'quick-pay', element: <QuickPay /> },
       { path: 'quick-pay/print', element: <QuickPayPrint /> },
       { path: 'customers', element: <CustomerCRM /> },
