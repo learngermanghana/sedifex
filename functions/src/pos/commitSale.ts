@@ -156,7 +156,7 @@ export const commitSale = functions.https.onCall(async (data, context) => {
       taxTotal: totals.taxTotal,
       discount: totals.discount,
       total: totals.total,
-      cashierId: context.auth?.uid ?? null,
+      cashierId: asTrimmedString(data?.cashierId) || (context.auth?.uid ?? null),
       payment: {
         method: asTrimmedString(paymentRaw.method) || null,
         amountPaid: asFiniteNumber(paymentRaw.amountPaid),
