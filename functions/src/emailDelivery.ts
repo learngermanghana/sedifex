@@ -121,6 +121,15 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+/** Centralize immediate booking emails; leave scheduled reminders on their
+ * configured route so existing Google Sheets reminder schedules can continue.
+ */
+export function useCentralBookingSender(eventType: string, preference: string): boolean {
+  return eventType.startsWith('booking.')
+    && !eventType.startsWith('booking.reminder_')
+    && (preference === 'automatic' || preference === 'sedifex')
+}
+
 async function resolveSettings(storeId: string) {
   const [storeSnapshot, settingsSnapshot, automation] = await Promise.all([
     defaultDb.collection('stores').doc(storeId).get(),
@@ -275,7 +284,7 @@ async function sendWebhook(
       deliveryStatus: response.ok ? 'sent' : 'failed',
       senderName: settings.storeName,
       senderEmail: '',
-      replyToEmail: settings.replyToEmail,
+      replyToEmail: safeReplyTo,
       reason: response.ok ? undefined : `${channel}-http-${response.status}`,
     }
   } catch (error) {
@@ -287,7 +296,7 @@ async function sendWebhook(
       deliveryStatus: 'failed',
       senderName: settings.storeName,
       senderEmail: '',
-      replyToEmail: settings.replyToEmail,
+      replyToEmail: safeReplyTo,
       reason: error instanceof Error ? error.message : `${channel}-error`,
     }
   }
@@ -321,9 +330,7 @@ export async function deliverTransactionalEmail(
   // Automatic or Sedifex Email. The existing spreadsheet Apps Script remains
   // independent and may continue its own scheduled reminder triggers.
   // Do not fall back to another store's script if the central sender fails.
-  const isImmediateBooking = input.eventType.startsWith('booking.')
-    && !input.eventType.startsWith('booking.reminder_')
-  if (isImmediateBooking && (preference === 'automatic' || preference === 'sedifex')) {
+  if (useCentralBookingSender(input.eventType, preference)) {
     if (!settings.centralUrl) {
       return noSenderResult(settings, 'central-booking-sender-not-configured')
     }
