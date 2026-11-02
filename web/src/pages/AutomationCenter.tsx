@@ -42,13 +42,6 @@ const RULES: Rule[] = [
   { eventType: 'booking.completed', label: 'Completion thank-you', detail: 'Thank the customer after the booking is marked completed.', group: 'Follow-up', smsSupported: true },
 ]
 
-const PREFERENCES: Array<{ value: DeliveryPreference; title: string; detail: string }> = [
-  { value: 'automatic', title: 'Automatic', detail: 'Try the business email first, then configured fallbacks.' },
-  { value: 'sedifex', title: 'Sedifex Email', detail: 'Use the Sedifex transactional email sender.' },
-  { value: 'store_email', title: 'Business Gmail', detail: 'Use the connected business Gmail / Apps Script sender.' },
-  { value: 'custom_webhook', title: 'Custom webhook', detail: 'Send through the configured custom email webhook.' },
-]
-
 function cloneSettings(settings: AutomationSettings): AutomationSettings {
   return {
     ...settings,
@@ -147,10 +140,6 @@ export default function AutomationCenter() {
   }
 
   const readiness = state.readiness
-  const emailPreferenceUnavailable = (preference: DeliveryPreference) =>
-    (preference === 'store_email' && !readiness.email.storeEmailConfigured)
-    || (preference === 'custom_webhook' && !readiness.email.customWebhookConfigured)
-
   return (
     <main className="automation-page">
       <section className="automation-hero">
@@ -172,7 +161,7 @@ export default function AutomationCenter() {
         <article className="automation-summary-card">
           <span>Email automations</span>
           <strong>{draft.emailEnabled ? `${activeEmailRules} active` : 'Off'}</strong>
-          <small>{readiness.email.storeEmailConfigured ? 'Business email connected' : 'Sedifex/fallback delivery available'}</small>
+          <small>Sedifex-owned transactional email sender</small>
         </article>
         <article className="automation-summary-card">
           <span>SMS automations</span>
@@ -181,8 +170,8 @@ export default function AutomationCenter() {
         </article>
         <article className="automation-summary-card">
           <span>Email route</span>
-          <strong>{PREFERENCES.find(option => option.value === draft.deliveryPreference)?.title || 'Automatic'}</strong>
-          <small>{draft.fallbackToSedifex ? 'Sedifex fallback on' : 'Sedifex fallback off'}</small>
+          <strong>Sedifex Apps Script</strong>
+          <small>One sender · separate store notifications</small>
         </article>
       </section>
 
@@ -192,8 +181,7 @@ export default function AutomationCenter() {
             <div><p className="automation-eyebrow">Channel</p><h2>Email</h2></div>
             <Toggle checked={draft.emailEnabled} onChange={checked => setDraft(current => current ? { ...current, emailEnabled: checked } : current)} label="Enable email automations" />
           </div>
-          <p className="automation-muted">Email automations use your selected delivery route and keep the existing Sedifex notification safeguards.</p>
-          <Link className="automation-link" to="/settings/integrations/email">Manage email integration</Link>
+          <p className="automation-muted">Sedifex sends transactional booking emails, payment receipts, reminders and store alerts through its own Google Apps Script. Business Gmail integrations are not used for these messages.</p>
         </article>
 
         <article className="automation-card automation-channel-card">
@@ -211,30 +199,10 @@ export default function AutomationCenter() {
 
       <section className="automation-card">
         <div className="automation-section-heading">
-          <div><p className="automation-eyebrow">Email delivery</p><h2>Choose how automated email is sent</h2></div>
+          <div><p className="automation-eyebrow">Email delivery</p><h2>Central Sedifex email sender</h2></div>
         </div>
-        <div className="automation-preference-grid">
-          {PREFERENCES.map(option => {
-            const unavailable = emailPreferenceUnavailable(option.value)
-            return (
-              <button
-                type="button"
-                key={option.value}
-                className={`automation-preference ${draft.deliveryPreference === option.value ? 'selected' : ''}`}
-                disabled={unavailable}
-                onClick={() => setDraft(current => current ? { ...current, deliveryPreference: option.value } : current)}
-              >
-                <strong>{option.title}</strong>
-                <span>{option.detail}</span>
-                {unavailable && <small>Not configured</small>}
-              </button>
-            )
-          })}
-        </div>
-        <label className="automation-fallback-row">
-          <input type="checkbox" checked={draft.fallbackToSedifex} onChange={event => setDraft(current => current ? { ...current, fallbackToSedifex: event.target.checked } : current)} />
-          <span><strong>Fallback to Sedifex Email</strong><small>If the selected business sender fails or is unavailable, allow Sedifex to try its transactional sender.</small></span>
-        </label>
+        <p className="automation-muted">All transactional emails are sent by Sedifex's Google Apps Script. Business Gmail and custom webhook settings no longer determine transactional routing. Store copies go only to verified owners or explicitly authorized staff of the same workspace.</p>
+        <p className="automation-muted">Email delivery still requires the central Sedifex Apps Script to be deployed and configured by the platform administrator. Bulk campaign email integrations remain separate.</p>
       </section>
 
       <section className="automation-card">
