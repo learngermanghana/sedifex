@@ -182,7 +182,7 @@ describe('resolveNavigation', () => {
       'dashboard', 'products', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
     ])
     expect(owner.map(item => item.id)).toEqual([
-      'dashboard', 'activity', 'products', 'customers', 'bookings', 'upcoming-events',
+      'dashboard', 'products', 'customers', 'activity', 'bookings', 'upcoming-events', 
       'invoices', 'expenses', 'reports', 'settlement', 'account',
     ])
     expect(owner.find(item => item.id === 'products')).toMatchObject({ label: 'Services & Pricing', target: '/products' })
@@ -196,7 +196,7 @@ describe('resolveNavigation', () => {
       workspaceProfile: { industry: 'cleaning', labelPolicy: 'industry_aliases' },
     })
     expect(staff.map(item => item.id)).toEqual([
-      'activity', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
+      'customers', 'activity', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
     ])
   })
 
@@ -209,7 +209,7 @@ describe('resolveNavigation', () => {
         customLabels: { '/customers': 'Property clients' },
       },
     })
-    expect(owner.map(item => item.id)).toEqual(['activity', 'customers', 'bookings', 'bulk-email', 'settlement', 'account'])
+    expect(owner.map(item => item.id)).toEqual(['customers', 'activity', 'bookings', 'bulk-email', 'settlement', 'account'])
     expect(owner.find(item => item.id === 'customers')?.label).toBe('Property clients')
   })
 
