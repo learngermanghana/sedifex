@@ -77,3 +77,34 @@ it.each([['travel', 'service', 'Add your first service'], ['school', 'course', '
   await userEvent.click(button)
   await waitFor(() => expect(state.navigate).toHaveBeenCalledWith(`/products/new?itemType=${itemType}`, { replace: true }))
 })
+
+
+it('starts cleaning businesses with the eight-page service preset and the existing service editor', async () => {
+  state.navigation = { industry: 'shop', labelPolicy: 'shared', enabledModules: ['dashboard', 'sell'] }
+  state.get.mockImplementation((path: string) => Promise.resolve({
+    exists: () => true,
+    data: () => path.startsWith('storeSettings/')
+      ? { navigation: state.navigation }
+      : { name: 'Demo Cleaning Co' },
+  }))
+  const user = userEvent.setup()
+  mount()
+  await screen.findByLabelText('Business name')
+  await user.click(screen.getByRole('radio', { name: /Cleaning Services/ }))
+  await user.click(screen.getByRole('button', { name: 'Save and continue' }))
+  await screen.findByRole('heading', { name: 'Choose where to begin' })
+
+  expect(state.preferences).toHaveBeenCalledWith({
+    navigation: {
+      industry: 'cleaning',
+      labelPolicy: 'industry_aliases',
+      enabledModules: [
+        'dashboard', 'products', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
+      ],
+    },
+  })
+  await user.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByRole('heading', { name: 'You’re ready to start' })
+  await user.click(screen.getByRole('button', { name: 'Add your first cleaning service' }))
+  await waitFor(() => expect(state.navigate).toHaveBeenCalledWith('/products/new?itemType=service', { replace: true }))
+})
