@@ -27,12 +27,17 @@ function milliseconds(value: unknown): number | null {
 
 // Never trust a role, cashier ID, or workspace ID sent from the browser.
 async function memberRole(uid: string, storeId: string): Promise<'owner' | 'staff'> {
-  const members = await defaultDb.collection('teamMembers').where('uid', '==', uid).limit(100).get()
+  const [members, directDoc] = await Promise.all([
+    defaultDb.collection('teamMembers').where('uid', '==', uid).limit(100).get(),
+    defaultDb.collection('teamMembers').doc(uid).get(),
+  ])
   const rows = members.docs.map(doc => doc.data())
-  const direct = rows.find(member => asText(member.storeId) === storeId)
-  if (direct && ['owner', 'staff'].includes(asText(direct.role))) {
-    return asText(direct.role) as 'owner' | 'staff'
+  if (directDoc.exists && (!asText(directDoc.get('uid')) || asText(directDoc.get('uid')) === uid)) {
+    rows.push(directDoc.data() || {})
   }
+  const sameWorkspace = rows.filter(member => asText(member.storeId) === storeId)
+  if (sameWorkspace.some(member => asText(member.role) === 'owner')) return 'owner'
+  if (sameWorkspace.some(member => asText(member.role) === 'staff')) return 'staff'
 
   // Owners may also administer explicitly linked child workspaces.
   const storeSnap = await defaultDb.collection('stores').doc(storeId).get()
