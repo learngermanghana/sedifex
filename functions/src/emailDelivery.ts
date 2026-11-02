@@ -5,8 +5,8 @@ import { bookingStoreRecipients } from './bookingNotificationRecipients'
 
 // One Sedifex-owned Apps Script deploy, shared by every merchant. Never use
 // the merchant's bulkEmailIntegration webAppUrl for transactional notifications.
-const SEDIFEX_EMAIL_APPS_SCRIPT_URL = defineString('SEDIFEX_EMAIL_APPS_SCRIPT_URL', { default: '' })
-const SEDIFEX_EMAIL_APPS_SCRIPT_SECRET = defineString('SEDIFEX_EMAIL_APPS_SCRIPT_SECRET', { default: '' })
+const SEDIFEX_NOTIFICATION_WEBHOOK_URL = defineString('SEDIFEX_NOTIFICATION_WEBHOOK_URL', { default: '' })
+const SEDIFEX_NOTIFICATION_SHARED_SECRET = defineString('SEDIFEX_NOTIFICATION_SHARED_SECRET', { default: '' })
 
 type RecordMap = Record<string, unknown>
 
@@ -36,6 +36,8 @@ export type TransactionalEmailDeliveryResult = {
   senderEmail: string
   replyToEmail: string
   reason?: string
+  receiptNumber?: string
+  receiptUrl?: string
 }
 
 function text(value: unknown, max = 1200): string {
@@ -55,6 +57,16 @@ export function useCentralBookingSender(eventType: string, _preference?: string)
   return Boolean(eventType.trim())
 }
 
+/** The existing Sedifex Apps Script responds with {sent:true} or
+ * {skipped:true,reason:'duplicate'}, unlike the newer sample script.
+ */
+export function interpretSedifexNotificationResponse(body: RecordMap) {
+  return {
+    sent: body.sent === true || body.sent === 1,
+    duplicate: body.duplicate === true || (body.skipped === true && body.reason === 'duplicate'),
+  }
+}
+
 function notDelivered(
   storeName: string,
   replyToEmail: string,
@@ -65,7 +77,7 @@ function notDelivered(
     attempted,
     ok: false,
     status: null,
-    channel: 'sedifex_apps_script',
+    channel: 'sedifex_notification',
     deliveryStatus: 'failed',
     senderName: `Sedifex · ${storeName}`,
     senderEmail: '',
@@ -120,17 +132,19 @@ export async function deliverTransactionalEmail(
     return notDelivered(storeName, replyTo, 'unverified-or-cross-store-recipient')
   }
 
-  const url = SEDIFEX_EMAIL_APPS_SCRIPT_URL.value()?.trim()
-    || process.env.SEDIFEX_EMAIL_APPS_SCRIPT_URL?.trim() || ''
-  const secret = SEDIFEX_EMAIL_APPS_SCRIPT_SECRET.value()?.trim()
-    || process.env.SEDIFEX_EMAIL_APPS_SCRIPT_SECRET?.trim() || ''
+  // Reuse the already deployed Sedifex Central Notification Web App and its
+  // existing Firebase environment variables; no second Gmail script needed.
+  const url = SEDIFEX_NOTIFICATION_WEBHOOK_URL.value()?.trim()
+    || process.env.SEDIFEX_NOTIFICATION_WEBHOOK_URL?.trim() || ''
+  const secret = SEDIFEX_NOTIFICATION_SHARED_SECRET.value()?.trim()
+    || process.env.SEDIFEX_NOTIFICATION_SHARED_SECRET?.trim() || ''
 
   // Only a Google Apps Script /exec deployment belonging to the Sedifex
   // project is accepted by configuration. The deployed script must also
   // validate the 32+ character shared secret in its Script Properties.
   if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/i.test(url)
     || secret.length < 32) {
-    return notDelivered(storeName, replyTo, 'sedifex-apps-script-not-configured')
+    return notDelivered(storeName, replyTo, 'sedifex-notification-web-app-not-configured')
   }
   if (!input.storeId || !input.eventType || !input.reference || !input.subject
     || !(input.text || input.html)) {
@@ -154,17 +168,24 @@ export async function deliverTransactionalEmail(
         text: input.text,
         storeName,
         replyTo: replyTo || null,
+        // The existing Sedifex script generates branded PDF receipts from
+        // brand/customer/payment/data. Keep its original payload contract.
+        brand: { ...(input.brand || {}), storeName, email: replyTo || '' },
+        customer: input.customer || null,
+        payment: input.payment || null,
+        data: input.data || null,
       }),
     })
     const body = await response.json().catch(() => ({})) as RecordMap
-    const duplicate = body.duplicate === true
-    const sent = Number(body.sent) === 1
+    const { duplicate, sent } = interpretSedifexNotificationResponse(body)
     const accepted = response.ok && body.ok === true && (sent || duplicate)
     return {
       ...base,
       ok: accepted,
       status: response.status,
       deliveryStatus: accepted ? (duplicate ? 'duplicate' : 'sent') : 'failed',
+      receiptNumber: accepted ? text(body.receiptNumber, 180) || undefined : undefined,
+      receiptUrl: accepted ? text(body.receiptUrl, 1200) || undefined : undefined,
       reason: accepted ? undefined : text(body.error, 180) || `sedifex-apps-script-http-${response.status}`,
     }
   } catch (error) {
