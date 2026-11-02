@@ -27,7 +27,7 @@ it('applies the Cleaning Services industry preset and saves its labels without t
   />)
 
   await user.selectOptions(screen.getByRole('combobox', { name: 'Business type' }), 'cleaning')
-  expect(screen.getByText('Recommended for Cleaning Services', { exact: false })).toBeTruthy()
+  expect(screen.getAllByText('Recommended for Cleaning Services')).toHaveLength(8)
   await user.click(screen.getByRole('button', { name: 'Save navigation settings' }))
 
   expect(save).toHaveBeenCalledWith(expect.objectContaining({
