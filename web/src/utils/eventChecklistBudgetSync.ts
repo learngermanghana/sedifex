@@ -18,10 +18,6 @@ function taskKey(value: unknown) {
 }
 
 /**
- * Pure, idempotent and deterministic: safe to apply during Firestore hydration,
- * reconciliation, undo/redo and every edit. Never creates an extra network write.
- */
-/**
  * Update linked Checklist fields from Budget edits before the normal Checklist ->
  * Budget reconciliation runs. The link is retained so subsequent edits from
  * either sheet stay in sync; category and actual spending belong only to Budget.
@@ -56,6 +52,10 @@ export function applyEventBudgetEdits<T extends LinkableStudio>(studio: T, budge
   })
 }
 
+/**
+ * Pure, idempotent and deterministic: safe to apply during Firestore hydration,
+ * reconciliation, undo/redo and every edit. Never creates an extra network write.
+ */
 export function syncEventChecklistBudget<T extends LinkableStudio>(studio: T): T {
   const checklist = studio.sheets.checklist
   const originalBudget = studio.sheets.budget
