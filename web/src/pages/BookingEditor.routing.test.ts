@@ -17,10 +17,12 @@ describe('store-isolated booking Apps Script delivery', () => {
     expect(bookingSync).toContain('const storeId = firstText([data.storeId, data.store_id], 180)')
     expect(bookingSync).toContain('const config = await loadBookingSyncConfig(storeId)')
     expect(bookingSync).toContain('postToAppsScript(config.url, payload, config.secret)')
+    expect(bookingSync).toContain('if (result.ok === false)')
   })
 
   it('requires a matching store ID and explicit BCC in the Apps Script template', () => {
     expect(appsScriptTemplate).toContain("requireSecret: true")
+    expect(appsScriptTemplate).toContain("const got = str_(body.secret || '')")
     expect(appsScriptTemplate).toContain("SEDIFEX_EXPECTED_STORE_ID")
     expect(appsScriptTemplate).toContain("error: 'store-id-mismatch'")
     expect(appsScriptTemplate).toContain("const bcc = str_(branding.notificationBccEmail || '')")
