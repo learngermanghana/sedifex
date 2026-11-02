@@ -269,9 +269,9 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
   // must not be able to route copies to a different business. Always alert
   // the verified owner; optional staff must both belong to this store and be
   // explicitly selected in adminEmails.
-  const adminEmails = payload.eventType.startsWith('booking.')
-    ? await bookingStoreRecipients(storeId, settings.adminEmails)
-    : settings.adminEmails.length ? settings.adminEmails : [brand.email].filter((value): value is string => Boolean(value))
+  // Send a separate store copy only to a verified owner or an explicitly
+  // approved team member of THIS store. Never trust legacy adminEmails alone.
+  const adminEmails = await bookingStoreRecipients(storeId, settings.adminEmails)
   if ((settings.storeAlertEnabled || forceStoreAlert) && adminEmails.length) {
     const amount = formatMoney(payload.payment)
     const title = copy.adminTitle
