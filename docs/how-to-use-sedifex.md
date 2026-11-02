@@ -37,7 +37,6 @@ Core modules now include:
 | **Reports** | Sales, bookings, website sales, payments, inventory, donor, funds, blog, volunteer, and registration reports | Owner, Staff |
 | **Items** | Products, services, courses, packages, campaigns, trips, and catalog records | Owner |
 | **Sell** | POS sales and checkout work | Owner, Staff |
-| **Activity** | My Activity for staff, Team Activity for owners, sale review requests | Owner, Staff |
 | **Quick Pay** | Simple public payment/search page where customers can find the store and pay quickly | Owner, Staff |
 | **Invoices** | Create and manage invoices | Owner, Staff |
 | **Receipts** | Create and manage receipts | Owner, Staff |
@@ -259,18 +258,6 @@ Use:
 4. Sell in **Sell**, invoice customers, or share **Quick Pay**.
 5. Track customers, receipts, expenses, and reports; owners can also review **Payments**.
 6. Build a custom website and connect it through **Integrations** using the developer quickstart.
-
-#### Staff and owner sales activity
-
-Open **Activity** from the Daily work navigation:
-
-- **Staff – My Activity:** see up to 100 recent POS sales attributed to the authenticated user (server-enforced by the `committedBy` field). Search by receipt, customer, or item; filter by date; open details or receipt; flag a mistaken sale for owner review.
-- **Owner – Team Activity:** review recent team sales, see open mistake reports, open the POS report to void incorrect sales, or close a review with an audited resolution note.
-- **Payment status:** `Cash recorded` means the cash transaction was entered; `Recorded · payment not verified` means a non-cash POS transaction was entered without provider verification. Never promise a successful card or Mobile Money payment based solely on a POS entry.
-- **Costs:** the Activity page loads only when opened/refreshed and uses a bounded Cloud Function query (100 most recent per staff/workspace), not a continuous live listener.
-- **History:** only records with the trusted `committedBy` UID are available in staff My Activity. Older unattributed sales remain in owner reporting; do not guess which employee handled them.
-
-This page is a POS activity view, not a replacement for the owner-only payment settlement report. Deploy the Firestore composite index for `sales(storeId, committedBy, createdAt desc)` before enabling staff queries in production.
 
 #### Correcting a completed POS sale
 
