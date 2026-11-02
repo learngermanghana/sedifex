@@ -71,7 +71,7 @@ jobs:
         working-directory: web
 
       - name: Test sales history regressions
-        run: npm exec vitest run src/components/salesHistoryRegression.test.tsx
+        run: npm exec vitest run src/components/salesHistoryRegression.test.tsx src/pages/BookingEditor.routing.test.ts
         working-directory: web
 
       - name: Test event task progress
