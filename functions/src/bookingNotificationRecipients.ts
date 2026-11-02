@@ -2,7 +2,7 @@ import { admin, defaultDb } from './firestore'
 
 function normalizeEmail(value: unknown): string {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : ''
-  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) ? email : ''
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
 }
 
 function text(value: unknown) {
