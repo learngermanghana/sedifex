@@ -145,10 +145,16 @@ describe('Event Studio compact spreadsheet design', () => {
     expect(screen.getAllByText('Book event hall').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Ama').length).toBeGreaterThan(0)
     expect(screen.getAllByText('GHS 800.00').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('textbox', { name: 'Expense row 1' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Expense row 1' })).toHaveValue('Book event hall')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Expense row 1' }),
+      { target: { value: 'Book larger event hall' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Budgeted (GHS) row 1' }),
+      { target: { value: '875' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Spent (GHS) row 1' }),
       { target: { value: '200' } })
     await user.click(screen.getByRole('tab', { name: 'Checklist' }))
+    expect(screen.getByRole('textbox', { name: 'Task row 1' })).toHaveValue('Book larger event hall')
+    expect(screen.getByRole('spinbutton', { name: 'Est. cost (GHS) row 1' })).toHaveValue(875)
     fireEvent.change(screen.getByRole('textbox', { name: 'Task row 1' }),
       { target: { value: 'Reserve conference hall' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Est. cost (GHS) row 1' }),
