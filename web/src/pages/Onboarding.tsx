@@ -74,7 +74,7 @@ export default function Onboarding() {
           industry: draft.industry,
           // Apply the cleaning starter pages and labels on first selection; keep
           // saved custom navigation intact for already-configured cleaning stores.
-          labelPolicy: draft.industry === 'cleaning' ? 'industry_aliases' : preferences.navigation.labelPolicy,
+          ...(draft.industry === 'cleaning' ? { labelPolicy: 'industry_aliases' as const } : {}),
           enabledModules: !navigationConfigured || selectingCleaning
             ? INDUSTRY_ENABLED_MODULE_PRESETS[draft.industry]
             : preferences.navigation.enabledModules,
