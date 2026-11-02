@@ -51,6 +51,16 @@ Set this to `true` only if a store wants the Google Sheet script to send the fir
 sendInitialBookingReceivedEmail: false
 ```
 
+> **Cross-store privacy safeguard:** If an Apps Script receives a booking
+> for a different `store_id`, it rejects the request before saving it or
+> emailing a customer. The script must be deployed separately for each store,
+> with a matching `SEDIFEX_EXPECTED_STORE_ID` and unique webhook secret.
+> Existing deployed Apps Script versions do **not** update automatically
+> when this GitHub template changes. Redeploy each affected script manually.
+> Leave `BRANDING_notificationBccEmail` blank unless the store intentionally
+> authorizes a copy to its own address. The support address is for replies,
+> not an automatic BCC recipient.
+
 ## Sedifex admin action meanings
 
 | Button in Sedifex | Business meaning | Payment meaning | Sync behavior |
@@ -172,9 +182,11 @@ Stores that already installed an older version should update their Apps Script w
 1. Create a sheet tab named `Bookings`.
 2. Leave the tab empty.
 3. Paste the script below into Extensions → Apps Script.
-4. Deploy as Web App.
-5. Save the Web App URL in the store's Sedifex booking sync settings.
-6. Run **Sedifex Automation → Install 5-minute trigger** from the Sheet menu.
+4. In **Project Settings → Script Properties**, set `SEDIFEX_EXPECTED_STORE_ID` to the ID of this specific Sedifex store and `BOOKING_WEBHOOK_SECRET` to a unique secret for this store. Set the same secret in that store's Sedifex booking-sync settings. Do not reuse either value across businesses.
+5. Deploy as Web App.
+6. Save **this** Web App URL in **this store's** Sedifex booking sync settings (never share another store's script endpoint).
+7. Review `BRANDING_notificationBccEmail` and `BRANDING_supportEmail` in Script Properties. They must refer to this business only; BCC is opt-in, not automatic.
+8. Run **Sedifex Automation → Install 5-minute trigger** from the Sheet menu.
 
 ## Apps Script code
 
@@ -182,7 +194,7 @@ Stores that already installed an older version should update their Apps Script w
 const CONFIG = {
   sheetName: 'Bookings',
   timezone: Session.getScriptTimeZone() || 'UTC',
-  requireSecret: false,
+  requireSecret: true,
   secretProperty: 'BOOKING_WEBHOOK_SECRET',
   fromName: 'Booking Team',
 
@@ -204,7 +216,7 @@ const BRANDING = {
   logoUrl: '',
   addressLine: '',
   bookingTermsUrl: '',
-  notificationBccEmail: '', // optional store/staff email to receive BCC copies of all outgoing emails
+  notificationBccEmail: '', // opt-in: BCC copies only when explicitly configured for this store
   poweredByText: 'Powered by Sedifex',
 };
 
@@ -267,6 +279,10 @@ function doPost(e) {
     if (!body) return json_(400, { ok: false, error: 'invalid-json-body' });
 
     const p = normalizePayload_(body);
+    const expectedStoreId = str_(PropertiesService.getScriptProperties().getProperty('SEDIFEX_EXPECTED_STORE_ID'));
+    if (!expectedStoreId || !p.store_id || p.store_id !== expectedStoreId) {
+      return json_(403, { ok: false, error: 'store-id-mismatch' });
+    }
     if (!p.booking_date || !p.booking_time) return json_(400, { ok: false, error: 'missing-date-time' });
     if (!p.customer_name) return json_(400, { ok: false, error: 'missing-customer-name' });
     if (!p.customer_email && !p.customer_phone) return json_(400, { ok: false, error: 'missing-contact-method' });
@@ -553,7 +569,7 @@ function sendImmediateEmail_(sheet, rowNum, row, stage) {
     name: branding.businessName || CONFIG.fromName,
   };
 
-  const bcc = str_(branding.notificationBccEmail || branding.supportEmail || '');
+  const bcc = str_(branding.notificationBccEmail || '');
   if (bcc) mailOptions.bcc = bcc;
 
   if (branding.supportEmail) {
