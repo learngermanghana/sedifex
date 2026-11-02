@@ -71,7 +71,7 @@ jobs:
         working-directory: web
 
       - name: Test sales history regressions
-        run: npm exec vitest run src/components/salesHistoryRegression.test.tsx
+        run: npm exec vitest run src/components/salesHistoryRegression.test.tsx src/pages/BookingEditor.routing.test.ts
         working-directory: web
 
       - name: Test event task progress
@@ -99,7 +99,7 @@ jobs:
           --config firebase.event-planning-ci.json
           --only auth,firestore
           --project sedifex-ci
-          "cd web && npm exec vitest run tests/event-planning.rules.emulator.test.ts tests/event-planning-security-regressions.rules.emulator.test.ts tests/inventory-access.rules.emulator.test.ts"
+          "cd web && npm exec vitest run tests/event-planning.rules.emulator.test.ts tests/event-planning-security-regressions.rules.emulator.test.ts tests/booking-routing-security.rules.emulator.test.ts tests/inventory-access.rules.emulator.test.ts"
 
       # Vite proves the changed web code can be bundled for production. The
       # repository currently has unrelated legacy TypeScript errors across

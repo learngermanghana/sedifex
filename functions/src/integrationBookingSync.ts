@@ -232,6 +232,15 @@ async function postToAppsScript(url: string, payload: PlainRecord, secret: strin
       // Apps Script may return text if a deployment is customized.
     }
 
+    // Apps Script Web Apps can return HTTP 200 for a logical rejection.
+    // Never mark a mismatched store or invalid webhook secret as synced.
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const result = body as PlainRecord
+      if (result.ok === false) {
+        throw new Error(`booking-app-script-rejected: ${firstText([result.error], 200) || 'unknown-error'}`)
+      }
+    }
+
     return { status: response.status, body }
   } finally {
     clearTimeout(timeout)
