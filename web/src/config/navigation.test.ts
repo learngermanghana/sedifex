@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, resolveNavigation } from './navigation'
 
 describe('resolveNavigation', () => {
+  it('shows a staff-only read-only Inventory link without enabling item editing', () => {
+    for (const industry of ['shop', 'travel', 'ngo', 'school', 'event', 'cleaning'] as const) {
+      const workspaceProfile = { industry, labelPolicy: 'shared' as const, enabledModules: ['sell'] }
+      const staff = resolveNavigation({ role: 'staff', workspaceProfile })
+      const owner = resolveNavigation({ role: 'owner', workspaceProfile })
+      expect(staff.find(item => item.id === 'inventory')).toMatchObject({
+        label: 'Inventory', target: '/inventory', rolesAllowed: ['staff'],
+      })
+      expect(staff.map(item => item.id)).not.toContain('products')
+      expect(owner.map(item => item.id)).not.toContain('inventory')
+    }
+  })
+
   it('uses the selected industry preset when no enabled modules are stored', () => {
     const items = resolveNavigation({
       role: 'owner',
@@ -82,7 +95,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['reports', 'sell', 'customers', 'blog'])
+    expect(items.map(item => item.id)).toEqual(['reports', 'inventory', 'sell', 'customers', 'blog'])
     expect(items.find(item => item.id === 'customers')?.label).toBe('Customers')
   })
 
@@ -113,7 +126,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items).toEqual([])
+    expect(items.map(item => item.id)).toEqual(['inventory'])
   })
 
   it('keeps signup presets focused on the selected business type', () => {
@@ -189,7 +202,7 @@ describe('resolveNavigation', () => {
       workspaceProfile: { industry: 'cleaning', labelPolicy: 'industry_aliases' },
     })
     expect(staff.map(item => item.id)).toEqual([
-      'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
+      'inventory', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
     ])
   })
 

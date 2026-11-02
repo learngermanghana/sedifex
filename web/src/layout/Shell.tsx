@@ -62,7 +62,7 @@ const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = 
   {
     id: 'daily',
     label: 'Daily work',
-    itemIds: ['dashboard', 'products', 'sell', 'customers', 'students', 'bookings', 'events', 'upcoming-events', 'student-registration'],
+    itemIds: ['dashboard', 'products', 'inventory', 'sell', 'customers', 'students', 'bookings', 'events', 'upcoming-events', 'student-registration'],
   },
   {
     id: 'money',

@@ -247,6 +247,24 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn();
     }
 
+    // POS stock and catalogue records belong to one workspace.
+    // Staff may look up/query stock, but only owners may change inventory.
+    // Legacy broad authenticated fallback must exclude this collection.
+    match /products/{productId} {
+      allow get, list: if resource.data.storeId is string
+        && hasStoreAccess(resource.data.storeId);
+
+      allow create: if request.resource.data.storeId is string
+        && isStoreOwner(request.resource.data.storeId);
+
+      allow update: if resource.data.storeId is string
+        && request.resource.data.storeId == resource.data.storeId
+        && isStoreOwner(resource.data.storeId);
+
+      allow delete: if resource.data.storeId is string
+        && isStoreOwner(resource.data.storeId);
+    }
+
     // Customer CRM records contain cross-module contact, financial, message,
     // note, and document metadata. Keep root customer records and all CRM
     // subcollections inside the same store-membership boundary.
@@ -317,6 +335,7 @@ service cloud.firestore {
         && topCollection != 'stores'
         && topCollection != 'teamMembers'
         && topCollection != 'customers'
+        && topCollection != 'products'
         && topCollection != 'eventContractLinks'
         && topCollection != 'eventClientLinks'
         && topCollection != 'bookingSmsQueue'

@@ -1,0 +1,31 @@
+.staff-inventory { display:grid; gap:20px; padding:16px 0; }
+.staff-inventory__header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; }
+.staff-inventory__header h1 { margin:0 0 6px; }
+.staff-inventory__header p { color:var(--text-muted,#64748b); margin:0; }
+.staff-inventory__readonly { display:inline-block; border:1px solid #a7f3d0; background:#ecfdf5; color:#166534; border-radius:99px; padding:7px 12px; font-size:13px; font-weight:700; }
+.staff-inventory__summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.staff-inventory__summary>div { display:flex; flex-direction:column; gap:5px; padding:16px; border:1px solid var(--border-color,#cbd5e1); border-radius:12px; background:var(--surface,#fff); }
+.staff-inventory__summary strong { font-size:26px; }
+.staff-inventory__summary span { font-size:13px; color:var(--text-muted,#64748b); }
+.staff-inventory__toolbar { display:flex; align-items:end; gap:14px; flex-wrap:wrap; }
+.staff-inventory__toolbar label { display:grid; gap:6px; font-weight:600; }
+.staff-inventory__toolbar input,.staff-inventory__toolbar select { min-width:180px; border:1px solid #94a3b8; border-radius:9px; padding:10px 12px; background:var(--surface,#fff); color:inherit; }
+.staff-inventory__toolbar input { min-width:270px; }
+.staff-inventory__scroll { overflow-x:auto; border:1px solid var(--border-color,#cbd5e1); border-radius:12px; background:var(--surface,#fff); }
+.staff-inventory__table { width:100%; border-collapse:collapse; min-width:620px; font-size:14px; text-align:left; }
+.staff-inventory__table th { background:var(--surface-muted,#f8fafc); color:var(--text-muted,#475569); font-weight:600; }
+.staff-inventory__table td,.staff-inventory__table th { padding:14px; border-bottom:1px solid var(--border-color,#e2e8f0); }
+.staff-inventory__table tbody tr:last-child td { border-bottom:0; }
+.staff-inventory__table small { display:block; margin-top:3px; color:var(--text-muted,#64748b); }
+.staff-inventory__status { display:inline-block; white-space:nowrap; padding:5px 9px; border-radius:99px; background:#e2e8f0; color:#334155; font-size:12px; font-weight:700; }
+.staff-inventory__status--in-stock { color:#166534; background:#dcfce7; }
+.staff-inventory__status--low-stock { color:#92400e; background:#fef3c7; }
+.staff-inventory__status--out-of-stock { color:#991b1b; background:#fee2e2; }
+.staff-inventory__error { padding:12px; border:1px solid #fca5a5; border-radius:9px; color:#991b1b; background:#fef2f2; }
+.staff-inventory__empty { padding:28px; border:1px dashed #94a3b8; border-radius:12px; text-align:center; }
+.staff-inventory__footnote { font-size:13px; color:var(--text-muted,#64748b); }
+@media(max-width:600px) {
+ .staff-inventory__summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .staff-inventory__toolbar label { width:100%; }
+ .staff-inventory__toolbar input,.staff-inventory__toolbar select { width:100%; min-width:0; }
+}

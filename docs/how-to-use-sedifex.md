@@ -23,7 +23,7 @@ Navigation settings are grouped like this:
 
 | Navigation group | Pages included |
 |---|---|
-| **Daily work** | Dashboard, Reports, Items, Sell, Customers, Bookings |
+| **Daily work** | Dashboard, Reports, Items (owner), Inventory (staff), Sell, Customers, Bookings |
 | **Documents, payments & expenses** | Quick Pay, Invoices, Receipts, Expenses, Payments, Donor management, Funds ledger |
 | **Bookings, registration & cases** | Upcoming events, Student registration, Volunteers, Support requests |
 | **Website & marketing** | Integrations, Blog, SMS, Bulk email |
@@ -35,7 +35,8 @@ Core modules now include:
 |---|---|---|
 | **Dashboard** | Quick business summary and daily overview | Owner |
 | **Reports** | Sales, bookings, website sales, payments, inventory, donor, funds, blog, volunteer, and registration reports | Owner, Staff |
-| **Items** | Products, services, courses, packages, campaigns, trips, and catalog records | Owner |
+| **Items** | Create and manage products, services, courses, packages, campaigns, trips, and catalog records | Owner |
+| **Inventory** | Read-only product stock, selling prices, SKU lookup, and low-stock alerts | Staff |
 | **Sell** | POS sales and checkout work | Owner, Staff |
 | **Quick Pay** | Simple public payment/search page where customers can find the store and pay quickly | Owner, Staff |
 | **Invoices** | Create and manage invoices | Owner, Staff |
@@ -77,6 +78,14 @@ Example: the same **Bookings** system may appear as **Trips** for travel, **Camp
 
 ---
 
+### Staff stock visibility (read-only)
+
+Staff open **Inventory** in the Daily work navigation (or go to `/inventory`). The page shows product names, SKUs, selling prices, quantities on hand, and low/out-of-stock warnings. Search and stock filters do not modify inventory. Stock is loaded for the selected workspace and capped at 500 products.
+
+The existing **Items** editor remains available to owners at `/products`. Staff visiting an Items URL are redirected to Inventory, including the `/products/new` editor route. Firestore also blocks staff writes to `products`, and the `receiveStock` Cloud Function verifies owner membership before stock can be received. Staff can still sell products in **Sell**, and successful POS checkout continues to update stock through the authorized server flow.
+
+**Sales History** remains at **Sell → Sales history**. The new Activity page was removed because it duplicated that existing transaction view.
+
 ## 3. Role-based access
 
 ### Owner
@@ -111,6 +120,7 @@ Owners can normally manage the full workspace:
 Staff usually work with daily operations:
 
 - Reports
+- Inventory (view only)
 - Sell
 - Quick Pay
 - Invoices

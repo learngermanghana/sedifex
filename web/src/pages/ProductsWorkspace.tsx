@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import ProductsServiceFirst from './ProductsServiceFirst'
+import { useActiveStore } from '../hooks/useActiveStore'
+import { useMemberships } from '../hooks/useMemberships'
 import './ProductsWorkspace.css'
 
 function markDescriptionFields(root: HTMLDivElement | null) {
@@ -31,6 +33,9 @@ function toggleDescriptionField(target: EventTarget | null) {
 export default function ProductsWorkspace() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { storeId } = useActiveStore()
+  const { memberships, loading: checkingRole } = useMemberships()
+  const isStaff = memberships.some(member => member.storeId === storeId && member.role === 'staff')
   const rootRef = useRef<HTMLDivElement>(null)
   const [notice, setNotice] = useState('')
   const isAddPage = location.pathname === '/products/new'
@@ -53,6 +58,9 @@ export default function ProductsWorkspace() {
     if (rootRef.current) observer.observe(rootRef.current, { childList: true, subtree: true })
     return () => observer.disconnect()
   }, [isAddPage])
+
+  if (checkingRole) return <div role="status">Checking item permissions…</div>
+  if (isStaff) return <Navigate to="/inventory" replace />
 
   return (
     <div
