@@ -8,14 +8,14 @@ The supplied Sedifex Central Notification Web App already supports:
 - Branded HTML emails and attached PDF receipts stored in Google Drive
 - Private `SentLog` and `Errors` worksheets
 - Deduplication using store, event, reference, recipient type and recipient
-- An optional Sedifex-owned tracking BCC
+- An approved Sedifex-owned tracking BCC
 
 This PR replaces the newly drafted standalone sender with the **user's existing complete script** in `scripts/sedifex-transactional-email.gs`. It keeps the original HTML, PDF receipts, test menu and delivery logs.
 
 ## Security/compatibility improvements to the existing source
 
 1. Require `SEDIFEX_NOTIFICATION_SHARED_SECRET` (32+ characters). Previously `verifySecret_` returned **true** when the secret property was missing — an unauthenticated public mail endpoint.
-2. Keep optional `SEDIFEX_TRACKING_EMAIL` but remove the automatic default BCC; store copies are sent as separate, auditable notifications by Sedifex. Enable Sedifex platform tracking BCC explicitly only if required and privacy-approved.
+2. Set the central audit BCC directly to `learngermanghana@gmail.com` using `DEFAULT_TRACKING_EMAIL`. Any stale `SEDIFEX_TRACKING_EMAIL` Script Property is intentionally ignored, so a different store cannot override the tracking mailbox. Store copies remain separate, auditable emails.
 3. Prefer Firebase's verified store-owner `replyTo`; ignore possibly stale `payload.brand.email` as Reply-To.
 4. Lock around dedupe + send + ledger write to reduce concurrent duplicate emails. As with all Gmail calls, a crash after send but before the ledger write can still cause an uncertain delivery.
 5. Redact sensitive payloads and secrets from the `Errors` sheet.
@@ -26,7 +26,7 @@ This PR replaces the newly drafted standalone sender with the **user's existing 
 
 1. Open the already-existing Sedifex Central Notification Apps Script project in the Sedifex Google account. Replace its source with `scripts/sedifex-transactional-email.gs` **in the same project**.
 2. In **Project Settings → Script properties**, ensure `SEDIFEX_NOTIFICATION_SHARED_SECRET` contains a private random secret at least 32 characters long. If you rotate it, update the matching `SEDIFEX_NOTIFICATION_SHARED_SECRET` in the Firebase Functions environment.
-3. Check existing optional `SEDIFEX_TRACKING_EMAIL`, `SEDIFEX_SENDER_NAME`, and `SEDIFEX_RECEIPTS_FOLDER_ID`. The tracking BCC is off by default unless explicitly set, but existing script properties are preserved.
+3. Check `SEDIFEX_SENDER_NAME` and `SEDIFEX_RECEIPTS_FOLDER_ID`. The script sends a BCC to `learngermanghana@gmail.com` for central tracking, independent of any old `SEDIFEX_TRACKING_EMAIL` property. The script must execute as `sedifexbiz@gmail.com` to use that official sender account.
 4. **Deploy → Manage deployments → Edit existing deployment → New version → Deploy**, keeping the existing web-app URL where possible. Preserve **Execute as Me** for Sedifex's Google account.
 5. Confirm Firebase's `SEDIFEX_NOTIFICATION_WEBHOOK_URL` points to this existing deployed `/exec` URL. The code accepts no merchant Apps Script as a fallback. Firebase deployment configuration is managed through `FUNCTIONS_ENV_SEDIFEX_WEB` in the workflow, without revealing secrets in GitHub source.
 6. Send fake/test confirmations for Glittering Med-Spa and OncoNurse, with verified owners. Confirm **one customer email, one correct-store alert, attached receipt, no cross-store BCC**, and a single SentLog row per intended recipient.
@@ -44,4 +44,4 @@ This PR replaces the newly drafted standalone sender with the **user's existing 
 
 ## Test coverage
 
-`functions/test/bookingNotificationIsolation.test.js` verifies the legacy script's real response shapes, an attached PDF receipt (using a test stub for Google APIs), mandatory secret, no default BCC, verified store address filtering, and duplicate handling.
+`functions/test/bookingNotificationIsolation.test.js` verifies the legacy script's real response shapes, an attached PDF receipt (using a test stub for Google APIs), mandatory secret, only approved Sedifex audit BCC, verified store address filtering, and duplicate handling.
