@@ -104,6 +104,7 @@ export { createIntegrationApiKey, listIntegrationApiKeys } from './integrationAp
 export { getPricingPlans } from './pricingPlans'
 
 export { commitSale } from './pos/commitSale'
+export { listSalesActivity, flagSaleForReview, resolveSaleReview } from './pos/salesActivity'
 export { receiveStock } from './pos/receiveStock'
 export { voidSale } from './pos/voidSale'
 
