@@ -87,9 +87,30 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Only the owner may change booking/email routing and associated secrets.
+    // Other staff settings updates are allowed within their own workspace.
+    // Public readability is legacy behavior pending a separate migration of
+    // public settings and private credentials to distinct documents.
     match /storeSettings/{docId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isStoreOwner(docId) ||
+        (request.auth.uid == docId &&
+          !request.resource.data.keys().hasAny([
+            'bookingSync', 'appsScriptBookingSync', 'integrationBookingConfig',
+            'bookingAppsScript', 'websiteBookingSync', 'bookingSyncEnabled',
+            'appScriptBookingSyncEnabled', 'bulkEmailIntegration', 'notifications'
+          ]))
+      );
+      allow update: if isSignedIn() && hasStoreAccess(docId) && (
+        isStoreOwner(docId) ||
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'bookingSync', 'appsScriptBookingSync', 'integrationBookingConfig',
+          'bookingAppsScript', 'websiteBookingSync', 'bookingSyncEnabled',
+          'appScriptBookingSyncEnabled', 'bulkEmailIntegration', 'notifications'
+        ])
+      );
+      allow delete: if isStoreOwner(docId);
     }
 
     match /publicStores/{docId} {
@@ -310,7 +331,15 @@ service cloud.firestore {
           'ownerUid',
           'ownerId',
           'parentStoreId'
-        ]);
+        ])
+        && (
+          isStoreOwner(storeId) ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'bookingSync', 'appsScriptBookingSync', 'integrationBookingConfig',
+            'bookingAppsScript', 'websiteBookingSync', 'bookingSyncEnabled',
+            'appScriptBookingSyncEnabled', 'bulkEmailIntegration', 'notifications'
+          ])
+        );
 
       allow delete: if hasDirectStoreAccess(storeId)
         && memberData().role == 'owner';
