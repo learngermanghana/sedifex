@@ -229,7 +229,7 @@ export default function SalesActivity() {
                 </div>
                 {expanded === sale.id && (
                   <div className="sales-activity__details">
-                    <p><strong>Payment method:</strong> {sale.method.replaceAll('_', ' ')}</p>
+                    <p><strong>Payment method:</strong> {sale.method.replace(/_/g, ' ')}</p>
                     <p><strong>Provider status:</strong> {sale.providerStatus || 'Not independently confirmed'}</p>
                     {sale.voidReason && <p><strong>Void reason:</strong> {sale.voidReason}</p>}
                     <p><strong>Items:</strong> {sale.items.length
