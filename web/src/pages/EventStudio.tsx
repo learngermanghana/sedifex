@@ -91,6 +91,36 @@ const EVENT_TEMPLATES = [
   { id: 'conference', label: 'Conference', eventType: 'Conference / seminar', detail: 'Speakers, venue and production', tools: ['checklist', 'production', 'programme', 'guests', 'vendors', 'budget'] as ToolId[], tasks: ['Confirm speakers', 'Arrange registration desk', 'Test presentation equipment'] },
   { id: 'birthday', label: 'Birthday', eventType: 'Birthday', detail: 'Guests, gifts and schedule', tools: ['checklist', 'programme', 'guests', 'gifts', 'budget'] as ToolId[], tasks: ['Confirm location', 'Plan entertainment', 'Send invitations'] },
   { id: 'fundraising', label: 'Fundraising', eventType: 'Charity / community', detail: 'Donations, pledges and guests', tools: ['checklist', 'programme', 'donations', 'guests', 'budget'] as ToolId[], tasks: ['Set fundraising target', 'Contact potential donors', 'Prepare programme'] },
+  {
+    id: 'cleaning', label: 'Cleaning Service', eventType: 'Cleaning service',
+    detail: 'Cleaning checklist, work schedule and expenses',
+    tools: ['checklist', 'production', 'budget', 'vendors'] as ToolId[],
+    tasks: [
+      'Confirm client details, location, access and cleaning scope',
+      'Inspect the property and record its condition',
+      'Agree the quotation and cleaning schedule with the client',
+      'Assign cleaners and a supervising team member',
+      'Prepare cleaning products, equipment and protective gear',
+      'Review safety, surface care and chemical handling instructions',
+      'Protect valuables and delicate surfaces before work begins',
+      'Remove rubbish and tidy the assigned work areas',
+      'Dust and wipe fixtures, furniture and frequently touched surfaces',
+      'Clean kitchen or staff break areas as agreed',
+      'Clean and disinfect toilets and washrooms',
+      'Clean mirrors, glass and windows within the agreed scope',
+      'Sweep, vacuum and mop applicable floor surfaces',
+      'Complete the supervisor quality inspection and any corrections',
+      'Confirm the finished work with the client and hand over access',
+      'Record consumables, expenses, final payment and follow-up',
+    ],
+  },
+] as const
+const CLEANING_WORK_STAGES = [
+  { segment: 'Arrival and site review', cue: 'Check access, confirm the scope and document any existing damage.' },
+  { segment: 'Safety and equipment setup', cue: 'Brief the team, protect sensitive surfaces and prepare supplies.' },
+  { segment: 'Cleaning work', cue: 'Clean the agreed rooms and surfaces, following appropriate product instructions.' },
+  { segment: 'Quality inspection', cue: 'Inspect completed work and correct any missed areas.' },
+  { segment: 'Client handover', cue: 'Confirm completion, record feedback and hand over keys or access.' },
 ] as const
 type TemplateId = typeof EVENT_TEMPLATES[number]['id']
 type ClientShareSettings = { details: boolean; checklist: boolean; programme: boolean }
@@ -116,6 +146,11 @@ function studioFromTemplate(id: TemplateId): Studio {
   studio.sheets.checklist = template.tasks.map(task => ({
     ...makeRow(TOOLS[0]), task, status: 'Not started',
   }))
+  if (id === 'cleaning') {
+    studio.sheets.production = CLEANING_WORK_STAGES.map(stage => ({
+      ...makeRow(TOOLS[1]), ...stage,
+    }))
+  }
   return syncEventChecklistBudget(studio)
 }
 
@@ -243,10 +278,12 @@ export function EventStudioHome() {
       <section className="event-studio__home-grid">
         <form className="event-studio__panel event-studio__new-event" onSubmit={createEvent}>
           <span className="event-studio__step">STEP 01 — START HERE</span>
-          <h2>Create an event</h2>
-          <p>Give the event a name, then choose a starter template. Everything remains editable.</p>
-          <label>Event name<input required maxLength={140} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Annual fundraising dinner" /></label>
-          <label>Event date <span className="event-studio__optional">(optional)</span><input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} /></label>
+          <h2>{templateId === 'cleaning' ? 'Create a cleaning job' : 'Create an event'}</h2>
+          <p>{templateId === 'cleaning'
+            ? 'Start a cleaning job with an editable checklist, work schedule, budget and supplier sheet. Set your own prices and dates.'
+            : 'Give the event a name, then choose a starter template. Everything remains editable.'}</p>
+          <label>{templateId === 'cleaning' ? 'Cleaning job name' : 'Event name'}<input required maxLength={140} value={title} onChange={e => setTitle(e.target.value)} placeholder={templateId === 'cleaning' ? 'e.g. Office deep cleaning' : 'e.g. Annual fundraising dinner'} /></label>
+          <label>{templateId === 'cleaning' ? 'Cleaning date' : 'Event date'} <span className="event-studio__optional">(optional)</span><input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} /></label>
           <fieldset className="event-studio__template-picker"><legend>Start with a template</legend>
             <div className="event-studio__template-grid">{EVENT_TEMPLATES.map(item => (
               <label key={item.id} className={templateId === item.id ? 'is-selected' : ''}>
@@ -260,7 +297,7 @@ export function EventStudioHome() {
               <option>Traditional wedding</option><option>White wedding</option><option>Engagement</option>
             </select>
           </label>}
-          <button className="event-studio__primary" type="submit" disabled={creating || !title.trim() || !storeId}>{creating ? 'Creating…' : 'Create event & choose tools →'}</button>
+          <button className="event-studio__primary" type="submit" disabled={creating || !title.trim() || !storeId}>{creating ? 'Creating…' : templateId === 'cleaning' ? 'Create cleaning job & choose tools →' : 'Create event & choose tools →'}</button>
         </form>
         <section className="event-studio__panel event-studio__recent">
           <div className="event-studio__section-head"><div><span className="event-studio__step">CONTINUE PLANNING</span><h2>Your events</h2></div><span className="event-studio__count">{events.length} events</span></div>
