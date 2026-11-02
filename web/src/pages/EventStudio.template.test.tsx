@@ -45,7 +45,7 @@ describe('Event Studio canonical event types', () => {
     </MemoryRouter>)
     await user.type(screen.getByPlaceholderText('e.g. Annual fundraising dinner'), 'Planning a new event')
     await user.click(screen.getByRole('radio', { name: new RegExp('^' + template) }))
-    await user.click(screen.getByRole('button', { name: /Create event & choose tools/i }))
+    await user.click(screen.getByRole('button', { name: /Create (?:event|cleaning job) & choose tools/i }))
     await waitFor(() => expect(mockAddDoc).toHaveBeenCalledTimes(1))
     expect(mockAddDoc.mock.calls[0][1]).toMatchObject({ eventType, title: 'Planning a new event' })
   })
