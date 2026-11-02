@@ -30,7 +30,7 @@ export type TransactionalEmailDeliveryResult = {
   attempted: boolean
   ok: boolean
   status: number | null
-  channel: 'sedifex_apps_script' | 'outbox_only'
+  channel: 'sedifex_notification' | 'outbox_only'
   deliveryStatus: 'sent' | 'queued' | 'duplicate' | 'failed' | 'outbox'
   senderName: string
   senderEmail: string
