@@ -3,6 +3,7 @@ import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { appendNotificationOutboxRow, getDefaultSpreadsheetId } from './googleSheets'
 import { deliverTransactionalEmail } from './emailDelivery'
+import { bookingStoreRecipients } from './bookingNotificationRecipients'
 
 const SEDIFEX_NOTIFICATION_WEBHOOK_URL = defineString('SEDIFEX_NOTIFICATION_WEBHOOK_URL', { default: '' })
 const SEDIFEX_NOTIFICATION_SHARED_SECRET = defineString('SEDIFEX_NOTIFICATION_SHARED_SECRET', { default: '' })
@@ -264,7 +265,13 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
     deliveries.push(createDelivery({ payload: { ...payload, reference }, brand, settings, recipientType: 'customer', to: customerEmail, subject: `${title} - ${brand.storeName}`, html: buildHtmlEmail({ brand, title, intro, rows, footerNote: 'Keep this email for your records. If you did not receive this order or there is a problem, contact the store or Sedifex support as soon as possible.', paymentUrl, portalUrl }), text: buildTextEmail(title, intro, rows, undefined, paymentUrl, portalUrl) }))
   }
   const forceStoreAlert = payload.forceStoreAlert || REQUIRED_STORE_ALERT_EVENTS.has(payload.eventType)
-  const adminEmails = settings.adminEmails.length ? settings.adminEmails : [brand.email].filter((value): value is string => Boolean(value))
+  // For booking/customer medical-service details, untrusted legacy adminEmails
+  // must not be able to route copies to a different business. Always alert
+  // the verified owner; optional staff must both belong to this store and be
+  // explicitly selected in adminEmails.
+  const adminEmails = payload.eventType.startsWith('booking.')
+    ? await bookingStoreRecipients(storeId, settings.adminEmails)
+    : settings.adminEmails.length ? settings.adminEmails : [brand.email].filter((value): value is string => Boolean(value))
   if ((settings.storeAlertEnabled || forceStoreAlert) && adminEmails.length) {
     const amount = formatMoney(payload.payment)
     const title = copy.adminTitle
