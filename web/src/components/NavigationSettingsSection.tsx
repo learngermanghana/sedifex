@@ -21,6 +21,7 @@ const INDUSTRY_OPTIONS: Array<{ value: Industry; label: string }> = [
   { value: 'ngo', label: 'NGO' },
   { value: 'school', label: 'School' },
   { value: 'event', label: 'Event Planning / Coordination' },
+  { value: 'cleaning', label: 'Cleaning Services' },
 ]
 
 const PAGE_GROUPS: PageGroup[] = [
@@ -110,6 +111,8 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
     setDraft(current => ({
       ...current,
       industry,
+      // Cleaning-specific labels must appear even for workspaces using shared labels.
+      labelPolicy: industry === 'cleaning' ? 'industry_aliases' : current.labelPolicy,
       enabledModules: uniqueList(INDUSTRY_ENABLED_MODULE_PRESETS[industry] ?? []),
       customNavItems: [],
     }))
