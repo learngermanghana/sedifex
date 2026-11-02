@@ -362,6 +362,7 @@ service cloud.firestore {
     match /{topCollection}/{document=**} {
       allow read, write: if isSignedIn()
         && topCollection != 'stores'
+        && topCollection != 'storeSettings'
         && topCollection != 'teamMembers'
         && topCollection != 'customers'
         && topCollection != 'products'
