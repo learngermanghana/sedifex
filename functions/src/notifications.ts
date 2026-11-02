@@ -224,6 +224,10 @@ async function createDelivery(args: { payload: NotificationPayload; brand: Store
       senderEmail: webhook.senderEmail || null,
       replyToEmail: webhook.replyToEmail || null,
       deliveryReason: webhook.reason || null,
+      // Existing Sedifex Central Notification Web App returns generated
+      // receipt metadata, so admins can track each email without a new script.
+      receiptNumber: webhook.receiptNumber || null,
+      receiptUrl: webhook.receiptUrl || null,
       sentToWebhookAt: now,
       sheetSyncStatus,
       updatedAt: now,
