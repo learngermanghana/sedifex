@@ -529,7 +529,6 @@ export default function BookingEditor() {
           source_channel: 'manual_admin',
         } : {}),
       }
-      const booking = payload as BookingSheetSource & Record<string, unknown>
 
       await withTimeout(
         Promise.all([
