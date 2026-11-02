@@ -6,7 +6,7 @@ import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import './EventStudio.css'
 import { copyStudioGrid, pasteStudioGrid, repositionStudioRow, dropStudioRow, studioOverview } from '../utils/eventStudioGrid'
-import { syncEventChecklistBudget } from '../utils/eventChecklistBudgetSync'
+import { applyEventBudgetEdits, syncEventChecklistBudget } from '../utils/eventChecklistBudgetSync'
 
 type EventDetails = {
   eventDate: string; startTime: string; venue: string; clientName: string; clientPhone: string;
@@ -67,7 +67,7 @@ const TOOLS: Tool[] = [
   { id: 'budget', name: 'Budget & Expenses', icon: '₵', description: 'Compare estimated costs with actual spending.', caption: 'Plan and monitor event costs', fields: [
     { key: 'item', label: 'Expense', type: 'text', width: 250 },
     { key: 'owner', label: 'Assigned to', type: 'text', width: 160 }, { key: 'due', label: 'Due date', type: 'date', width: 155 },
-    { key: 'status', label: 'Status', type: 'text', width: 150 }, { key: 'category', label: 'Category', type: 'text', width: 190 },
+    { key: 'status', label: 'Status', type: 'select', options: ['Not started', 'In progress', 'Done'], width: 150 }, { key: 'category', label: 'Category', type: 'text', width: 190 },
     { key: 'estimate', label: 'Budgeted (GHS)', type: 'number', width: 170 }, { key: 'actual', label: 'Spent (GHS)', type: 'number', width: 160 },
     { key: 'difference', label: 'Remaining (GHS)', type: 'computed', width: 170 },
   ] },
@@ -77,7 +77,7 @@ const TOOLS: Tool[] = [
     { key: 'seats', label: 'Seats', type: 'number', width: 125 },
   ] },
   { id: 'vendors', name: 'Vendors & Suppliers', icon: '▣', description: 'Supplier details, services and payments.', caption: 'Manage service providers', fields: [
-    { key: 'vendor', label: 'Supplier', type: 'text', width: 240 }, { key: 'service', label: 'Service', type: 'text', width: 235 },
+    { key: 'vendor', label: 'Service/ Vendor', type: 'text', width: 240 }, { key: 'service', label: 'handle', type: 'text', width: 235 },
     { key: 'contact', label: 'Contact', type: 'text', width: 190 }, { key: 'quoted', label: 'Quoted (GHS)', type: 'number', width: 165 },
     { key: 'paid', label: 'Paid (GHS)', type: 'number', width: 160 },
   ] },
@@ -610,9 +610,10 @@ export function EventStudioWorkspace() {
 
   function changeCell(rowId: string, key: string, value: Cell) {
     if (!studio || active === 'overview' || active === 'details' || active === 'sharing') return
-    if (active === 'budget' && ['item', 'owner', 'due', 'status', 'estimate'].includes(key) &&
-      studio.sheets.budget.some(row => row.id === rowId && row.sourceChecklistId)) return
-    edit({ ...studio, sheets: { ...studio.sheets, [active]: studio.sheets[active].map(row => row.id === rowId ? { ...row, [key]: value } : row) } })
+    const nextRows = studio.sheets[active].map(row => row.id === rowId ? { ...row, [key]: value } : row)
+    edit(active === 'budget'
+      ? applyEventBudgetEdits(studio, nextRows)
+      : { ...studio, sheets: { ...studio.sheets, [active]: nextRows } })
   }
 
   function addRow() {
@@ -659,11 +660,9 @@ export function EventStudioWorkspace() {
     event.preventDefault()
     const result = pasteStudioGrid(studio.sheets[active], tool.fields, rowId, key, text, () => makeRow(tool))
     if (result.changed) {
-      if (active === 'budget' && studio.sheets.budget.some(row => row.sourceChecklistId)) {
-        setActionMessage('Edit linked descriptions, owners, dates and estimates in Checklist. Paste expense amounts or categories into individual budget cells.')
-        return
-      }
-      edit({ ...studio, sheets: { ...studio.sheets, [active]: result.rows } })
+      edit(active === 'budget'
+        ? applyEventBudgetEdits(studio, result.rows)
+        : { ...studio, sheets: { ...studio.sheets, [active]: result.rows } })
       setQuery('')
       setSortBy('')
     }
@@ -924,7 +923,7 @@ export function EventStudioWorkspace() {
               <span className="event-studio__sheet-count">{rows.length} {rows.length === 1 ? 'row' : 'rows'}</span>
             </div>
             {current.id === 'budget' && studio.sheets.budget.some(row => row.sourceChecklistId) ? (
-              <p className="event-studio__sync-note">Checklist items are linked automatically. Edit task details and estimated costs in Checklist; enter Category and Spent (GHS) here. Existing expenses are preserved.</p>
+              <p className="event-studio__sync-note">Checklist items are linked automatically. Edit descriptions, owners, dates, status and estimates in either sheet; both stay in sync. Category and Spent (GHS) remain independent budget records.</p>
             ) : null}
             <div className="event-studio__toolbar" role="toolbar" aria-label="Spreadsheet actions">
               <button type="button" className="event-studio__primary" onClick={addRow}>+ Add row</button>
@@ -983,10 +982,8 @@ export function EventStudioWorkspace() {
                         <span>{rowNumber}</span>
                       </td>
                       {current.fields.map(field => <td key={field.key}>
-                        {current.id === 'budget' && row.sourceChecklistId && ['item', 'owner', 'due', 'status', 'estimate'].includes(field.key)
-                          ? <output className="event-studio__computed event-studio__linked-field" title="Synced from Checklist; edit there">{field.key === 'estimate' ? money(cellNumber(row, field.key)) : String(row[field.key] ?? '')}</output> :
-                        field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
-                          field.type === 'select' ? <select aria-label={`${field.label} row ${rowNumber}`} value={String(row[field.key] ?? '')} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)}>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
+                        {field.type === 'computed' ? <output className="event-studio__computed">{money(cellNumber(row, field.key))}</output> :
+                          field.type === 'select' ? <select aria-label={`${field.label} row ${rowNumber}`} value={String(row[field.key] ?? '')} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onChange={e => changeCell(row.id, field.key, e.target.value)}>{!field.options?.includes(String(row[field.key] ?? '')) && <option value={String(row[field.key] ?? '')}>{String(row[field.key] || 'Select status')}</option>}{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> :
                           <input aria-label={`${field.label} row ${rowNumber}`} type={field.type} min={field.type === 'number' ? '0' : undefined} step={field.type === 'number' ? 'any' : undefined} value={row[field.key] ?? ''} onKeyDown={moveDown} onFocus={() => setSelectedRowId(row.id)} onPaste={e => pasteCells(e, row.id, field.key)} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                       </td>)}
                       <td className="event-studio__number event-studio__row-actions">
@@ -1028,10 +1025,8 @@ export function EventStudioWorkspace() {
                   </div>
                 </header>
                 <div>{current.fields.map(field => <label key={field.key}>{field.label}
-                  {current.id === 'budget' && row.sourceChecklistId && ['item', 'owner', 'due', 'status', 'estimate'].includes(field.key)
-                    ? <output title="Synced from Checklist">{field.key === 'estimate' ? money(cellNumber(row, field.key)) : String(row[field.key] ?? '')}</output> :
-                  field.type === 'computed' ? <output>{money(cellNumber(row, field.key))}</output> : field.type === 'select' ?
-                    <select value={String(row[field.key] ?? '')} onChange={e => changeCell(row.id, field.key, e.target.value)} aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`}>{field.options?.map(value => <option key={value}>{value}</option>)}</select> :
+                  {field.type === 'computed' ? <output>{money(cellNumber(row, field.key))}</output> : field.type === 'select' ?
+                    <select value={String(row[field.key] ?? '')} onChange={e => changeCell(row.id, field.key, e.target.value)} aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`}>{!field.options?.includes(String(row[field.key] ?? '')) && <option value={String(row[field.key] ?? '')}>{String(row[field.key] || 'Select status')}</option>}{field.options?.map(value => <option key={value}>{value}</option>)}</select> :
                     <input aria-label={`${field.label} mobile row ${rows.indexOf(row) + 1}`} type={field.type} value={row[field.key] ?? ''} onChange={e => changeCell(row.id, field.key, e.target.value)} />}
                 </label>)}</div>
               </article>) : <p>No rows to edit yet.</p>}
