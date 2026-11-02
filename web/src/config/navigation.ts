@@ -1,5 +1,5 @@
 export type NavRole = 'owner' | 'staff'
-export type Industry = 'shop' | 'travel' | 'ngo' | 'school' | 'event'
+export type Industry = 'shop' | 'travel' | 'ngo' | 'school' | 'event' | 'cleaning'
 export type NavigationLabelPolicy = 'shared' | 'industry_aliases'
 export type NavItemType = 'module' | 'internal' | 'external'
 
@@ -55,10 +55,12 @@ const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
   ngo: { '/customers': 'Donors', '/bookings': 'Campaigns', '/upcoming-events': 'Upcoming campaigns', '/promo': 'Campaign promo', '/gallery': 'Impact gallery', '/social-links': 'Contact links', '/expenses': 'Petty expenses' },
   school: { '/customers': 'Contacts', '/students': 'Students', '/bookings': 'Classes', '/upcoming-events': 'Upcoming classes', '/promo': 'Admissions promo', '/gallery': 'School gallery', '/social-links': 'Contact links' },
   event: { '/event-planning': 'Event Management', '/bulk-email': 'Email' },
+  cleaning: { '/products': 'Services & Pricing', '/customers': 'Clients', '/upcoming-events': 'Cleaning Schedule' },
 }
 
 const INDUSTRY_SORT_ORDERS: Partial<Record<Industry, Partial<Record<string, number>>>> = {
   event: { dashboard: 10, events: 20, customers: 30, invoices: 40, reports: 50, 'bulk-email': 60 },
+  cleaning: { dashboard: 10, products: 20, customers: 30, bookings: 40, 'upcoming-events': 50, invoices: 60, expenses: 70, reports: 80, settlement: 90, account: 100 },
 }
 
 export type CustomNavItem = {
@@ -85,6 +87,8 @@ export const INDUSTRY_ENABLED_MODULE_PRESETS: Record<Industry, string[]> = {
   ngo: ['dashboard', 'customers', 'bookings', 'upcoming-events', 'donor-management', 'funds-ledger', 'volunteers', 'settlement'],
   school: ['dashboard', 'students', 'customers', 'bookings', 'upcoming-events', 'student-registration', 'invoices', 'settlement'],
   event: ['dashboard', 'events', 'customers', 'invoices', 'reports', 'bulk-email', 'settlement'],
+  // Reuse existing pages; no cleaning-specific job, inventory, or automation backend.
+  cleaning: ['dashboard', 'products', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports'],
 }
 
 const LEGACY_EVENT_PRESET = ['events', 'customers', 'invoices', 'bulk-email']
