@@ -18,6 +18,41 @@ function taskKey(value: unknown) {
 }
 
 /**
+ * Update linked Checklist fields from Budget edits before the normal Checklist ->
+ * Budget reconciliation runs. The link is retained so subsequent edits from
+ * either sheet stay in sync; category and actual spending belong only to Budget.
+ *
+ * Accepts a whole budget sheet so single-cell edits and multi-cell pastes behave
+ * identically. Only changed fields propagate to the linked task.
+ */
+export function applyEventBudgetEdits<T extends LinkableStudio>(studio: T, budgetRows: EventStudioSyncRow[]): T {
+  const previousRows = new Map(studio.sheets.budget.map(row => [row.id, row]))
+  const checklistChanges = new Map<string, Record<string, string | number>>()
+  const linkedFields = { item: 'task', owner: 'owner', due: 'due', status: 'status', estimate: 'cost' } as const
+
+  for (const row of budgetRows) {
+    const previous = previousRows.get(row.id)
+    const taskId = previous?.sourceChecklistId
+    if (typeof taskId !== 'string' || !taskId) continue
+    for (const [budgetField, checklistField] of Object.entries(linkedFields)) {
+      if (String(previous[budgetField] ?? '') === String(row[budgetField] ?? '')) continue
+      const changes = checklistChanges.get(taskId) ?? {}
+      changes[checklistField] = row[budgetField] ?? ''
+      checklistChanges.set(taskId, changes)
+    }
+  }
+
+  const checklist = studio.sheets.checklist.map(task => {
+    const changes = checklistChanges.get(task.id)
+    return changes ? { ...task, ...changes } : task
+  })
+  return syncEventChecklistBudget({
+    ...studio,
+    sheets: { ...studio.sheets, checklist, budget: budgetRows },
+  })
+}
+
+/**
  * Pure, idempotent and deterministic: safe to apply during Firestore hydration,
  * reconciliation, undo/redo and every edit. Never creates an extra network write.
  */

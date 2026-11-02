@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { syncEventChecklistBudget, type EventStudioSyncRow } from './eventChecklistBudgetSync'
+import { applyEventBudgetEdits, syncEventChecklistBudget, type EventStudioSyncRow } from './eventChecklistBudgetSync'
 
 type Studio = { selected: string[]; sheets: { checklist: EventStudioSyncRow[]; budget: EventStudioSyncRow[] } }
 const createStudio = (tasks: EventStudioSyncRow[] = [], budget: EventStudioSyncRow[] = []): Studio =>
@@ -85,5 +85,57 @@ describe('Checklist to Budget & Expenses synchronization', () => {
     ] } })
     expect(result.sheets.budget).toHaveLength(2)
     expect(result.selected).toEqual(['checklist'])
+  })
+})
+
+describe('editing linked Budget & Expenses rows', () => {
+  it('lets the budget update the linked checklist while preserving spending and row IDs', () => {
+    const initial = syncEventChecklistBudget(createStudio([
+      { id: 'task-1', task: 'Book venue', owner: 'Ama', due: '2026-12-01', status: 'Not started', cost: 1200 },
+    ]))
+    const originalId = initial.sheets.budget[0].id
+    const result = applyEventBudgetEdits(initial, [{
+      ...initial.sheets.budget[0],
+      item: 'Reserve hall', owner: 'Kwame', due: '2026-12-03',
+      status: 'Done', estimate: 1500, category: 'Venue', actual: 750,
+    }])
+    expect(result.sheets.checklist[0]).toMatchObject({
+      task: 'Reserve hall', owner: 'Kwame', due: '2026-12-03', status: 'Done', cost: 1500,
+    })
+    expect(result.sheets.budget[0]).toMatchObject({
+      id: originalId, sourceChecklistId: 'task-1', item: 'Reserve hall',
+      estimate: 1500, actual: 750, category: 'Venue',
+    })
+    expect(syncEventChecklistBudget(result)).toBe(result)
+    const checklistEdited = syncEventChecklistBudget({
+      ...result, sheets: {
+        ...result.sheets,
+        checklist: [{ ...result.sheets.checklist[0], task: 'Final venue name', cost: 1700 }],
+      },
+    })
+    expect(checklistEdited.sheets.budget[0]).toMatchObject({
+      id: originalId, item: 'Final venue name', estimate: 1700, actual: 750, category: 'Venue',
+    })
+  })
+
+  it('supports multiple changed linked rows from a paste without creating duplicates', () => {
+    const initial = syncEventChecklistBudget(createStudio([
+      { id: 'task-1', task: 'Catering', cost: 400 },
+      { id: 'task-2', task: 'Lights', cost: 200 },
+    ], [{ id: 'manual', item: 'Transport', estimate: 100, actual: 50 }]))
+    const updatedRows = initial.sheets.budget.map(row => row.sourceChecklistId === 'task-1'
+      ? { ...row, estimate: '450', actual: '70' }
+      : row.sourceChecklistId === 'task-2'
+        ? { ...row, item: 'Lighting', estimate: '250', category: 'Production' }
+        : { ...row, actual: '60' })
+    const result = applyEventBudgetEdits(initial, updatedRows)
+    expect(result.sheets.checklist).toMatchObject([
+      { id: 'task-1', cost: '450' }, { id: 'task-2', task: 'Lighting', cost: '250' },
+    ])
+    expect(result.sheets.budget).toHaveLength(3)
+    expect(result.sheets.budget.find(row => row.id === 'manual')).toMatchObject({
+      item: 'Transport', estimate: 100, actual: '60',
+    })
+    expect(result.sheets.budget.find(row => row.sourceChecklistId === 'task-1')?.actual).toBe('70')
   })
 })
