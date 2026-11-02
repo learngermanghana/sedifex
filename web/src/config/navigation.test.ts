@@ -2,13 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { INDUSTRY_ENABLED_MODULE_PRESETS, resolveNavigation } from './navigation'
 
 describe('resolveNavigation', () => {
-  it('always offers a scoped Activity page for staff and owners, even with saved modules', () => {
-    for (const role of ['staff', 'owner'] as const) {
-      const items = resolveNavigation({ role, workspaceProfile: { industry: 'travel', labelPolicy: 'shared', enabledModules: ['customers'] } })
-      expect(items.find(item => item.id === 'activity')).toMatchObject({ target: '/activity', rolesAllowed: ['owner', 'staff'] })
-    }
-  })
-
   it('uses the selected industry preset when no enabled modules are stored', () => {
     const items = resolveNavigation({
       role: 'owner',
@@ -55,7 +48,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'activity', 'settlement', 'account'])
+    expect(items.map(item => item.id)).toEqual(['dashboard', 'products', 'sell', 'settlement', 'account'])
   })
 
   it('applies industry preset aliases, module toggles, custom items, role and permissions', () => {
@@ -89,7 +82,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['reports', 'sell', 'activity', 'customers', 'blog'])
+    expect(items.map(item => item.id)).toEqual(['reports', 'sell', 'customers', 'blog'])
     expect(items.find(item => item.id === 'customers')?.label).toBe('Customers')
   })
 
@@ -120,7 +113,7 @@ describe('resolveNavigation', () => {
       },
     })
 
-    expect(items.map(item => item.id)).toEqual(['activity'])
+    expect(items).toEqual([])
   })
 
   it('keeps signup presets focused on the selected business type', () => {
@@ -182,7 +175,7 @@ describe('resolveNavigation', () => {
       'dashboard', 'products', 'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
     ])
     expect(owner.map(item => item.id)).toEqual([
-      'dashboard', 'products', 'customers', 'activity', 'bookings', 'upcoming-events', 
+      'dashboard', 'products', 'customers', 'bookings', 'upcoming-events',
       'invoices', 'expenses', 'reports', 'settlement', 'account',
     ])
     expect(owner.find(item => item.id === 'products')).toMatchObject({ label: 'Services & Pricing', target: '/products' })
@@ -196,7 +189,7 @@ describe('resolveNavigation', () => {
       workspaceProfile: { industry: 'cleaning', labelPolicy: 'industry_aliases' },
     })
     expect(staff.map(item => item.id)).toEqual([
-      'customers', 'activity', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
+      'customers', 'bookings', 'upcoming-events', 'invoices', 'expenses', 'reports',
     ])
   })
 
@@ -209,7 +202,7 @@ describe('resolveNavigation', () => {
         customLabels: { '/customers': 'Property clients' },
       },
     })
-    expect(owner.map(item => item.id)).toEqual(['customers', 'activity', 'bookings', 'bulk-email', 'settlement', 'account'])
+    expect(owner.map(item => item.id)).toEqual(['customers', 'bookings', 'bulk-email', 'settlement', 'account'])
     expect(owner.find(item => item.id === 'customers')?.label).toBe('Property clients')
   })
 
