@@ -56,7 +56,11 @@ function presentSale(snapshot: FirebaseFirestore.QueryDocumentSnapshot | Firebas
   const customer = asRecord(data.customer)
   const review = asRecord(data.staffReview)
   const items = Array.isArray(data.items) ? data.items : []
-  const method = asText(payment.method) || 'unspecified'
+  const tenderMethods = Array.isArray(payment.tenders)
+    ? payment.tenders.map(tender => asText(asRecord(tender).method)).filter(Boolean)
+    : []
+  const method = tenderMethods.length ? Array.from(new Set(tenderMethods)).join(' + ') : asText(payment.method) || 'unspecified'
+  const isCashOnly = method === 'cash' || (tenderMethods.length > 0 && tenderMethods.every(value => value === 'cash'))
   const providerStatus = asText(payment.status ?? data.paymentStatus).toLowerCase()
   const hasVerifiedProviderPayment = Boolean(payment.verifiedAt ?? data.paymentVerifiedAt)
     || ['paid', 'success', 'succeeded', 'verified'].includes(providerStatus)
