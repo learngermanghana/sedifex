@@ -29,13 +29,13 @@ assert.deepEqual(
 for (const event of [
   'booking.received', 'booking.confirmed', 'booking.cancelled',
   'booking.payment_confirmed', 'booking.rescheduled',
+  'booking.reminder_1d', 'booking.reminder_3d',
+  'order.confirmed', 'student_registration.paid', 'donation.confirmed',
 ]) {
-  assert.equal(useCentralBookingSender(event, 'automatic'), true, event)
-  assert.equal(useCentralBookingSender(event, 'sedifex'), true, event)
-  assert.equal(useCentralBookingSender(event, 'store_email'), false, event)
+  for (const preference of ['automatic', 'sedifex', 'store_email', 'custom_webhook']) {
+    assert.equal(useCentralBookingSender(event, preference), true,
+      `${event} must always use Sedifex's own script, not ${preference}`)
+  }
 }
-assert.equal(useCentralBookingSender('booking.reminder_1d', 'automatic'), false, 'keep scheduled reminders on existing route')
-assert.equal(useCentralBookingSender('order.confirmed', 'automatic'), false, 'do not alter unrelated order mail')
-assert.equal(useCentralBookingSender('booking.confirmed', 'custom_webhook'), false, 'preserve explicit custom override')
-
-console.log('store-isolated booking email routing tests passed')
+assert.equal(useCentralBookingSender(''), false, 'empty event is not an email')
+console.log('store-isolated transactional email routing tests passed')
