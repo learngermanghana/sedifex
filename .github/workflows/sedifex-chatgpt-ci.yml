@@ -1,0 +1,49 @@
+name: Sedifex ChatGPT OAuth and MCP
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/server/chatgpt/**'
+      - 'web/api/chatgpt.ts'
+      - 'web/shared/chatgpt-scopes.ts'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+      - '.github/workflows/sedifex-chatgpt-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/server/chatgpt/**'
+      - 'web/api/chatgpt.ts'
+      - 'web/shared/chatgpt-scopes.ts'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+      - '.github/workflows/sedifex-chatgpt-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  oauth-and-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Align with Event Planning Web CI; the committed lockfile is stale.
+      - name: Use project-compatible npm version
+        run: npm install --global npm@11.6.0
+      - name: Install web dependencies
+        working-directory: web
+        run: |
+          rm -f package-lock.json
+          npm install --no-package-lock --no-audit --no-fund
+      - name: Run Sedifex ChatGPT OAuth and MCP tests
+        working-directory: web
+        run: npm run test:chatgpt
+      - name: Typecheck ChatGPT OAuth/MCP server files
+        working-directory: web
+        run: npm run typecheck:chatgpt
