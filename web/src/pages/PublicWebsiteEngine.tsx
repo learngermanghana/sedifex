@@ -222,6 +222,7 @@ function mapGallery(
   id: string,
   source: Record<string, unknown>,
 ): GalleryItem | null {
+  if (source.isPublished === false) return null;
   const url = clean(
     source.url ??
       source.imageUrl ??
@@ -230,7 +231,7 @@ function mapGallery(
       source.photoUrl,
     900,
   );
-  if (!url) return null;
+  if (!url || !/^https?:\/\//i.test(url)) return null;
   return {
     id,
     url,
@@ -704,14 +705,42 @@ export default function PublicWebsiteEngine() {
             ),
           )
           .filter((item): item is PublicItem => Boolean(item));
-        const gallerySnap = await getDocs(
-          query(collection(db, "stores", storeId, "promoGallery"), limit(40)),
-        );
-        const galleryItems = gallerySnap.docs
-          .map((itemDoc) =>
-            mapGallery(itemDoc.id, itemDoc.data() as Record<string, unknown>),
-          )
-          .filter((item): item is GalleryItem => Boolean(item));
+        // The published website uses the same merged gallery response as promo
+        // pages and partner websites. No secret key is embedded in the browser.
+        // Keep the original Firestore read as a compatibility fallback while
+        // older deployments or gallery endpoint permissions are being updated.
+        let galleryItems: GalleryItem[] = [];
+        try {
+          const projectId = import.meta.env.VITE_FB_PROJECT_ID;
+          if (!projectId) throw new Error("Missing Firebase project");
+          const region = import.meta.env.VITE_FB_FUNCTIONS_REGION ?? "us-central1";
+          const galleryUrl = new URL(
+            `https://${region}-${projectId}.cloudfunctions.net/integrationGallery`,
+          );
+          galleryUrl.searchParams.set("siteSlug", slug);
+          galleryUrl.searchParams.set("limit", "100");
+          const galleryResponse = await fetch(galleryUrl.toString(), { method: "GET" });
+          if (!galleryResponse.ok) throw new Error(`Gallery HTTP ${galleryResponse.status}`);
+          const galleryPayload = await galleryResponse.json() as { gallery?: Array<Record<string, unknown>> };
+          if (!Array.isArray(galleryPayload.gallery)) throw new Error("Invalid gallery response");
+          galleryItems = galleryPayload.gallery
+            .map((item) => mapGallery(clean(item.id, 180), item))
+            .filter((item): item is GalleryItem => Boolean(item));
+        } catch (galleryError) {
+          console.warn("[public-website] Gallery API unavailable; using existing promo gallery.", galleryError);
+          try {
+            const gallerySnap = await getDocs(
+              query(collection(db, "stores", storeId, "promoGallery"), limit(40)),
+            );
+            galleryItems = gallerySnap.docs
+              .map((itemDoc) =>
+                mapGallery(itemDoc.id, itemDoc.data() as Record<string, unknown>),
+              )
+              .filter((item): item is GalleryItem => Boolean(item));
+          } catch (fallbackError) {
+            console.warn("[public-website] Existing promo gallery unavailable.", fallbackError);
+          }
+        }
         if (!mounted) return;
         const contentDrafts = record(website.contentDrafts);
         const seoSettings = record(website.seoSettings);
