@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
   const { client_id, redirect_uri, code_challenge, code_challenge_method, scope, state, resource } = req.body || {}
   if (!origin() || !process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(503).json({error:'OAuth not configured'})
-  if (!(await permittedSedifexCallback(client_id, redirect_uri)) || !/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge || '') || code_challenge_method !== 'S256' || typeof state !== 'string' || !state || resource !== process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(400).json({error:'invalid_request'})
+  if (!/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge || '') || code_challenge_method !== 'S256' || typeof state !== 'string' || !state || resource !== process.env.SEDIFEX_MCP_RESOURCE_URL || !(await permittedSedifexCallback(client_id, redirect_uri))) return res.status(400).json({error:'invalid_request'})
   const scopes = String(scope || '').split(' ').filter(Boolean)
   if (!scopes.length || scopes.some(s => !chatgptScopes.includes(s))) return res.status(400).json({error:'invalid_scope'})
   const match = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))
