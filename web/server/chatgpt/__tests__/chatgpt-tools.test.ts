@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Timestamp } from 'firebase-admin/firestore'
 import { executeTool, tools } from '../chatgpt-tools'
+import { scopeDescriptions } from '../../../shared/chatgpt-scopes'
 import { memoryDb } from './memory-db'
 const start = '2099-03-01T10:00:00.000Z', end = '2099-03-01T11:00:00.000Z'
 function setup(capacity = 2) {
@@ -14,6 +15,12 @@ function setup(capacity = 2) {
 const args = { storeId: 'shop', listingId: 'listing', slotId: 'slot', quantity: 1, expectedUnitPrice: 100, expectedCurrency: 'GHS', expectedStartAt: start, expectedEndAt: end, expectedTimezone: 'Africa/Accra', customerName: 'Test Customer', customerEmail: 'customer@example.com', customerPhone: '+233241234567', requestId: 'booking_0001', confirmed: true }
 const blog = { storeId: 'shop', title: 'Helpful massage advice', content: 'A useful article.', requestId: 'blog_0001' }
 describe('ChatGPT tools', () => {
+  it('uses current Sedifex business terminology in the exposed tool descriptions and consent scopes', () => {
+    expect(tools.length).toBeGreaterThan(0)
+    expect(tools.map(tool => tool.description).join(' ')).not.toMatch(/\bmerchant\b/i)
+    expect(Object.values(scopeDescriptions).join(' ')).not.toMatch(/\bmerchant\b/i)
+    expect(scopeDescriptions['stores:read']).toMatch(/stores you own/)
+  })
   it('discovers only published public services and returns slot prices', async () => {
     const m = setup(); m.put('publicListings/private', { name: 'Secret', itemType: 'service', isPublished: false })
     expect((await executeTool(m.db, 'search_services', {})).services).toHaveLength(1)
