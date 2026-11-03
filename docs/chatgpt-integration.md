@@ -38,6 +38,36 @@ Cancellation/rescheduling creates a pending request on both booking copies witho
 
 Use `list_stores` to choose the merchant store. ChatGPT composes article text and sends it to `create_blog_draft`; no extra AI API key or background generation is required. The post is visible in Sedifex's existing Blog page and remains a draft. Use `get_blog_post` before editing or publishing, passing its opaque `revision` as `expectedRevision`. Revisions include Firestore nanoseconds. Published posts cannot be silently overwritten by the connector. Publishing requires the user to review the article and explicitly approve it.
 
+## ChatGPT CIMD OAuth client registration (November 2026)
+
+The consolidated Sedifex OAuth issuer now accepts **ChatGPT Client ID Metadata Documents (CIMD)** while preserving the existing registered pilot client for already connected users. The production OAuth discovery advertises `client_id_metadata_document_supported: true` and `authorization_response_iss_parameter_supported: true`, with token endpoint method `none` and PKCE S256.
+
+- Preferred ChatGPT client identity: `https://chatgpt.com/oauth/client.json`.
+- Preferred callback: `https://chatgpt.com/connector_platform_oauth_redirect`; authorization responses include the matching `iss=https://sedifex.com` parameter.
+- Legacy callback-ID-specific client identities `https://chatgpt.com/oauth/{callback_id}/client.json` are accepted **only** with their matching `https://chatgpt.com/connector/oauth/{callback_id}` callback, when verified against the ChatGPT-hosted public metadata.
+- Unknown client IDs, unknown callbacks, unverified metadata, extra scopes and mismatched `resource` values fail closed. Only `chatgpt.com` metadata URLs in these fixed patterns may be fetched. A 5-minute in-memory metadata cache limits repeated requests; no new datastore is introduced.
+- The original registered pilot `SEDIFEX_OAUTH_CLIENT_ID` and `SEDIFEX_OAUTH_REDIRECT_URI` remain valid for older plugin connections, without weakening the new CIMD callback checks. These environment variables are **optional for CIMD-only connections**, but leave them in place until any old connections have migrated.
+- Pilot allowlist `SEDIFEX_MCP_TEST_UIDS` remains mandatory for private tools. Merchant ownership, customer booking identity isolation, approval for write actions and 60-requests/minute user limit remain unchanged.
+
+### Plugin package and connection
+
+Use a current Agent Plugins package with root `plugin.json` and `mcp.json`, and exactly the existing Sedifex server URL `https://sedifex.com/api/chatgpt-mcp` under `mcpServers.sedifex`. OAuth must be placed in `mcpServers.sedifex.extensions["com.openai"].auth`, with:
+
+```json
+{
+  "type": "oauth",
+  "client": { "mode": "cimd" },
+  "authorizationUrl": "https://sedifex.com/api/chatgpt-oauth-authorize",
+  "tokenUrl": "https://sedifex.com/api/chatgpt-oauth-token",
+  "resource": "https://sedifex.com/api/chatgpt-mcp",
+  "baseScopes": ["stores:read", "services:read", "services:write", "bookings:read", "bookings:write", "blog:read", "blog:write"]
+}
+```
+
+**Do not** include a top-level `oauth` object in `.mcp.json`, a `clientId` alongside `mode:cimd`, a private key, client secret or Firebase UID in the ZIP. The portal may retain the previous registered-client settings for an existing plugin version; inspect the connection settings and, if the portal prevents changing registration mode, create a **new plugin submission**, reusing the same MCP endpoint and domain verification. Do not assert a previously installed plugin was migrated automatically.
+
+End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
+
 ## Account linking
 
 The existing Sedifex/Firebase email-password login remains on `/chatgpt/connect`. Credentials never pass through ChatGPT. Consent displays the exact requested scopes. The issuer supports one-time authorization codes with PKCE S256, 15-minute access tokens, rotating refresh tokens, and a maximum 30-day session. Session revocation invalidates existing access tokens on their next tool call. Disabled Firebase users and Firebase session revocation are checked as well.
@@ -45,8 +75,8 @@ The existing Sedifex/Firebase email-password login remains on `/chatgpt/connect`
 Set these deployment variables (keep their actual values in deployment configuration):
 
 - `SEDIFEX_OAUTH_ISSUER`: HTTPS origin hosting the local issuer, e.g. `https://sedifex.com`.
-- `SEDIFEX_OAUTH_CLIENT_ID`: the registered public OAuth client ID.
-- `SEDIFEX_OAUTH_REDIRECT_URI`: the exact callback shown by the ChatGPT connection screen, including any existing query parameters.
+- `SEDIFEX_OAUTH_CLIENT_ID`: optional legacy registered pilot client ID, retained for old connections; CIMD does not require one.
+- `SEDIFEX_OAUTH_REDIRECT_URI`: exact callback for the legacy registered client; CIMD callbacks are independently checked against ChatGPT public client metadata.
 - `SEDIFEX_OAUTH_PRIVATE_KEY`: RSA signing key in PEM form.
 - `SEDIFEX_OAUTH_KEY_ID`: signing key identifier.
 - `SEDIFEX_MCP_RESOURCE_URL`: exact endpoint URL, e.g. `https://sedifex.com/api/chatgpt-mcp`.
