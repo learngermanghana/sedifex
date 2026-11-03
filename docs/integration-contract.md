@@ -32,14 +32,14 @@ Do not store product purchases as bookings. Do not treat webhook logs as order r
 ## Mandatory versioning policy
 
 - **Current contract version:** `2026-04-13`
-- **Required request header (all integration API requests):** `X-Sedifex-Contract-Version: 2026-04-13`
+- **Required request header for authenticated integrations:** `X-Sedifex-Contract-Version: 2026-04-13`
 - **Response headers:**
   - `x-sedifex-contract-version`
   - `x-sedifex-request-id`
 
 ### Enforcement
 
-- Missing or mismatched contract header returns `400` with:
+- Missing or mismatched contract header on authenticated integration requests returns `400` with:
 
 ```json
 {
@@ -50,6 +50,7 @@ Do not store product purchases as bookings. Do not treat webhook logs as order r
 ```
 
 - Integration clients must fail fast on contract mismatch and raise a visible operator error.
+- **Read-only public gallery compatibility:** `GET /integrationGallery?slug=...` and `?siteSlug=...` are the only documented exceptions to the required-header rule. These legacy/public browser modes have no API key, return only the pictures of a verified enabled promo or published Sedifex website, and reject a mismatched header if supplied. Never treat a `storeId` request as public or expose the private integration key in browser code.
 
 ## URL/versioning rules (mandatory)
 
