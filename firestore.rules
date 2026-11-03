@@ -342,6 +342,13 @@ service cloud.firestore {
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['customerUid']);
     }
 
+    // Private metadata for the per-store Media Library. The public image URLs
+    // are deliberately separate from private store inventory records.
+    match /stores/{storeId}/mediaAssets/{assetId} {
+      allow read, create, update: if hasStoreAccess(storeId);
+      allow delete: if isStoreOwner(storeId);
+    }
+
     // Preserve the legacy behavior for other store subcollections while
     // excluding event planning and event contract templates, which have
     // stricter multi-tenant rules above.
@@ -350,7 +357,8 @@ service cloud.firestore {
         && subCollection != 'integrationBookings'
         && subCollection != 'events'
         && subCollection != 'eventActivity'
-        && subCollection != 'eventContractTemplates';
+        && subCollection != 'eventContractTemplates'
+        && subCollection != 'mediaAssets';
     }
 
     // Legacy fallback for non-store-scoped collections. Store-scoped,
