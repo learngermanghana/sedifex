@@ -58,8 +58,9 @@ legacy generic store subcollection fallback explicitly excludes mediaAssets.
 Verify that the existing /api/uploads Vercel function is deployed and points to
 the intended IMAGE_UPLOAD_BUCKET (or FIREBASE_STORAGE_BUCKET). New media uploads
 still obey the existing **5 MB per request** upload limit after client-side
-optimization. This release intentionally does not modify existing upload API
-authentication, access policy or storage billing.
+optimization. Media Library uploads and deletions under stores/{storeId}/media/ now require
+a valid Firebase ID token and verified team membership for that store. Older
+non-media upload paths retain their legacy behavior pending broader hardening.
 
 ## Costs and limits
 
@@ -74,10 +75,10 @@ authentication, access policy or storage billing.
 
 ## Follow-up hardening
 
-The existing general-purpose /api/uploads route predates this feature and does
-not authenticate each request. Before enabling large-scale public importing,
-harden that route with Firebase ID-token verification and store-scoped write/delete
-authorization, then update all existing image-upload clients and tests together.
+The existing general-purpose /api/uploads route predates this feature. Its
+legacy non-media paths still need Firebase ID-token verification and store-scoped
+write/delete authorization. The new Media Library path is already protected;
+finish the wider upload-route hardening with migration tests for older clients.
 Also consider authenticated signed URLs instead of public URLs for any private
 media; this Media Library is for public website assets only.
 
