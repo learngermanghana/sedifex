@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
-  collection, deleteDoc, doc, getDocs, query, serverTimestamp,
-  setDoc, updateDoc, where, writeBatch,
+  collection, doc, getDocs, query, serverTimestamp,
+  setDoc, where, writeBatch,
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import SafeFirebaseImage from './SafeFirebaseImage'
@@ -228,17 +228,20 @@ export default function MediaAlbumEditor({ storeId, album, otherAlbums, revision
       const batch = writeBatch(db)
       batch.delete(doc(db, 'stores', storeId, 'galleryImages', photo.id))
       const nextPhotos = photos.filter(item => item.id !== photo.id)
-      if (photo.url === suggestedCover) {
-        const nextCover = nextPhotos.find(item => item.isPublished)?.url || ''
+      const replacingCover = photo.url === suggestedCover
+      const nextCover = replacingCover ? nextPhotos.find(item => item.isPublished)?.url || '' : suggestedCover
+      if (replacingCover) {
         batch.update(doc(db, 'stores', storeId, 'galleryAlbums', album.id), {
           coverImageUrl: nextCover || null,
           updatedAt: serverTimestamp(),
         })
-        setCoverImageUrl(nextCover)
-        onUpdate({ ...album, coverImageUrl: nextCover })
       }
       await batch.commit()
       setPhotos(nextPhotos)
+      if (replacingCover) {
+        setCoverImageUrl(nextCover)
+        onUpdate({ ...album, coverImageUrl: nextCover })
+      }
       if (editingPhotoId === photo.id) setEditingPhotoId('')
       publish({ tone: 'success', message: 'Picture removed from album. The original image was not deleted.' })
     } catch (saveError) {
