@@ -1,4 +1,5 @@
 import { chatgptScopes } from '../../shared/chatgpt-scopes.js'
+import { permittedSedifexCallback } from './chatgpt-oauth-client.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHash, randomBytes } from 'node:crypto'
 import { db, getAdmin } from '../../api/_firebase-admin.js'
@@ -18,8 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method !== 'POST') return res.status(405).end()
   const { client_id, redirect_uri, code_challenge, code_challenge_method, scope, state, resource } = req.body || {}
-  if (!origin() || !process.env.SEDIFEX_OAUTH_CLIENT_ID || !process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(503).json({error:'OAuth not configured'})
-  if (client_id !== process.env.SEDIFEX_OAUTH_CLIENT_ID || typeof redirect_uri !== 'string' || redirect_uri !== process.env.SEDIFEX_OAUTH_REDIRECT_URI || !/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge || '') || code_challenge_method !== 'S256' || typeof state !== 'string' || !state || resource !== process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(400).json({error:'invalid_request'})
+  if (!origin() || !process.env.SEDIFEX_MCP_RESOURCE_URL) return res.status(503).json({error:'OAuth not configured'})
+  if (!/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge || '') || code_challenge_method !== 'S256' || typeof state !== 'string' || !state || resource !== process.env.SEDIFEX_MCP_RESOURCE_URL || !(await permittedSedifexCallback(client_id, redirect_uri))) return res.status(400).json({error:'invalid_request'})
   const scopes = String(scope || '').split(' ').filter(Boolean)
   if (!scopes.length || scopes.some(s => !chatgptScopes.includes(s))) return res.status(400).json({error:'invalid_scope'})
   const match = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))
@@ -32,6 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const redirect = new URL(redirect_uri)
     redirect.searchParams.set('code', code)
     redirect.searchParams.set('state', state)
+    redirect.searchParams.set('iss', origin()!)
     return res.status(200).json({redirect_url:redirect.toString()})
   } catch { return res.status(401).json({error:'invalid_login'}) }
 }

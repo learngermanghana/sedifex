@@ -14,6 +14,8 @@ import authorize from '../chatgpt-oauth-authorize'
 import token from '../chatgpt-oauth-token'
 import revoke from '../chatgpt-oauth-revoke'
 import mcp from '../chatgpt-mcp'
+import metadata from '../chatgpt-oauth-metadata'
+import { clearSedifexClientMetadataCacheForTests } from '../chatgpt-oauth-client'
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
 const issuer = 'https://sedifex.example', resource = issuer + '/api/chatgpt-mcp'
 function response() {
@@ -38,8 +40,91 @@ beforeEach(() => {
   mock.db = memoryDb().db; mock.user.disabled = false
   for (const [k, v] of Object.entries({ SEDIFEX_OAUTH_ISSUER: issuer, SEDIFEX_MCP_OAUTH_ISSUER: issuer, SEDIFEX_MCP_RESOURCE_URL: resource, SEDIFEX_MCP_JWKS_URL: issuer + '/jwks', SEDIFEX_OAUTH_PRIVATE_KEY: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(), SEDIFEX_OAUTH_KEY_ID: 'test', SEDIFEX_OAUTH_CLIENT_ID: 'client', SEDIFEX_OAUTH_REDIRECT_URI: 'https://chatgpt.example/callback?existing=1', SEDIFEX_MCP_TEST_UIDS: 'customer' })) vi.stubEnv(k, v)
 })
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+  clearSedifexClientMetadataCacheForTests()
+})
 describe('OAuth and MCP authorization', () => {
+  it('advertises ChatGPT CIMD and issuer-bound OAuth callbacks', async () => {
+    const r = response()
+    metadata({ method: 'GET' } as any, r)
+    expect(r.body.client_id_metadata_document_supported).toBe(true)
+    expect(r.body.authorization_response_iss_parameter_supported).toBe(true)
+    expect(r.body.token_endpoint_auth_methods_supported).toContain('none')
+  })
+  it('authorizes verified stable ChatGPT CIMD client with PKCE, issuer and token exchange', async () => {
+    const clientId = 'https://chatgpt.com/oauth/client.json'
+    const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    const fetchMetadata = vi.fn(async () => ({
+      ok: true, text: async () => JSON.stringify({
+        client_id: clientId, redirect_uris: [redirectUri],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+        token_endpoint_auth_method: 'private_key_jwt',
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMetadata)
+    vi.stubEnv('SEDIFEX_OAUTH_CLIENT_ID', '')
+    const body = { response_type: 'code', client_id: clientId, redirect_uri: redirectUri,
+      code_challenge: sha(verifier), code_challenge_method: 'S256',
+      scope: 'stores:read services:read', state: 'state-1', resource }
+    const granted = await call(authorize, body, 'Bearer firebase-token')
+    expect(granted.statusCode).toBe(200)
+    const destination = new URL(granted.body.redirect_url)
+    expect(destination.origin + destination.pathname).toBe(redirectUri)
+    expect(destination.searchParams.get('iss')).toBe(issuer)
+    expect(destination.searchParams.get('state')).toBe('state-1')
+    expect(fetchMetadata).toHaveBeenCalledTimes(1)
+    const exchange = await call(token, { grant_type: 'authorization_code',
+      code: destination.searchParams.get('code'), client_id: clientId,
+      redirect_uri: redirectUri, code_verifier: verifier, resource })
+    expect(exchange.statusCode).toBe(200)
+    const { payload } = await jwtVerify(exchange.body.access_token, publicKey, { issuer, audience: resource })
+    expect(payload.sub).toBe('customer')
+    expect(payload.scope).toBe('stores:read services:read')
+    const refreshed = await call(token, { grant_type: 'refresh_token',
+      client_id: clientId, refresh_token: exchange.body.refresh_token, resource })
+    expect(refreshed.statusCode).toBe(200)
+    expect(refreshed.body.refresh_token).not.toBe(exchange.body.refresh_token)
+    expect((await call(revoke, { client_id: clientId, token: refreshed.body.refresh_token })).statusCode).toBe(200)
+    expect((await call(token, { grant_type: 'refresh_token',
+      client_id: clientId, refresh_token: refreshed.body.refresh_token, resource })).statusCode).toBe(400)
+  })
+  it('supports callback-ID-specific CIMD when ChatGPT publishes a matching verified document', async () => {
+    const clientId = 'https://chatgpt.com/oauth/testcallbackid2026/client.json'
+    const redirectUri = 'https://chatgpt.com/connector/oauth/testcallbackid2026'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true,
+      text: async () => JSON.stringify({ client_id: clientId, redirect_uris: [redirectUri],
+        grant_types: ['authorization_code'], response_types: ['code'],
+        token_endpoint_auth_methods_supported: ['none'] }) })))
+    const granted = await call(authorize, { client_id: clientId, redirect_uri: redirectUri,
+      code_challenge: sha(verifier), code_challenge_method: 'S256',
+      scope: 'bookings:read', state: 'state', resource }, 'Bearer firebase')
+    expect(granted.statusCode).toBe(200)
+    expect(new URL(granted.body.redirect_url).searchParams.get('iss')).toBe(issuer)
+  })
+  it('rejects unverified CIMD metadata, spoofed clients, redirect substitution and resource mismatch', async () => {
+    const clientId = 'https://chatgpt.com/oauth/client.json'
+    const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    const candidate = { client_id: clientId, redirect_uri: redirectUri,
+      code_challenge: sha(verifier), code_challenge_method: 'S256',
+      scope: 'stores:read', state: 'state', resource }
+    const fetchMetadata = vi.fn(async () => ({ ok: true,
+      text: async () => JSON.stringify({ client_id: 'https://attacker.example/oauth',
+        redirect_uris: [redirectUri], grant_types: ['authorization_code'], response_types: ['code'],
+        token_endpoint_auth_methods_supported: ['none'] }) }))
+    vi.stubGlobal('fetch', fetchMetadata)
+    expect((await call(authorize, candidate, 'Bearer firebase')).statusCode).toBe(400)
+    expect((await call(authorize, { ...candidate,
+      client_id: 'https://attacker.example/oauth/client.json' }, 'Bearer firebase')).statusCode).toBe(400)
+    expect((await call(authorize, { ...candidate,
+      redirect_uri: 'https://attacker.example/oauth' }, 'Bearer firebase')).statusCode).toBe(400)
+    expect((await call(authorize, { ...candidate,
+      resource: 'https://attacker.example/mcp' }, 'Bearer firebase')).statusCode).toBe(400)
+    expect(fetchMetadata).toHaveBeenCalledTimes(1)
+  })
   it('exchanges one-time PKCE codes for scoped tokens and rotates refresh tokens', async () => {
     const { result, body } = await connect()
     expect(result.statusCode).toBe(200)
