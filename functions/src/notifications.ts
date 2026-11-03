@@ -3,6 +3,7 @@ import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { appendNotificationOutboxRow, getDefaultSpreadsheetId } from './googleSheets'
 import { deliverTransactionalEmail } from './emailDelivery'
+import { bookingStoreRecipients } from './bookingNotificationRecipients'
 
 const SEDIFEX_NOTIFICATION_WEBHOOK_URL = defineString('SEDIFEX_NOTIFICATION_WEBHOOK_URL', { default: '' })
 const SEDIFEX_NOTIFICATION_SHARED_SECRET = defineString('SEDIFEX_NOTIFICATION_SHARED_SECRET', { default: '' })
@@ -37,9 +38,9 @@ function eventCopy(eventType: string, storeName: string, itemName: string) {
     case 'booking.rescheduled': return { customerTitle: 'Booking rescheduled', customerIntro: `Your booking for ${itemName} has been rescheduled by ${storeName}. Please review the new date and time below.`, adminTitle: 'Booking rescheduled', adminAction: 'Make sure staff and operational schedules reflect the new appointment.' }
     case 'booking.cancelled': return { customerTitle: 'Booking cancelled', customerIntro: `Your booking for ${itemName} has been cancelled. Contact ${storeName} if you need help or want to arrange another date.`, adminTitle: 'Booking cancelled', adminAction: 'Review any outstanding payment, refund or follow-up requirement.' }
     case 'booking.completed': return { customerTitle: 'Thank you for choosing us', customerIntro: `Thank you for choosing ${storeName} for ${itemName}. We appreciate your business and hope to serve you again.`, adminTitle: 'Booking completed', adminAction: 'No action is required unless follow-up is needed.' }
-    case 'booking.reminder_3d': return { customerTitle: 'Booking reminder - 3 days', customerIntro: `Your ${itemName} booking with ${storeName} is in 3 days. Review the appointment details and any outstanding balance below.`, adminTitle: 'Booking reminder', adminAction: 'No action is required unless the customer needs assistance.' }
-    case 'booking.reminder_2d': return { customerTitle: 'Booking reminder - 2 days', customerIntro: `Your ${itemName} booking with ${storeName} is in 2 days. Review the appointment details and any outstanding balance below.`, adminTitle: 'Booking reminder', adminAction: 'No action is required unless the customer needs assistance.' }
-    case 'booking.reminder_1d': return { customerTitle: 'Booking reminder - tomorrow', customerIntro: `Your ${itemName} booking with ${storeName} is tomorrow. Review the appointment details and any outstanding balance below.`, adminTitle: 'Booking reminder', adminAction: 'No action is required unless the customer needs assistance.' }
+    case 'booking.reminder_3d': return { customerTitle: 'Your appointment is in 3 days!', customerIntro: `A friendly reminder: your ${itemName} appointment with ${storeName} is coming up in 3 days. Please review your appointment details below. We look forward to seeing you!`, adminTitle: 'Booking reminder', adminAction: 'No action is required unless the customer needs assistance.' }
+    case 'booking.reminder_2d': return { customerTitle: 'Your appointment is in 2 days!', customerIntro: `A friendly reminder: your ${itemName} appointment with ${storeName} is in 2 days. Please check your appointment details below. We look forward to welcoming you!`, adminTitle: 'Booking reminder', adminAction: 'No action is required unless the customer needs assistance.' }
+    case 'booking.reminder_1d': return { customerTitle: 'Your appointment is tomorrow!', customerIntro: `We look forward to seeing you tomorrow for your ${itemName} appointment with ${storeName}. Please check the appointment time and details below.`, adminTitle: 'Booking reminder', adminAction: 'No action is required unless the customer needs assistance.' }
     case 'order.confirmed': return { customerTitle: 'Order confirmed', customerIntro: `Your order for ${itemName} has been received and confirmed. Thank you for buying from ${storeName}.`, adminTitle: 'New paid order received', adminAction: 'Prepare delivery or contact the customer if you need extra details.' }
     case 'order.pay_on_delivery': return { customerTitle: 'Order received', customerIntro: `Your order for ${itemName} has been received. Payment will be handled on delivery.`, adminTitle: 'New pay on delivery order', adminAction: 'Contact the customer and prepare delivery.' }
     case 'order.manual_payment': return { customerTitle: 'Order received', customerIntro: `Your order for ${itemName} has been received and is pending payment review.`, adminTitle: 'New manual payment order', adminAction: 'Review the payment details and follow up with the customer.' }
@@ -223,6 +224,10 @@ async function createDelivery(args: { payload: NotificationPayload; brand: Store
       senderEmail: webhook.senderEmail || null,
       replyToEmail: webhook.replyToEmail || null,
       deliveryReason: webhook.reason || null,
+      // Existing Sedifex Central Notification Web App returns generated
+      // receipt metadata, so admins can track each email without a new script.
+      receiptNumber: webhook.receiptNumber || null,
+      receiptUrl: webhook.receiptUrl || null,
       sentToWebhookAt: now,
       sheetSyncStatus,
       updatedAt: now,
@@ -264,7 +269,13 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
     deliveries.push(createDelivery({ payload: { ...payload, reference }, brand, settings, recipientType: 'customer', to: customerEmail, subject: `${title} - ${brand.storeName}`, html: buildHtmlEmail({ brand, title, intro, rows, footerNote: 'Keep this email for your records. If you did not receive this order or there is a problem, contact the store or Sedifex support as soon as possible.', paymentUrl, portalUrl }), text: buildTextEmail(title, intro, rows, undefined, paymentUrl, portalUrl) }))
   }
   const forceStoreAlert = payload.forceStoreAlert || REQUIRED_STORE_ALERT_EVENTS.has(payload.eventType)
-  const adminEmails = settings.adminEmails.length ? settings.adminEmails : [brand.email].filter((value): value is string => Boolean(value))
+  // For booking/customer medical-service details, untrusted legacy adminEmails
+  // must not be able to route copies to a different business. Always alert
+  // the verified owner; optional staff must both belong to this store and be
+  // explicitly selected in adminEmails.
+  // Send a separate store copy only to a verified owner or an explicitly
+  // approved team member of THIS store. Never trust legacy adminEmails alone.
+  const adminEmails = await bookingStoreRecipients(storeId, settings.adminEmails)
   if ((settings.storeAlertEnabled || forceStoreAlert) && adminEmails.length) {
     const amount = formatMoney(payload.payment)
     const title = copy.adminTitle

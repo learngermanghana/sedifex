@@ -201,41 +201,6 @@ function normalizeTimeInput(value: unknown): string {
   return ''
 }
 
-const bookingAppsScriptUrl = 'https://script.google.com/macros/s/AKfycbxl0IdT746Z_yL2LJbAOKi0wsn3iNct4H1omFYWaxq8nzzI7rc_cebfxXcMxMydtvO4Eg/exec'
-
-type BookingSheetPayload = Record<string, string>
-
-type BookingSheetSource = {
-  id?: string
-  bookingId?: string
-  name?: string
-  customerName?: string
-  email?: string
-  customerEmail?: string
-  phone?: string
-  customerPhone?: string
-  service?: string
-  serviceName?: string
-  date?: string
-  bookingDate?: string
-  time?: string
-  bookingTime?: string
-}
-
-async function syncBookingToSheet(payload: BookingSheetPayload) {
-  const url = bookingAppsScriptUrl
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-    },
-    body: JSON.stringify(payload),
-  })
-
-  return res.text()
-}
-
 function syncReasonForStatus(status: string, paymentStatus: string) {
   return deriveLastEventType(status, paymentStatus)
 }
@@ -564,7 +529,6 @@ export default function BookingEditor() {
           source_channel: 'manual_admin',
         } : {}),
       }
-      const booking = payload as BookingSheetSource & Record<string, unknown>
 
       await withTimeout(
         Promise.all([
@@ -621,27 +585,9 @@ export default function BookingEditor() {
       if (storeIdSnap.exists()) orderRefs.set(storeIdSnap.ref.path, storeIdSnap.ref)
       await Promise.all(Array.from(orderRefs.values()).map(orderRef => setDoc(orderRef, orderPatch, { merge: true })))
 
-      await syncBookingToSheet({
-        type: 'booking',
-        bookingId: String(booking.id || booking.bookingId || targetId || `BOOK-${Date.now()}`),
-        booking_id: String(booking.booking_id || booking.bookingId || targetId),
-        customerName: String(booking.customerName || booking.name || ''),
-        customerEmail: String(booking.customerEmail || booking.email || ''),
-        customerPhone: String(booking.customerPhone || booking.phone || ''),
-        serviceName: String(booking.serviceName || booking.service || ''),
-        bookingDate: String(booking.bookingDate || booking.date || ''),
-        bookingTime: String(booking.bookingTime || booking.time || ''),
-        status: normalizedStatus,
-        booking_status: normalizedStatus,
-        bookingStatus: normalizedStatus,
-        payment_status: normalizedPaymentStatus,
-        paymentStatus: normalizedPaymentStatus,
-        payment_confirmed_at: isPaid ? stringValue(paymentConfirmedAt) : '',
-        last_event_type: lastEventType,
-        lastEventType,
-        source: isConfirmedPaid ? 'sedifex-booking-confirmed-paid' : isConfirmedPartial ? 'sedifex-booking-partial-payment' : 'sedifex-booking-update',
-      })
-
+      // The store-scoped Firestore trigger performs the optional booking Sheet
+      // sync. Never POST from the browser to a shared Apps Script endpoint:
+      // that bypasses tenant routing and can send another store's BCC copies.
       const saveMessage = isCreateMode
         ? 'Booking created successfully. Email will be sent to the customer.'
         : 'Booking changes saved successfully. Email will be sent to the customer.'

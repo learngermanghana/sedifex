@@ -38,6 +38,10 @@ jobs:
         run: npm run test:automation-settings
         working-directory: functions
 
+      - name: Test cross-store booking email isolation
+        run: node test/bookingNotificationIsolation.test.js
+        working-directory: functions
+
       - name: Test booking lifecycle SMS rules
         run: npm run test:booking-lifecycle-sms
         working-directory: functions
