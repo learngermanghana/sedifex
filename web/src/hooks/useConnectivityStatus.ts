@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const HEARTBEAT_URL = import.meta.env.VITE_HEARTBEAT_URL ?? '/heartbeat.json'
-const DEFAULT_HEARTBEAT_INTERVAL = 30_000
+const DEFAULT_HEARTBEAT_INTERVAL = 300_000
 
 type QueueStatusValue = 'idle' | 'pending' | 'processing' | 'error'
 
@@ -63,8 +63,10 @@ export function useConnectivityStatus(intervalMs = DEFAULT_HEARTBEAT_INTERVAL): 
     },
   }))
   const isMountedRef = useRef(true)
+  const isHeartbeatRunningRef = useRef(false)
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
     }
@@ -77,7 +79,7 @@ export function useConnectivityStatus(intervalMs = DEFAULT_HEARTBEAT_INTERVAL): 
     const now = Date.now()
     const online = typeof navigator !== 'undefined' ? navigator.onLine : true
 
-    if (!isMountedRef.current) return
+    if (!isMountedRef.current || isHeartbeatRunningRef.current) return
 
     if (!online) {
       setState(prev => ({
@@ -97,9 +99,11 @@ export function useConnectivityStatus(intervalMs = DEFAULT_HEARTBEAT_INTERVAL): 
       isChecking: true,
     }))
 
+    isHeartbeatRunningRef.current = true
     try {
       const response = await fetch(`${heartbeatUrl}?ts=${Date.now()}`, {
         cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
       })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
@@ -124,13 +128,15 @@ export function useConnectivityStatus(intervalMs = DEFAULT_HEARTBEAT_INTERVAL): 
         heartbeatError: error instanceof Error ? error.message : 'Heartbeat failed',
         lastHeartbeatAt: Date.now(),
       }))
+    } finally {
+      isHeartbeatRunningRef.current = false
     }
   }, [heartbeatUrl])
 
   useEffect(() => {
-    void runHeartbeat()
+    if (document.visibilityState === 'visible') void runHeartbeat()
     const timer = window.setInterval(() => {
-      void runHeartbeat()
+      if (document.visibilityState === 'visible') void runHeartbeat()
     }, interval)
 
     return () => {
