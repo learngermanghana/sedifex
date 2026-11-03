@@ -268,6 +268,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'A valid storage.googleapis.com image URL is required.' })
     }
 
+    const accessError = await authorizeStoreMediaUpload(adminApp, objectPath, req.headers?.authorization)
+    if (accessError) return res.status(accessError).json({ error: 'Not authorized to delete this store media.' })
+
     try {
       await bucket.file(objectPath).delete({ ignoreNotFound: true })
       emitUploadMetric('delete_success', {
