@@ -45,9 +45,12 @@ settings page uses.
 The galleryAlbums.isPublished and galleryImages.isPublished flags should be
 respected by connected websites when rendering public galleries. The existing
 /v1IntegrationProducts endpoint continues to expose product image URLs when
-those images have been assigned to a product. The separate legacy
-/integrationGallery endpoint still requires verification/implementation
-before promising automatic gallery syncing to external sites.
+those images have been assigned to a product. The authenticated /integrationGallery Cloud Function returns grouped published
+albums and a flat photo list for website integrations. Connected websites must
+fetch it server-side with a per-store integration key and the canonical contract
+header. Updates appear when the site's own cache refreshes (the example uses
+120-second revalidation). Public slug-only promo pages still need a separate
+public-gallery adapter; never expose the integration key in browser code.
 
 ## One-time Google Cloud setup for Sedifex (not per store)
 
