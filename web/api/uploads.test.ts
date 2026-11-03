@@ -74,7 +74,7 @@ describe('uploads api', () => {
       body: {
         filename: 'promo.png',
         mimeType: 'image/png',
-        dataBase64: Buffer.from('hello').toString('base64'),
+        dataBase64: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]).toString('base64'),
         storagePath: 'stores/store-1/promo.jpg',
       },
     }
@@ -107,7 +107,7 @@ describe('uploads api', () => {
       body: {
         filename: 'gallery.png',
         mimeType: 'image/png',
-        dataBase64: Buffer.from('hello').toString('base64'),
+        dataBase64: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]).toString('base64'),
       },
     }
     const res = createResponse()
