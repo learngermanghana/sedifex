@@ -8,6 +8,7 @@ import { auth, db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
+import MediaAlbumEditor, { type MediaGalleryAlbum } from '../components/MediaAlbumEditor'
 import { uploadProductImage } from '../api/productImageUpload'
 import { downloadDriveImage, pickGoogleDriveImages, type DriveImage } from '../api/googleDriveMedia'
 import {
@@ -25,7 +26,7 @@ type Asset = {
   size: number
   createdAt: { toMillis?: () => number } | null
 }
-type Album = { id: string; title: string; coverImageUrl: string }
+type Album = MediaGalleryAlbum
 type ImportTask = { name: string; source: 'device' | 'drive'; file?: File; driveImage?: DriveImage; token?: string }
 type TaskState = { name: string; state: 'pending' | 'uploading' | 'done' | 'skipped' | 'failed'; message: string }
 
@@ -44,6 +45,8 @@ export default function MediaLibraryPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [albums, setAlbums] = useState<Album[]>([])
   const [albumId, setAlbumId] = useState('')
+  const [editingAlbumId, setEditingAlbumId] = useState('')
+  const [albumRevision, setAlbumRevision] = useState(0)
   const [newAlbumTitle, setNewAlbumTitle] = useState('')
   const [newAlbumDescription, setNewAlbumDescription] = useState('')
   const [creatingAlbum, setCreatingAlbum] = useState(false)
@@ -78,6 +81,8 @@ export default function MediaLibraryPage() {
         id: snapshot.id,
         title: String(snapshot.data().title || 'Album'),
         coverImageUrl: String(snapshot.data().coverImageUrl || ''),
+        description: String(snapshot.data().description || ''),
+        isPublished: snapshot.data().isPublished !== false,
       })))
     } catch (loadError) {
       setErrorMessage('Unable to load media. Check your store access and Firestore rules.')
@@ -92,6 +97,8 @@ export default function MediaLibraryPage() {
     setTasks([])
     setFailedTasks([])
     setAlbumId('')
+    setEditingAlbumId('')
+    setAlbumRevision(0)
     setSelectedIds([])
     setNewAlbumTitle('')
     setNewAlbumDescription('')
@@ -222,8 +229,9 @@ export default function MediaLibraryPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-      setAlbums(previous => [...previous, { id: created.id, title, coverImageUrl: '' }])
+      setAlbums(previous => [...previous, { id: created.id, title, description: newAlbumDescription.trim(), coverImageUrl: '', isPublished: true }])
       setAlbumId(created.id)
+      setEditingAlbumId(created.id)
       setNewAlbumTitle('')
       setNewAlbumDescription('')
       publish({ tone: 'success', message: 'Album created and selected. Choose pictures to add.' })
@@ -292,6 +300,7 @@ export default function MediaLibraryPage() {
           ? { ...album, coverImageUrl: unique[0].url } : album))
       }
       setSelectedIds([])
+      setAlbumRevision(previous => previous + 1)
       const skipped = pictures.length - unique.length
       publish({ tone: 'success', message: unique.length + ' picture(s) added to "' + selectedAlbum.title + '".' + (skipped ? ' ' + skipped + ' already added.' : '') })
     } catch (saveError) {
@@ -303,6 +312,7 @@ export default function MediaLibraryPage() {
 
   const selectedAssets = assets.filter(asset => selectedIds.includes(asset.id))
   const hasAlbum = Boolean(albumId && albums.some(album => album.id === albumId))
+  const activeAlbum = albums.find(album => album.id === albumId)
 
   const imported = tasks.filter(item => item.state === 'done').length
   const completed = tasks.filter(item => item.state === 'done' || item.state === 'skipped' || item.state === 'failed').length
@@ -377,13 +387,21 @@ export default function MediaLibraryPage() {
             <div className="media-library__album-tools">
               <div className="media-library__album-select">
                 <label htmlFor="media-library-album">Gallery album</label>
-                <select id="media-library-album" value={albumId} onChange={event => setAlbumId(event.target.value)}
+                <select id="media-library-album" value={albumId} onChange={event => { setAlbumId(event.target.value); setEditingAlbumId('') }}
                   disabled={publishing || creatingAlbum}>
                   <option value="">Select an album</option>
                   {albums.map(album => <option key={album.id} value={album.id}>{album.title}</option>)}
                 </select>
                 {!hasAlbum ? <span className="media-library__help">{albums.length ? 'Select an album to enable publishing.' : 'No albums yet. Create your first one on the right.'}</span>
                   : <span className="media-library__album-ready">✓ Album selected — choose pictures below</span>}
+                {activeAlbum ? (
+                  <div className="media-library__album-controls">
+                    <span className={activeAlbum.isPublished ? 'media-library__album-ready' : 'media-library__help'}>{activeAlbum.isPublished ? 'Published album' : 'Hidden album'}</span>
+                    <button type="button" className="button button--secondary" onClick={() => setEditingAlbumId(current => current === activeAlbum.id ? '' : activeAlbum.id)} disabled={publishing}>
+                      {editingAlbumId === activeAlbum.id ? 'Close album editor' : 'Edit album'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <form className="media-library__create-form" onSubmit={event => void createAlbum(event)}>
                 <label htmlFor="media-library-new-album">Create a new album</label>
@@ -399,6 +417,11 @@ export default function MediaLibraryPage() {
                   onChange={event => setNewAlbumDescription(event.target.value)} maxLength={240} disabled={creatingAlbum}/>
               </form>
             </div>
+            {activeAlbum && editingAlbumId === activeAlbum.id ? (
+              <MediaAlbumEditor key={activeAlbum.id} storeId={storeId} album={activeAlbum} otherAlbums={albums} revision={albumRevision}
+                onUpdate={updated => setAlbums(previous => previous.map(album => album.id === updated.id ? updated : album))}
+                onClose={() => setEditingAlbumId('')} />
+            ) : null}
           </section>
 
           <section className="account-overview__card media-library__panel" aria-labelledby="media-pictures-title">
