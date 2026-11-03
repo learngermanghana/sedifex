@@ -170,25 +170,25 @@ export function buildPublicGallery(
     flattened.push(...sorted)
   }
 
-  // A picture assigned in both the older promo gallery and a new album is
-  // displayed only once. Old published gallery order remains first.
-  const unique: GalleryImage[] = []
+  // The grouped albums keep intentionally reused pictures in each album.
+  // The flat homepage gallery deduplicates URLs to avoid double-display.
+  const displayed = flattened.slice(0, options.limit)
+  const selected: GalleryImage[] = []
   const seenUrls = new Set<string>()
-  for (const photo of flattened) {
+  for (const photo of displayed) {
     if (seenUrls.has(photo.url)) continue
     seenUrls.add(photo.url)
-    unique.push(photo)
+    selected.push(photo)
   }
-  const selected = unique.slice(0, options.limit)
   const selectedUrls = new Map<string, Set<string>>()
-  for (const image of selected) {
+  for (const image of displayed) {
     const urls = selectedUrls.get(image.albumId) ?? new Set<string>()
     urls.add(image.url)
     selectedUrls.set(image.albumId, urls)
   }
 
   const outputAlbums = albums.reduce<GalleryAlbum[]>((acc, album) => {
-    const selectedImages = selected.filter(image => image.albumId === album.id)
+    const selectedImages = displayed.filter(image => image.albumId === album.id)
     if (!selectedImages.length) return acc
     const validCover = album.coverImageUrl && selectedUrls.get(album.id)?.has(album.coverImageUrl)
       ? album.coverImageUrl
@@ -201,6 +201,6 @@ export function buildPublicGallery(
     albums: outputAlbums,
     gallery: selected,
     count: selected.length,
-    truncated: Boolean(options.sourceTruncated || unique.length > options.limit),
+    truncated: Boolean(options.sourceTruncated || flattened.length > options.limit),
   }
 }
