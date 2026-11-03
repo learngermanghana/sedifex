@@ -151,7 +151,7 @@ jobs:
           gcloud scheduler jobs resume firebase-schedule-processBookingEmailReminders-us-central1 --location us-central1 --project sedifex-web
 
       - name: Deploy Firestore rules
-        run: firebase deploy --only firestore:rules --project sedifex-web --force
+        run: firebase deploy --only firestore:rules --config firebase.firestore-default.json --project sedifex-web --force
 
       - name: Deploy Firestore indexes
-        run: firebase deploy --only firestore:indexes --project sedifex-web --force
+        run: firebase deploy --only firestore:indexes --config firebase.firestore-default.json --project sedifex-web --force
