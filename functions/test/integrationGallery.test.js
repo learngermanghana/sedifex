@@ -84,8 +84,8 @@ assert.deepEqual(merged.gallery.map(image => image.url), [
 ])
 assert.equal(merged.gallery.filter(image => image.url === 'https://images.example/visible.jpg').length, 1)
 assert.ok(!merged.gallery.some(image => image.url.includes('secret') || image.url.startsWith('javascript:')))
-assert.equal(merged.albums.find(album => album.id === 'b'), undefined,
-  'New album whose only visible photo is already in legacy gallery is not duplicated')
+assert.equal(merged.albums.find(album => album.id === 'b')?.images.length, 1,
+  'Reusing an image in a new album keeps that album visible without duplicating homepage photos')
 const legacyOnly = buildPublicGallery(albums, images, {
   albumId: LEGACY_PROMO_ALBUM_ID,
   limit: 20,
