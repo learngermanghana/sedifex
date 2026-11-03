@@ -171,7 +171,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
     <div className="account-overview__form-grid">
       <label><span>Business type</span>
-        <select value={draft.industry} disabled={!canEdit} onChange={event => applyIndustryTemplate(event.target.value as Industry)}>
+        <select aria-label="Business type" value={draft.industry} disabled={!canEdit} onChange={event => applyIndustryTemplate(event.target.value as Industry)}>
           {INDUSTRY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <small className="account-overview__hint">Changing business type selects its recommended pages automatically. You can customize them here at any time.</small>
