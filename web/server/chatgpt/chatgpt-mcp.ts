@@ -54,8 +54,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.setHeader('WWW-Authenticate', challenge)
         return res.status(401).json(error(body.id, -32001, 'Connect Sedifex again; access token missing, expired or revoked'))
       }
-      const allowed = (process.env.SEDIFEX_MCP_TEST_UIDS || '').split(',').map(s => s.trim())
-      if (!allowed.includes(uid!)) return res.status(403).json(error(body.id, -32003, 'Account not enrolled in private pilot'))
       // Shared per-account limit across tools and serverless instances.
       const window = Math.floor(Date.now() / 60000), ref = firestore.collection('chatgpt_rate_limits').doc(uid! + '_' + window)
       const permitted = await firestore.runTransaction(async tx => {
