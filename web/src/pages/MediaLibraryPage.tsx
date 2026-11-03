@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy,
-  query, serverTimestamp, setDoc,
+  query, serverTimestamp, setDoc, where, writeBatch,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -15,6 +15,7 @@ import {
   optimizeMediaFile, uploadWithRetry,
 } from '../utils/mediaLibrary'
 import './AccountOverview.css'
+import './MediaLibraryPage.css'
 
 type Asset = {
   id: string
@@ -43,6 +44,11 @@ export default function MediaLibraryPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [albums, setAlbums] = useState<Album[]>([])
   const [albumId, setAlbumId] = useState('')
+  const [newAlbumTitle, setNewAlbumTitle] = useState('')
+  const [newAlbumDescription, setNewAlbumDescription] = useState('')
+  const [creatingAlbum, setCreatingAlbum] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [tasks, setTasks] = useState<TaskState[]>([])
   const [failedTasks, setFailedTasks] = useState<ImportTask[]>([])
   const [busy, setBusy] = useState(false)
@@ -86,6 +92,9 @@ export default function MediaLibraryPage() {
     setTasks([])
     setFailedTasks([])
     setAlbumId('')
+    setSelectedIds([])
+    setNewAlbumTitle('')
+    setNewAlbumDescription('')
     setErrorMessage('')
     if (storeId) void refresh(storeId)
   }, [storeId])
@@ -182,38 +191,118 @@ export default function MediaLibraryPage() {
     }
   }
 
-  async function addToAlbum(asset: Asset) {
-    if (!storeId || !albumId) return
-    const activeStoreId = storeId
+  async function createAlbum(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!storeId || creatingAlbum) return
+    const title = newAlbumTitle.trim()
+    if (!title) {
+      setErrorMessage('Enter an album name before creating it.')
+      return
+    }
+    if (title.length > 100) {
+      setErrorMessage('Album names must be 100 characters or fewer.')
+      return
+    }
+    const existing = albums.find(album => album.title.toLocaleLowerCase() === title.toLocaleLowerCase())
+    if (existing) {
+      setAlbumId(existing.id)
+      setErrorMessage('')
+      publish({ tone: 'success', message: 'This album already exists. It is now selected.' })
+      return
+    }
+    setCreatingAlbum(true)
+    setErrorMessage('')
     try {
-      // Avoid adding the same URL twice to the selected album.
-      const existing = await getDocs(collection(db, 'stores', activeStoreId, 'galleryImages'))
-      if (existing.docs.some(image => image.data().albumId === albumId && image.data().url === asset.url)) {
-        publish({ tone: 'success', message: 'That photo is already in the selected album.' })
-        return
-      }
-      await addDoc(collection(db, 'stores', activeStoreId, 'galleryImages'), {
-        albumId,
-        url: asset.url,
-        alt: asset.name.replace(/\.[^.]+$/, ''),
-        caption: null,
+      const created = await addDoc(collection(db, 'stores', storeId, 'galleryAlbums'), {
+        title,
+        description: newAlbumDescription.trim() || null,
+        coverImageUrl: null,
         isPublished: true,
-        sortOrder: Date.now(),
+        sortOrder: albums.length,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-      const album = albums.find(row => row.id === albumId)
-      if (album && !album.coverImageUrl) {
-        await setDoc(doc(db, 'stores', activeStoreId, 'galleryAlbums', albumId), {
-          coverImageUrl: asset.url,
+      setAlbums(previous => [...previous, { id: created.id, title, coverImageUrl: '' }])
+      setAlbumId(created.id)
+      setNewAlbumTitle('')
+      setNewAlbumDescription('')
+      publish({ tone: 'success', message: 'Album created and selected. Choose pictures to add.' })
+    } catch (saveError) {
+      setErrorMessage('Unable to create album: ' + messageFrom(saveError))
+    } finally {
+      setCreatingAlbum(false)
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds(previous => previous.includes(id)
+      ? previous.filter(item => item !== id)
+      : [...previous, id])
+  }
+
+  async function addAssetsToAlbum(pictures: Asset[]) {
+    if (!storeId || publishing || !pictures.length) return
+    if (!albumId) {
+      setErrorMessage('Choose or create a gallery album first.')
+      return
+    }
+    const selectedAlbum = albums.find(album => album.id === albumId)
+    if (!selectedAlbum) {
+      setErrorMessage('The selected album is unavailable. Choose an album again.')
+      return
+    }
+    setPublishing(true)
+    setErrorMessage('')
+    try {
+      const targetId = albumId
+      // Query only the selected album instead of reading every gallery image in the store.
+      const gallery = collection(db, 'stores', storeId, 'galleryImages')
+      const existing = await getDocs(query(gallery, where('albumId', '==', targetId)))
+      const existingUrls = new Set(existing.docs.map(image => String(image.data().url || '')))
+      const unique = pictures.filter((asset, index, all) =>
+        !existingUrls.has(asset.url) && all.findIndex(item => item.url === asset.url) === index)
+      if (!unique.length) {
+        setSelectedIds([])
+        publish({ tone: 'success', message: 'These pictures are already in the selected album.' })
+        return
+      }
+      const batch = writeBatch(db)
+      const order = Date.now()
+      for (const [index, asset] of unique.entries()) {
+        batch.set(doc(gallery), {
+          albumId: targetId,
+          url: asset.url,
+          alt: asset.name.replace(/\.[^.]+$/, ''),
+          caption: null,
+          isPublished: true,
+          sortOrder: order + index,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      }
+      if (!selectedAlbum.coverImageUrl) {
+        batch.set(doc(db, 'stores', storeId, 'galleryAlbums', targetId), {
+          coverImageUrl: unique[0].url,
           updatedAt: serverTimestamp(),
         }, { merge: true })
       }
-      publish({ tone: 'success', message: 'Photo published to your gallery. Connected websites can use it now.' })
+      await batch.commit()
+      if (!selectedAlbum.coverImageUrl) {
+        setAlbums(previous => previous.map(album => album.id === targetId
+          ? { ...album, coverImageUrl: unique[0].url } : album))
+      }
+      setSelectedIds([])
+      const skipped = pictures.length - unique.length
+      publish({ tone: 'success', message: unique.length + ' picture(s) added to "' + selectedAlbum.title + '".' + (skipped ? ' ' + skipped + ' already added.' : '') })
     } catch (saveError) {
-      setErrorMessage(messageFrom(saveError))
+      setErrorMessage('Unable to add pictures: ' + messageFrom(saveError))
+    } finally {
+      setPublishing(false)
     }
   }
+
+  const selectedAssets = assets.filter(asset => selectedIds.includes(asset.id))
+  const hasAlbum = Boolean(albumId && albums.some(album => album.id === albumId))
 
   const imported = tasks.filter(item => item.state === 'done').length
   const completed = tasks.filter(item => item.state === 'done' || item.state === 'skipped' || item.state === 'failed').length
