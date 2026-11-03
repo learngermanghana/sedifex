@@ -75,7 +75,7 @@ export default function MediaLibraryPage() {
           url: typeof item.url === 'string' ? item.url : '',
           name: typeof item.name === 'string' ? item.name : snapshot.id,
           size: typeof item.size === 'number' ? item.size : 0,
-          source: item.source === 'drive' ? 'drive' : 'device',
+          source: item.source === 'drive' ? 'drive' as const : 'device' as const,
           createdAt: item.createdAt ?? null,
         }
       })
@@ -89,7 +89,7 @@ export default function MediaLibraryPage() {
           name: typeof item.alt === 'string' && item.alt ? item.alt
             : typeof item.caption === 'string' && item.caption ? item.caption : 'Gallery picture',
           size: 0,
-          source: 'gallery',
+          source: 'gallery' as const,
           createdAt: item.createdAt ?? null,
         }
       })
@@ -101,7 +101,7 @@ export default function MediaLibraryPage() {
           name: typeof item.alt === 'string' && item.alt ? item.alt
             : typeof item.caption === 'string' && item.caption ? item.caption : 'Existing promo picture',
           size: 0,
-          source: 'promo-gallery',
+          source: 'promo-gallery' as const,
           createdAt: item.createdAt ?? null,
         }
       })
