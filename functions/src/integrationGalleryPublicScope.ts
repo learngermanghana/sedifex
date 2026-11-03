@@ -29,7 +29,9 @@ export function matchPublicGalleryStore(
       // Mirror the existing public site resolver (websiteBuilder.storeId || settings document ID).
       const selected = typeof builder.storeId === 'string' && builder.storeId.trim()
         ? builder.storeId.trim() : row.id
-      if (!selected || selected.includes('/')) continue
+      // Public aliases cannot be redirected to another store by changing
+      // websiteBuilder.storeId. The settings document must own the target store.
+      if (!selected || selected !== row.id || selected.includes('/')) continue
       matches.push(selected)
     }
   }
