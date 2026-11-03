@@ -170,6 +170,14 @@ describe('OAuth and MCP authorization', () => {
     const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_my_bookings', arguments: { storeId: 'shop' } } }
     expect((await call(mcp, request, 'Bearer ' + refreshed.body.access_token)).statusCode).toBe(200)
   })
+  it('requires the new inventory scope and checks store ownership', async () => {
+    mock.db = memoryDb({ 'stores/shop': { ownerUid: 'customer' } }).db
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_inventory', arguments: { storeId: 'shop' } } }
+    const oldScope = await connect('bookings:read')
+    expect((await call(mcp, request, 'Bearer ' + oldScope.result.body.access_token)).statusCode).toBe(403)
+    const newScope = await connect('inventory:read')
+    expect((await call(mcp, request, 'Bearer ' + newScope.result.body.access_token)).body.result.structuredContent.items).toEqual([])
+  })
   it('limits authenticated tool traffic across requests', async () => {
     const { result } = await connect('bookings:read')
     const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_my_bookings', arguments: { storeId: 'shop' } } }
@@ -177,8 +185,9 @@ describe('OAuth and MCP authorization', () => {
     expect((await call(mcp, request, 'Bearer ' + result.body.access_token)).statusCode).toBe(429)
   })
   it('lists tools and public services without exposing account data', async () => {
-    expect((await call(mcp, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools).toHaveLength(13)
+    expect((await call(mcp, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools).toHaveLength(23)
     expect((await call(mcp, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_services', arguments: {} } })).body.result.structuredContent.services).toEqual([])
     expect((await call(mcp, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'search_services', arguments: { maliciousExtra: true } } })).body.error.code).toBe(-32602)
   })
 })
+
