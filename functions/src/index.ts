@@ -31,6 +31,7 @@ export { repairDataConsistency, repairDuplicateBookingOrders } from './dataConsi
 export { cleanPendingReportData, onSaleReportingAggregate } from './reporting'
 export { v1IntegrationAvailability } from './integrationAvailability'
 export { v1IntegrationHeroSlides } from './integrationHeroSlides'
+export { integrationGallery } from './integrationGallery'
 export { v1IntegrationBookings } from './integrationBookings'
 
 // Recurring Cloud Scheduler jobs and automatic SMS pipelines are intentionally
