@@ -1,6 +1,6 @@
 export const scopeDescriptions = {
-  'stores:read': 'Find your merchant stores.',
-  'services:read': 'View your merchant services.',
+  'stores:read': 'Find the stores you own.',
+  'services:read': 'View your business services.',
   'services:write': 'Create unpublished services.',
   'bookings:read': 'View appointments you created through ChatGPT.',
   'bookings:write': 'Request appointments and changes to your own appointments.',
