@@ -3,6 +3,10 @@
   "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ]; then exit 1; else exit 0; fi",
   "rewrites": [
     {
+      "source": "/api/chatgpt-oauth-revoke",
+      "destination": "/api/chatgpt?endpoint=oauth-revoke"
+    },
+    {
       "source": "/.well-known/oauth-authorization-server",
       "destination": "/api/chatgpt?endpoint=oauth-metadata"
     },

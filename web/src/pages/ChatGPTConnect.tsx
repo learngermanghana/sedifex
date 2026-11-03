@@ -1,3 +1,4 @@
+import { scopeDescriptions } from '../../shared/chatgpt-scopes'
 import { useEffect, useState } from 'react'
 import { auth } from '../firebase'
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
@@ -31,8 +32,8 @@ export default function ChatGPTConnect() {
  }
  return <main style={{maxWidth:480,margin:'6vh auto',padding:24}}>
   <h1>Connect Sedifex to ChatGPT</h1>
-  <p>ChatGPT requests access to your Sedifex services.</p>
-  <p><strong>Permissions:</strong> {scope.includes('services:read')?'View services. ':''}{scope.includes('services:write')?'Create unpublished services.':''}</p>
+  <p>ChatGPT requests the Sedifex permissions listed below. Merchant actions apply only to stores you own; appointment access applies only to your ChatGPT bookings.</p>
+  <p><strong>Permissions:</strong> {scope.split(' ').filter(Boolean).map(s => scopeDescriptions[s as keyof typeof scopeDescriptions] || s).join(' ')}</p>
   <p>Your password is sent only to Firebase Authentication, never to ChatGPT.</p>
   {!signedIn&&<form onSubmit={e=>{e.preventDefault();void approve()}}>
    <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>

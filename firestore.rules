@@ -237,11 +237,6 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn();
     }
 
-    match /integrationBookings/{docId} {
-      allow create: if isIntegrationOrderCreate();
-      allow read, update, delete: if isSignedIn();
-    }
-
     match /checkoutRequests/{docId} {
       allow create: if request.resource.data.customer is map || request.resource.data.customerName is string;
       allow read, update, delete: if isSignedIn();
@@ -316,11 +311,43 @@ service cloud.firestore {
         && memberData().role == 'owner';
     }
 
+    // ChatGPT OAuth, retry, rate-limit and booking-identity records are
+    // server-owned. The authenticated fallback below must never expose them.
+    match /blogPosts/{postId} {
+      allow read, delete: if resource.data.storeId is string && hasStoreAccess(resource.data.storeId);
+      allow create: if request.resource.data.storeId is string && hasStoreAccess(request.resource.data.storeId);
+      allow update: if resource.data.storeId is string
+        && request.resource.data.storeId == resource.data.storeId
+        && hasStoreAccess(resource.data.storeId);
+    }
+
+    match /integrationBookings/{bookingId} {
+      allow read, delete: if resource.data.storeId is string && hasStoreAccess(resource.data.storeId);
+      allow create: if request.resource.data.storeId is string
+        && hasStoreAccess(request.resource.data.storeId)
+        && !request.resource.data.keys().hasAny(['customerUid']);
+      allow update: if resource.data.storeId is string
+        && request.resource.data.storeId == resource.data.storeId
+        && hasStoreAccess(resource.data.storeId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['customerUid']);
+    }
+
+    match /stores/{storeId}/integrationBookings/{bookingId} {
+      allow read, delete: if hasStoreAccess(storeId);
+      allow create: if hasStoreAccess(storeId)
+        && request.resource.data.storeId == storeId
+        && !request.resource.data.keys().hasAny(['customerUid']);
+      allow update: if hasStoreAccess(storeId)
+        && request.resource.data.storeId == storeId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['customerUid']);
+    }
+
     // Preserve the legacy behavior for other store subcollections while
     // excluding event planning and event contract templates, which have
     // stricter multi-tenant rules above.
     match /stores/{storeId}/{subCollection}/{document=**} {
       allow read, write: if isSignedIn()
+        && subCollection != 'integrationBookings'
         && subCollection != 'events'
         && subCollection != 'eventActivity'
         && subCollection != 'eventContractTemplates';
@@ -336,6 +363,9 @@ service cloud.firestore {
         && topCollection != 'teamMembers'
         && topCollection != 'customers'
         && topCollection != 'products'
+        && topCollection != 'blogPosts'
+        && topCollection != 'integrationBookings'
+        && !topCollection.matches('chatgpt_.*')
         && topCollection != 'eventContractLinks'
         && topCollection != 'eventClientLinks'
         && topCollection != 'bookingSmsQueue'
