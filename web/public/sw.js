@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sedifex-static-v4'
+const CACHE_NAME = 'sedifex-static-v5'
 const SYNC_TAG = 'sync-pending-requests'
 const BASE_URL = new URL('./', self.location).pathname
 const PRECACHE_URLS = [
@@ -58,6 +58,15 @@ self.addEventListener('fetch', event => {
     return
   }
 
+  // API and authentication responses must bypass the offline asset cache.
+  if (/^\/(api|__)\//.test(url.pathname)) return
+
+  // Vite assets have content hashes, so new builds get new URLs.
+  if (url.pathname.startsWith(`${BASE_URL}assets/`)) {
+    event.respondWith(cacheFirstAsset(request))
+    return
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request, OFFLINE_FALLBACK))
     return
@@ -65,6 +74,17 @@ self.addEventListener('fetch', event => {
 
   event.respondWith(networkFirst(request))
 })
+
+async function cacheFirstAsset(request) {
+  const cache = await caches.open(CACHE_NAME)
+  const cached = await cache.match(request)
+  if (cached) return cached
+  const response = await fetch(request)
+  if (response.status === 200 && response.type === 'basic') {
+    await cache.put(request, response.clone())
+  }
+  return response
+}
 
 async function networkFirst(request, fallbackUrl) {
   try {

@@ -30,5 +30,16 @@
       "destination": "https://pay.sedifex.com/customer-portal/:path*",
       "permanent": false
     }
+  ],
+  "headers": [
+    {
+      "source": "/assets/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
   ]
 }
