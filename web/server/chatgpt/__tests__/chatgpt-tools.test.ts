@@ -17,8 +17,8 @@ const blog = { storeId: 'shop', title: 'Helpful massage advice', content: 'A use
 describe('ChatGPT tools', () => {
   it('uses current Sedifex business terminology in the exposed tool descriptions and consent scopes', () => {
     expect(tools.length).toBeGreaterThan(0)
-    expect(tools.map(tool => tool.description).join(' ')).not.toMatch(/\\bmerchant\\b/i)
-    expect(Object.values(scopeDescriptions).join(' ')).not.toMatch(/\\bmerchant\\b/i)
+    expect(tools.map(tool => tool.description).join(' ')).not.toMatch(/\bmerchant\b/i)
+    expect(Object.values(scopeDescriptions).join(' ')).not.toMatch(/\bmerchant\b/i)
     expect(scopeDescriptions['stores:read']).toMatch(/stores you own/)
   })
   it('discovers only published public services and returns slot prices', async () => {
