@@ -58,3 +58,78 @@ assert.equal(legacy.albums[0].images[0].alt, null)
 assert.equal(legacy.albums[0].sortOrder, Number.MAX_SAFE_INTEGER)
 
 console.log('integrationGallery core tests passed')
+
+const {
+  normalizePublicGalleryAlias, matchPublicGalleryStore,
+} = require('../lib/integrationGalleryPublicScope')
+const { LEGACY_PROMO_ALBUM_ID } = require('../lib/integrationGalleryCore')
+
+// Original promo pictures are preserved alongside newer published albums.
+// The same URL is not duplicated if the owner reused it in Media Library.
+const merged = buildPublicGallery(albums, images, {
+  limit: 20,
+  legacyRecords: [
+    record('legacy1', { url: 'https://images.example/original.jpg', sortOrder: 1, isPublished: true }),
+    record('legacy2', { url: 'https://images.example/visible.jpg', sortOrder: 2 }),
+    record('hidden-legacy', { url: 'https://images.example/secret.jpg', isPublished: false }),
+    record('dangerous-url', { url: 'javascript:alert(1)', isPublished: true }),
+  ],
+})
+assert.equal(merged.albums[0].id, LEGACY_PROMO_ALBUM_ID)
+assert.deepEqual(merged.gallery.map(image => image.url), [
+  'https://images.example/original.jpg',
+  'https://images.example/visible.jpg',
+  'https://images.example/before.jpg',
+  'https://images.example/first.jpg',
+])
+assert.equal(merged.gallery.filter(image => image.url === 'https://images.example/visible.jpg').length, 1)
+assert.ok(!merged.gallery.some(image => image.url.includes('secret') || image.url.startsWith('javascript:')))
+assert.equal(merged.albums.find(album => album.id === 'b'), undefined,
+  'New album whose only visible photo is already in legacy gallery is not duplicated')
+const legacyOnly = buildPublicGallery(albums, images, {
+  albumId: LEGACY_PROMO_ALBUM_ID,
+  limit: 20,
+  legacyRecords: [record('existing', { url: 'https://images.example/original.jpg' })],
+})
+assert.equal(legacyOnly.gallery.length, 1)
+assert.equal(legacyOnly.gallery[0].albumId, LEGACY_PROMO_ALBUM_ID)
+const mediaOnly = buildPublicGallery(albums, images, {
+  albumId: 'a',
+  limit: 20,
+  legacyRecords: [record('legacy', { url: 'https://images.example/original.jpg' })],
+})
+assert.ok(mediaOnly.gallery.every(image => image.albumId === 'a'), 'Filtering a new album must not include legacy photos')
+
+// Public slug mode is available only when that exact store promo is enabled.
+assert.equal(normalizePublicGalleryAlias(' My-Spa '), 'my-spa')
+assert.equal(normalizePublicGalleryAlias('admin/../secret'), '')
+assert.equal(normalizePublicGalleryAlias(''), '')
+assert.equal(matchPublicGalleryStore([
+  record('store1', { promoSlug: 'spa', promoEnabled: true }),
+  record('store2', { promoSlug: 'disabled', promoEnabled: false }),
+], 'promoSlug', 'spa'), 'store1')
+assert.equal(matchPublicGalleryStore([
+  record('store2', { promoSlug: 'disabled', promoEnabled: false }),
+], 'promoSlug', 'disabled'), null)
+assert.equal(matchPublicGalleryStore([
+  record('store1', { promoSlug: 'duplicate', promoEnabled: true }),
+  record('store2', { promoSlug: 'duplicate', promoEnabled: true }),
+], 'promoSlug', 'duplicate'), null, 'Ambiguous public aliases cannot expose either store')
+
+const publishedSite = record('settingsA', {
+  websiteBuilder: { slug: 'my-site', status: 'published', storeId: 'storeA' },
+})
+assert.equal(matchPublicGalleryStore([publishedSite], 'siteSlug', 'my-site'), 'storeA')
+assert.equal(matchPublicGalleryStore([
+  record('settingsB', { websiteBuilder: { slug: 'my-site', status: 'draft', storeId: 'private' } }),
+], 'siteSlug', 'my-site'), null)
+assert.equal(matchPublicGalleryStore([
+  record('settingsC', { websiteBuilder: { slug: 'my-site', status: 'published', storeId: '../private' } }),
+], 'siteSlug', 'my-site'), null)
+assert.equal(matchPublicGalleryStore([
+  record('settings1', { websiteBuilder: { slug: 'same', status: 'published' } }),
+  record('settings2', { websiteBuilder: { slug: 'same', status: 'published' } }),
+], 'siteSlug', 'same'), null)
+
+console.log('integrationGallery compatibility tests passed')
+
