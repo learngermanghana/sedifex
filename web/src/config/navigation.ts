@@ -40,6 +40,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'automations', label: 'Automations', type: 'module', target: '/settings/automations', rolesAllowed: ['owner'], sortOrder: 59.5 },
   { id: 'blog', label: 'Blog', type: 'module', target: '/blog', rolesAllowed: ['owner', 'staff'], sortOrder: 60 },
   { id: 'promo', label: 'Promo', type: 'module', target: '/promo', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.1 },
+  { id: 'media-library', label: 'Media Library', type: 'module', target: '/media-library', rolesAllowed: ['owner', 'staff'], sortOrder: 60.5 },
   { id: 'gallery', label: 'Gallery', type: 'module', target: '/gallery', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.2 },
   { id: 'website-hero-slides', label: 'Website Hero Slides', type: 'module', target: '/website-hero-slides', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.3 },
   { id: 'social-links', label: 'Social links', type: 'module', target: '/social-links', parentTarget: '/settings/integrations/website', hideFromPrimaryNav: true, rolesAllowed: ['owner', 'staff'], sortOrder: 61.4 },
