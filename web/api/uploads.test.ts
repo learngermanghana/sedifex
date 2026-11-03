@@ -22,6 +22,21 @@ vi.mock('./_firebase-admin.js', () => ({
   getAdmin: () => ({ app: 'mock-admin' }),
 }))
 
+
+const verifyIdToken = vi.fn(async () => ({ uid: 'owner-1' }))
+const readMember = vi.fn(async () => ({ exists: true, data: () => ({ uid: 'owner-1', role: 'owner', storeId: 'store-1' }) }))
+const readStore = vi.fn(async () => ({ exists: true, data: () => ({ parentStoreId: 'store-1' }) }))
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({ verifyIdToken }),
+}))
+vi.mock('firebase-admin/firestore', () => ({
+  getFirestore: () => ({
+    collection: (name: string) => ({
+      doc: () => ({ get: name === 'teamMembers' ? readMember : readStore }),
+    }),
+  }),
+}))
+
 type MockResponse = {
   statusCode: number
   payload: unknown
@@ -188,4 +203,57 @@ describe('uploads api', () => {
     expect(res.statusCode).toBe(201)
     expect(bucketFile).toHaveBeenCalledTimes(1)
   })
+
+  it('blocks anonymous media uploads to store media storage', async () => {
+    const res = createResponse()
+    await handler({
+      method: 'POST',
+      headers: {
+        'content-type': 'image/png',
+        'x-upload-filename': 'photo.png',
+        'x-upload-mimetype': 'image/png',
+        'x-upload-storage-path': encodeURIComponent('stores/store-1/media/sha.png'),
+      },
+      body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]),
+    } as any, res as any)
+    expect(res.statusCode).toBe(401)
+    expect(bucketFileSave).not.toHaveBeenCalled()
+  })
+
+  it('permits a signed-in store member to upload media and blocks other stores', async () => {
+    const request = {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer valid-id-token',
+        'content-type': 'image/png',
+        'x-upload-filename': 'photo.png',
+        'x-upload-mimetype': 'image/png',
+        'x-upload-storage-path': encodeURIComponent('stores/store-1/media/sha.png'),
+      },
+      body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]),
+    }
+    let res = createResponse()
+    await handler(request as any, res as any)
+    expect(res.statusCode).toBe(201)
+    expect(verifyIdToken).toHaveBeenCalledWith('valid-id-token')
+    expect(bucketFileSave).toHaveBeenCalledTimes(1)
+
+    readMember.mockResolvedValueOnce({ exists: true, data: () => ({ uid: 'owner-1', role: 'staff', storeId: 'other-store' }) })
+    res = createResponse()
+    await handler(request as any, res as any)
+    expect(res.statusCode).toBe(403)
+    expect(bucketFileSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks anonymous deletion of an imported media image', async () => {
+    const res = createResponse()
+    await handler({
+      method: 'DELETE',
+      headers: {},
+      body: { url: 'https://storage.googleapis.com/test-bucket/stores/store-1/media/sha.png' },
+    } as any, res as any)
+    expect(res.statusCode).toBe(401)
+    expect(bucketFileDelete).not.toHaveBeenCalled()
+  })
+
 })
