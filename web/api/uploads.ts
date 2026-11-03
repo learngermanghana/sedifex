@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getStorage } from 'firebase-admin/storage'
+import { getAuth } from 'firebase-admin/auth'
+import { getFirestore } from 'firebase-admin/firestore'
 import { getAdmin } from './_firebase-admin.js'
 
 const MAX_BYTES = 5 * 1024 * 1024
@@ -18,6 +20,34 @@ type UploadRequestBody = {
   dataBase64?: unknown
   storagePath?: unknown
   url?: unknown
+}
+
+async function authorizeStoreMediaUpload(app: ReturnType<typeof getAdmin>, objectName: string, header: unknown): Promise<401 | 403 | null> {
+  const match = /^stores\/([^/]+)\/media\//.exec(objectName)
+  if (!match) return null // Legacy routes retain existing behavior.
+  const authorization = typeof header === 'string' ? header : ''
+  const token = /^Bearer\s+(\S+)$/i.exec(authorization)?.[1]
+  if (!token) return 401
+
+  let uid: string
+  try {
+    const verified = await getAuth(app).verifyIdToken(token)
+    uid = verified.uid
+  } catch {
+    return 401
+  }
+
+  const firestore = getFirestore(app)
+  const member = await firestore.collection('teamMembers').doc(uid).get()
+  const memberData = member.data()
+  if (!member.exists || memberData?.uid !== uid) return 403
+
+  const targetStoreId = match[1]
+  if (memberData?.storeId === targetStoreId) return null
+  if (memberData?.role !== 'owner' || !memberData?.storeId) return 403
+
+  const store = await firestore.collection('stores').doc(targetStoreId).get()
+  return store.exists && store.data()?.parentStoreId === memberData.storeId ? null : 403
 }
 
 function normalizeFilename(value: unknown): string {
@@ -238,6 +268,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'A valid storage.googleapis.com image URL is required.' })
     }
 
+    const accessError = await authorizeStoreMediaUpload(adminApp, objectPath, req.headers?.authorization)
+    if (accessError) return res.status(accessError).json({ error: 'Not authorized to delete this store media.' })
+
     try {
       await bucket.file(objectPath).delete({ ignoreNotFound: true })
       emitUploadMetric('delete_success', {
@@ -346,6 +379,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ext = resolveExtension(safeFilename, detectedMimeType)
     const explicitStoragePath = normalizeStoragePath(storagePath)
     const objectName = explicitStoragePath || `product-images/${Date.now()}-${basename}${ext}`
+
+    const accessError = await authorizeStoreMediaUpload(adminApp, objectName, req.headers?.authorization)
+    if (accessError) {
+      emitUploadMetric('media_upload_access_denied', { latencyMs: Date.now() - requestStart, status: accessError })
+      return res.status(accessError).json({ error: accessError === 401 ? 'Sign in to upload media.' : 'No access to this store.' })
+    }
 
     console.log('[api/uploads] bucket env check', {
       hasImageUploadBucket: !!process.env.IMAGE_UPLOAD_BUCKET,

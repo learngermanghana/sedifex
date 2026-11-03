@@ -31,6 +31,18 @@ describe('productImageUpload api client', () => {
     expect(init.body).toBeInstanceOf(File)
     expect(init.headers['X-Upload-Storage-Path']).toBe(encodeURIComponent('stores/store-1/promo.jpg'))
     expect(init.headers['X-Upload-MimeType']).toBe('image/png')
+    expect(init.headers.Authorization).toBeUndefined()
+  })
+
+  it('sends Firebase authorization for store media uploads', async () => {
+    ;(global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: 'https://storage.googleapis.com/test-bucket/stores/store-1/media/test.webp' }),
+    })
+    const file = new File([new Uint8Array([1, 2, 3])], 'photo.webp', { type: 'image/webp' })
+    await uploadProductImage(file, { storagePath: 'stores/store-1/media/test.webp', authToken: 'secure-token' })
+    const [, init] = (global.fetch as any).mock.calls[0]
+    expect(init.headers.Authorization).toBe('Bearer secure-token')
   })
 
   it('returns precise deletion errors for gallery cleanup failures', async () => {

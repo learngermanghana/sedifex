@@ -20,6 +20,7 @@ import { httpsCallable } from 'firebase/functions'
 import './Products.css'
 import { requestAiAdvisor } from '../api/aiAdvisor'
 import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
+import MediaAssetPicker from '../components/MediaAssetPicker'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useStorePreferenceSync } from '../hooks/useStorePreferenceSync'
@@ -1439,6 +1440,7 @@ export default function ProductsServiceFirst({
                   event.target.value = ''
                 }}
               />
+              <MediaAssetPicker storeId={storeId} disabled={imageUploadState === 'uploading' || galleryImages.length >= MAX_ITEM_IMAGES} onSelect={url => appendGalleryImages([url])} />
               <p className="field__hint">Choose multiple photos at once. You can add up to {MAX_ITEM_IMAGES}, reorder them, or choose another cover.</p>
               {imageStatusMessage ? <p className={`products-page__upload-state products-page__upload-state--${imageUploadState}`}>{imageStatusMessage}</p> : null}
               {galleryImages.some(image => image.startsWith('data:image/')) ? <p className="products-page__upload-warning">One or more photos are still local and have not been uploaded to cloud storage.</p> : null}
