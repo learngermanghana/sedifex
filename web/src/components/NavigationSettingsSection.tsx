@@ -28,8 +28,8 @@ const PAGE_GROUPS: PageGroup[] = [
   { title: 'Daily work', ids: ['dashboard', 'reports', 'products', 'sell', 'customers', 'bookings'] },
   { title: 'Documents, payments & expenses', ids: ['quick-pay', 'invoices', 'receipts', 'expenses', 'settlement', 'donor-management', 'funds-ledger'] },
   { title: 'Bookings, registration & cases', ids: ['upcoming-events', 'student-registration', 'volunteers', 'support-requests'] },
-  { title: 'Website & marketing', ids: ['integrations', 'automations', 'blog', 'bulk-messaging', 'bulk-email'] },
-  { title: 'Account', ids: ['account'] },
+  { title: 'Website & marketing', ids: ['integrations', 'media-library', 'automations', 'blog', 'bulk-messaging', 'bulk-email'] },
+  { title: 'Settings', ids: ['account'] },
 ]
 
 const CONFIGURABLE_NAV_ITEMS = NAV_ITEMS.filter(item => !item.hideFromPrimaryNav)
@@ -140,7 +140,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
   const hideAllPages = () => {
     setDraft(current => ({ ...current, enabledModules: ['account'], customNavItems: [] }))
-    setError('All optional pages are hidden. Account stays available so you can change navigation later.')
+    setError('All optional pages are hidden. Settings stays available so you can change navigation later.')
   }
 
   const renderPageRow = (item: typeof NAV_ITEMS[number]) => {
@@ -153,7 +153,7 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
           <input type="checkbox" disabled={!canEdit || isAccount} checked={checked} onChange={() => toggleModule(item.id)} />
           <span>
             <strong>{item.label}</strong>
-            {isAccount ? <small className="account-overview__hint">Always available to workspace owners</small> : recommended ? <small className="account-overview__hint">Recommended for {selectedIndustry.label}</small> : null}
+            {isAccount ? <small className="account-overview__hint">Always available to workspace owners</small> : item.id === 'media-library' ? <small className="account-overview__hint">Upload from device or Google Drive, reuse photos and manage albums.</small> : recommended ? <small className="account-overview__hint">Recommended for {selectedIndustry.label}</small> : null}
           </span>
         </label>
         <span className="navigation-settings__state">{isAccount ? 'Always on' : checked ? 'Visible' : 'Hidden'}</span>
@@ -171,14 +171,14 @@ export default function NavigationSettingsSection({ preferences, onSave, canEdit
 
     <div className="account-overview__form-grid">
       <label><span>Business type</span>
-        <select value={draft.industry} disabled={!canEdit} onChange={event => applyIndustryTemplate(event.target.value as Industry)}>
+        <select aria-label="Business type" value={draft.industry} disabled={!canEdit} onChange={event => applyIndustryTemplate(event.target.value as Industry)}>
           {INDUSTRY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <small className="account-overview__hint">Changing business type selects its recommended pages automatically. You can customize them here at any time.</small>
       </label>
       <div className="account-overview__card" role="status">
         <strong>{moduleSummary(enabledModuleIds)}</strong>
-        <p className="account-overview__hint">Only selected pages show in the sidebar. Account remains available so you can always return to Navigation settings.</p>
+        <p className="account-overview__hint">Only selected pages show in the sidebar. Settings remains available so you can always return to Navigation settings.</p>
       </div>
     </div>
 

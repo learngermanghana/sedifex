@@ -229,4 +229,49 @@ describe('resolveNavigation', () => {
       expect(INDUSTRY_ENABLED_MODULE_PRESETS[industry]).not.toContain('bulk-messaging')
     }
   })
+
+  it('renames the account navigation label to Settings but preserves /account for old bookmarks', () => {
+    const items = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: {
+        industry: 'shop',
+        labelPolicy: 'shared',
+        enabledModules: ['dashboard', 'account'],
+        customLabels: { '/account': 'Business account' },
+      },
+    })
+    expect(items.find(item => item.id === 'account')).toMatchObject({
+      label: 'Settings',
+      target: '/account',
+    })
+  })
+
+  it('shows the Media Library only when selected and respects store roles', () => {
+    const base = { industry: 'shop' as const, labelPolicy: 'shared' as const }
+    const hiddenOwner = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: { ...base, enabledModules: ['dashboard', 'account'] },
+    })
+    expect(hiddenOwner.some(item => item.id === 'media-library')).toBe(false)
+
+    const enabledOwner = resolveNavigation({
+      role: 'owner',
+      workspaceProfile: { ...base, enabledModules: ['dashboard', 'account', 'media-library'] },
+    })
+    expect(enabledOwner.find(item => item.id === 'media-library')).toMatchObject({
+      label: 'Media Library',
+      target: '/media-library',
+    })
+    const staff = resolveNavigation({
+      role: 'staff',
+      workspaceProfile: { ...base, enabledModules: ['dashboard', 'account', 'media-library'] },
+    })
+    expect(staff.find(item => item.id === 'media-library')?.target).toBe('/media-library')
+    const disabledStaff = resolveNavigation({
+      role: 'staff',
+      workspaceProfile: { ...base, enabledModules: ['dashboard', 'account'] },
+    })
+    expect(disabledStaff.map(item => item.id)).not.toContain('media-library')
+  })
+
 })
