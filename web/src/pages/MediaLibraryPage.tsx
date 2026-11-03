@@ -309,25 +309,31 @@ export default function MediaLibraryPage() {
 
   if (error) return <div role="alert">{error}</div>
   return (
-    <main className="account-overview">
-      <header className="account-overview__section-header">
-        <div>
-          <h1>Media Library</h1>
-          <p className="account-overview__subtitle">Upload many product and gallery photos, or import selected pictures from your Google Drive. Only photos you publish to a product or gallery appear there.</p>
-        </div>
+    <main className="account-overview media-library">
+      <header className="media-library__hero">
+        <span className="media-library__eyebrow">Sedifex / Website content</span>
+        <h1>Media Library</h1>
+        <p>Bring pictures from your device or Google Drive into one organized library. Create albums here, then choose which pictures to publish to your website gallery or products.</p>
       </header>
-      {!storeId && !isLoading ? <p>Select a store first.</p> : null}
-      {errorMessage ? <p className="account-overview__error" role="alert">{errorMessage}</p> : null}
+
+      {!storeId && !isLoading ? <p className="media-library__notice">Select a store first.</p> : null}
+      {errorMessage ? <p className="media-library__notice media-library__notice--error" role="alert">{errorMessage}</p> : null}
+
       {storeId ? (
         <>
-          <section className="account-overview__card">
-            <h2>Import pictures</h2>
-            <p className="account-overview__hint">JPEG, PNG, WebP or AVIF, up to 25 MB each and 100 at a time. Photos are resized in your browser and saved to Sedifex's existing image storage.</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-              <label className="button button--primary" style={{ cursor: busy ? 'not-allowed' : 'pointer' }}>
+          <section className="account-overview__card media-library__panel" aria-labelledby="media-import-title">
+            <div className="media-library__section-heading">
+              <div>
+                <h2 id="media-import-title">1. Import your pictures</h2>
+                <p>Upload up to 100 JPEG, PNG, WebP or AVIF photos at once (25 MB source limit). Sedifex optimizes pictures for fast websites.</p>
+              </div>
+              <span className="media-library__count">{assets.length} pictures</span>
+            </div>
+            <div className="media-library__actions">
+              <label className="button button--primary media-library__upload" aria-disabled={busy || openingDrive}>
                 Upload from device
                 <input aria-label="Select photos from device" type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple
-                  disabled={busy || openingDrive} style={{ display: 'none' }}
+                  disabled={busy || openingDrive}
                   onChange={event => {
                     const selected = Array.from(event.currentTarget.files || [])
                     event.currentTarget.value = ''
@@ -335,50 +341,122 @@ export default function MediaLibraryPage() {
                   }}
                 />
               </label>
-              <button type="button" className="button button--secondary" disabled={busy || openingDrive} onClick={() => void chooseDrivePhotos()}>
+              <button type="button" className="button button--secondary" disabled={busy || openingDrive}
+                onClick={() => void chooseDrivePhotos()}>
                 {openingDrive ? 'Opening Google Drive…' : 'Import from Google Drive'}
               </button>
-              {failedTasks.length ? <button type="button" className="button button--secondary" disabled={busy || openingDrive} onClick={() => void importTasks(failedTasks)}>Retry {failedTasks.length} failed</button> : null}
+              {failedTasks.length > 0 ? (
+                <button type="button" className="button button--secondary" disabled={busy || openingDrive}
+                  onClick={() => void importTasks(failedTasks)}>Retry {failedTasks.length} failed</button>
+              ) : null}
             </div>
-            <p className="account-overview__hint">For Drive: sign in with any Google account, open a folder and select multiple photos. Sedifex only reads pictures you choose; this is not continuous folder sync.</p>
-            {tasks.length ? (
-              <div aria-live="polite" style={{ marginTop: 16 }}>
-                <p><strong>{completed} / {tasks.length}</strong> processed · {imported} imported this batch</p>
-                <progress max={tasks.length} value={completed} style={{ width: '100%' }} />
-                <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 8 }}>
+            <p className="media-library__help">Google Drive import reads only the pictures you select. Imported photos are stored in Sedifex; original Drive files remain unchanged.</p>
+            {tasks.length > 0 ? (
+              <div className="media-library__progress" aria-live="polite">
+                <div className="media-library__progress-label"><strong>{completed} / {tasks.length} processed</strong><span>{imported} new pictures imported</span></div>
+                <progress max={tasks.length} value={completed} />
+                <div className="media-library__task-list">
                   {tasks.map((task, index) => (
-                    <p key={index} style={{ fontSize: 13, margin: '4px 0' }}>{task.state === 'done' ? '✓' : task.state === 'failed' ? '✕' : '•'} {task.name}: {task.message}</p>
+                    <p key={index} className={'media-library__task media-library__task--' + task.state}>
+                      {task.state === 'done' ? '✓' : task.state === 'failed' ? '✕' : '•'} {task.name}: {task.message}
+                    </p>
                   ))}
                 </div>
               </div>
             ) : null}
           </section>
-          <section className="account-overview__card">
-            <h2>Website image library</h2>
-            <p className="account-overview__hint">These URLs can be used by your existing product, gallery and website integrations. Importing alone does not automatically publish photos.</p>
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span>Publish selected photo to gallery album</span>
-              <select value={albumId} onChange={event => setAlbumId(event.target.value)} style={{ display: 'block', maxWidth: 380, width: '100%', marginTop: 5 }}>
-                <option value="">Choose an album (optional)</option>
-                {albums.map(album => <option key={album.id} value={album.id}>{album.title}</option>)}
-              </select>
-            </label>
-            <p className="account-overview__hint">Need a new album? <Link to="/gallery">Manage gallery albums</Link>. For products, use the “Choose from Media Library” control in the product editor.</p>
-            {loading ? <p>Loading images…</p> : null}
-            {!loading && assets.length === 0 ? <p>No pictures imported yet.</p> : null}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(172px, 1fr))', gap: 12 }}>
-              {assets.map(asset => (
-                <article key={asset.id} style={{ border: '1px solid #d6dde6', borderRadius: 12, overflow: 'hidden' }}>
-                  <SafeFirebaseImage src={asset.url} alt={asset.name} style={{ width: '100%', height: 130, objectFit: 'cover' }} />
-                  <div style={{ padding: 10, display: 'grid', gap: 6 }}>
-                    <strong style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{asset.name}</strong>
-                    <small>{asset.source === 'drive' ? 'Google Drive' : 'Device'} · {updatedAtLabel(asset.createdAt)}</small>
-                    <button className="button button--secondary button--small" type="button" onClick={() => void navigator.clipboard.writeText(asset.url).then(() => publish({ tone: 'success', message: 'Image URL copied.' }))}>Copy image URL</button>
-                    <button className="button button--secondary button--small" type="button" disabled={!albumId} onClick={() => void addToAlbum(asset)}>Add to album</button>
-                  </div>
-                </article>
-              ))}
+
+          <section className="account-overview__card media-library__panel" aria-labelledby="media-albums-title">
+            <div className="media-library__section-heading">
+              <div>
+                <h2 id="media-albums-title">2. Choose or create an album</h2>
+                <p>Albums organize pictures on your website. You can create one without leaving this page.</p>
+              </div>
+              <Link to="/gallery" className="media-library__text-link">Manage all albums</Link>
             </div>
+            <div className="media-library__album-tools">
+              <div className="media-library__album-select">
+                <label htmlFor="media-library-album">Gallery album</label>
+                <select id="media-library-album" value={albumId} onChange={event => setAlbumId(event.target.value)}
+                  disabled={publishing || creatingAlbum}>
+                  <option value="">Select an album</option>
+                  {albums.map(album => <option key={album.id} value={album.id}>{album.title}</option>)}
+                </select>
+                {!hasAlbum ? <span className="media-library__help">{albums.length ? 'Select an album to enable publishing.' : 'No albums yet. Create your first one on the right.'}</span>
+                  : <span className="media-library__album-ready">✓ Album selected — choose pictures below</span>}
+              </div>
+              <form className="media-library__create-form" onSubmit={event => void createAlbum(event)}>
+                <label htmlFor="media-library-new-album">Create a new album</label>
+                <div className="media-library__create-row">
+                  <input id="media-library-new-album" placeholder="e.g. Products, Salon Gallery, Events" value={newAlbumTitle}
+                    onChange={event => setNewAlbumTitle(event.target.value)} maxLength={100} required disabled={creatingAlbum} />
+                  <button className="button button--primary" type="submit" disabled={creatingAlbum || !newAlbumTitle.trim()}>
+                    {creatingAlbum ? 'Creating…' : '+ Create album'}
+                  </button>
+                </div>
+                <label className="media-library__optional" htmlFor="media-library-description">Description (optional)</label>
+                <input id="media-library-description" placeholder="What this album is for" value={newAlbumDescription}
+                  onChange={event => setNewAlbumDescription(event.target.value)} maxLength={240} disabled={creatingAlbum}/>
+              </form>
+            </div>
+          </section>
+
+          <section className="account-overview__card media-library__panel" aria-labelledby="media-pictures-title">
+            <div className="media-library__section-heading">
+              <div>
+                <h2 id="media-pictures-title">3. Select and publish pictures</h2>
+                <p>Your imported pictures stay private to this store's dashboard until you assign them to a product or publish them to an album.</p>
+              </div>
+            </div>
+            <div className="media-library__selection-toolbar">
+              <label className="media-library__select-all">
+                <input type="checkbox" checked={assets.length > 0 && selectedIds.length === assets.length}
+                  disabled={assets.length === 0 || publishing}
+                  onChange={event => setSelectedIds(event.target.checked ? assets.map(asset => asset.id) : [])} />
+                Select all ({assets.length})
+              </label>
+              <span className="media-library__selected-count">{selectedIds.length} selected</span>
+              <button type="button" className="button button--primary" disabled={!hasAlbum || !selectedAssets.length || publishing}
+                onClick={() => void addAssetsToAlbum(selectedAssets)}>
+                {publishing ? 'Publishing…' : 'Add selected to album'}
+              </button>
+            </div>
+            {!hasAlbum ? <p className="media-library__notice">Choose or create a gallery album above to enable “Add to album”. You can still copy image URLs.</p> : null}
+            {loading ? <p>Loading pictures…</p> : null}
+            {!loading && assets.length === 0 ? <p className="media-library__empty">No pictures imported yet. Upload a few pictures or choose them from Google Drive above.</p> : null}
+            <div className="media-library__grid">
+              {assets.map(asset => {
+                const selected = selectedIds.includes(asset.id)
+                return (
+                  <article key={asset.id} className={'media-library__tile' + (selected ? ' is-selected' : '')}>
+                    <div className="media-library__thumbnail">
+                      <SafeFirebaseImage src={asset.url} alt={asset.name} />
+                      <label className="media-library__tile-select">
+                        <input type="checkbox" checked={selected} disabled={publishing}
+                          onChange={() => toggleSelected(asset.id)}
+                          aria-label={'Select ' + asset.name} />
+                        <span>Select</span>
+                      </label>
+                    </div>
+                    <div className="media-library__tile-body">
+                      <strong title={asset.name}>{asset.name}</strong>
+                      <small>{asset.source === 'drive' ? 'Google Drive' : 'Device'} · {updatedAtLabel(asset.createdAt)}</small>
+                      <div className="media-library__tile-actions">
+                        <button className="button button--secondary button--small" type="button"
+                          onClick={() => void navigator.clipboard.writeText(asset.url)
+                            .then(() => publish({ tone: 'success', message: 'Image URL copied.' }))
+                            .catch(() => setErrorMessage('Could not copy the URL. Try again.'))}>Copy URL</button>
+                        <button className="button button--primary button--small" type="button"
+                          disabled={!hasAlbum || publishing} onClick={() => void addAssetsToAlbum([asset])}>
+                          {publishing ? 'Adding…' : 'Add to album'}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+            <p className="media-library__help">For product listings, open the product editor and select <strong>Choose from Media Library</strong>. Adding to a gallery album does not automatically attach a photo to a product.</p>
           </section>
         </>
       ) : null}
