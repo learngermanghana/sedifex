@@ -30,7 +30,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         uid = data.uid; scope = data.scope; sid = newSessionId; authTime = data.authTime
         const user = await getAuth(getAdmin()).getUser(uid)
         if (user.disabled || !Number.isFinite(authTime) || Date.parse(user.tokensValidAfterTime || '') > authTime) throw Error('invalid_grant')
-        if (!(process.env.SEDIFEX_MCP_TEST_UIDS || '').split(',').map(s => s.trim()).includes(uid)) throw Error('invalid_grant')
         tx.delete(ref)
         tx.create(firestore.collection('chatgpt_oauth_sessions').doc(sid), { uid, scope, clientId: client_id, authTime, revoked: false, refreshHash, expiresAt: Date.now() + 30 * 86400000 })
       } else {
@@ -41,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!session || session.revoked || session.expiresAt <= Date.now() || session.refreshHash !== hash(refresh_token)) throw Error('invalid_grant')
         uid = session.uid; scope = session.scope; sid = old.sid; authTime = session.authTime
         const user = await getAuth(getAdmin()).getUser(uid)
-        if (user.disabled || Date.parse(user.tokensValidAfterTime || '') > authTime || !(process.env.SEDIFEX_MCP_TEST_UIDS || '').split(',').map(s => s.trim()).includes(uid)) throw Error('invalid_grant')
+        if (user.disabled || Date.parse(user.tokensValidAfterTime || '') > authTime) throw Error('invalid_grant')
         tx.delete(oldRef)
         tx.update(sessionRef, { refreshHash })
       }

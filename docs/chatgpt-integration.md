@@ -1,6 +1,6 @@
 # Sedifex in ChatGPT
 
-The private-pilot MCP endpoint is `POST /api/chatgpt-mcp`, routed through the existing consolidated Vercel function. This implementation adds customer booking and merchant blog workflows; it does not make the app publicly installable or configure deployment secrets.
+The MCP endpoint is `POST /api/chatgpt-mcp`, routed through the existing consolidated Vercel function. This implementation adds customer booking and merchant blog workflows; it does not make the app publicly installable or configure deployment secrets.
 
 ## Tools
 
@@ -82,7 +82,7 @@ Set these deployment variables (keep their actual values in deployment configura
 - `SEDIFEX_MCP_RESOURCE_URL`: exact endpoint URL, e.g. `https://sedifex.com/api/chatgpt-mcp`.
 - `SEDIFEX_MCP_OAUTH_ISSUER`: the same issuer for the built-in OAuth implementation.
 - `SEDIFEX_MCP_JWKS_URL`: e.g. `https://sedifex.com/api/chatgpt-oauth-jwks`.
-- `SEDIFEX_MCP_TEST_UIDS`: deliberately enrolled merchant and customer **Firebase UIDs**, comma separated. Empty means all authenticated tools are denied. Public catalog tools remain readable.
+- Account enrollment is open to authenticated Sedifex users. `SEDIFEX_MCP_TEST_UIDS` is no longer used. Store ownership, customer booking access, OAuth scopes, disabled-account checks and rate limits still apply.
 - Existing Firebase Admin service-account configuration is also required.
 
 Discovery endpoints: `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`. Refresh at `POST /api/chatgpt-oauth-token` with `grant_type=refresh_token`, `client_id`, and `refresh_token`. Revoke the current refresh token at `POST /api/chatgpt-oauth-revoke` with `client_id` and `token` (form encoded or JSON). Reconnect existing pilot accounts after deployment to establish a session and consent to new scopes. Previously issued sessionless access tokens are rejected by the built-in issuer path.
@@ -101,8 +101,8 @@ npm run build
 firebase emulators:exec --config firebase.event-planning-ci.json --only firestore,auth --project sedifex-ci "cd web && RUN_CHATGPT_EMULATOR_TESTS=1 npm exec vitest run tests/chatgpt-access.rules.emulator.test.ts"
 ```
 
-The focused suite checks real JWT signatures, PKCE, single-use codes, refresh rotation, revocation, scope and pilot restrictions, disabled accounts, customer isolation, cross-store denial, capacity races, retry safety, stale price confirmation and blog revisions. The in-memory transaction test double enforces read-before-write and rollback; it is not a Firestore emulator or live deployment test.
+The focused suite checks real JWT signatures, PKCE, single-use codes, refresh rotation, revocation, scope restrictions and open account enrollment, disabled accounts, customer isolation, cross-store denial, capacity races, retry safety, stale price confirmation and blog revisions. The in-memory transaction test double enforces read-before-write and rollback; it is not a Firestore emulator or live deployment test.
 
 **Deploy the updated Firestore rules before enabling the new connector.** They block all client access to `chatgpt_*` records, scope root/store bookings and blog posts to store members, and prevent client reassignment of ChatGPT booking ownership.
 
-Before public release, test the deployed OAuth connection with one enrolled merchant and a distinct customer, verify domain ownership, scan all tools, book a real test slot, review its change request in the merchant dashboard, and check draft/publish behavior on the public blog. Confirm deployment is READY and the consolidated function remains within the hosting plan's function count. This change adds a route to the existing function, not another serverless function. Public app review/submission, open customer enrollment, payment checkout and deployment configuration are separate release steps.
+Before public release, test the deployed OAuth connection with one merchant and a distinct customer, verify domain ownership, scan all tools, book a real test slot, review its change request in the merchant dashboard, and check draft/publish behavior on the public blog. Confirm deployment is READY and the consolidated function remains within the hosting plan's function count. This change adds a route to the existing function, not another serverless function. Public app review/submission, payment checkout and deployment configuration are separate release steps.

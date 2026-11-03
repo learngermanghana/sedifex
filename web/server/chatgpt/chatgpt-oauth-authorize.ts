@@ -5,11 +5,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { db, getAdmin } from '../../api/_firebase-admin.js'
 import { getAuth } from 'firebase-admin/auth'
 
-// Private-pilot authorization-code issuer. Requires an authenticated Firebase ID token.
+// Authorization-code issuer. Requires an authenticated Firebase ID token.
 // The client sends its Firebase ID token in Authorization, never a password.
 const origin = () => process.env.SEDIFEX_OAUTH_ISSUER?.replace(/\/$/, '')
 const hash = (s: string) => createHash('sha256').update(s).digest('base64url')
-const permitted = (uid: string) => (process.env.SEDIFEX_MCP_TEST_UIDS || '').split(',').map(x => x.trim()).includes(uid)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store')
   if (req.method === 'GET') {
@@ -27,7 +26,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!match) return res.status(401).json({error:'login_required'})
   try {
     const decoded = await getAuth(getAdmin()).verifyIdToken(match[1], true)
-    if (!permitted(decoded.uid)) return res.status(403).json({error:'account_not_enrolled'})
     const code = randomBytes(32).toString('base64url')
     await db().collection('chatgpt_oauth_codes').doc(hash(code)).create({uid:decoded.uid,authTime:decoded.auth_time * 1000,clientId:client_id,redirectUri:redirect_uri,challenge:code_challenge,scope:scopes.join(' '),resource,expiresAt:Date.now()+120000,createdAt:Date.now()})
     const redirect = new URL(redirect_uri)
