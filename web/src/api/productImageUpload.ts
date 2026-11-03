@@ -16,6 +16,7 @@ type DeleteUploadResponse = {
 
 export type UploadImageOptions = {
   storagePath?: string
+  authToken?: string
 }
 
 export class ProductImageUploadError extends Error {
@@ -174,6 +175,7 @@ export async function uploadProductImage(file: File, options: UploadImageOptions
       method: 'POST',
       headers: {
         'Content-Type': uploadFile.type || 'application/octet-stream',
+        ...(options.authToken ? { Authorization: 'Bearer ' + options.authToken } : {}),
         'X-Upload-Filename': encodeURIComponent(uploadFile.name),
         'X-Upload-MimeType': uploadFile.type || 'application/octet-stream',
         ...(resolvedStoragePath
