@@ -1,3 +1,4 @@
+import { isSedifexOAuthClient } from './chatgpt-oauth-client.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHash, createPrivateKey, randomBytes } from 'node:crypto'
 import { SignJWT } from 'jose'
@@ -12,8 +13,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { grant_type, code, code_verifier, client_id, redirect_uri, refresh_token, resource } = body
   const issuer = process.env.SEDIFEX_OAUTH_ISSUER?.replace(/\/$/, ''), audience = process.env.SEDIFEX_MCP_RESOURCE_URL
   const pem = process.env.SEDIFEX_OAUTH_PRIVATE_KEY?.replace(/\\n/g, '\n'), kid = process.env.SEDIFEX_OAUTH_KEY_ID
-  if (!issuer || !audience || !pem || !kid || !process.env.SEDIFEX_OAUTH_CLIENT_ID) return res.status(503).json({ error: 'server_unavailable' })
-  if (client_id !== process.env.SEDIFEX_OAUTH_CLIENT_ID || !['authorization_code', 'refresh_token'].includes(grant_type) || (resource !== undefined && resource !== audience)) return res.status(400).json({ error: 'invalid_request' })
+  if (!issuer || !audience || !pem || !kid ) return res.status(503).json({ error: 'server_unavailable' })
+  if (!isSedifexOAuthClient(client_id) || !['authorization_code', 'refresh_token'].includes(grant_type) || (resource !== undefined && resource !== audience)) return res.status(400).json({ error: 'invalid_request' })
   const refresh = randomBytes(32).toString('base64url'), refreshHash = hash(refresh)
   const firestore = db(), newSessionId = hash(randomBytes(32).toString('hex'))
   try {
