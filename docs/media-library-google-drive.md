@@ -1,6 +1,6 @@
 # Sedifex Media Library and Google Drive photo import
 
-The Media Library at /media-library is a store-scoped way to bulk import photos
+The Media Library at /media-library also displays original promo gallery and existing album images as reusable pictures. Picking them does not re-upload or duplicate the file. It is a store-scoped way to bulk import new photos
 from a device or Google Drive. It reuses the current /api/uploads endpoint and
 Google Cloud Storage bucket, so there is no new always-on worker or storage provider.
 
@@ -49,8 +49,7 @@ those images have been assigned to a product. The authenticated /integrationGall
 albums and a flat photo list for website integrations. Connected websites must
 fetch it server-side with a per-store integration key and the canonical contract
 header. Updates appear when the site's own cache refreshes (the example uses
-120-second revalidation). Public slug-only promo pages still need a separate
-public-gallery adapter; never expose the integration key in browser code.
+120-second revalidation). Existing public promo pages use `/integrationGallery?slug=...` and published Sedifex websites use `?siteSlug=...`; both serve only published pictures without exposing an integration key in browser code. The original `promoGallery` records remain usable alongside new named albums.
 
 ## One-time Google Cloud setup for Sedifex (not per store)
 
