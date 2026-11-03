@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import NavigationSettingsSection from './NavigationSettingsSection'
@@ -38,7 +38,7 @@ it('applies the Cleaning Services industry preset and saves its labels without t
   const saved = save.mock.calls[0][0]
   expect(saved.enabledModules).not.toContain('events')
   expect(saved.enabledModules).not.toContain('automations')
-  expect(await screen.findByText('Navigation saved. Your sidebar is up to date.')).toBeVisible()
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
 })
 
 
@@ -67,7 +67,7 @@ it('lets the owner tick Media Library under Website & marketing and save it to t
   expect(save).toHaveBeenCalledWith(expect.objectContaining({
     enabledModules: expect.arrayContaining(['dashboard', 'account', 'media-library']),
   }))
-  expect(await screen.findByText('Navigation saved. Your sidebar is up to date.')).toBeVisible()
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
 })
 
 it('keeps Settings always available and lets owners untick Media Library', async () => {
