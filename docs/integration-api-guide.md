@@ -528,7 +528,7 @@ Use the same Website Integration API key unless the endpoint is specifically pub
 
 ### Gallery albums and images
 
-Use `/integrationGallery` when a connected website needs the store-managed gallery from **Website Builder → Gallery**. The current gallery model is album-based: albums live separately from images, and each image points back to its album with `albumId`. This lets websites render a full gallery page grouped by album, while still supporting a flat image grid on a homepage.
+Use `/integrationGallery` when a connected website needs the store-managed gallery from **Media Library / Gallery**. This is an authenticated Firebase Cloud Function, exported from `functions/src/integrationGallery.ts`. Call it **server-side**, not from a browser containing a secret key. The current gallery model is album-based: albums live separately from images, and each image points back to its album with `albumId`. This lets websites render a full gallery page grouped by album, while still supporting a flat image grid on a homepage.
 
 #### Endpoint
 
@@ -546,10 +546,10 @@ https://us-central1-sedifex-web.cloudfunctions.net/integrationGallery?storeId=<s
 
 | Parameter | Required | Notes |
 |---|---:|---|
-| `storeId` | Yes, unless `slug` is used | Store whose gallery should be loaded. Use this for authenticated website integrations. |
-| `slug` | No | Public promo/landing-page links may use a store slug instead of `storeId` when the public endpoint supports slug lookup. |
+| `storeId` | Yes | Store whose gallery should be loaded. A website must send a store-specific Sedifex integration API key. |
+| `slug` | Not supported | This authenticated endpoint does not resolve public promo slugs. Use `storeId` and your website's API key. |
 | `albumId` | No | Optional filter when a website only wants one album. If omitted, return all published albums and their published images. |
-| `limit` | No | Optional image limit for homepage previews. Full gallery pages usually omit this or use a higher server-side limit. |
+| `limit` | No | Return 1–1000 published images. Defaults to 300; use a small value for homepage previews. |
 
 #### Data source and new gallery structure
 
@@ -609,7 +609,7 @@ Invoke-RestMethod -Uri $url -Headers $headers -Method GET | ConvertTo-Json -Dept
 
 #### Response shape
 
-The recommended response includes both grouped `albums` and a flat `gallery` array. Use `albums` for a full gallery page. Use `gallery` for compact homepage previews and older templates that expect a flat list.
+The endpoint returns both grouped `albums` and a flat `gallery` array. It also includes `count` and `truncated`; `truncated: true` means the returned images were limited by the requested `limit` or by server read caps. Album and picture publication flags are enforced server-side. The API requires `x-api-key` and `X-Sedifex-Contract-Version: 2026-04-13`. Do not expose the key in client-side JavaScript. Use `albums` for a full gallery page. Use `gallery` for compact homepage previews and older templates that expect a flat list.
 
 ```json
 {
