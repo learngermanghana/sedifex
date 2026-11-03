@@ -116,10 +116,13 @@ assert.equal(matchPublicGalleryStore([
   record('store2', { promoSlug: 'duplicate', promoEnabled: true }),
 ], 'promoSlug', 'duplicate'), null, 'Ambiguous public aliases cannot expose either store')
 
-const publishedSite = record('settingsA', {
+const publishedSite = record('storeA', {
   websiteBuilder: { slug: 'my-site', status: 'published', storeId: 'storeA' },
 })
 assert.equal(matchPublicGalleryStore([publishedSite], 'siteSlug', 'my-site'), 'storeA')
+assert.equal(matchPublicGalleryStore([record('settingsA', {
+  websiteBuilder: { slug: 'my-site', status: 'published', storeId: 'storeB' },
+})], 'siteSlug', 'my-site'), null, 'A forged public website alias cannot read another store')
 assert.equal(matchPublicGalleryStore([
   record('settingsB', { websiteBuilder: { slug: 'my-site', status: 'draft', storeId: 'private' } }),
 ], 'siteSlug', 'my-site'), null)
