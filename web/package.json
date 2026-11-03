@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "test": "vitest run",
-    "build:help": "node scripts/build-help.mjs"
+    "build:help": "node scripts/build-help.mjs",
+    "test:chatgpt": "vitest run --config vitest.chatgpt.config.ts",
+    "typecheck:chatgpt": "tsc --noEmit --skipLibCheck --module nodenext --moduleResolution nodenext --target es2022 server/chatgpt/*.ts api/chatgpt.ts"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.4.2",

@@ -6,6 +6,7 @@ import authorize from '../server/chatgpt/chatgpt-oauth-authorize.js'
 import jwks from '../server/chatgpt/chatgpt-oauth-jwks.js'
 import metadata from '../server/chatgpt/chatgpt-oauth-metadata.js'
 import resource from '../server/chatgpt/chatgpt-oauth-resource.js'
+import revoke from '../server/chatgpt/chatgpt-oauth-revoke.js'
 import token from '../server/chatgpt/chatgpt-oauth-token.js'
 
 // Single Vercel serverless function. Public paths are rewritten here so the
@@ -19,6 +20,7 @@ const handlers: Record<string, (req: VercelRequest, res: VercelResponse) => unkn
   'oauth-metadata': metadata,
   'oauth-resource': resource,
   'oauth-token': token,
+  'oauth-revoke': revoke,
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

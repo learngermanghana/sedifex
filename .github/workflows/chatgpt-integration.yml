@@ -1,0 +1,41 @@
+name: ChatGPT integration
+on:
+  pull_request:
+    paths:
+      - 'web/server/chatgpt/**'
+      - 'web/shared/chatgpt-scopes.ts'
+      - 'web/api/chatgpt.ts'
+      - 'web/src/pages/ChatGPTConnect.tsx'
+      - 'web/package*.json'
+      - 'web/vitest.chatgpt.config.ts'
+      - 'web/vite.config.ts'
+      - 'web/tests/chatgpt-access.rules.emulator.test.ts'
+      - 'firestore.rules'
+      - 'firebase.event-planning-ci.json'
+      - '.github/workflows/chatgpt-integration.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run typecheck:chatgpt
+        working-directory: web
+      - run: npm run test:chatgpt
+        working-directory: web
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm install -g firebase-tools
+      - name: Verify Firestore access boundaries
+        run: >-
+          firebase emulators:exec --config firebase.event-planning-ci.json
+          --only firestore,auth --project sedifex-ci
+          "cd web && RUN_CHATGPT_EMULATOR_TESTS=1 npm exec vitest run tests/chatgpt-access.rules.emulator.test.ts"

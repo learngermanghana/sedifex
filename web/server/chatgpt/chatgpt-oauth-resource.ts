@@ -1,3 +1,4 @@
+import { chatgptScopes } from '../../shared/chatgpt-scopes.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 // Discovery for a separately configured OAuth authorization server.
@@ -13,6 +14,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   return res.json({
     resource,
     authorization_servers: [issuer],
-    scopes_supported: ['services:read', 'services:write'],
+    scopes_supported: chatgptScopes,
   })
 }
