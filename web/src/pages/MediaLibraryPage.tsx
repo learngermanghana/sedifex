@@ -4,7 +4,7 @@ import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy,
   query, serverTimestamp, setDoc,
 } from 'firebase/firestore'
-import { db } from '../firebase'
+import { auth, db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
@@ -131,7 +131,9 @@ export default function MediaLibraryPage() {
           }
 
           const storagePath = 'stores/' + activeStoreId + '/media/' + hash + mediaFileExtension(optimized)
-          const url = await uploadWithRetry(() => uploadProductImage(optimized, { storagePath }))
+          const token = await auth.currentUser?.getIdToken()
+          if (!token) throw new Error('Sign in to Sedifex before importing pictures.')
+          const url = await uploadWithRetry(() => uploadProductImage(optimized, { storagePath, authToken: token }))
           await setDoc(assetRef, {
             url,
             name: original.name.slice(0, 220),
