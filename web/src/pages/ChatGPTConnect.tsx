@@ -46,3 +46,4 @@ export default function ChatGPTConnect() {
   {error&&<p role="alert">{error}</p>}
  </main>
 }
+
