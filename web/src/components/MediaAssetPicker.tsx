@@ -30,12 +30,34 @@ export default function MediaAssetPicker({
     setLoading(true)
     setError('')
     try {
-      const snapshot = await getDocs(query(collection(db, 'stores', storeId, 'mediaAssets'), orderBy('createdAt', 'desc'), limit(100)))
-      setItems(snapshot.docs.map(row => ({
-        id: row.id,
-        url: String(row.data().url || ''),
-        name: String(row.data().name || 'Photo'),
-      })).filter(item => item.url))
+      const [snapshot, albums, legacy] = await Promise.all([
+        getDocs(query(collection(db, 'stores', storeId, 'mediaAssets'), orderBy('createdAt', 'desc'), limit(100))),
+        getDocs(query(collection(db, 'stores', storeId, 'galleryImages'), limit(100))),
+        getDocs(query(collection(db, 'stores', storeId, 'promoGallery'), limit(100))),
+      ])
+      const entries: Asset[] = [
+        ...snapshot.docs.map(row => ({
+          id: row.id,
+          url: String(row.data().url || ''),
+          name: String(row.data().name || 'Photo'),
+        })),
+        ...albums.docs.map(row => ({
+          id: 'album:' + row.id,
+          url: String(row.data().url || ''),
+          name: String(row.data().alt || row.data().caption || 'Existing album picture'),
+        })),
+        ...legacy.docs.map(row => ({
+          id: 'promo:' + row.id,
+          url: String(row.data().url || row.data().imageUrl || ''),
+          name: String(row.data().alt || row.data().caption || 'Original gallery picture'),
+        })),
+      ]
+      const seenUrls = new Set<string>()
+      setItems(entries.filter(item => {
+        if (!/^https?:\/\//i.test(item.url) || seenUrls.has(item.url)) return false
+        seenUrls.add(item.url)
+        return true
+      }))
     } catch {
       setError('Unable to read the media library for this store.')
     } finally {
