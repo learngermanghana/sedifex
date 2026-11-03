@@ -144,7 +144,7 @@ describe('OAuth and MCP authorization', () => {
     expect((await call(token, { ...body, code_verifier: verifier })).statusCode).toBe(200)
     expect((await call(authorize, { client_id: 'client', redirect_uri: process.env.SEDIFEX_OAUTH_REDIRECT_URI, code_challenge: sha(verifier), code_challenge_method: 'S256', scope: 'admin:all', state: 'state', resource }, 'Bearer firebase')).body.error).toBe('invalid_scope')
   })
-  it('enforces missing authentication, scope, allowlist, disabled users and revocation', async () => {
+  it('enforces missing authentication, scope, disabled users and revocation', async () => {
     const { result } = await connect()
     const read = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_my_bookings', arguments: { storeId: 'shop' } } }
     expect((await call(mcp, read)).statusCode).toBe(401)
@@ -155,11 +155,20 @@ describe('OAuth and MCP authorization', () => {
     expect((await call(mcp, read, 'Bearer ' + result.body.access_token)).statusCode).toBe(401)
     mock.user.disabled = false
     vi.stubEnv('SEDIFEX_MCP_TEST_UIDS', '')
-    expect((await call(mcp, read, 'Bearer ' + result.body.access_token)).statusCode).toBe(403)
+    expect((await call(mcp, read, 'Bearer ' + result.body.access_token)).statusCode).toBe(200)
     vi.stubEnv('SEDIFEX_MCP_TEST_UIDS', 'customer')
     expect((await call(revoke, { client_id: 'client', token: result.body.refresh_token })).statusCode).toBe(200)
     expect((await call(mcp, read, 'Bearer ' + result.body.access_token)).statusCode).toBe(401)
     expect((await call(token, { grant_type: 'refresh_token', refresh_token: result.body.refresh_token, client_id: 'client' })).statusCode).toBe(400)
+  })
+  it('allows accounts outside the former pilot list to connect, refresh and use their bookings', async () => {
+    vi.stubEnv('SEDIFEX_MCP_TEST_UIDS', 'another-account')
+    const { result } = await connect()
+    expect(result.statusCode).toBe(200)
+    const refreshed = await call(token, { grant_type: 'refresh_token', refresh_token: result.body.refresh_token, client_id: 'client', resource })
+    expect(refreshed.statusCode).toBe(200)
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_my_bookings', arguments: { storeId: 'shop' } } }
+    expect((await call(mcp, request, 'Bearer ' + refreshed.body.access_token)).statusCode).toBe(200)
   })
   it('limits authenticated tool traffic across requests', async () => {
     const { result } = await connect('bookings:read')
