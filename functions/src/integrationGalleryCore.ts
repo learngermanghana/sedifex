@@ -32,6 +32,8 @@ export type GalleryAlbum = {
   images: GalleryImage[]
 }
 
+export const LEGACY_PROMO_ALBUM_ID = 'legacy-promo-gallery'
+
 export type GalleryResult = {
   albums: GalleryAlbum[]
   gallery: GalleryImage[]
@@ -79,7 +81,7 @@ function updatedAt(value: unknown): string | null {
 export function buildPublicGallery(
   albumRecords: GallerySourceDocument[],
   imageRecords: GallerySourceDocument[],
-  options: { albumId?: string; limit: number; sourceTruncated?: boolean },
+  options: { albumId?: string; limit: number; sourceTruncated?: boolean; legacyRecords?: GallerySourceDocument[] },
 ): GalleryResult {
   const albums: GalleryAlbum[] = albumRecords
     .filter(item => item.data.isPublished !== false)
@@ -96,8 +98,48 @@ export function buildPublicGallery(
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))
 
+  // Legacy promotional galleries remain part of the same website response.
+  // Don't rewrite or copy those files: retain the existing Firestore records.
+  // When no albumId is specified, include a synthetic album for old photos.
+  const includeLegacy = !options.albumId || options.albumId === LEGACY_PROMO_ALBUM_ID
+  const legacyRecords = includeLegacy ? options.legacyRecords ?? [] : []
+  const visibleLegacy = legacyRecords.filter(item =>
+    item.data.isPublished !== false && safeUrl(item.data.url ?? item.data.imageUrl ?? item.data.image_url ?? item.data.image ?? item.data.photoUrl))
+  if (visibleLegacy.length && !albums.some(album => album.id === LEGACY_PROMO_ALBUM_ID)) {
+    albums.unshift({
+      id: LEGACY_PROMO_ALBUM_ID,
+      title: 'Gallery',
+      description: null,
+      coverImageUrl: null,
+      isPublished: true,
+      sortOrder: -1,
+      updatedAt: null,
+      images: [],
+    })
+  }
   const albumById = new Map(albums.map(album => [album.id, album]))
   const imagesByAlbum = new Map<string, GalleryImage[]>()
+
+  if (albumById.has(LEGACY_PROMO_ALBUM_ID) && includeLegacy) {
+    for (const item of visibleLegacy) {
+      const data = item.data
+      const url = safeUrl(data.url ?? data.imageUrl ?? data.image_url ?? data.image ?? data.photoUrl)
+      if (!url) continue
+      const group = imagesByAlbum.get(LEGACY_PROMO_ALBUM_ID) ?? []
+      group.push({
+        id: 'legacy:' + item.id,
+        albumId: LEGACY_PROMO_ALBUM_ID,
+        albumTitle: 'Gallery',
+        url,
+        alt: safeText(data.alt ?? data.imageAlt, 240) || null,
+        caption: safeText(data.caption ?? data.title ?? data.description, 500) || null,
+        isPublished: true,
+        sortOrder: orderValue(data.sortOrder),
+        updatedAt: updatedAt(data.updatedAt),
+      })
+      imagesByAlbum.set(LEGACY_PROMO_ALBUM_ID, group)
+    }
+  }
 
   for (const item of imageRecords) {
     if (item.data.isPublished === false) continue
@@ -128,16 +170,25 @@ export function buildPublicGallery(
     flattened.push(...sorted)
   }
 
-  const selected = flattened.slice(0, options.limit)
+  // The grouped albums keep intentionally reused pictures in each album.
+  // The flat homepage gallery deduplicates URLs to avoid double-display.
+  const displayed = flattened.slice(0, options.limit)
+  const selected: GalleryImage[] = []
+  const seenUrls = new Set<string>()
+  for (const photo of displayed) {
+    if (seenUrls.has(photo.url)) continue
+    seenUrls.add(photo.url)
+    selected.push(photo)
+  }
   const selectedUrls = new Map<string, Set<string>>()
-  for (const image of selected) {
+  for (const image of displayed) {
     const urls = selectedUrls.get(image.albumId) ?? new Set<string>()
     urls.add(image.url)
     selectedUrls.set(image.albumId, urls)
   }
 
   const outputAlbums = albums.reduce<GalleryAlbum[]>((acc, album) => {
-    const selectedImages = selected.filter(image => image.albumId === album.id)
+    const selectedImages = displayed.filter(image => image.albumId === album.id)
     if (!selectedImages.length) return acc
     const validCover = album.coverImageUrl && selectedUrls.get(album.id)?.has(album.coverImageUrl)
       ? album.coverImageUrl

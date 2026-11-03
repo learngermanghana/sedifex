@@ -519,6 +519,8 @@ Booking/registration note:
 
 ```http
 GET /integrationGallery?storeId=<storeId>
+GET /integrationGallery?slug=<publicPromoSlug>
+GET /integrationGallery?siteSlug=<publishedWebsiteSlug>
 GET /v1IntegrationPromo?storeId=<storeId>
 GET /v1IntegrationHeroSlides?storeId=<storeId>&placement=home_hero
 GET /v1IntegrationSocialSettings?storeId=<storeId>
@@ -528,7 +530,7 @@ Use the same Website Integration API key unless the endpoint is specifically pub
 
 ### Gallery albums and images
 
-Use `/integrationGallery` when a connected website needs the store-managed gallery from **Media Library / Gallery**. This is an authenticated Firebase Cloud Function, exported from `functions/src/integrationGallery.ts`. Call it **server-side**, not from a browser containing a secret key. The current gallery model is album-based: albums live separately from images, and each image points back to its album with `albumId`. This lets websites render a full gallery page grouped by album, while still supporting a flat image grid on a homepage.
+Use `/integrationGallery` to retrieve the same published pictures from **Media Library albums** and the **original promoGallery**. Store-specific integration keys are supported for external websites; public promo links and published Sedifex websites also have slug-based read-only modes. Never put a private integration key in browser code. The current gallery model is album-based: albums live separately from images, and each image points back to its album with `albumId`. This lets websites render a full gallery page grouped by album, while still supporting a flat image grid on a homepage.
 
 #### Endpoint
 
@@ -546,10 +548,13 @@ https://us-central1-sedifex-web.cloudfunctions.net/integrationGallery?storeId=<s
 
 | Parameter | Required | Notes |
 |---|---:|---|
-| `storeId` | Yes | Store whose gallery should be loaded. A website must send a store-specific Sedifex integration API key. |
-| `slug` | Not supported | This authenticated endpoint does not resolve public promo slugs. Use `storeId` and your website's API key. |
+| `storeId` | One of three scopes | Private partner website mode. Requires that store's integration API key and canonical contract header. |
+| `slug` | One of three scopes | Public legacy promo link. Only works while the exact promo slug belongs to an enabled public promo; no API key is sent in browser requests. |
+| `siteSlug` | One of three scopes | Public built-in website. Only works when the exact website slug is published; no API key is sent in browser requests. |
 | `albumId` | No | Optional filter when a website only wants one album. If omitted, return all published albums and their published images. |
-| `limit` | No | Return 1–1000 published images. Defaults to 300; use a small value for homepage previews. |
+| `limit` | No | Return up to 1–1000 published images. Defaults to 300; use a small value for homepage previews. |
+
+Supply **exactly one** of `storeId`, `slug` or `siteSlug`. Public slug modes accept the contract header but do not require it (for compatibility with existing browser clients); mismatched headers are rejected. The private `storeId` mode requires a valid API key and contract header. The response contains named albums plus a synthetic `legacy-promo-gallery` album when old promo pictures exist. Its flat `gallery[]` removes duplicate image URLs; album groups retain reused photos and exclude unpublished records.
 
 #### Data source and new gallery structure
 

@@ -22,7 +22,7 @@ type Asset = {
   id: string
   url: string
   name: string
-  source: 'device' | 'drive'
+  source: 'device' | 'drive' | 'gallery' | 'promo-gallery'
   size: number
   createdAt: { toMillis?: () => number } | null
 }
@@ -62,21 +62,55 @@ export default function MediaLibraryPage() {
   async function refresh(id: string) {
     setLoading(true)
     try {
-      const [mediaSnap, albumSnap] = await Promise.all([
+      const [mediaSnap, albumSnap, albumImagesSnap, promoImagesSnap] = await Promise.all([
         getDocs(query(collection(db, 'stores', id, 'mediaAssets'), orderBy('createdAt', 'desc'), limit(200))),
         getDocs(query(collection(db, 'stores', id, 'galleryAlbums'), orderBy('sortOrder', 'asc'))),
+        getDocs(query(collection(db, 'stores', id, 'galleryImages'), limit(100))),
+        getDocs(query(collection(db, 'stores', id, 'promoGallery'), limit(100))),
       ])
-      setAssets(mediaSnap.docs.map(snapshot => {
+      const mediaAssets: Asset[] = mediaSnap.docs.map(snapshot => {
         const item = snapshot.data()
         return {
           id: snapshot.id,
           url: typeof item.url === 'string' ? item.url : '',
           name: typeof item.name === 'string' ? item.name : snapshot.id,
           size: typeof item.size === 'number' ? item.size : 0,
-          source: item.source === 'drive' ? 'drive' : 'device',
+          source: item.source === 'drive' ? 'drive' as const : 'device' as const,
           createdAt: item.createdAt ?? null,
         }
-      }).filter(item => item.url))
+      })
+      // Gallery records predate Media Library metadata. Show their existing
+      // public image URLs as reusable assets rather than re-uploading copies.
+      const galleryAssets: Asset[] = albumImagesSnap.docs.map(snapshot => {
+        const item = snapshot.data()
+        return {
+          id: 'gallery:' + snapshot.id,
+          url: typeof item.url === 'string' ? item.url : '',
+          name: typeof item.alt === 'string' && item.alt ? item.alt
+            : typeof item.caption === 'string' && item.caption ? item.caption : 'Gallery picture',
+          size: 0,
+          source: 'gallery' as const,
+          createdAt: item.createdAt ?? null,
+        }
+      })
+      const promoAssets: Asset[] = promoImagesSnap.docs.map(snapshot => {
+        const item = snapshot.data()
+        return {
+          id: 'promo:' + snapshot.id,
+          url: typeof item.url === 'string' ? item.url : typeof item.imageUrl === 'string' ? item.imageUrl : '',
+          name: typeof item.alt === 'string' && item.alt ? item.alt
+            : typeof item.caption === 'string' && item.caption ? item.caption : 'Existing promo picture',
+          size: 0,
+          source: 'promo-gallery' as const,
+          createdAt: item.createdAt ?? null,
+        }
+      })
+      const seenUrls = new Set<string>()
+      setAssets([...mediaAssets, ...galleryAssets, ...promoAssets].filter(item => {
+        if (!/^https?:\/\//i.test(item.url) || seenUrls.has(item.url)) return false
+        seenUrls.add(item.url)
+        return true
+      }))
       setAlbums(albumSnap.docs.map(snapshot => ({
         id: snapshot.id,
         title: String(snapshot.data().title || 'Album'),
@@ -428,7 +462,7 @@ export default function MediaLibraryPage() {
             <div className="media-library__section-heading">
               <div>
                 <h2 id="media-pictures-title">3. Select and publish pictures</h2>
-                <p>Your imported pictures stay private to this store's dashboard until you assign them to a product or publish them to an album.</p>
+                <p>Choose new uploads or pictures already saved in your old Gallery. Original files are reused without uploading them again.</p>
               </div>
             </div>
             <div className="media-library__selection-toolbar">
@@ -463,7 +497,7 @@ export default function MediaLibraryPage() {
                     </div>
                     <div className="media-library__tile-body">
                       <strong title={asset.name}>{asset.name}</strong>
-                      <small>{asset.source === 'drive' ? 'Google Drive' : 'Device'} · {updatedAtLabel(asset.createdAt)}</small>
+                      <small>{asset.source === 'drive' ? 'Google Drive' : asset.source === 'gallery' ? 'Existing album' : asset.source === 'promo-gallery' ? 'Original gallery' : 'Device'} · {updatedAtLabel(asset.createdAt)}</small>
                       <div className="media-library__tile-actions">
                         <button className="button button--secondary button--small" type="button"
                           onClick={() => void navigator.clipboard.writeText(asset.url)
