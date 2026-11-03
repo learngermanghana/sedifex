@@ -65,7 +65,8 @@ export const integrationGallery = functions.https.onRequest(async (req, res): Pr
 
   const expected = INTEGRATION_CONTRACT_VERSION.value() || '2026-04-13'
   const received = cleanIntegrationText(req.get('x-sedifex-contract-version'), 80)
-  if (received && received !== expected) {
+  const publicAliasRequested = req.query.slug !== undefined || req.query.siteSlug !== undefined
+  if (received !== expected && (!publicAliasRequested || Boolean(received))) {
     res.status(400).json({ error: 'contract-version-mismatch', expectedVersion: expected, receivedVersion: received })
     return
   }
