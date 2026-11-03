@@ -109,3 +109,6 @@ export { receiveStock } from './pos/receiveStock'
 export { voidSale } from './pos/voidSale'
 
 export { getBusinessSetupChecklist, setBusinessSetupStepSkipped } from './businessSetup'
+
+export { deliverChatgptBookingReminder } from './chatgptBookingReminder'
+

@@ -2,6 +2,9 @@ name: ChatGPT integration
 on:
   pull_request:
     paths:
+      - 'functions/src/chatgptBookingReminder.ts'
+      - 'functions/src/notifications.ts'
+      - 'functions/test/chatgptBookingReminder.test.js'
       - 'web/server/chatgpt/**'
       - 'web/shared/chatgpt-scopes.ts'
       - 'web/api/chatgpt.ts'
@@ -29,6 +32,10 @@ jobs:
         working-directory: web
       - run: npm run test:chatgpt
         working-directory: web
+      - run: npm ci --ignore-scripts
+        working-directory: functions
+      - run: node test/chatgptBookingReminder.test.js
+        working-directory: functions
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -39,3 +46,4 @@ jobs:
           firebase emulators:exec --config firebase.event-planning-ci.json
           --only firestore,auth --project sedifex-ci
           "cd web && RUN_CHATGPT_EMULATOR_TESTS=1 npm exec vitest run tests/chatgpt-access.rules.emulator.test.ts"
+
