@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { uploadProductImage } from '../api/productImageUpload'
+import MediaAssetPicker from '../components/MediaAssetPicker'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import './AccountOverview.css'
@@ -276,6 +277,7 @@ export default function GallerySettings() {
               <form className="account-overview__website-sync-test" onSubmit={addImage}>
                 <label><span>Upload image</span><input type="file" accept="image/*" onChange={event => setImageFile(event.target.files?.[0] ?? null)} /></label>
                 <button type="button" className="button button--secondary" disabled={!imageFile || uploading} onClick={() => void uploadImage()}>{uploading ? 'Uploading…' : 'Upload image'}</button>
+                <MediaAssetPicker storeId={storeId} disabled={busy || uploading} onSelect={url => setImageUrl(url)} />
                 <label><span>Image URL</span><input type="url" value={imageUrl} onChange={event => setImageUrl(event.target.value)} /></label>
                 <label><span>Alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} /></label>
                 <label><span>Caption</span><input value={imageCaption} onChange={event => setImageCaption(event.target.value)} /></label>
