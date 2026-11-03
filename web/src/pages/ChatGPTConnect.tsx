@@ -32,7 +32,7 @@ export default function ChatGPTConnect() {
  }
  return <main style={{maxWidth:480,margin:'6vh auto',padding:24}}>
   <h1>Connect Sedifex to ChatGPT</h1>
-  <p>ChatGPT requests the Sedifex permissions listed below. Merchant actions apply only to stores you own; appointment access applies only to your ChatGPT bookings.</p>
+  <p>ChatGPT requests the Sedifex permissions listed below. Business management actions apply only to stores you own. Booking access is limited to appointments you create through ChatGPT.</p>
   <p><strong>Permissions:</strong> {scope.split(' ').filter(Boolean).map(s => scopeDescriptions[s as keyof typeof scopeDescriptions] || s).join(' ')}</p>
   <p>Your password is sent only to Firebase Authentication, never to ChatGPT.</p>
   {!signedIn&&<form onSubmit={e=>{e.preventDefault();void approve()}}>
