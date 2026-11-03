@@ -72,11 +72,11 @@ const NAV_GROUPS: Array<{ id: NavGroupId; label: string; itemIds: string[] }> = 
   {
     id: 'website',
     label: 'Website',
-    itemIds: ['integrations', 'blog', 'bulk-email', 'bulk-messaging', 'automations'],
+    itemIds: ['integrations', 'media-library', 'blog', 'bulk-email', 'bulk-messaging', 'automations'],
   },
   {
     id: 'manage',
-    label: 'Account & management',
+    label: 'Settings & management',
     itemIds: ['donor-management', 'volunteers', 'support-requests', 'account'],
   },
 ]
@@ -174,7 +174,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           type: 'module',
           target: '/account',
           sortOrder: 20,
-          label: 'Account',
+          label: 'Settings',
           end: true,
           rolesAllowed: [role],
         },
@@ -207,7 +207,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       if (manageGroup) {
         manageGroup.items.push(...remaining)
       } else {
-        groups.push({ id: 'manage', label: 'Account & management', itemIds: [], items: remaining } as (typeof groups)[number])
+        groups.push({ id: 'manage', label: 'Settings & management', itemIds: [], items: remaining } as (typeof groups)[number])
       }
     }
     return groups
