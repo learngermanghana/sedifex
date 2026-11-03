@@ -17,7 +17,7 @@ The latest interface focuses on six daily actions:
 
 ## 1. Latest navigation model
 
-Sedifex navigation is module-based. The owner can go to **Account → Navigation settings**, choose a business type, then tick only the pages that should appear in the sidebar. The sidebar also supports search, mobile menu behavior, and a desktop **Hide navigation** control for a cleaner workspace.
+Sedifex navigation is module-based. The owner can go to **Settings → Navigation settings**, choose a business type, then tick only the pages that should appear in the sidebar. The sidebar also supports search, mobile menu behavior, and a desktop **Hide navigation** control for a cleaner workspace.
 
 Navigation settings are grouped like this:
 
@@ -26,8 +26,10 @@ Navigation settings are grouped like this:
 | **Daily work** | Dashboard, Reports, Items (owner), Inventory (staff), Sell, Customers, Bookings |
 | **Documents, payments & expenses** | Quick Pay, Invoices, Receipts, Expenses, Payments, Donor management, Funds ledger |
 | **Bookings, registration & cases** | Upcoming events, Student registration, Volunteers, Support requests |
-| **Website & marketing** | Integrations, Blog, SMS, Bulk email |
-| **Account** | Account |
+| **Website & marketing** | Integrations, Media Library (optional), Blog, SMS, Bulk email |
+| **Settings** | Settings (always available to the owner) |
+
+The page formerly labeled **Business account** is now **Settings**, at the same `/account` URL. The owner can tick **Media Library** under Website & marketing and save; it appears in the sidebar's Website section for permitted users. Untick it to hide that menu entry without deleting pictures or albums. Media Library opens `/media-library` for device and Google Drive uploads and photo/album management.
 
 Core modules now include:
 
@@ -64,7 +66,7 @@ Important: the visual **Website Builder is retired**. Existing integration APIs 
 
 ## 2. Industry presets and labels
 
-Sedifex can use the same core modules but rename them based on business type. Choose the business type in **Account → Navigation settings**, then use **Use recommended pages**, **Show all pages**, or manual checkboxes to control the sidebar.
+Sedifex can use the same core modules but rename them based on business type. Choose the business type in **Settings → Navigation settings**, then use **Use recommended pages**, **Show all pages**, or manual checkboxes to control the sidebar.
 
 | Industry | Common navigation meaning |
 |---|---|
@@ -135,7 +137,7 @@ Staff usually work with daily operations:
 - Blog
 - Donor management and funds ledger where enabled
 
-The owner can adjust modules from **Account → Navigation settings**. If a trial has ended, the app limits navigation to the billing/account recovery path and the blog until payment is updated.
+The owner can adjust modules from **Settings → Navigation settings**. If a trial has ended, the app limits navigation to the billing/account recovery path and the blog until payment is updated.
 
 ---
 
@@ -172,7 +174,7 @@ Go to **Account** and confirm:
 
 ### Step 2: Choose the right navigation
 
-Go to **Account → Navigation settings** and:
+Go to **Settings → Navigation settings** and:
 
 1. Pick the business type: **Retail / Shop**, **Travel**, **NGO**, or **School**.
 2. Click **Use recommended pages** for the selected business type, or **Show all pages** if the team needs everything.
@@ -312,7 +314,7 @@ Only owners can void completed sales. A void cannot itself be undone, and attemp
 
 ## 7. Key notes for the latest interface
 
-- **Account → Navigation settings** is where owners choose the business type and tick sidebar pages.
+- **Settings → Navigation settings** is where owners choose the business type and tick sidebar pages.
 - **Items** is the source for products, services, courses, packages, campaigns, trips, and catalog records.
 - **Ask Sedifex** can search connected items, prepare safe item edits, and upload product images into open item forms.
 - **Payments** is owner-only and is used for website, Quick Pay, booking, registration, and checkout payment activity.
