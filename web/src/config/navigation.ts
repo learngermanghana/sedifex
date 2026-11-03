@@ -48,7 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'bulk-email', label: 'Bulk email', type: 'module', target: '/bulk-email', rolesAllowed: ['owner'], sortOrder: 80 },
   { id: 'donor-management', label: 'Donor management', type: 'module', target: '/donor-management', rolesAllowed: ['owner', 'staff'], sortOrder: 90 },
   { id: 'funds-ledger', label: 'Funds ledger', type: 'module', target: '/funds-ledger', rolesAllowed: ['owner', 'staff'], sortOrder: 105 },
-  { id: 'account', label: 'Business account', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
+  { id: 'account', label: 'Settings', type: 'module', target: '/account', rolesAllowed: ['owner'], sortOrder: 110 },
 ]
 
 const INDUSTRY_LABELS: Record<Industry, Partial<Record<string, string>>> = {
@@ -136,7 +136,7 @@ export function resolveNavigation(input: NavigationResolverInput): NavItem[] {
     const customLabel = workspaceProfile.customLabels?.[item.target]?.trim()
     const aliasLabel = aliasLabels[item.target]
     const industrySortOrder = INDUSTRY_SORT_ORDERS[workspaceProfile.industry]?.[item.id]
-    return toShellNavItem({ ...item, label: customLabel || aliasLabel || item.label, sortOrder: industrySortOrder ?? item.sortOrder })
+    return toShellNavItem({ ...item, label: item.id === 'account' ? 'Settings' : (customLabel || aliasLabel || item.label), sortOrder: industrySortOrder ?? item.sortOrder })
   })
   const customItems = (workspaceProfile.customNavItems ?? []).filter(item => {
     if (!item.roles_allowed.includes(role)) return false
