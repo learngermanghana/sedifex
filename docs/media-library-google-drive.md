@@ -25,6 +25,30 @@ Google Cloud Storage bucket, so there is no new always-on worker or storage prov
 Imported media is *not* automatically published to a website or album. Stored
 image URLs are publicly fetchable and should never contain private documents.
 
+## Editing existing albums
+
+From **Media Library**, select an existing gallery album and choose **Edit album**.
+Changes are saved to the same store-scoped records that the original Gallery
+settings page uses.
+
+- Rename the album, update the description, publish or hide it, and select a
+  cover from the album's published pictures. Save with **Save album changes**.
+- In **Pictures in this album**, edit a photo's alt text, caption and published
+  flag, move it earlier or later, or remove it from the album.
+- Removing a picture affects only the gallery reference. The original media
+  file stays in the Media Library and can be reused on another album or product.
+- Removing or hiding a cover photo automatically chooses the next published
+  photo as the cover, or clears it when none remain.
+- Use **Add more from Media Library** to select and publish more photos to
+  the chosen album, then the editor refreshes the album's photo list.
+
+The galleryAlbums.isPublished and galleryImages.isPublished flags should be
+respected by connected websites when rendering public galleries. The existing
+/v1IntegrationProducts endpoint continues to expose product image URLs when
+those images have been assigned to a product. The separate legacy
+/integrationGallery endpoint still requires verification/implementation
+before promising automatic gallery syncing to external sites.
+
 ## One-time Google Cloud setup for Sedifex (not per store)
 
 Use a Google Cloud project that Sedifex controls.
