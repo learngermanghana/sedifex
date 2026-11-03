@@ -136,16 +136,15 @@ export function buildPublicGallery(
     selectedUrls.set(image.albumId, urls)
   }
 
-  const outputAlbums = albums
-    .map(album => {
-      const selectedImages = selected.filter(image => image.albumId === album.id)
-      if (!selectedImages.length) return null
-      const validCover = album.coverImageUrl && selectedUrls.get(album.id)?.has(album.coverImageUrl)
-        ? album.coverImageUrl
-        : selectedImages[0].url
-      return { ...album, coverImageUrl: validCover, images: selectedImages }
-    })
-    .filter((album): album is GalleryAlbum => album !== null)
+  const outputAlbums = albums.reduce<GalleryAlbum[]>((acc, album) => {
+    const selectedImages = selected.filter(image => image.albumId === album.id)
+    if (!selectedImages.length) return acc
+    const validCover = album.coverImageUrl && selectedUrls.get(album.id)?.has(album.coverImageUrl)
+      ? album.coverImageUrl
+      : selectedImages[0].url
+    acc.push({ ...album, coverImageUrl: validCover, images: selectedImages })
+    return acc
+  }, [])
 
   return {
     albums: outputAlbums,
