@@ -1007,7 +1007,7 @@ export default function AccountOverview({
   if (storeLoading) {
     return (
       <div className="account-overview">
-        <Heading>Business account</Heading>
+        <Heading>Settings</Heading>
         <p role="status" aria-live="polite">
           Loading workspace…
         </p>
@@ -1018,7 +1018,7 @@ export default function AccountOverview({
   if (!storeId) {
     return (
       <div className="account-overview" role="status">
-        <Heading>Business account</Heading>
+        <Heading>Settings</Heading>
         <p>Select a workspace to view account details.</p>
       </div>
     )
@@ -1835,7 +1835,7 @@ export default function AccountOverview({
   return (
     <div className="account-overview">
       <header className="account-overview__page-header">
-      <Heading>{isPromotionsView ? 'Promotions' : 'Business account'}</Heading>
+      <Heading>{isPromotionsView ? 'Promotions' : 'Settings'}</Heading>
 
       {profile && (
         <p className="account-overview__subtitle">
@@ -1890,7 +1890,7 @@ export default function AccountOverview({
 
 
       {!isPromotionsView && (
-        <nav className="account-overview__tabs account-overview__tabs--sections" aria-label="Account sections">
+        <nav className="account-overview__tabs account-overview__tabs--sections" aria-label="Settings sections">
           <button
             type="button"
             className={`account-overview__tab ${activeTab === 'workspace' ? 'is-active' : ''}`}
