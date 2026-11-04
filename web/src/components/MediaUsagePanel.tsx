@@ -9,6 +9,7 @@ type UsageResult = {
   albumRefs: UsageItem[]
   productRefs: UsageItem[]
   promoRefs: UsageItem[]
+  siteRefs: UsageItem[]
   partial: boolean
 }
 
@@ -63,7 +64,7 @@ export default function MediaUsagePanel({
     return () => { current = false }
   }, [storeId, selected?.url])
 
-  const used = (result?.albumRefs.length || 0) + (result?.productRefs.length || 0) + (result?.promoRefs.length || 0)
+  const used = (result?.albumRefs.length || 0) + (result?.productRefs.length || 0) + (result?.promoRefs.length || 0) + (result?.siteRefs?.length || 0)
 
   return (
     <div className="media-library__usage">
@@ -108,9 +109,21 @@ export default function MediaUsagePanel({
               <p>{result.promoRefs.length} photo reference(s) · <Link to="/promo">Open promo</Link></p>
             </div>
           ) : null}
+          {result.siteRefs?.length ? (
+            <div>
+              <h3>Website and blog</h3>
+              {result.siteRefs.map(item => (
+                <p key={item.type + ':' + item.id}>
+                  {item.name} · {item.type === 'blog' ? <Link to="/blog">Open blog</Link> :
+                    item.type === 'hero' ? <Link to="/website-hero-slides">Open hero slides</Link> :
+                    <Link to="/promo">Open store promo</Link>}
+                </p>
+              ))}
+            </div>
+          ) : null}
           <p className="media-library__help">
             {result.partial ? 'Some collections exceeded the lookup limit. Additional references may exist. ' : ''}
-            URLs copied to blog content, other Sedifex fields or external websites cannot be reliably detected here.
+            URLs embedded inside rich-text content, other custom fields or external websites cannot be reliably detected here.
             Removing a picture from an album is different from deleting the original from storage.
           </p>
         </div>
