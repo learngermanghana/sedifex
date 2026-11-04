@@ -32,7 +32,8 @@ The single store-scoped `/media-library` page has four permanent tabs:
 - **All pictures** browses imported and older gallery photos, permits URL copy and choosing a named album to publish existing assets. Users can open Where used for a particular photo.
 - **Albums** lists and opens every existing gallery album (with its cover and published state), creates albums, and directly embeds the existing full album editor for titles, descriptions, covers, captions, order and visibility. Deleting an album removes its gallery references in chunks while retaining the original image files.
 - **Upload** retains one-time device/Google Drive import and in-browser optimization. Imported pictures are added to the same existing `mediaAssets` collection.
-- **Where used** checks the selected picture on demand against Sedifex album references, covers, promo galleries and item images. It is not a background job. Queries are capped for affordability and may report incomplete coverage; manually pasted external URLs and blog HTML are not tracked.
+  Item, service, blog, promo and hero image uploads now call the same optimized content-addressed upload service; their inline selectors can also reuse existing library pictures.
+- **Where used** checks the selected picture on demand against Sedifex album references, covers, promo galleries, products/services, blog featured images, website hero slides and store promo covers. It is not a background job. Queries are capped for affordability and may report incomplete coverage; manually pasted external URLs and rich-text HTML are not tracked.
 
 Old bookmarks to `/gallery` now redirect to `/media-library?tab=albums`, retaining any album query. Existing album/image records are untouched; no copying or migration is required. Product and service editors keep their inline **Choose from Media Library** picker, now linking directly to the Upload tab for new files. Do not create separate storage buckets for gallery or product usage.
 
