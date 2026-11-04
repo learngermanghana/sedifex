@@ -71,7 +71,7 @@ jobs:
         working-directory: web
 
       - name: Test Media Library imports and upload authorization
-        run: npm exec vitest run src/utils/mediaLibrary.test.ts src/api/productImageUpload.test.ts api/uploads.test.ts api/media-assets/delete.test.ts src/components/__tests__/MediaAlbumEditor.test.tsx
+        run: npm exec vitest run src/utils/mediaLibrary.test.ts src/api/productImageUpload.test.ts api/uploads.test.ts api/media-assets/delete.test.ts api/media-assets/usage.test.ts src/utils/mediaManagerTabs.test.ts src/components/__tests__/MediaAlbumEditor.test.tsx
         working-directory: web
 
       - name: Test shared Tailwind utility runtime
