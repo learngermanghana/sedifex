@@ -72,7 +72,7 @@ export default function MediaAssetPicker({
       </button>
       {open ? (
         <div style={{ border: '1px solid #d6dde6', borderRadius: 12, padding: 12, marginTop: 10 }}>
-          <p style={{ marginTop: 0 }}>Choose an existing photo, or <Link to="/media-library">upload many photos from your device or Google Drive</Link>.</p>
+          <p style={{ marginTop: 0 }}>Choose an existing photo, or <Link to="/media-library?tab=upload">upload many photos from your device or Google Drive</Link>.</p>
           {loading ? <p>Loading photos…</p> : null}
           {error ? <p role="alert">{error}</p> : null}
           {!loading && !error && items.length === 0 ? <p>No photos imported yet.</p> : null}
