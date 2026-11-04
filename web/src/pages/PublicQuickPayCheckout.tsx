@@ -225,6 +225,7 @@ export default function PublicQuickPayCheckout() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [challengeVersion, setChallengeVersion] = useState(0);
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -535,6 +536,7 @@ export default function PublicQuickPayCheckout() {
         throw new Error(payload?.error || `Checkout failed (${response.status})`);
       }
 
+      if (TURNSTILE_SITE_KEY && paymentMethod === "ONLINE") setChallengeVersion(value => value + 1);
       if (paymentMethod === "CASH" || payload.cashCheckout) {
         window.location.href = returnUrl;
         return;
@@ -552,6 +554,7 @@ export default function PublicQuickPayCheckout() {
       window.location.href = checkoutUrl;
     } catch (checkoutError) {
       console.error("[quick-pay] Checkout failed", checkoutError);
+      if (TURNSTILE_SITE_KEY) setChallengeVersion(value => value + 1);
       setError(
         checkoutError instanceof Error
           ? checkoutError.message
@@ -572,12 +575,12 @@ export default function PublicQuickPayCheckout() {
             <h1 className="qp-success-title">
               {isCashReturn
                 ? "Cash order sent to the store"
-                : "Thank you for your payment"}
+                : "Payment submitted for verification"}
             </h1>
             <p className="qp-success-copy">
               {isCashReturn
                 ? "Your cash payment request has been recorded. Please pay the store directly. The store will confirm cash received in Sedifex."
-                : "Your payment has been received or is being confirmed. The business will receive your payment record in Sedifex."}
+                : "Your payment is being checked with Paystack. The business will only mark it paid after confirmation."}
             </p>
             {paymentReference ? (
               <div className="qp-success-reference">
@@ -982,7 +985,7 @@ export default function PublicQuickPayCheckout() {
             )}
 
             {paymentMethod === "ONLINE" && TURNSTILE_SITE_KEY ? (
-              <CheckoutBotChallenge onToken={setTurnstileToken} />
+              <CheckoutBotChallenge key={challengeVersion} onToken={setTurnstileToken} />
             ) : null}
             {error ? <p className="qp-error">{error}</p> : null}
 
