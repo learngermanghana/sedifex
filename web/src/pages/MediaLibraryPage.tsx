@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy,
-  query, serverTimestamp, setDoc, where, writeBatch,
+  addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy,
+  query, serverTimestamp, where, writeBatch,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -11,12 +11,9 @@ import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import MediaAlbumEditor, { type MediaGalleryAlbum } from '../components/MediaAlbumEditor'
 import MediaUsagePanel from '../components/MediaUsagePanel'
 import { resolveMediaManagerTab, type MediaManagerTab } from '../utils/mediaManagerTabs'
-import { uploadProductImage } from '../api/productImageUpload'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
 import { downloadDriveImage, pickGoogleDriveImages, type DriveImage } from '../api/googleDriveMedia'
-import {
-  MEDIA_BATCH_LIMIT, MEDIA_IMPORT_CONCURRENCY, mediaFileExtension, mediaSha256,
-  optimizeMediaFile, uploadWithRetry,
-} from '../utils/mediaLibrary'
+import { MEDIA_BATCH_LIMIT, MEDIA_IMPORT_CONCURRENCY } from '../utils/mediaLibrary'
 import './AccountOverview.css'
 import './MediaLibraryPage.css'
 
@@ -199,30 +196,17 @@ export default function MediaLibraryPage() {
             ? await downloadDriveImage(item.driveImage, item.token)
             : null)
           if (!original) throw new Error('Image is unavailable. Select it again.')
-          const optimized = await optimizeMediaFile(original)
-          const hash = await mediaSha256(optimized)
-          const assetRef = doc(db, 'stores', activeStoreId, 'mediaAssets', hash)
-          const previous = await getDoc(assetRef)
-          if (previous.exists() && typeof previous.data().url === 'string') {
+          const saved = await uploadToSharedMediaLibrary(
+            original,
+            activeStoreId,
+            item.source,
+            item.source === 'drive' ? item.driveImage?.id || null : null,
+          )
+          if (saved.alreadyThere) {
             alreadyThere += 1
             setTask(index, 'skipped', 'Already in your media library')
             continue
           }
-
-          const storagePath = 'stores/' + activeStoreId + '/media/' + hash + mediaFileExtension(optimized)
-          const token = await auth.currentUser?.getIdToken()
-          if (!token) throw new Error('Sign in to Sedifex before importing pictures.')
-          const url = await uploadWithRetry(() => uploadProductImage(optimized, { storagePath, authToken: token }))
-          await setDoc(assetRef, {
-            url,
-            name: original.name.slice(0, 220),
-            source: item.source,
-            sourceId: item.source === 'drive' ? item.driveImage?.id || null : null,
-            sha256: hash,
-            size: optimized.size,
-            mimeType: optimized.type,
-            createdAt: serverTimestamp(),
-          })
           imported += 1
           setTask(index, 'done', 'Ready for your website')
         } catch (uploadError) {
