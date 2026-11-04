@@ -18,6 +18,7 @@ function tool(name: string, description: string, properties: Row, required: stri
 }
 export const businessTools = [
   tool('list_inventory', 'Read product prices and stock in your store. Paginated; follow nextCursor. Services are excluded. Unknown stock is returned as null.', { ...store, ...page }, ['storeId'], 'inventory:read'),
+  tool('update_product_price', 'Change the catalog price of one owned-store product (not a service) after showing old and new price and receiving explicit approval. Rechecks the current price and currency atomically; never records a sale or collects payment. New price applies to future purchases.', { ...store, productId: string, expectedUnitPrice: number, expectedCurrency: string, newUnitPrice: { type: 'number', minimum: 0, maximum: 100000000 }, ...confirm }, ['storeId','productId','expectedUnitPrice','expectedCurrency','newUnitPrice','confirmed','requestId'], 'inventory:write', false, true),
   tool('record_sale', 'Record an already completed offline sale of one product/service, using its current catalog price. Show item, quantity, price, payment method and total, then obtain explicit approval. Atomically decrements product stock and records a ledger entry. Does not charge a customer or verify receipt of money. Repeat per distinct product.', { ...store, productId: string, quantity: { type: 'integer', minimum: 1, maximum: 10000 }, expectedUnitPrice: number, expectedCurrency: string, paymentMethod: { type: 'string', enum: ['cash', 'mobile_money', 'bank_transfer', 'card'] }, ...confirm }, ['storeId','productId','quantity','expectedUnitPrice','expectedCurrency','paymentMethod','confirmed','requestId'], 'sales:write', false, true),
   tool('summarize_sales', 'Summarize recorded sales between inclusive ISO startAt and exclusive ISO endAt. Returns totals for this page, separated by currency; follow every nextCursor and sum page totals for a complete report. Recorded sale value is not verified payment-provider revenue. Voided/refunded sales excluded.', { ...store, ...page, startAt: string, endAt: string }, ['storeId','startAt','endAt'], 'sales:read'),
   tool('list_store_bookings', 'Merchant view of ALL booking channels in one selected source, including existing Sedifex appointments. Read all four sources for full coverage and deduplicate mirrors by bookingId/reference. Paginated. Orders include only service bookings.', { ...store, source: booking.source, ...page }, ['storeId','source'], 'merchant-bookings:read'),
@@ -70,6 +71,19 @@ export async function executeBusinessTool(db: Firestore, name: string, args: Row
     if (args.cursor) q = q.startAfter(id(args.cursor))
     const items = await q.get()
     return { items: items.docs.filter(d => !['service','SERVICE'].includes(d.data().itemType) && d.data().type !== 'SERVICE').map(d => ({ productId:d.id, name:d.data().name || null, price:d.data().price ?? null, currency:currency(d.data()), stockCount:typeof d.data().stockCount === 'number' ? d.data().stockCount : null })), nextCursor:items.size === 100 ? items.docs[99].id : null }
+  }
+  if (name === 'update_product_price') {
+    const validPrice = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100000000 && Math.abs(Math.round(value * 100) - value * 100) < 1e-8
+    if (!validPrice(args.expectedUnitPrice) || !validPrice(args.newUnitPrice) || !str(args.expectedCurrency)) fail('Invalid product price or currency')
+    const productRef = db.collection('products').doc(id(args.productId))
+    return mutate(db, uid, name, args, async tx => {
+      const product = await tx.get(productRef), p = product.data() || {}
+      if (!product.exists || p.storeId !== storeId || p.itemType === 'service' || p.type === 'SERVICE') fail('Product not found')
+      if (p.price !== args.expectedUnitPrice || currency(p) !== args.expectedCurrency || currency(p) === 'UNKNOWN') fail('Price/currency changed; read inventory again and obtain approval')
+      if (p.price === args.newUnitPrice) fail('New price must differ from current price')
+      tx.update(productRef, { price: args.newUnitPrice, updatedAt: Timestamp.now() })
+      return { productId: product.id, name: p.name || null, previousUnitPrice: p.price, newUnitPrice: args.newUnitPrice, currency: currency(p), saleRecorded: false }
+    })
   }
   if (name === 'record_sale') {
     if (!Number.isInteger(args.quantity) || args.quantity < 1 || args.quantity > 10000 || !['cash','mobile_money','bank_transfer','card'].includes(args.paymentMethod)) fail('Invalid sale details')
