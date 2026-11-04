@@ -5,6 +5,7 @@ let role = 'owner'
 let homeStore = 'store-1'
 let galleryUsed = true
 let productUsed = true
+let blogUsed = false
 const verifyIdToken = vi.fn(async () => ({ uid: 'owner-1' }))
 
 const record = (data: Record<string, unknown>, id = 'record-1') => ({
@@ -24,6 +25,9 @@ vi.mock('firebase-admin/firestore', () => ({
       }
       if (name === 'products') return {
         where: () => ({ limit: () => ({ get: async () => snapshot(productUsed ? [record({ name: 'Test service', imageUrl: 'https://example.com/photo.jpg' })] : []) }) }),
+      }
+      if (name === 'blogPosts') return {
+        where: () => ({ limit: () => ({ get: async () => snapshot(blogUsed ? [record({ title: 'My blog', imageUrl: 'https://example.com/photo.jpg' })] : []) }) }),
       }
       if (name === 'stores') return {
         doc: () => ({
@@ -69,6 +73,7 @@ describe('on-demand media usage lookup', () => {
     homeStore = 'store-1'
     galleryUsed = true
     productUsed = true
+    blogUsed = false
   })
 
   it('returns known album and product references', async () => {
@@ -78,6 +83,14 @@ describe('on-demand media usage lookup', () => {
     expect(response.payload.albumRefs).toEqual([{ id: 'album-1', name: 'My album', type: 'album' }])
     expect(response.payload.productRefs[0].name).toBe('Test service')
     expect(response.payload.partial).toBe(false)
+  })
+
+  it('shows blog post references when present', async () => {
+    blogUsed = true
+    const response = res()
+    await handler(validRequest() as any, response as any)
+    expect(response.statusCode).toBe(200)
+    expect(response.payload.siteRefs).toEqual([{ id: 'record-1', name: 'My blog', type: 'blog' }])
   })
 
   it('does not invent references when picture is unused', async () => {
