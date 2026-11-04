@@ -19,7 +19,9 @@ import {
 import { db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { requestAiAdvisor } from '../api/aiAdvisor'
-import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
+import { ProductImageUploadError } from '../api/productImageUpload'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
+import MediaAssetPicker from '../components/MediaAssetPicker'
 
 const BLOG_AUTOSAVE_VERSION = 1
 const BLOG_AUTOSAVE_DELAY_MS = 4000
@@ -377,9 +379,8 @@ export default function BlogPage() {
     setUploadStatus(`Uploading image: ${file.name}`)
 
     try {
-      const uploadedUrl = await uploadProductImage(file, {
-        storagePath: storeId ? `stores/${storeId}/blog` : 'blog',
-      })
+      if (!storeId) throw new Error('Select a store to upload blog photos.')
+      const { url: uploadedUrl } = await uploadToSharedMediaLibrary(file, storeId)
       setImageUrl(uploadedUrl)
       setUploadStatus(`Image uploaded: ${file.name}`)
     } catch (error) {
@@ -607,6 +608,13 @@ export default function BlogPage() {
                   </button>
                 ) : null}
               </div>
+              <MediaAssetPicker storeId={storeId} disabled={uploadingImage}
+                onSelect={url => {
+                  setImageUrl(url)
+                  setCustomImageSelected(true)
+                  setSelectedFileName(null)
+                  setUploadStatus('Picture selected from Media Manager. Save the blog post to publish it.')
+                }} />
               {selectedFileName ? <p className="blog-page__upload-status">File: {selectedFileName}</p> : null}
               {uploadStatus ? <p className="blog-page__upload-status">{uploadStatus}</p> : null}
               {imageUrl ? <SafeFirebaseImage className="blog-page__image-preview" src={imageUrl} alt="Selected blog featured preview" /> : null}
