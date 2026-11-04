@@ -25,9 +25,20 @@ Google Cloud Storage bucket, so there is no new always-on worker or storage prov
 Imported media is *not* automatically published to a website or album. Stored
 image URLs are publicly fetchable and should never contain private documents.
 
-## Redesigned three-step Media Library
+## Central Media Manager (Pictures · Albums · Upload · Where used)
 
-The Media Library is organized into **Import pictures**, **Albums**, and **Select & publish** tabs. Device uploads support drag and drop as well as file picking. Existing Google Drive imports and album editing are unchanged.
+The single store-scoped `/media-library` page has four permanent tabs:
+
+- **All pictures** browses imported and older gallery photos, permits URL copy and choosing a named album to publish existing assets. Users can open Where used for a particular photo.
+- **Albums** lists and opens every existing gallery album (with its cover and published state), creates albums, and directly embeds the existing full album editor for titles, descriptions, covers, captions, order and visibility. Deleting an album removes its gallery references in chunks while retaining the original image files.
+- **Upload** retains one-time device/Google Drive import and in-browser optimization. Imported pictures are added to the same existing `mediaAssets` collection.
+- **Where used** checks the selected picture on demand against Sedifex album references, covers, promo galleries and item images. It is not a background job. Queries are capped for affordability and may report incomplete coverage; manually pasted external URLs and blog HTML are not tracked.
+
+Old bookmarks to `/gallery` now redirect to `/media-library?tab=albums`, retaining any album query. Existing album/image records are untouched; no copying or migration is required. Product and service editors keep their inline **Choose from Media Library** picker, now linking directly to the Upload tab for new files. Do not create separate storage buckets for gallery or product usage.
+
+## Previous three-step Media Library design (superseded)
+
+The previous Media Library was organized into **Import pictures**, **Albums**, and **Select & publish** tabs. Device uploads support drag and drop as well as file picking. Existing Google Drive imports and album editing are unchanged.
 
 Store owners can select **Delete picture** on an original device/Drive upload. The action requires confirmation and calls the authenticated, on-demand `/api/media-assets/delete` endpoint. It permanently deletes the Sedifex storage object and media metadata only if it is not referenced by a named gallery, album cover, promo gallery, or known product image. If a reference exists, deletion is blocked and the owner should first remove the picture from the connected album or item. The original image in Google Drive remains untouched.
 
