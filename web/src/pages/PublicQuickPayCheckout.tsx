@@ -1,4 +1,5 @@
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { resumePaystackTransaction } from "../utils/paystack";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import "./PublicQuickPayCheckout.css";
 
@@ -42,6 +43,59 @@ const FUNCTION_BASE_URL =
 const CONTRACT_VERSION =
   import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || "2026-04-13";
 const DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT = 1.95;
+const TURNSTILE_SITE_KEY = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, options: {
+        sitekey: string;
+        callback: (token: string) => void;
+        "expired-callback": () => void;
+        "error-callback": () => void;
+      }) => string;
+      remove: (id: string) => void;
+    };
+  }
+}
+
+/** Render the Cloudflare Turnstile challenge when configured. */
+function CheckoutBotChallenge({ onToken }: { onToken: (token: string) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !containerRef.current) return;
+    let active = true;
+    let widgetId: string | null = null;
+    const mount = () => {
+      if (!active || widgetId || !containerRef.current || !window.turnstile) return;
+      widgetId = window.turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: onToken,
+        "expired-callback": () => onToken(""),
+        "error-callback": () => onToken(""),
+      });
+    };
+    const existing = document.querySelector<HTMLScriptElement>('script[data-sedifex-turnstile]');
+    const script = existing || document.createElement("script");
+    script.addEventListener("load", mount);
+    if (!existing) {
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.dataset.sedifexTurnstile = "true";
+      document.head.appendChild(script);
+    }
+    mount();
+    return () => {
+      active = false;
+      script.removeEventListener("load", mount);
+      if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+      onToken("");
+    };
+  }, [onToken]);
+  return TURNSTILE_SITE_KEY ? <div ref={containerRef} aria-label="Payment security verification" /> : null;
+}
+
 
 const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = [
   "SERVICE",
@@ -170,6 +224,7 @@ export default function PublicQuickPayCheckout() {
   );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -305,6 +360,10 @@ export default function PublicQuickPayCheckout() {
   async function createCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    if (paymentMethod === "ONLINE" && TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError("Complete the payment security check first.");
+      return;
+    }
 
     const cleanCustomer: CustomerDetails = {
       name: customer.name.trim(),
@@ -364,6 +423,7 @@ export default function PublicQuickPayCheckout() {
             ? "Sedifex Quick Pay Cash"
             : "Sedifex Quick Pay",
         paymentMethod,
+        turnstileToken: paymentMethod === "ONLINE" ? turnstileToken : undefined,
         payment_method: paymentMethod,
         paymentProvider: paymentMethod === "CASH" ? "cash" : "paystack",
         payment_provider: paymentMethod === "CASH" ? "cash" : "paystack",
@@ -466,6 +526,7 @@ export default function PublicQuickPayCheckout() {
       const payload = (await response.json().catch(() => null)) as {
         authorizationUrl?: string;
         checkoutUrl?: string;
+        accessCode?: string | null;
         error?: string;
         cashCheckout?: boolean;
       } | null;
@@ -479,6 +540,13 @@ export default function PublicQuickPayCheckout() {
         return;
       }
 
+      // Inline V2 only resumes the server-issued access code.
+      if (payload.accessCode && await resumePaystackTransaction(payload.accessCode)) {
+        setStatus("Complete payment in the Paystack window. Your business gets confirmation after Paystack verifies it.");
+        setIsSubmitting(false);
+        return;
+      }
+      // Redirect fallback uses the same server-initialized Paystack transaction.
       const checkoutUrl = payload.authorizationUrl || payload.checkoutUrl;
       if (!checkoutUrl) throw new Error("Checkout URL was not returned.");
       window.location.href = checkoutUrl;
@@ -913,6 +981,9 @@ export default function PublicQuickPayCheckout() {
               </>
             )}
 
+            {paymentMethod === "ONLINE" && TURNSTILE_SITE_KEY ? (
+              <CheckoutBotChallenge onToken={setTurnstileToken} />
+            ) : null}
             {error ? <p className="qp-error">{error}</p> : null}
 
             <button
