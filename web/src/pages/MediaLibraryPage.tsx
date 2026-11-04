@@ -58,6 +58,9 @@ export default function MediaLibraryPage() {
   const [openingDrive, setOpeningDrive] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1)
+  const [dragging, setDragging] = useState(false)
+  const [deletingId, setDeletingId] = useState('')
 
   async function refresh(id: string) {
     setLoading(true)
@@ -137,6 +140,9 @@ export default function MediaLibraryPage() {
     setNewAlbumTitle('')
     setNewAlbumDescription('')
     setErrorMessage('')
+    setActiveStep(1)
+    setDragging(false)
+    setDeletingId('')
     if (storeId) void refresh(storeId)
   }, [storeId])
 
@@ -276,6 +282,33 @@ export default function MediaLibraryPage() {
     }
   }
 
+  async function deleteAsset(asset: Asset) {
+    if (!storeId || deletingId || busy || publishing || !['device', 'drive'].includes(asset.source)) return
+    if (!window.confirm('Permanently delete "' + asset.name + '" from this store? This cannot be undone. Pictures still used by albums or items cannot be deleted.')) return
+    setDeletingId(asset.id)
+    setErrorMessage('')
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) throw new Error('Sign in to delete pictures.')
+      const response = await fetch('/api/media-assets/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ storeId, assetId: asset.id }),
+      })
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { error?: string }
+        throw new Error(detail.error || 'Could not delete the picture.')
+      }
+      setAssets(previous => previous.filter(item => item.id !== asset.id))
+      setSelectedIds(previous => previous.filter(id => id !== asset.id))
+      publish({ tone: 'success', message: 'Picture permanently deleted from your store.' })
+    } catch (deleteError) {
+      setErrorMessage(messageFrom(deleteError))
+    } finally {
+      setDeletingId('')
+    }
+  }
+
   function toggleSelected(id: string) {
     setSelectedIds(previous => previous.includes(id)
       ? previous.filter(item => item !== id)
@@ -355,25 +388,58 @@ export default function MediaLibraryPage() {
   return (
     <main className="account-overview media-library">
       <header className="media-library__hero">
-        <span className="media-library__eyebrow">Sedifex / Website content</span>
-        <h1>Media Library</h1>
+        <span className="media-library__eyebrow">Website content <span aria-hidden="true">/</span> Media Library</span>
+        <h1>Your pictures, ready for the web.</h1>
         <p>Bring pictures from your device or Google Drive into one organized library. Create albums here, then choose which pictures to publish to your website gallery or products.</p>
       </header>
+
+      <nav className="media-library__steps" aria-label="Media Library steps">
+        {([
+          { step: 1 as const, name: 'Import pictures', detail: assets.length + ' pictures', complete: assets.length > 0 },
+          { step: 2 as const, name: 'Albums', detail: '', complete: hasAlbum },
+          { step: 3 as const, name: 'Select & publish', detail: '', complete: false },
+        ]).map(({ step, name, detail, complete }) => (
+          <button type="button" key={step}
+            className={'media-library__step' + (activeStep === step ? ' is-active' : '')}
+            aria-current={activeStep === step ? 'step' : undefined}
+            onClick={() => { setActiveStep(step); setErrorMessage('') }}>
+            <span className="media-library__step-dot" aria-hidden="true">{complete && activeStep !== step ? '✓' : step}</span>
+            <span>{name}</span>
+            {detail ? <small>{detail}</small> : null}
+          </button>
+        ))}
+      </nav>
 
       {!storeId && !isLoading ? <p className="media-library__notice">Select a store first.</p> : null}
       {errorMessage ? <p className="media-library__notice media-library__notice--error" role="alert">{errorMessage}</p> : null}
 
       {storeId ? (
         <>
-          <section className="account-overview__card media-library__panel" aria-labelledby="media-import-title">
+          {activeStep === 1 ? <section id="media-library-step-1" className="account-overview__card media-library__panel" aria-labelledby="media-import-title">
             <div className="media-library__section-heading">
               <div>
-                <h2 id="media-import-title">1. Import your pictures</h2>
+                <h2 id="media-import-title"><span className="media-library__section-number">1</span>Import your pictures</h2>
                 <p>Upload up to 100 JPEG, PNG, WebP or AVIF photos at once (25 MB source limit). Sedifex optimizes pictures for fast websites.</p>
               </div>
               <span className="media-library__count">{assets.length} pictures</span>
             </div>
-            <div className="media-library__actions">
+            <div className={'media-library__upload-zone' + (dragging ? ' is-dragging' : '')}
+              onDragEnter={event => { event.preventDefault(); setDragging(true) }}
+              onDragOver={event => { event.preventDefault(); setDragging(true) }}
+              onDragLeave={event => { event.preventDefault(); setDragging(false) }}
+              onDrop={event => {
+                event.preventDefault()
+                setDragging(false)
+                if (!busy && !openingDrive) {
+                  void importTasks(Array.from(event.dataTransfer.files).map(file => ({ name: file.name, source: 'device' as const, file })))
+                }
+              }}>
+              <div className="media-library__drop-instruction">
+                <span className="media-library__drop-icon" aria-hidden="true">↑</span>
+                <strong>Drop pictures here or choose files</strong>
+                <span>25 MB source limit per picture</span>
+              </div>
+              <div className="media-library__actions">
               <label className="button button--primary media-library__upload" aria-disabled={busy || openingDrive}>
                 Upload from device
                 <input aria-label="Select photos from device" type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple
@@ -394,7 +460,9 @@ export default function MediaLibraryPage() {
                   onClick={() => void importTasks(failedTasks)}>Retry {failedTasks.length} failed</button>
               ) : null}
             </div>
-            <p className="media-library__help">Google Drive import reads only the pictures you select. Imported photos are stored in Sedifex; original Drive files remain unchanged.</p>
+              </div>
+              <p className="media-library__help">Google Drive import reads only the pictures you select. Imported photos are stored in Sedifex; original Drive files remain unchanged.</p>
+            </div>
             {tasks.length > 0 ? (
               <div className="media-library__progress" aria-live="polite">
                 <div className="media-library__progress-label"><strong>{completed} / {tasks.length} processed</strong><span>{imported} new pictures imported</span></div>
@@ -408,12 +476,12 @@ export default function MediaLibraryPage() {
                 </div>
               </div>
             ) : null}
-          </section>
+          </section> : null}
 
-          <section className="account-overview__card media-library__panel" aria-labelledby="media-albums-title">
+          {activeStep === 2 ? <section id="media-library-step-2" className="account-overview__card media-library__panel" aria-labelledby="media-albums-title">
             <div className="media-library__section-heading">
               <div>
-                <h2 id="media-albums-title">2. Choose or create an album</h2>
+                <h2 id="media-albums-title"><span className="media-library__section-number">2</span>Choose or create an album</h2>
                 <p>Albums organize pictures on your website. You can create one without leaving this page.</p>
               </div>
               <Link to="/gallery" className="media-library__text-link">Manage all albums</Link>
@@ -456,15 +524,16 @@ export default function MediaLibraryPage() {
                 onUpdate={updated => setAlbums(previous => previous.map(album => album.id === updated.id ? updated : album))}
                 onClose={() => setEditingAlbumId('')} />
             ) : null}
-          </section>
+          </section> : null}
 
-          <section className="account-overview__card media-library__panel" aria-labelledby="media-pictures-title">
+          {activeStep === 3 ? <section id="media-library-step-3" className="account-overview__card media-library__panel" aria-labelledby="media-pictures-title">
             <div className="media-library__section-heading">
               <div>
-                <h2 id="media-pictures-title">3. Select and publish pictures</h2>
+                <h2 id="media-pictures-title"><span className="media-library__section-number">3</span>Select and publish pictures</h2>
                 <p>Choose new uploads or pictures already saved in your old Gallery. Original files are reused without uploading them again.</p>
               </div>
             </div>
+            <div className="media-library__workspace">
             <div className="media-library__selection-toolbar">
               <label className="media-library__select-all">
                 <input type="checkbox" checked={assets.length > 0 && selectedIds.length === assets.length}
@@ -473,10 +542,7 @@ export default function MediaLibraryPage() {
                 Select all ({assets.length})
               </label>
               <span className="media-library__selected-count">{selectedIds.length} selected</span>
-              <button type="button" className="button button--primary" disabled={!hasAlbum || !selectedAssets.length || publishing}
-                onClick={() => void addAssetsToAlbum(selectedAssets)}>
-                {publishing ? 'Publishing…' : 'Add selected to album'}
-              </button>
+              <button type="button" className="media-library__change-album" onClick={() => setActiveStep(2)}>Choose album</button>
             </div>
             {!hasAlbum ? <p className="media-library__notice">Choose or create a gallery album above to enable “Add to album”. You can still copy image URLs.</p> : null}
             {loading ? <p>Loading pictures…</p> : null}
@@ -489,10 +555,9 @@ export default function MediaLibraryPage() {
                     <div className="media-library__thumbnail">
                       <SafeFirebaseImage src={asset.url} alt={asset.name} />
                       <label className="media-library__tile-select">
-                        <input type="checkbox" checked={selected} disabled={publishing}
+                        <input type="checkbox" checked={selected} disabled={publishing || Boolean(deletingId)}
                           onChange={() => toggleSelected(asset.id)}
                           aria-label={'Select ' + asset.name} />
-                        <span>Select</span>
                       </label>
                     </div>
                     <div className="media-library__tile-body">
@@ -507,6 +572,13 @@ export default function MediaLibraryPage() {
                           disabled={!hasAlbum || publishing} onClick={() => void addAssetsToAlbum([asset])}>
                           {publishing ? 'Adding…' : 'Add to album'}
                         </button>
+                        {(asset.source === 'device' || asset.source === 'drive') ? (
+                          <button className="media-library__delete" type="button"
+                            disabled={Boolean(deletingId) || busy || publishing}
+                            onClick={() => void deleteAsset(asset)}>
+                            {deletingId === asset.id ? 'Deleting…' : 'Delete picture'}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </article>
@@ -514,7 +586,16 @@ export default function MediaLibraryPage() {
               })}
             </div>
             <p className="media-library__help">For product listings, open the product editor and select <strong>Choose from Media Library</strong>. Adding to a gallery album does not automatically attach a photo to a product.</p>
-          </section>
+            <div className="media-library__publish-bar">
+              <div><strong>{selectedIds.length} picture{selectedIds.length === 1 ? '' : 's'} selected</strong>
+                <span>{hasAlbum ? 'Ready for ' + activeAlbum?.title : 'Choose or create an album to continue'}</span></div>
+              <button type="button" className="button button--primary" disabled={!hasAlbum || !selectedAssets.length || publishing}
+                onClick={() => void addAssetsToAlbum(selectedAssets)}>
+                {publishing ? 'Publishing…' : 'Add selected to album'}
+              </button>
+            </div>
+            </div>
+          </section> : null}
         </>
       ) : null}
     </main>
