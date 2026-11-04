@@ -1,5 +1,6 @@
 export const scopeDescriptions = {
   'inventory:read': 'View your store inventory and stock.',
+  'inventory:write': 'Change catalog prices of products in stores you own after your approval.',
   'sales:read': 'Summarize recorded store sales.',
   'sales:write': 'Record offline sales you approve and update stock.',
   'merchant-bookings:read': 'View all appointments and customer contact details in stores you own.',
