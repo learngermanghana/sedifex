@@ -9,10 +9,14 @@ const tokenVerify = vi.fn(async () => ({ uid: 'owner-1' }))
 let memberRole = 'owner'
 let albumUsed = false
 let productUsed = false
-const empty = () => ({ empty: true, docs: [] })
-const imageRecords = () => ({ empty: !albumUsed, docs: albumUsed ? [{ id: 'photo' }] : [] })
+let blogUsed = false
+let heroUsed = false
+let promoUsed = false
+const empty = () => ({ empty: true, docs: [], size: 0 })
+const imageRecords = () => ({ empty: !albumUsed, docs: albumUsed ? [{ id: 'photo' }] : [], size: albumUsed ? 1 : 0 })
 const productRecords = () => ({
   docs: productUsed ? [{ data: () => ({ imageUrl: url, imageUrls: [url] }) }] : [],
+  size: productUsed ? 1 : 0,
 })
 
 vi.mock('../_firebase-admin.js', () => ({
@@ -33,11 +37,16 @@ vi.mock('firebase-admin/firestore', () => ({
         doc: () => ({ get: async () => ({ exists: true, data: () => ({ uid: 'owner-1', role: memberRole, storeId: 'store-1' }) }) }),
       }
       if (name === 'products') return {
-        where: () => ({ get: async () => productRecords() }),
+        where: () => ({ limit: () => ({ get: async () => productRecords() }) }),
+      }
+      if (name === 'blogPosts') return {
+        where: () => ({ limit: () => ({ get: async () => ({
+          docs: blogUsed ? [{ data: () => ({ imageUrl: url }) }] : [], size: blogUsed ? 1 : 0,
+        }) }) }),
       }
       if (name === 'stores') return {
         doc: () => ({
-          get: async () => ({ exists: true, data: () => ({ parentStoreId: 'store-1' }) }),
+          get: async () => ({ exists: true, data: () => ({ parentStoreId: 'store-1', promoImageUrl: promoUsed ? url : null }) }),
           collection: (collectionName: string) => ({
             doc: () => ({
               get: async () => ({ exists: true, data: () => ({ url }) }),
@@ -47,6 +56,8 @@ vi.mock('firebase-admin/firestore', () => ({
               limit: () => ({ get: async () => collectionName === 'galleryImages' ? imageRecords() : empty() }),
             }),
             get: async () => empty(),
+            limit: () => ({ get: async () => collectionName === 'websiteHeroSlides' && heroUsed
+              ? { docs: [{ data: () => ({ imageUrl: url }) }], size: 1 } : empty() }),
           }),
         }),
       }
@@ -79,6 +90,9 @@ describe('Media Library permanent deletion', () => {
     memberRole = 'owner'
     albumUsed = false
     productUsed = false
+    blogUsed = false
+    heroUsed = false
+    promoUsed = false
   })
 
   it('deletes the original object and its media record for an owner', async () => {
@@ -104,6 +118,18 @@ describe('Media Library permanent deletion', () => {
     await handler(request() as any, res as any)
     expect(res.statusCode).toBe(409)
     expect(storageDelete).not.toHaveBeenCalled()
+  })
+
+  it('blocks deletion when blogs, hero slides or promo profiles still use the image', async () => {
+    for (const field of ['blog', 'hero', 'promo']) {
+      blogUsed = field === 'blog'
+      heroUsed = field === 'hero'
+      promoUsed = field === 'promo'
+      const res = response()
+      await handler(request() as any, res as any)
+      expect(res.statusCode).toBe(409)
+      expect(storageDelete).not.toHaveBeenCalled()
+    }
   })
 
   it('rejects staff deletion and anonymous deletion', async () => {
