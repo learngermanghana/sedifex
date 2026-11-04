@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions/v1'
+import * as crypto from 'crypto'
 import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { getUsdGhsRates } from './currencyRates'
@@ -653,6 +654,37 @@ async function initializePaystack(payload: Record<string, unknown>) {
   return json
 }
 
+/**
+ * Server-side rate limiting for the public Paystack initialization endpoint.
+ * Paystack request hashing is the primary defense against direct public-key use.
+ */
+async function checkCheckoutRateLimit(req: functions.https.Request, email: string): Promise<boolean> {
+  const ip = (req.ip || req.socket.remoteAddress || 'unknown').trim()
+  const bucket = Math.floor(Date.now() / (10 * 60 * 1000))
+  const rules = [
+    { kind: 'ip', value: ip, max: 30 },
+    { kind: 'email', value: email.toLowerCase().trim(), max: 8 },
+  ]
+  for (const rule of rules) {
+    const digest = crypto.createHash('sha256').update(rule.kind + ':' + rule.value + ':' + bucket).digest('hex')
+    const doc = defaultDb.collection('paystackCheckoutRateLimits').doc(digest)
+    const accepted = await defaultDb.runTransaction(async tx => {
+      const snapshot = await tx.get(doc)
+      const count = Number(snapshot.data()?.count || 0)
+      if (count >= rule.max) return false
+      tx.set(doc, {
+        count: count + 1,
+        kind: rule.kind,
+        // Enable Firestore TTL on expiresAt to clean up expired buckets.
+        expiresAt: admin.firestore.Timestamp.fromMillis((bucket + 2) * 10 * 60 * 1000),
+      }, { merge: true })
+      return true
+    })
+    if (!accepted) return false
+  }
+  return true
+}
+
 export const integrationCheckoutCreate = functions.https.onRequest(async (req, res): Promise<void> => {
   setCors(res)
   if (req.method === 'OPTIONS') {
@@ -689,6 +721,12 @@ export const integrationCheckoutCreate = functions.https.onRequest(async (req, r
     if (!customer.email) {
       res.status(400).json({ error: 'customer-email-required' })
       return
+    }
+    if (!sandboxCheckout) {
+      if (!(await checkCheckoutRateLimit(req, customer.email))) {
+        res.status(429).set('Retry-After', '600').json({ error: 'too-many-payment-attempts', message: 'Too many payment attempts. Please try again in a few minutes.' })
+        return
+      }
     }
 
     const authoritativePricing = await resolveAuthoritativePricing(body, storeId)

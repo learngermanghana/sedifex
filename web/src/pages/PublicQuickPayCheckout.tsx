@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import { resumePaystackTransaction } from "../utils/paystack";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import "./PublicQuickPayCheckout.css";
 
@@ -42,7 +43,6 @@ const FUNCTION_BASE_URL =
 const CONTRACT_VERSION =
   import.meta.env.VITE_SEDIFEX_INTEGRATION_CONTRACT_VERSION || "2026-04-13";
 const DEFAULT_PAYSTACK_PROCESSING_FEE_PERCENT = 1.95;
-
 const MANUAL_PAYMENT_TYPES: ManualPaymentType[] = [
   "SERVICE",
   "PRODUCT",
@@ -466,6 +466,7 @@ export default function PublicQuickPayCheckout() {
       const payload = (await response.json().catch(() => null)) as {
         authorizationUrl?: string;
         checkoutUrl?: string;
+        accessCode?: string | null;
         error?: string;
         cashCheckout?: boolean;
       } | null;
@@ -479,6 +480,13 @@ export default function PublicQuickPayCheckout() {
         return;
       }
 
+      // Inline V2 only resumes the server-issued access code.
+      if (payload.accessCode && await resumePaystackTransaction(payload.accessCode)) {
+        setStatus("Complete payment in the Paystack window. Your business gets confirmation after Paystack verifies it.");
+        setIsSubmitting(false);
+        return;
+      }
+      // Redirect fallback uses the same server-initialized Paystack transaction.
       const checkoutUrl = payload.authorizationUrl || payload.checkoutUrl;
       if (!checkoutUrl) throw new Error("Checkout URL was not returned.");
       window.location.href = checkoutUrl;
@@ -504,12 +512,12 @@ export default function PublicQuickPayCheckout() {
             <h1 className="qp-success-title">
               {isCashReturn
                 ? "Cash order sent to the store"
-                : "Thank you for your payment"}
+                : "Payment submitted for verification"}
             </h1>
             <p className="qp-success-copy">
               {isCashReturn
                 ? "Your cash payment request has been recorded. Please pay the store directly. The store will confirm cash received in Sedifex."
-                : "Your payment has been received or is being confirmed. The business will receive your payment record in Sedifex."}
+                : "Your payment is being checked with Paystack. The business will only mark it paid after confirmation."}
             </p>
             {paymentReference ? (
               <div className="qp-success-reference">
