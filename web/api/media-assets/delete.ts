@@ -55,22 +55,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const base = db.collection('stores').doc(storeId)
-    const [albumPhotos, albumCovers, promoPhotos, promoImages, products, storeProducts] = await Promise.all([
+    const [albumPhotos, albumCovers, promoPhotos, promoImages, products, storeProducts, blogPosts, heroSlides, profile] = await Promise.all([
       base.collection('galleryImages').where('url', '==', url).limit(1).get(),
       base.collection('galleryAlbums').where('coverImageUrl', '==', url).limit(1).get(),
       base.collection('promoGallery').where('url', '==', url).limit(1).get(),
       base.collection('promoGallery').where('imageUrl', '==', url).limit(1).get(),
-      db.collection('products').where('storeId', '==', storeId).get(),
-      base.collection('products').get(),
+      db.collection('products').where('storeId', '==', storeId).limit(1000).get(),
+      base.collection('products').limit(1000).get(),
+      db.collection('blogPosts').where('storeId', '==', storeId).limit(1000).get(),
+      base.collection('websiteHeroSlides').limit(300).get(),
+      base.get(),
     ])
     const usedByItem = [...products.docs, ...storeProducts.docs].some(snapshot => {
       const product = snapshot.data()
       return product.imageUrl === url ||
         (Array.isArray(product.imageUrls) && product.imageUrls.includes(url))
     })
-    if (!albumPhotos.empty || !albumCovers.empty || !promoPhotos.empty || !promoImages.empty || usedByItem) {
+    const usedByBlog = blogPosts.docs.some(snapshot => {
+      const blog = snapshot.data()
+      return blog.imageUrl === url || blog.ogImage === url
+    })
+    const usedByHero = heroSlides.docs.some(snapshot => {
+      const slide = snapshot.data()
+      return slide.imageUrl === url || slide.mobileImageUrl === url
+    })
+    const usedByPromo = profile.data()?.promoImageUrl === url
+    // A capped scan is not proof an image is unused. Block deletion rather
+    // than risk breaking unscanned images in large stores.
+    const scanIncomplete = products.size >= 1000 || storeProducts.size >= 1000 ||
+      blogPosts.size >= 1000 || heroSlides.size >= 300
+    if (!albumPhotos.empty || !albumCovers.empty || !promoPhotos.empty || !promoImages.empty ||
+        usedByItem || usedByBlog || usedByHero || usedByPromo || scanIncomplete) {
       return res.status(409).json({
-        error: 'This picture is used by an album, gallery, or item. Remove those references first, then try again.',
+        error: scanIncomplete
+          ? 'This store has too many references to check safely. The picture was not deleted.'
+          : 'This picture is used by an album, gallery, item, blog post, hero slide or promo. Remove those references first, then try again.',
       })
     }
 
