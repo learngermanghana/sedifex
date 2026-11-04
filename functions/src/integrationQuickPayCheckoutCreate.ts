@@ -1,11 +1,10 @@
 import * as functions from 'firebase-functions/v1'
 import * as crypto from 'crypto'
-import { defineSecret, defineString } from 'firebase-functions/params'
+import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { getUsdGhsRates } from './currencyRates'
 
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
-const TURNSTILE_SECRET_KEY = defineSecret('TURNSTILE_SECRET_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL', { default: '' })
 const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
   default: '2026-04-13',
@@ -656,36 +655,9 @@ async function initializePaystack(payload: Record<string, unknown>) {
 }
 
 /**
- * Protect the publicly accessible Paystack initialization endpoint.
- * Turnstile is enforced once TURNSTILE_SECRET_KEY is configured. All real
- * initialization attempts are independently rate-limited in Firestore.
- * The client-supplied payment amount is never used as a Paystack key.
+ * Server-side rate limiting for the public Paystack initialization endpoint.
+ * Paystack request hashing is the primary defense against direct public-key use.
  */
-async function verifyCheckoutBotToken(req: functions.https.Request, body: CheckoutBody): Promise<boolean> {
-  const secret = TURNSTILE_SECRET_KEY.value()?.trim()
-  if (!secret) return true // Staged rollout: configure secret after all checkout clients send tokens.
-  const token = clean(body.turnstileToken ?? body.turnstile_token, 2048)
-  if (!token) return false
-  try {
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        secret,
-        response: token,
-        remoteip: req.ip || req.socket.remoteAddress || '',
-      }).toString(),
-      signal: AbortSignal.timeout(6000),
-    })
-    if (!response.ok) return false
-    const result = await response.json() as { success?: boolean; hostname?: string }
-    return result.success === true
-  } catch (error) {
-    functions.logger.warn('Checkout Turnstile validation unavailable', { error })
-    return false // Do not fall back to unprotected checkout when validation fails.
-  }
-}
-
 async function checkCheckoutRateLimit(req: functions.https.Request, email: string): Promise<boolean> {
   const ip = (req.ip || req.socket.remoteAddress || 'unknown').trim()
   const bucket = Math.floor(Date.now() / (10 * 60 * 1000))
@@ -713,7 +685,7 @@ async function checkCheckoutRateLimit(req: functions.https.Request, email: strin
   return true
 }
 
-export const integrationCheckoutCreate = functions.runWith({ secrets: [TURNSTILE_SECRET_KEY] }).https.onRequest(async (req, res): Promise<void> => {
+export const integrationCheckoutCreate = functions.https.onRequest(async (req, res): Promise<void> => {
   setCors(res)
   if (req.method === 'OPTIONS') {
     res.status(204).send('')
@@ -751,10 +723,6 @@ export const integrationCheckoutCreate = functions.runWith({ secrets: [TURNSTILE
       return
     }
     if (!sandboxCheckout) {
-      if (!(await verifyCheckoutBotToken(req, body))) {
-        res.status(403).json({ error: 'bot-verification-required', message: 'Please complete the security check and try again.' })
-        return
-      }
       if (!(await checkCheckoutRateLimit(req, customer.email))) {
         res.status(429).set('Retry-After', '600').json({ error: 'too-many-payment-attempts', message: 'Too many payment attempts. Please try again in a few minutes.' })
         return
