@@ -19,7 +19,8 @@ import {
 import { httpsCallable } from 'firebase/functions'
 import './Products.css'
 import { requestAiAdvisor } from '../api/aiAdvisor'
-import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
+import { ProductImageUploadError } from '../api/productImageUpload'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
 import MediaAssetPicker from '../components/MediaAssetPicker'
 import { db, functions } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
@@ -1413,7 +1414,7 @@ export default function ProductsServiceFirst({
                     const file = filesToUpload[index]
                     setImageStatusMessage(`Uploading ${index + 1} of ${filesToUpload.length}…`)
                     try {
-                      const uploadedImageUrl = await uploadProductImage(file, { storagePath: `stores/${storeId}/products` })
+                      const { url: uploadedImageUrl } = await uploadToSharedMediaLibrary(file, storeId)
                       uploadedUrls.push(uploadedImageUrl)
                     } catch (uploadError) {
                       console.error('[products] Image upload failed', uploadError)

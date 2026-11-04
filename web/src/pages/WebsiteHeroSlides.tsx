@@ -8,7 +8,8 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { db } from '../firebase'
-import { uploadProductImage } from '../api/productImageUpload'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
+import MediaAssetPicker from '../components/MediaAssetPicker'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import './AccountOverview.css'
@@ -264,9 +265,8 @@ export default function WebsiteHeroSlides() {
     try {
       const isEditingExistingSlide = Boolean(editingId && draft.id)
       const slideId = draft.id || `slide-${Date.now()}`
-      const filename = `${safePathSegment(draft.title || slideId)}-${Date.now()}${fileExtension(imageFile)}`
-      const imagePath = `stores/${storeId}/hero-slides/${slideId}/${filename}`
-      const url = await uploadProductImage(imageFile, { storagePath: imagePath })
+      const { url } = await uploadToSharedMediaLibrary(imageFile, storeId)
+      const imagePath = '' // Shared Media Manager owns the canonical media path.
       const imageUpdate = { imageUrl: url, imagePath, updatedAt: new Date().toISOString() }
 
       if (isEditingExistingSlide) {
@@ -441,7 +441,10 @@ export default function WebsiteHeroSlides() {
                     <input type="file" accept="image/*" onChange={event => setImageFile(event.target.files?.[0] ?? null)} />
                   </Field>
                   <button type="button" className="button button--secondary" disabled={!imageFile || uploading} onClick={() => void uploadImage()}>{uploading ? 'Uploading…' : 'Upload image'}</button>
-                  <p className="account-overview__hint">Uploads are stored under stores/{storeId}/hero-slides.</p>
+                  <MediaAssetPicker storeId={storeId} disabled={uploading} onSelect={url => {
+                    setDraft(current => ({ ...current, imageUrl: url, imagePath: '' }))
+                  }} />
+                  <p className="account-overview__hint">Pictures are saved once in Media Manager and can be reused across your website.</p>
                 </div>
 
                 {draft.imageUrl ? <SafeFirebaseImage src={draft.imageUrl} alt={draft.title || 'Hero slide preview'} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 18, border: '1px solid #e5e7eb' }} /> : null}

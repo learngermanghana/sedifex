@@ -42,7 +42,7 @@ it('applies the Cleaning Services industry preset and saves its labels without t
 })
 
 
-it('lets the owner tick Media Library under Website & marketing and save it to the sidebar', async () => {
+it('lets the owner tick Media Manager under Website & marketing and save it to the sidebar', async () => {
   const save = vi.fn().mockResolvedValue(undefined)
   const user = userEvent.setup()
   render(<NavigationSettingsSection
@@ -57,11 +57,11 @@ it('lets the owner tick Media Library under Website & marketing and save it to t
   />)
 
   expect(screen.getByRole('heading', { name: 'Website & marketing' })).toBeInTheDocument()
-  expect(screen.getByRole('checkbox', { name: /Media Library/i })).not.toBeChecked()
+  expect(screen.getByRole('checkbox', { name: /Media Manager/i })).not.toBeChecked()
   expect(screen.getByText(/Upload from device or Google Drive, reuse photos and manage albums/)).toBeVisible()
 
-  await user.click(screen.getByRole('checkbox', { name: /Media Library/i }))
-  expect(screen.getByRole('checkbox', { name: /Media Library/i })).toBeChecked()
+  await user.click(screen.getByRole('checkbox', { name: /Media Manager/i }))
+  expect(screen.getByRole('checkbox', { name: /Media Manager/i })).toBeChecked()
 
   await user.click(screen.getByRole('button', { name: 'Save navigation settings' }))
   expect(save).toHaveBeenCalledWith(expect.objectContaining({
@@ -70,7 +70,7 @@ it('lets the owner tick Media Library under Website & marketing and save it to t
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
 })
 
-it('keeps Settings always available and lets owners untick Media Library', async () => {
+it('keeps Settings always available and lets owners untick Media Manager', async () => {
   const save = vi.fn().mockResolvedValue(undefined)
   const user = userEvent.setup()
   render(<NavigationSettingsSection
@@ -86,9 +86,9 @@ it('keeps Settings always available and lets owners untick Media Library', async
   const settings = screen.getByRole('checkbox', { name: /Settings/i })
   expect(settings).toBeChecked()
   expect(settings).toBeDisabled()
-  expect(screen.getByRole('checkbox', { name: /Media Library/i })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: /Media Manager/i })).toBeChecked()
 
-  await user.click(screen.getByRole('checkbox', { name: /Media Library/i }))
+  await user.click(screen.getByRole('checkbox', { name: /Media Manager/i }))
   await user.click(screen.getByRole('button', { name: 'Save navigation settings' }))
   const selected = save.mock.calls[0][0].enabledModules
   expect(selected).not.toContain('media-library')

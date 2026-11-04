@@ -246,7 +246,7 @@ describe('resolveNavigation', () => {
     })
   })
 
-  it('shows the Media Library only when selected and respects store roles', () => {
+  it('shows the Media Manager only when selected and respects store roles', () => {
     const base = { industry: 'shop' as const, labelPolicy: 'shared' as const }
     const hiddenOwner = resolveNavigation({
       role: 'owner',
@@ -259,7 +259,7 @@ describe('resolveNavigation', () => {
       workspaceProfile: { ...base, enabledModules: ['dashboard', 'account', 'media-library'] },
     })
     expect(enabledOwner.find(item => item.id === 'media-library')).toMatchObject({
-      label: 'Media Library',
+      label: 'Media Manager',
       target: '/media-library',
     })
     const staff = resolveNavigation({

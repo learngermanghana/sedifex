@@ -1,20 +1,19 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
-  addDoc, collection, doc, getDoc, getDocs, limit, orderBy,
-  query, serverTimestamp, setDoc, where, writeBatch,
+  addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy,
+  query, serverTimestamp, where, writeBatch,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useToast } from '../components/ToastProvider'
 import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import MediaAlbumEditor, { type MediaGalleryAlbum } from '../components/MediaAlbumEditor'
-import { uploadProductImage } from '../api/productImageUpload'
+import MediaUsagePanel from '../components/MediaUsagePanel'
+import { resolveMediaManagerTab, type MediaManagerTab } from '../utils/mediaManagerTabs'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
 import { downloadDriveImage, pickGoogleDriveImages, type DriveImage } from '../api/googleDriveMedia'
-import {
-  MEDIA_BATCH_LIMIT, MEDIA_IMPORT_CONCURRENCY, mediaFileExtension, mediaSha256,
-  optimizeMediaFile, uploadWithRetry,
-} from '../utils/mediaLibrary'
+import { MEDIA_BATCH_LIMIT, MEDIA_IMPORT_CONCURRENCY } from '../utils/mediaLibrary'
 import './AccountOverview.css'
 import './MediaLibraryPage.css'
 
@@ -58,7 +57,21 @@ export default function MediaLibraryPage() {
   const [openingDrive, setOpeningDrive] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = resolveMediaManagerTab(searchParams.get('tab'))
+  const requestedAlbumId = searchParams.get('album') || ''
+  const [usageAssetId, setUsageAssetId] = useState('')
+  const [deletingAlbumId, setDeletingAlbumId] = useState('')
+  function setTab(tab: MediaManagerTab, nextAlbumId?: string) {
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.set('tab', tab)
+      if (tab === 'albums' && nextAlbumId) next.set('album', nextAlbumId)
+      else next.delete('album')
+      return next
+    })
+    setErrorMessage('')
+  }
   const [dragging, setDragging] = useState(false)
   const [deletingId, setDeletingId] = useState('')
 
@@ -140,11 +153,18 @@ export default function MediaLibraryPage() {
     setNewAlbumTitle('')
     setNewAlbumDescription('')
     setErrorMessage('')
-    setActiveStep(1)
+    setUsageAssetId('')
+    setDeletingAlbumId('')
     setDragging(false)
     setDeletingId('')
     if (storeId) void refresh(storeId)
   }, [storeId])
+
+  useEffect(() => {
+    if (!requestedAlbumId || !albums.some(album => album.id === requestedAlbumId)) return
+    setAlbumId(requestedAlbumId)
+    setEditingAlbumId(requestedAlbumId)
+  }, [requestedAlbumId, albums])
 
   function setTask(index: number, state: TaskState['state'], message: string) {
     setTasks(previous => previous.map((item, i) => i === index ? { ...item, state, message } : item))
@@ -176,30 +196,17 @@ export default function MediaLibraryPage() {
             ? await downloadDriveImage(item.driveImage, item.token)
             : null)
           if (!original) throw new Error('Image is unavailable. Select it again.')
-          const optimized = await optimizeMediaFile(original)
-          const hash = await mediaSha256(optimized)
-          const assetRef = doc(db, 'stores', activeStoreId, 'mediaAssets', hash)
-          const previous = await getDoc(assetRef)
-          if (previous.exists() && typeof previous.data().url === 'string') {
+          const saved = await uploadToSharedMediaLibrary(
+            original,
+            activeStoreId,
+            item.source,
+            item.source === 'drive' ? item.driveImage?.id || null : null,
+          )
+          if (saved.alreadyThere) {
             alreadyThere += 1
             setTask(index, 'skipped', 'Already in your media library')
             continue
           }
-
-          const storagePath = 'stores/' + activeStoreId + '/media/' + hash + mediaFileExtension(optimized)
-          const token = await auth.currentUser?.getIdToken()
-          if (!token) throw new Error('Sign in to Sedifex before importing pictures.')
-          const url = await uploadWithRetry(() => uploadProductImage(optimized, { storagePath, authToken: token }))
-          await setDoc(assetRef, {
-            url,
-            name: original.name.slice(0, 220),
-            source: item.source,
-            sourceId: item.source === 'drive' ? item.driveImage?.id || null : null,
-            sha256: hash,
-            size: optimized.size,
-            mimeType: optimized.type,
-            createdAt: serverTimestamp(),
-          })
           imported += 1
           setTask(index, 'done', 'Ready for your website')
         } catch (uploadError) {
@@ -254,6 +261,8 @@ export default function MediaLibraryPage() {
     if (existing) {
       setAlbumId(existing.id)
       setErrorMessage('')
+      setEditingAlbumId(existing.id)
+      setTab('albums', existing.id)
       publish({ tone: 'success', message: 'This album already exists. It is now selected.' })
       return
     }
@@ -274,11 +283,39 @@ export default function MediaLibraryPage() {
       setEditingAlbumId(created.id)
       setNewAlbumTitle('')
       setNewAlbumDescription('')
-      publish({ tone: 'success', message: 'Album created and selected. Choose pictures to add.' })
+      setTab('albums', created.id)
+      publish({ tone: 'success', message: 'Album created. Edit the album or add existing pictures from All pictures.' })
     } catch (saveError) {
       setErrorMessage('Unable to create album: ' + messageFrom(saveError))
     } finally {
       setCreatingAlbum(false)
+    }
+  }
+
+  async function deleteAlbum(album: Album) {
+    if (!storeId || deletingAlbumId || publishing || creatingAlbum || busy) return
+    if (!window.confirm('Delete the album "' + album.title + '" and remove its gallery references? The original pictures will remain in the Media Library. This cannot be undone.')) return
+    setDeletingAlbumId(album.id)
+    setErrorMessage('')
+    try {
+      const photos = await getDocs(query(collection(db, 'stores', storeId, 'galleryImages'), where('albumId', '==', album.id)))
+      // Delete gallery references in manageable batches, never the underlying files.
+      for (let offset = 0; offset < photos.docs.length; offset += 400) {
+        const batch = writeBatch(db)
+        for (const photo of photos.docs.slice(offset, offset + 400)) batch.delete(photo.ref)
+        await batch.commit()
+      }
+      await deleteDoc(doc(db, 'stores', storeId, 'galleryAlbums', album.id))
+      setAlbums(previous => previous.filter(item => item.id !== album.id))
+      if (albumId === album.id) {
+        setAlbumId('')
+        setEditingAlbumId('')
+      }
+      publish({ tone: 'success', message: 'Album deleted. The original pictures are still in your Media Library.' })
+    } catch (deleteError) {
+      setErrorMessage('Could not finish deleting this album. Please try again: ' + messageFrom(deleteError))
+    } finally {
+      setDeletingAlbumId('')
     }
   }
 
@@ -388,22 +425,23 @@ export default function MediaLibraryPage() {
   return (
     <main className="account-overview media-library">
       <header className="media-library__hero">
-        <span className="media-library__eyebrow">Website content <span aria-hidden="true">/</span> Media Library</span>
-        <h1>Your pictures, ready for the web.</h1>
-        <p>Bring pictures from your device or Google Drive into one organized library. Create albums here, then choose which pictures to publish to your website gallery or products.</p>
+        <span className="media-library__eyebrow">Website content <span aria-hidden="true">/</span> Media Manager</span>
+        <h1>Your media, all in one place.</h1>
+        <p>Upload once. Organize albums, choose pictures for products and services, and manage website galleries without leaving this page.</p>
       </header>
 
-      <nav className="media-library__steps" aria-label="Media Library steps">
+      <nav className="media-library__steps" aria-label="Media Manager tabs">
         {([
-          { step: 1 as const, name: 'Import pictures', detail: assets.length + ' pictures', complete: assets.length > 0 },
-          { step: 2 as const, name: 'Albums', detail: '', complete: hasAlbum },
-          { step: 3 as const, name: 'Select & publish', detail: '', complete: false },
-        ]).map(({ step, name, detail, complete }) => (
-          <button type="button" key={step}
-            className={'media-library__step' + (activeStep === step ? ' is-active' : '')}
-            aria-current={activeStep === step ? 'step' : undefined}
-            onClick={() => { setActiveStep(step); setErrorMessage('') }}>
-            <span className="media-library__step-dot" aria-hidden="true">{complete && activeStep !== step ? '✓' : step}</span>
+          { tab: 'pictures' as const, name: 'All pictures', detail: assets.length + ' photos', icon: '▦' },
+          { tab: 'albums' as const, name: 'Albums', detail: albums.length + ' albums', icon: '▤' },
+          { tab: 'upload' as const, name: 'Upload', detail: '', icon: '↑' },
+          { tab: 'usage' as const, name: 'Where used', detail: '', icon: '◎' },
+        ]).map(({ tab, name, detail, icon }) => (
+          <button type="button" key={tab}
+            className={'media-library__step' + (activeTab === tab ? ' is-active' : '')}
+            aria-current={activeTab === tab ? 'page' : undefined}
+            onClick={() => setTab(tab)}>
+            <span className="media-library__step-dot" aria-hidden="true">{icon}</span>
             <span>{name}</span>
             {detail ? <small>{detail}</small> : null}
           </button>
@@ -415,10 +453,10 @@ export default function MediaLibraryPage() {
 
       {storeId ? (
         <>
-          {activeStep === 1 ? <section id="media-library-step-1" className="account-overview__card media-library__panel" aria-labelledby="media-import-title">
+          {activeTab === 'upload' ? <section id="media-library-step-1" className="account-overview__card media-library__panel" aria-labelledby="media-import-title">
             <div className="media-library__section-heading">
               <div>
-                <h2 id="media-import-title"><span className="media-library__section-number">1</span>Import your pictures</h2>
+                <h2 id="media-import-title"><span className="media-library__section-number">↑</span>Import your pictures</h2>
                 <p>Upload up to 100 JPEG, PNG, WebP or AVIF photos at once (25 MB source limit). Sedifex optimizes pictures for fast websites.</p>
               </div>
               <span className="media-library__count">{assets.length} pictures</span>
@@ -475,15 +513,17 @@ export default function MediaLibraryPage() {
                 </div>
               </div>
             ) : null}
+            <button type="button" className="button button--secondary media-library__upload-view" onClick={() => setTab('pictures')}>
+              View all pictures →
+            </button>
           </section> : null}
 
-          {activeStep === 2 ? <section id="media-library-step-2" className="account-overview__card media-library__panel" aria-labelledby="media-albums-title">
+          {activeTab === 'albums' ? <section id="media-library-step-2" className="account-overview__card media-library__panel" aria-labelledby="media-albums-title">
             <div className="media-library__section-heading">
               <div>
-                <h2 id="media-albums-title"><span className="media-library__section-number">2</span>Choose or create an album</h2>
-                <p>Albums organize pictures on your website. You can create one without leaving this page.</p>
+                <h2 id="media-albums-title"><span className="media-library__section-number">▤</span>Your albums</h2>
+                <p>Create and manage website galleries right here. Edit album covers, titles, captions, photo order and visibility without visiting another page.</p>
               </div>
-              <Link to="/gallery" className="media-library__text-link">Manage all albums</Link>
             </div>
             <div className="media-library__album-tools">
               <div className="media-library__album-select">
@@ -493,8 +533,8 @@ export default function MediaLibraryPage() {
                   <option value="">Select an album</option>
                   {albums.map(album => <option key={album.id} value={album.id}>{album.title}</option>)}
                 </select>
-                {!hasAlbum ? <span className="media-library__help">{albums.length ? 'Select an album to enable publishing.' : 'No albums yet. Create your first one on the right.'}</span>
-                  : <span className="media-library__album-ready">✓ Album selected — choose pictures below</span>}
+                {!hasAlbum ? <span className="media-library__help">{albums.length ? 'Choose an album to edit or select pictures for it.' : 'No albums yet. Create one on the right.'}</span>
+                  : <span className="media-library__album-ready">✓ Selected — manage below or add existing pictures</span>}
                 {activeAlbum ? (
                   <div className="media-library__album-controls">
                     <span className={activeAlbum.isPublished ? 'media-library__album-ready' : 'media-library__help'}>{activeAlbum.isPublished ? 'Published album' : 'Hidden album'}</span>
@@ -518,6 +558,38 @@ export default function MediaLibraryPage() {
                   onChange={event => setNewAlbumDescription(event.target.value)} maxLength={240} disabled={creatingAlbum}/>
               </form>
             </div>
+            {albums.length > 0 ? (
+              <div className="media-library__album-grid">
+                {albums.map(album => (
+                  <article className={'media-library__album-card' + (albumId === album.id ? ' is-selected' : '')} key={album.id}>
+                    <button type="button" className="media-library__album-open"
+                      onClick={() => { setAlbumId(album.id); setEditingAlbumId(album.id) }}>
+                      <div className="media-library__album-cover">
+                        {album.coverImageUrl ? <SafeFirebaseImage src={album.coverImageUrl} alt={album.title + ' cover'} /> : <span aria-hidden="true">▤</span>}
+                      </div>
+                      <strong>{album.title}</strong>
+                      <span className={album.isPublished ? 'media-library__album-ready' : 'media-library__help'}>
+                        {album.isPublished ? 'Published' : 'Hidden'}
+                      </span>
+                    </button>
+                    <div className="media-library__album-actions">
+                      <button type="button" className="button button--secondary"
+                        onClick={() => { setAlbumId(album.id); setEditingAlbumId(album.id) }}>Manage</button>
+                      <button type="button" className="media-library__album-delete" disabled={Boolean(deletingAlbumId)}
+                        onClick={() => void deleteAlbum(album)}>
+                        {deletingAlbumId === album.id ? 'Deleting…' : 'Delete album'}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : <p className="media-library__empty">No albums yet. Use Create a new album above to organize your photos.</p>}
+            {hasAlbum ? (
+              <button type="button" className="button button--secondary media-library__album-add"
+                onClick={() => setTab('pictures')}>
+                Add existing pictures to {activeAlbum?.title} →
+              </button>
+            ) : null}
             {activeAlbum && editingAlbumId === activeAlbum.id ? (
               <MediaAlbumEditor key={activeAlbum.id} storeId={storeId} album={activeAlbum} otherAlbums={albums} revision={albumRevision}
                 onUpdate={updated => setAlbums(previous => previous.map(album => album.id === updated.id ? updated : album))}
@@ -525,11 +597,12 @@ export default function MediaLibraryPage() {
             ) : null}
           </section> : null}
 
-          {activeStep === 3 ? <section id="media-library-step-3" className="account-overview__card media-library__panel" aria-labelledby="media-pictures-title">
+          {activeTab === 'pictures' ? <section id="media-library-step-3" className="account-overview__card media-library__panel" aria-labelledby="media-pictures-title">
             <div className="media-library__section-heading">
               <div>
-                <h2 id="media-pictures-title"><span className="media-library__section-number">3</span>Select and publish pictures</h2>
-                <p>Choose new uploads or pictures already saved in your old Gallery. Original files are reused without uploading them again.</p>
+                <h2 id="media-pictures-title"><span className="media-library__section-number">▦</span>All pictures</h2>
+                <p>Your shared collection of device uploads, Google Drive imports and existing gallery pictures. Choose once and reuse across your website.</p>
+                <button type="button" className="button button--primary" onClick={() => setTab('upload')}>+ Upload pictures</button>
               </div>
             </div>
             <div className="media-library__workspace">
@@ -541,11 +614,20 @@ export default function MediaLibraryPage() {
                 Select all ({assets.length})
               </label>
               <span className="media-library__selected-count">{selectedIds.length} selected</span>
-              <button type="button" className="media-library__change-album" onClick={() => setActiveStep(2)}>Choose album</button>
+              <label className="media-library__quick-album" htmlFor="media-library-publish-album">Add to album
+                <select id="media-library-publish-album" value={albumId}
+                  onChange={event => setAlbumId(event.target.value)} disabled={publishing || creatingAlbum}>
+                  <option value="">Choose album</option>
+                  {albums.map(album => <option key={album.id} value={album.id}>{album.title}</option>)}
+                </select>
+              </label>
+              <button type="button" className="media-library__change-album" onClick={() => setTab('albums')}>
+                {albums.length ? 'Manage albums' : '+ Create album'}
+              </button>
             </div>
-            {!hasAlbum ? <p className="media-library__notice">Choose or create a gallery album above to enable “Add to album”. You can still copy image URLs.</p> : null}
+            {!hasAlbum ? <p className="media-library__notice">To add pictures to a gallery, choose an album above or create one in the Albums tab. You can still copy URLs or inspect where pictures are used.</p> : null}
             {loading ? <p>Loading pictures…</p> : null}
-            {!loading && assets.length === 0 ? <p className="media-library__empty">No pictures imported yet. Upload a few pictures or choose them from Google Drive above.</p> : null}
+            {!loading && assets.length === 0 ? <p className="media-library__empty">No pictures yet. Use the Upload tab to import from your device or Google Drive.</p> : null}
             <div className="media-library__grid">
               {assets.map(asset => {
                 const selected = selectedIds.includes(asset.id)
@@ -571,6 +653,8 @@ export default function MediaLibraryPage() {
                           disabled={!hasAlbum || publishing} onClick={() => void addAssetsToAlbum([asset])}>
                           {publishing ? 'Adding…' : 'Add to album'}
                         </button>
+                        <button className="media-library__usage-button" type="button"
+                          onClick={() => { setUsageAssetId(asset.id); setTab('usage') }}>Where used</button>
                         {(asset.source === 'device' || asset.source === 'drive') ? (
                           <button className="media-library__delete" type="button"
                             disabled={Boolean(deletingId) || busy || publishing}
@@ -584,7 +668,7 @@ export default function MediaLibraryPage() {
                 )
               })}
             </div>
-            <p className="media-library__help">For product listings, open the product editor and select <strong>Choose from Media Library</strong>. Adding to a gallery album does not automatically attach a photo to a product.</p>
+            <p className="media-library__help">In an item or service editor, choose <strong>Choose from Media Library</strong> to reuse these pictures. Adding to an album does not attach a picture to an item automatically.</p>
             <div className="media-library__publish-bar">
               <div><strong>{selectedIds.length} picture{selectedIds.length === 1 ? '' : 's'} selected</strong>
                 <span>{hasAlbum ? 'Ready for ' + activeAlbum?.title : 'Choose or create an album to continue'}</span></div>
@@ -595,6 +679,23 @@ export default function MediaLibraryPage() {
             </div>
             </div>
           </section> : null}
+
+          {activeTab === 'usage' ? (
+            <section className="account-overview__card media-library__panel" aria-labelledby="media-usage-title">
+              <div className="media-library__section-heading">
+                <div>
+                  <h2 id="media-usage-title"><span className="media-library__section-number">◎</span>Where pictures are used</h2>
+                  <p>Check known references before deleting an original image. Albums and item photos are checked only when you open this tab.</p>
+                </div>
+              </div>
+              <MediaUsagePanel storeId={storeId} assets={assets} initialAssetId={usageAssetId}
+                onOpenAlbum={id => {
+                  setAlbumId(id)
+                  setEditingAlbumId(id)
+                  setTab('albums', id)
+                }} />
+            </section>
+          ) : null}
         </>
       ) : null}
     </main>

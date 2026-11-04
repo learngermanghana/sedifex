@@ -36,7 +36,8 @@ import { useStorePreferences } from '../hooks/useStorePreferences'
 import { useStoreBilling } from '../hooks/useStoreBilling'
 import { useWorkspaceIdentity } from '../hooks/useWorkspaceIdentity'
 import type { ItemType, Product } from '../types/product'
-import { ProductImageUploadError, uploadProductImage } from '../api/productImageUpload'
+import { ProductImageUploadError } from '../api/productImageUpload'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
 import { requestAiAdvisor } from '../api/aiAdvisor'
 import { useToast } from '../components/ToastProvider'
 import { playSound } from '../utils/sound'
@@ -1274,9 +1275,7 @@ export default function Products() {
         return
       }
 
-      const uploadedUrl = await uploadProductImage(imageFileInput, {
-        storagePath: buildProductImagePath(activeStoreId, draftProductKey, nextSlot),
-      })
+      const { url: uploadedUrl } = await uploadToSharedMediaLibrary(imageFileInput, activeStoreId)
       if (nextSlot === 0) setImageUrlInput(uploadedUrl)
       if (nextSlot === 1) setImageUrlInput2(uploadedUrl)
       if (nextSlot === 2) setImageUrlInput3(uploadedUrl)
@@ -1604,9 +1603,7 @@ export default function Products() {
         return
       }
 
-      const uploadedUrl = await uploadProductImage(editImageFileInput, {
-        storagePath: buildProductImagePath(activeStoreId, product.id, nextSlot),
-      })
+      const { url: uploadedUrl } = await uploadToSharedMediaLibrary(editImageFileInput, activeStoreId)
       if (nextSlot === 0) setEditImageUrlInput(uploadedUrl)
       if (nextSlot === 1) setEditImageUrlInput2(uploadedUrl)
       if (nextSlot === 2) setEditImageUrlInput3(uploadedUrl)
