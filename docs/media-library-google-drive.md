@@ -25,6 +25,14 @@ Google Cloud Storage bucket, so there is no new always-on worker or storage prov
 Imported media is *not* automatically published to a website or album. Stored
 image URLs are publicly fetchable and should never contain private documents.
 
+## Redesigned three-step Media Library
+
+The Media Library is organized into **Import pictures**, **Albums**, and **Select & publish** tabs. Device uploads support drag and drop as well as file picking. Existing Google Drive imports and album editing are unchanged.
+
+Store owners can select **Delete picture** on an original device/Drive upload. The action requires confirmation and calls the authenticated, on-demand `/api/media-assets/delete` endpoint. It permanently deletes the Sedifex storage object and media metadata only if it is not referenced by a named gallery, album cover, promo gallery, or known product image. If a reference exists, deletion is blocked and the owner should first remove the picture from the connected album or item. The original image in Google Drive remains untouched.
+
+Pictures that appear through legacy gallery records are reusable references; use the gallery/album editor to remove those instead of deleting their original files. URLs copied manually into blog posts or external websites cannot be tracked reliably, so owners should verify such uses before deletion. There is no background cleanup job.
+
 ## Editing existing albums
 
 From **Media Library**, select an existing gallery album and choose **Edit album**.
@@ -109,6 +117,6 @@ Also consider authenticated signed URLs instead of public URLs for any private
 media; this Media Library is for public website assets only.
 
 A future iteration can add user-selected folder sync through a separately
-reviewed Drive authorization flow, scheduled incremental imports, and verified
-reference counts for safe removal of images that are already used by products
-or website galleries.
+reviewed Drive authorization flow and scheduled incremental imports. Permanent
+deletion currently checks the main product, album and promo references, but
+cannot discover copied URLs used on external websites or unstructured content.
