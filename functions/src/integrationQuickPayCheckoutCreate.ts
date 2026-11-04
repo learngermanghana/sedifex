@@ -1,10 +1,11 @@
 import * as functions from 'firebase-functions/v1'
 import * as crypto from 'crypto'
-import { defineString } from 'firebase-functions/params'
+import { defineSecret, defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { getUsdGhsRates } from './currencyRates'
 
 const PAYSTACK_SECRET_KEY = defineString('PAYSTACK_SECRET_KEY')
+const TURNSTILE_SECRET_KEY = defineSecret('TURNSTILE_SECRET_KEY')
 const APP_BASE_URL = defineString('APP_BASE_URL', { default: '' })
 const INTEGRATION_CONTRACT_VERSION = defineString('INTEGRATION_CONTRACT_VERSION', {
   default: '2026-04-13',
@@ -661,7 +662,7 @@ async function initializePaystack(payload: Record<string, unknown>) {
  * The client-supplied payment amount is never used as a Paystack key.
  */
 async function verifyCheckoutBotToken(req: functions.https.Request, body: CheckoutBody): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET_KEY?.trim()
+  const secret = TURNSTILE_SECRET_KEY.value()?.trim()
   if (!secret) return true // Staged rollout: configure secret after all checkout clients send tokens.
   const token = clean(body.turnstileToken ?? body.turnstile_token, 2048)
   if (!token) return false
@@ -712,7 +713,7 @@ async function checkCheckoutRateLimit(req: functions.https.Request, email: strin
   return true
 }
 
-export const integrationCheckoutCreate = functions.https.onRequest(async (req, res): Promise<void> => {
+export const integrationCheckoutCreate = functions.runWith({ secrets: [TURNSTILE_SECRET_KEY] }).https.onRequest(async (req, res): Promise<void> => {
   setCors(res)
   if (req.method === 'OPTIONS') {
     res.status(204).send('')
