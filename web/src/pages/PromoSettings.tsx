@@ -2,7 +2,8 @@ import SafeFirebaseImage from '../components/SafeFirebaseImage'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Timestamp, doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { uploadProductImage } from '../api/productImageUpload'
+import { uploadToSharedMediaLibrary } from '../api/sharedMediaUpload'
+import MediaAssetPicker from '../components/MediaAssetPicker'
 import { useActiveStore } from '../hooks/useActiveStore'
 import { useMemberships } from '../hooks/useMemberships'
 import { useToast } from '../components/ToastProvider'
@@ -94,7 +95,7 @@ export default function PromoSettings() {
     setUploading(true)
     setMessage('')
     try {
-      const url = await uploadProductImage(imageFile, { storagePath: imagePath(storeId) })
+      const { url } = await uploadToSharedMediaLibrary(imageFile, storeId)
       setImageUrl(url)
       setImageFile(null)
       publish({ message: 'Promo image uploaded. Save the promo to apply it.', tone: 'success' })
@@ -172,6 +173,7 @@ export default function PromoSettings() {
             <form className="account-overview__website-sync-test" onSubmit={event => event.preventDefault()}>
               <label><span>Upload image</span><input type="file" accept="image/*" onChange={event => setImageFile(event.target.files?.[0] ?? null)} /></label>
               <button type="button" className="button button--secondary" disabled={!imageFile || uploading} onClick={() => void uploadImage()}>{uploading ? 'Uploading…' : 'Upload image'}</button>
+              <MediaAssetPicker storeId={storeId} disabled={uploading} onSelect={url => setImageUrl(url)} />
               <label><span>Or image URL</span><input type="url" value={imageUrl} onChange={event => setImageUrl(event.target.value)} /></label>
               <label><span>Image alt text</span><input value={imageAlt} onChange={event => setImageAlt(event.target.value)} placeholder="Short image description" /></label>
             </form>
