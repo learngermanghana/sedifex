@@ -37,13 +37,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const base = db.collection('stores').doc(storeId)
-    const [photos, covers, promoUrls, promoImageUrls, products, nestedProducts] = await Promise.all([
+    const [photos, covers, promoUrls, promoImageUrls, products, nestedProducts, blogPosts, heroSlides, storeProfile] = await Promise.all([
       base.collection('galleryImages').where('url', '==', url).limit(LIMIT_PER_SOURCE).get(),
       base.collection('galleryAlbums').where('coverImageUrl', '==', url).limit(LIMIT_PER_SOURCE).get(),
       base.collection('promoGallery').where('url', '==', url).limit(LIMIT_PER_SOURCE).get(),
       base.collection('promoGallery').where('imageUrl', '==', url).limit(LIMIT_PER_SOURCE).get(),
       db.collection('products').where('storeId', '==', storeId).limit(1000).get(),
       base.collection('products').limit(1000).get(),
+      db.collection('blogPosts').where('storeId', '==', storeId).limit(1000).get(),
+      base.collection('websiteHeroSlides').limit(300).get(),
+      base.get(),
     ])
 
     const albumIds = new Set<string>()
@@ -70,14 +73,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const promoIds = new Set([...promoUrls.docs, ...promoImageUrls.docs].map(item => item.id))
     const promoRefs: UsageItem[] = Array.from(promoIds).map(id => ({ id, name: 'Promo gallery picture', type: 'promo' }))
+    const siteRefs: UsageItem[] = [
+      ...blogPosts.docs.filter(item => item.data().imageUrl === url || item.data().ogImage === url)
+        .map(item => ({ id: item.id, name: String(item.data().title || 'Blog post'), type: 'blog' })),
+      ...heroSlides.docs.filter(item => item.data().imageUrl === url || item.data().mobileImageUrl === url)
+        .map(item => ({ id: item.id, name: String(item.data().title || 'Website hero slide'), type: 'hero' })),
+      ...(storeProfile.data()?.promoImageUrl === url
+        ? [{ id: storeId, name: 'Store promo cover', type: 'store-promo' }] : []),
+    ]
 
     return res.status(200).json({
       albumRefs,
       productRefs,
       promoRefs,
+      siteRefs,
       partial: photos.size >= LIMIT_PER_SOURCE || covers.size >= LIMIT_PER_SOURCE ||
         promoUrls.size >= LIMIT_PER_SOURCE || promoImageUrls.size >= LIMIT_PER_SOURCE ||
-        products.size >= 1000 || nestedProducts.size >= 1000 || albumIds.size > 50,
+        products.size >= 1000 || nestedProducts.size >= 1000 || blogPosts.size >= 1000 ||
+        heroSlides.size >= 300 || albumIds.size > 50,
     })
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error &&
