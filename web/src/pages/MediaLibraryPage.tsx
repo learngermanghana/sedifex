@@ -459,7 +459,6 @@ export default function MediaLibraryPage() {
                 <button type="button" className="button button--secondary" disabled={busy || openingDrive}
                   onClick={() => void importTasks(failedTasks)}>Retry {failedTasks.length} failed</button>
               ) : null}
-            </div>
               </div>
               <p className="media-library__help">Google Drive import reads only the pictures you select. Imported photos are stored in Sedifex; original Drive files remain unchanged.</p>
             </div>
