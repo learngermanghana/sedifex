@@ -21,6 +21,32 @@ describe('Merchant business tools',()=>{
   for(const [name,args] of [['list_inventory',{storeId:'shop'}],['record_sale',sale],['get_store_booking',booking],['get_booking_payment_options',booking],['prepare_booking_refund',{...booking,amount:5,reason:'test'}]] as const)await expect(call(m,name,args,'customer')).rejects.toThrow('Store owner')
   expect(m.get('products/product')?.stockCount).toBe(8)
  })
+ it('updates only the requested product price with owner confirmation and idempotent retries; records no sale',async()=>{
+  const m=seed()
+  const args={storeId:'shop',productId:'product',expectedUnitPrice:10,expectedCurrency:'GHS',newUnitPrice:12,confirmed:true,requestId:'price-change-1'}
+  const result=await call(m,'update_product_price',args)
+  expect(result).toMatchObject({previousUnitPrice:10,newUnitPrice:12,currency:'GHS',saleRecorded:false})
+  expect(m.get('products/product')?.price).toBe(12)
+  expect(m.get('products/other')?.price).toBe(10)
+  expect(m.entries().filter(([p])=>p.startsWith('sales/'))).toHaveLength(0)
+  expect((await call(m,'update_product_price',args)).duplicate).toBe(true)
+  await expect(call(m,'update_product_price',{...args,newUnitPrice:13})).rejects.toThrow('different details')
+  await expect(call(m,'update_product_price',{...args,requestId:'price-change-2'})).rejects.toThrow('changed')
+ })
+ it('rejects missing confirmation, foreign stores, invalid prices and stale prices without writes',async()=>{
+  const args={storeId:'shop',productId:'product',expectedUnitPrice:10,expectedCurrency:'GHS',newUnitPrice:12,confirmed:true,requestId:'price-change-1'}
+  for(const changes of [{confirmed:false},{productId:'other'},{expectedUnitPrice:11},{expectedCurrency:'USD'},{newUnitPrice:-1},{newUnitPrice:12.345},{newUnitPrice:10}]){
+   const m=seed()
+   await expect(call(m,'update_product_price',{...args,...changes})).rejects.toThrow()
+   expect(m.get('products/product')?.price).toBe(10)
+  }
+  const m=seed()
+  await expect(call(m,'update_product_price',args,'customer')).rejects.toThrow('Store owner')
+  expect(m.get('products/product')?.price).toBe(10)
+  m.put('products/service',{storeId:'shop',name:'Service',price:10,currency:'GHS',itemType:'service'})
+  await expect(call(m,'update_product_price',{...args,productId:'service'})).rejects.toThrow('Product not found')
+  expect(m.get('products/service')?.price).toBe(10)
+ })
  it('records an offline sale atomically and retries without reducing stock twice',async()=>{
   const m=seed(), result=await call(m,'record_sale',sale)
   expect(result.total).toBe(20);expect(result.paymentEvidence).toBe('merchant_reported');expect(m.get('products/product')?.stockCount).toBe(6)
