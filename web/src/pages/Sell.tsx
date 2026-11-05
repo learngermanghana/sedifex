@@ -2100,7 +2100,7 @@ export default function Sell() {
           </div>
 
           <details className="sell-page__scan-options" style={{ marginTop: 20 }}>
-            <summary>More checkout options (not often used)</summary>
+            <summary>Click here to choose the payment method or enter a partial payment</summary>
             <div className="sell-page__scan-options-body">
               <div className="sell-page__payment" style={{ marginTop: 20 }}>
                 <div className="field">
