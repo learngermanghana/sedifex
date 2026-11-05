@@ -536,8 +536,12 @@
   gap: .5rem;
   list-style: none;
   cursor: pointer;
-  min-height: 1.6rem;
-  color: transparent;
+  min-height: 2rem;
+  padding-right: 1.5rem;
+  color: var(--sell-primary-dark);
+  font-size: .93rem;
+  font-weight: 850;
+  line-height: 1.35;
   user-select: none;
 }
 
@@ -545,19 +549,28 @@
   display: none;
 }
 
-.sell-page__scan-options > summary::before {
-  content: 'Payment';
-  color: var(--sell-text);
-  font-size: 1.05rem;
-  font-weight: 950;
-  letter-spacing: -.02em;
+.sell-page__scan-options > summary::after {
+  content: '▾';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.25rem;
+  color: var(--sell-primary-dark);
 }
 
-.sell-page__scan-options > summary::after {
-  content: 'Paid in full is automatic. Edit amount only for partial payment or debt.';
-  color: #475569;
-  font-size: .78rem;
-  font-weight: 700;
+.sell-page__scan-options[open] > summary::after {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.sell-page__scan-options > summary:hover {
+  text-decoration: underline;
+}
+
+.sell-page__scan-options > summary:focus-visible {
+  outline: 3px solid var(--sell-primary);
+  outline-offset: 4px;
+  border-radius: .4rem;
 }
 
 .sell-page__scan-options:not([open]) > .sell-page__scan-options-body,
