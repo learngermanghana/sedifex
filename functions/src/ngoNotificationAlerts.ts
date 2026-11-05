@@ -1,9 +1,7 @@
 import * as functions from 'firebase-functions/v1'
-import { defineString } from 'firebase-functions/params'
 import { admin, defaultDb } from './firestore'
 import { queueBrandedNotification } from './notifications'
 
-const SEDIFEX_INTERNAL_ALERT_EMAILS = defineString('SEDIFEX_INTERNAL_ALERT_EMAILS', { default: 'sedifexbiz@gmail.com' })
 
 type AnyRecord = Record<string, unknown>
 
@@ -35,10 +33,6 @@ function uniqueEmails(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map(value => email(value)).filter(Boolean)))
 }
 
-function internalAlertEmails() {
-  const configured = SEDIFEX_INTERNAL_ALERT_EMAILS.value()?.trim() || process.env.SEDIFEX_INTERNAL_ALERT_EMAILS || process.env.SEDIFEX_INTERNAL_ALERT_EMAIL || 'sedifexbiz@gmail.com'
-  return uniqueEmails(configured.split(',').map(value => value.trim()))
-}
 
 function isSettled(value: unknown) {
   const normalized = text(value, 80).toLowerCase().replace(/\s+/g, '_')
@@ -74,13 +68,13 @@ async function ensureNgoAlertRecipients(storeId: string) {
   const notifications = getRecord(settings.notifications)
   const existingAdminEmails = Array.isArray(notifications.adminEmails) ? notifications.adminEmails.map(email).filter(Boolean) : []
   const ngoEmail = email(store.email) || email(store.ownerEmail) || email(store.firstSignupEmail) || email(notifications.replyToEmail)
-  const adminEmails = uniqueEmails([...existingAdminEmails, ngoEmail, ...internalAlertEmails()])
+  const adminEmails = uniqueEmails(existingAdminEmails.length ? existingAdminEmails : [ngoEmail])
 
   if (adminEmails.length) {
     await defaultDb.collection('storeSettings').doc(storeId).set({
       notifications: {
         customerEmailEnabled: notifications.customerEmailEnabled !== false,
-        storeAlertEnabled: true,
+        storeAlertEnabled: notifications.storeAlertEnabled !== false,
         adminEmails,
         replyToEmail: email(notifications.replyToEmail) || ngoEmail || adminEmails[0] || null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -112,7 +106,7 @@ export const notifyNgoVolunteerApplicationReceived = functions.firestore
         location: text(details.location, 180),
         notes: text(details.notes, 1000),
       },
-      forceStoreAlert: true,
+      forceStoreAlert: false,
     })
   })
 
@@ -135,7 +129,7 @@ export const notifyNgoSupportRequestReceived = functions.firestore
         location: text(details.location, 180),
         notes: text(details.notes, 1000),
       },
-      forceStoreAlert: true,
+      forceStoreAlert: false,
     })
   })
 
@@ -167,7 +161,7 @@ export const notifyNgoDonationSubmitted = functions.firestore
         category: text(data.category, 220) || 'Donation',
         notes: text(data.description, 1000),
       },
-      forceStoreAlert: true,
+      forceStoreAlert: false,
     })
   })
 
@@ -202,6 +196,6 @@ export const notifyNgoDonationConfirmed = functions.firestore
         category: text(data.category, 220) || 'Donation',
         notes: text(data.description, 1000),
       },
-      forceStoreAlert: true,
+      forceStoreAlert: false,
     })
   })

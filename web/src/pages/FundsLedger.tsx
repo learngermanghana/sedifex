@@ -1,3 +1,4 @@
+import { isPostedFundTransaction } from '../utils/fundTransactionStatus'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
@@ -37,6 +38,9 @@ type FundTransaction = {
   project: string
   category: string
   description: string
+  status?: string
+  source?: string
+  payment?: { status?: string }
 }
 
 export default function FundsLedger() {
@@ -105,6 +109,9 @@ export default function FundsLedger() {
             id: docSnap.id,
             storeId: data.storeId,
             fundId: data.fundId,
+            status: data.status,
+            source: data.source,
+            payment: data.payment,
             direction: data.direction === 'outflow' ? 'outflow' : 'inflow',
             amount: Number(data.amount) || 0,
             date: data.date || '',
@@ -127,7 +134,7 @@ export default function FundsLedger() {
 
   const stats = useMemo(() => {
     const byFund = new Map<string, { inflows: number; outflows: number }>()
-    transactions.forEach(tx => {
+    transactions.filter(isPostedFundTransaction).forEach(tx => {
       const current = byFund.get(tx.fundId) || { inflows: 0, outflows: 0 }
       if (tx.direction === 'inflow') current.inflows += tx.amount
       else current.outflows += tx.amount
@@ -139,8 +146,8 @@ export default function FundsLedger() {
   const fundNameById = useMemo(() => new Map(funds.map(fund => [fund.id, fund.fundName])), [funds])
   const totals = useMemo(() => {
     const opening = funds.reduce((sum, fund) => sum + fund.openingBalance, 0)
-    const inflows = transactions.filter(tx => tx.direction === 'inflow').reduce((sum, tx) => sum + tx.amount, 0)
-    const outflows = transactions.filter(tx => tx.direction === 'outflow').reduce((sum, tx) => sum + tx.amount, 0)
+    const inflows = transactions.filter(isPostedFundTransaction).filter(tx => tx.direction === 'inflow').reduce((sum, tx) => sum + tx.amount, 0)
+    const outflows = transactions.filter(isPostedFundTransaction).filter(tx => tx.direction === 'outflow').reduce((sum, tx) => sum + tx.amount, 0)
     return { opening, inflows, outflows, remaining: opening + inflows - outflows }
   }, [funds, transactions])
 
@@ -235,6 +242,10 @@ export default function FundsLedger() {
   async function deleteFund(fund: Fund) {
     if (!storeId) return
     const relatedTransactions = transactions.filter(tx => tx.fundId === fund.id)
+    if (relatedTransactions.some(tx => tx.source && tx.source !== 'manual_fund_ledger')) {
+      setError('This fund contains online donations. Preserve its payment history instead of deleting it.')
+      return
+    }
     const confirmed = window.confirm(
       relatedTransactions.length > 0
         ? `Delete ${fund.fundName} and ${relatedTransactions.length} related transaction(s)? This cannot be undone.`
@@ -253,7 +264,7 @@ export default function FundsLedger() {
   }
 
   function remainingBeforeTransaction(targetFund: Fund, transactionIdToIgnore = '') {
-    const fundTransactions = transactions.filter(tx => tx.fundId === targetFund.id && tx.id !== transactionIdToIgnore)
+    const fundTransactions = transactions.filter(isPostedFundTransaction).filter(tx => tx.fundId === targetFund.id && tx.id !== transactionIdToIgnore)
     const totals = fundTransactions.reduce(
       (current, tx) => {
         if (tx.direction === 'inflow') current.inflows += tx.amount
@@ -277,7 +288,7 @@ export default function FundsLedger() {
       setError('Your account is still loading. Please wait a moment and try again.')
       return
     }
-    if (!fundId || Number(amount) <= 0) {
+    if (!fundId || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       setError('Select a fund and enter a valid amount.')
       return
     }
@@ -329,6 +340,10 @@ export default function FundsLedger() {
   }
 
   function startEditTransaction(tx: FundTransaction) {
+    if (tx.source && tx.source !== 'manual_fund_ledger') {
+      setError('Online donations are managed through payment verification and cannot be edited here.')
+      return
+    }
     setEditingTransactionId(tx.id)
     setFundId(tx.fundId)
     setDirection(tx.direction)
@@ -340,6 +355,10 @@ export default function FundsLedger() {
   }
 
   async function deleteTransaction(tx: FundTransaction) {
+    if (tx.source && tx.source !== 'manual_fund_ledger') {
+      setError('Online donation records cannot be deleted from the manual ledger.')
+      return
+    }
     const confirmed = window.confirm('Delete this fund transaction? This cannot be undone.')
     if (!confirmed) return
     await deleteDoc(doc(db, 'fund_transactions', tx.id))
@@ -464,7 +483,7 @@ export default function FundsLedger() {
                   <td>{tx.date || '-'}</td>
                   <td>{fundNameById.get(tx.fundId) || '-'}</td>
                   <td>{tx.direction === 'inflow' ? 'Inflow / donation received' : 'Outflow / expense'}</td>
-                  <td>{tx.amount.toFixed(2)}</td>
+                  <td>{tx.amount.toFixed(2)}{!isPostedFundTransaction(tx) ? <small> · {tx.status || tx.payment?.status || 'Pending'}</small> : null}</td>
                   <td>{tx.project || '-'}</td>
                   <td>{tx.category || '-'}</td>
                   <td>{tx.description || '-'}</td>
