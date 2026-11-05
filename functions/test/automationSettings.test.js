@@ -18,9 +18,9 @@ assert.equal(isSmsAutomationEnabledForStage(defaults, 'booking_confirmed'), fals
 assert.equal(isSmsAutomationEnabledForStage(defaults, 'booking_rescheduled'), false)
 assert.equal(isSmsAutomationEnabledForStage(defaults, 'booking_cancelled'), false)
 assert.equal(isSmsAutomationEnabledForStage(defaults, 'payment_confirmation'), true)
-assert.equal(isSmsAutomationEnabledForStage(defaults, 'reminder_3d'), true)
-assert.equal(isSmsAutomationEnabledForStage(defaults, 'reminder_2d'), true)
-assert.equal(isSmsAutomationEnabledForStage(defaults, 'reminder_1d'), true)
+assert.equal(isSmsAutomationEnabledForStage(defaults, 'reminder_3d'), false)
+assert.equal(isSmsAutomationEnabledForStage(defaults, 'reminder_2d'), false)
+assert.equal(isSmsAutomationEnabledForStage(defaults, 'reminder_1d'), false)
 assert.equal(isSmsAutomationEnabledForStage(defaults, 'thank_you'), true)
 
 const disabled = parseAutomationSettings({
@@ -39,7 +39,7 @@ assert.equal(disabled.fallbackToSedifex, false)
 const perRule = parseAutomationSettings({
   channels: {
     'booking.payment_confirmed': { email: false, sms: false },
-    'booking.reminder_3d': { email: true, sms: false },
+    'booking.reminder_3d': { email: true, sms: true },
     'booking.confirmed': { email: false, sms: true },
     'booking.rescheduled': { email: true, sms: false },
     'booking.payment_received': { email: true, sms: true },
@@ -47,7 +47,8 @@ const perRule = parseAutomationSettings({
 })
 assert.equal(isEmailAutomationEnabled(perRule, 'booking.payment_confirmed'), false)
 assert.equal(isSmsAutomationEnabledForStage(perRule, 'payment_confirmation'), false)
-assert.equal(isSmsAutomationEnabledForStage(perRule, 'reminder_3d'), false)
+assert.equal(isSmsAutomationEnabledForStage(perRule, 'reminder_3d'), false, 'booking reminders stay email-only even if legacy settings request SMS')
+assert.equal(perRule.channels['booking.reminder_3d'].sms, false, 'parser must clear legacy reminder SMS toggles')
 assert.equal(isEmailAutomationEnabled(perRule, 'booking.confirmed'), false)
 assert.equal(isSmsAutomationEnabledForEvent(perRule, 'booking.confirmed'), true)
 assert.equal(isSmsAutomationEnabledForStage(perRule, 'booking_confirmed'), true)
