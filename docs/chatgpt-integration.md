@@ -11,6 +11,7 @@ The MCP endpoint is `POST /api/chatgpt-mcp`, routed through the existing consoli
 | `list_stores` | `stores:read` | Discover the connected merchant's store IDs. |
 | `list_services` | `services:read` | Read the merchant's services, including unpublished services. |
 | `create_service` | `services:write` | Create an unpublished service in `products`. |
+| `create_product` | `inventory:write` | Create an unpublished physical product in `products` for an owned store, with an optional opening stock count, after user confirmation. |
 | `create_booking` | `bookings:write` | Reserve slot capacity and create a pending appointment for the connected customer. |
 | `list_my_bookings` | `bookings:read` | Read this customer’s ChatGPT bookings in the specified store, with cursor pagination. |
 | `request_booking_change` | `bookings:write` | Submit cancellation/rescheduling for merchant approval through the existing `customerPortalRequest` workflow. |
@@ -47,7 +48,7 @@ The consolidated Sedifex OAuth issuer now accepts **ChatGPT Client ID Metadata D
 - Legacy callback-ID-specific client identities `https://chatgpt.com/oauth/{callback_id}/client.json` are accepted **only** with their matching `https://chatgpt.com/connector/oauth/{callback_id}` callback, when verified against the ChatGPT-hosted public metadata.
 - Unknown client IDs, unknown callbacks, unverified metadata, extra scopes and mismatched `resource` values fail closed. Only `chatgpt.com` metadata URLs in these fixed patterns may be fetched. A 5-minute in-memory metadata cache limits repeated requests; no new datastore is introduced.
 - The original registered pilot `SEDIFEX_OAUTH_CLIENT_ID` and `SEDIFEX_OAUTH_REDIRECT_URI` remain valid for older plugin connections, without weakening the new CIMD callback checks. These environment variables are **optional for CIMD-only connections**, but leave them in place until any old connections have migrated.
-- Pilot allowlist `SEDIFEX_MCP_TEST_UIDS` remains mandatory for private tools. Merchant ownership, customer booking identity isolation, approval for write actions and 60-requests/minute user limit remain unchanged.
+- Authenticated Sedifex users can connect without a pilot UID allowlist. Store ownership, customer booking identity isolation, approval for write actions and the 60-requests/minute user limit remain enforced.
 
 ### Plugin package and connection
 
@@ -60,13 +61,15 @@ Use a current Agent Plugins package with root `plugin.json` and `mcp.json`, and 
   "authorizationUrl": "https://sedifex.com/api/chatgpt-oauth-authorize",
   "tokenUrl": "https://sedifex.com/api/chatgpt-oauth-token",
   "resource": "https://sedifex.com/api/chatgpt-mcp",
-  "baseScopes": ["stores:read", "services:read", "services:write", "bookings:read", "bookings:write", "blog:read", "blog:write"]
+  "baseScopes": ["stores:read", "services:read", "services:write", "bookings:read", "bookings:write", "blog:read", "blog:write", "inventory:read", "inventory:write", "sales:read", "sales:write", "merchant-bookings:read", "merchant-bookings:write", "reminders:write", "payments:read"]
 }
 ```
 
 **Do not** include a top-level `oauth` object in `.mcp.json`, a `clientId` alongside `mode:cimd`, a private key, client secret or Firebase UID in the ZIP. The portal may retain the previous registered-client settings for an existing plugin version; inspect the connection settings and, if the portal prevents changing registration mode, create a **new plugin submission**, reusing the same MCP endpoint and domain verification. Do not assert a previously installed plugin was migrated automatically.
 
-End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
+Product creation test: add `inventory:write` to the installed plugin's OAuth `baseScopes`, reconnect the ChatGPT account, rescan the tools, then create a low-cost unpublished draft with explicit approval. Verify it appears in Sedifex Products and `list_inventory` with the correct store, price and stock. No sale or payment should be recorded.
+
+End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with an authenticated Sedifex account, authorize the required scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Verify that non-owners remain blocked from another business's records.
 
 ## Account linking
 

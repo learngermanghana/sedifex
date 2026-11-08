@@ -13,13 +13,43 @@ function seed(){return memoryDb({
  'stores/shop/integrationAvailabilitySlots/newslot':{serviceId:'service',seatsBooked:0,capacity:4,status:'open',startAt:'2027-02-01T10:00:00Z',endAt:'2027-02-01T11:00:00Z',timezone:'Africa/Accra',price:20},
 })}
 const sale={storeId:'shop',productId:'product',quantity:2,expectedUnitPrice:10,expectedCurrency:'GHS',paymentMethod:'cash',confirmed:true,requestId:'sale-request-1'}
+const product={storeId:'shop',name:'Shea Butter Soap',description:'Natural soap',category:'Skincare',price:25.5,currency:'GHS',stockCount:12,sku:'SOAP-25',confirmed:true,requestId:'product-request-1'}
 const booking={storeId:'shop',source:'storeBookings',bookingId:'booking'}
 const call=(m:ReturnType<typeof memoryDb>,name:string,args:any,uid='owner')=>executeTool(m.db,name,args,uid)
 describe('Merchant business tools',()=>{
  it('requires ownership even for inventory, bookings and financial handoffs',async()=>{
   const m=seed()
-  for(const [name,args] of [['list_inventory',{storeId:'shop'}],['record_sale',sale],['get_store_booking',booking],['get_booking_payment_options',booking],['prepare_booking_refund',{...booking,amount:5,reason:'test'}]] as const)await expect(call(m,name,args,'customer')).rejects.toThrow('Store owner')
+  for(const [name,args] of [['list_inventory',{storeId:'shop'}],['create_product',product],['record_sale',sale],['get_store_booking',booking],['get_booking_payment_options',booking],['prepare_booking_refund',{...booking,amount:5,reason:'test'}]] as const)await expect(call(m,name,args,'customer')).rejects.toThrow('Store owner')
   expect(m.get('products/product')?.stockCount).toBe(8)
+ })
+ it('creates an unpublished catalog product with owner approval and prevents duplicate retries',async()=>{
+  const m=seed()
+  const [first,again]=await Promise.all([call(m,'create_product',product),call(m,'create_product',product)])
+  expect(first.productId).toBe(again.productId);expect(again.duplicate).toBe(true)
+  expect(first).toMatchObject({name:'Shea Butter Soap',category:'Skincare',price:25.5,currency:'GHS',stockCount:12,status:'draft',published:false})
+  expect(m.get('products/'+first.productId)).toMatchObject({storeId:'shop',itemType:'product',status:'draft',isPublished:false,isWebsiteVisible:false,category:'Skincare',stockCount:12,sku:'SOAP-25',currency:'GHS',createdBy:'owner'})
+  expect((await call(m,'list_inventory',{storeId:'shop'})).items).toContainEqual(expect.objectContaining({productId:first.productId,name:'Shea Butter Soap',price:25.5,stockCount:12}))
+  expect(m.entries().filter(([p])=>p.startsWith('products/'))).toHaveLength(3)
+  await expect(call(m,'create_product',{...product,price:30})).rejects.toThrow('different details')
+  expect(m.entries().filter(([p])=>p.startsWith('products/'))).toHaveLength(3)
+  expect(tools.find(t=>t.name==='create_product')?.securitySchemes[0]).toMatchObject({type:'oauth2',scopes:['inventory:write']})
+ })
+ it('requires confirmation and validates product details without creating a catalog entry',async()=>{
+  const invalid=[{confirmed:false},{name:''},{name:' '.repeat(5)},{price:-1},{price:1.001},{price:Number.POSITIVE_INFINITY},{currency:'EUR'},{stockCount:-1},{stockCount:1.5},{stockCount:1000001},{description:123},{category:24},{sku:42},{requestId:'short'}]
+  for(const patch of invalid){
+    const m=seed()
+    await expect(call(m,'create_product',{...product,...patch})).rejects.toThrow()
+    expect(m.entries().filter(([p])=>p.startsWith('products/'))).toHaveLength(2)
+  }
+ })
+ it('defaults unknown stock to null and restricts product creation to the store owner',async()=>{
+  const m=seed()
+  await expect(call(m,'create_product',product,'customer')).rejects.toThrow('Store owner')
+  expect(m.entries().filter(([p])=>p.startsWith('products/'))).toHaveLength(2)
+  const {stockCount,category,sku,...rest}=product
+  const created=await call(m,'create_product',{...rest,requestId:'product-request-2'})
+  expect(created).toMatchObject({category:'General Products',stockCount:null,sku:null})
+  expect(m.get('products/'+created.productId)?.stockCount).toBeNull()
  })
  it('records an offline sale atomically and retries without reducing stock twice',async()=>{
   const m=seed(), result=await call(m,'record_sale',sale)
