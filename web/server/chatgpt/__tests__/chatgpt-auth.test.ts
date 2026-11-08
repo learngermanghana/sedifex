@@ -188,7 +188,7 @@ describe('OAuth and MCP authorization', () => {
     expect(created.statusCode).toBe(200)
     expect(created.body.result.structuredContent).toMatchObject({name:'Trial Product',published:false,status:'draft'})
     const noConfirmation = { ...request, params: { ...request.params, arguments: { ...request.params.arguments, confirmed: false, requestId: 'create-product-2' } } }
-    expect((await call(mcp, noConfirmation, 'Bearer ' + writeScope.result.body.access_token)).body.result.isError).toBe(true)
+    expect((await call(mcp, noConfirmation, 'Bearer ' + writeScope.result.body.access_token)).body.error.code).toBe(-32602)
   })
   it('limits authenticated tool traffic across requests', async () => {
     const { result } = await connect('bookings:read')
