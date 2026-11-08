@@ -35,7 +35,7 @@ describe('Merchant business tools',()=>{
   expect(tools.find(t=>t.name==='create_product')?.securitySchemes[0]).toMatchObject({type:'oauth2',scopes:['inventory:write']})
  })
  it('requires confirmation and validates product details without creating a catalog entry',async()=>{
-  const invalid=[{confirmed:false},{name:''},{name:' '.repeat(5)},{price:-1},{price:1.001},{price:Number.POSITIVE_INFINITY},{currency:'EUR'},{stockCount:-1},{stockCount:1.5},{stockCount:1000001},{description:123},{category:24},{sku:42},{requestId:'too-short'}]
+  const invalid=[{confirmed:false},{name:''},{name:' '.repeat(5)},{price:-1},{price:1.001},{price:Number.POSITIVE_INFINITY},{currency:'EUR'},{stockCount:-1},{stockCount:1.5},{stockCount:1000001},{description:123},{category:24},{sku:42},{requestId:'short'}]
   for(const patch of invalid){
     const m=seed()
     await expect(call(m,'create_product',{...product,...patch})).rejects.toThrow()
