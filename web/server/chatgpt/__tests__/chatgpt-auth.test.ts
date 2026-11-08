@@ -178,6 +178,18 @@ describe('OAuth and MCP authorization', () => {
     const newScope = await connect('inventory:read')
     expect((await call(mcp, request, 'Bearer ' + newScope.result.body.access_token)).body.result.structuredContent.items).toEqual([])
   })
+  it('requires inventory:write consent to create a product and confirms it stays a draft', async () => {
+    mock.db = memoryDb({ 'stores/shop': { ownerUid: 'customer', currency: 'GHS' } }).db
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'create_product', arguments: { storeId: 'shop', name: 'Trial Product', category: 'General Products', price: 15, currency: 'GHS', stockCount: 3, confirmed: true, requestId: 'create-product-1' } } }
+    const oldScope = await connect('inventory:read')
+    expect((await call(mcp, request, 'Bearer ' + oldScope.result.body.access_token)).statusCode).toBe(403)
+    const writeScope = await connect('inventory:write')
+    const created = await call(mcp, request, 'Bearer ' + writeScope.result.body.access_token)
+    expect(created.statusCode).toBe(200)
+    expect(created.body.result.structuredContent).toMatchObject({name:'Trial Product',published:false,status:'draft'})
+    const noConfirmation = { ...request, params: { ...request.params, arguments: { ...request.params.arguments, confirmed: false, requestId: 'create-product-2' } } }
+    expect((await call(mcp, noConfirmation, 'Bearer ' + writeScope.result.body.access_token)).body.result.isError).toBe(true)
+  })
   it('limits authenticated tool traffic across requests', async () => {
     const { result } = await connect('bookings:read')
     const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_my_bookings', arguments: { storeId: 'shop' } } }
@@ -185,7 +197,7 @@ describe('OAuth and MCP authorization', () => {
     expect((await call(mcp, request, 'Bearer ' + result.body.access_token)).statusCode).toBe(429)
   })
   it('lists tools and public services without exposing account data', async () => {
-    expect((await call(mcp, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools).toHaveLength(23)
+    expect((await call(mcp, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools).toHaveLength(24)
     expect((await call(mcp, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_services', arguments: {} } })).body.result.structuredContent.services).toEqual([])
     expect((await call(mcp, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'search_services', arguments: { maliciousExtra: true } } })).body.error.code).toBe(-32602)
   })
