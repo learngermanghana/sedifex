@@ -67,7 +67,9 @@ Use a current Agent Plugins package with root `plugin.json` and `mcp.json`, and 
 
 **Do not** include a top-level `oauth` object in `.mcp.json`, a `clientId` alongside `mode:cimd`, a private key, client secret or Firebase UID in the ZIP. The portal may retain the previous registered-client settings for an existing plugin version; inspect the connection settings and, if the portal prevents changing registration mode, create a **new plugin submission**, reusing the same MCP endpoint and domain verification. Do not assert a previously installed plugin was migrated automatically.
 
-Product creation test: add `inventory:write` to the installed plugin's OAuth `baseScopes`, reconnect the ChatGPT account, rescan the tools, then create a low-cost unpublished draft with explicit approval. Verify it appears in Sedifex Products and `list_inventory` with the correct store, price and stock. No sale or payment should be recorded.\n\nEnd-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
+Product creation test: add `inventory:write` to the installed plugin's OAuth `baseScopes`, reconnect the ChatGPT account, rescan the tools, then create a low-cost unpublished draft with explicit approval. Verify it appears in Sedifex Products and `list_inventory` with the correct store, price and stock. No sale or payment should be recorded.
+
+End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
 
 ## Account linking
 
