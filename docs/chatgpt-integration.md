@@ -48,7 +48,7 @@ The consolidated Sedifex OAuth issuer now accepts **ChatGPT Client ID Metadata D
 - Legacy callback-ID-specific client identities `https://chatgpt.com/oauth/{callback_id}/client.json` are accepted **only** with their matching `https://chatgpt.com/connector/oauth/{callback_id}` callback, when verified against the ChatGPT-hosted public metadata.
 - Unknown client IDs, unknown callbacks, unverified metadata, extra scopes and mismatched `resource` values fail closed. Only `chatgpt.com` metadata URLs in these fixed patterns may be fetched. A 5-minute in-memory metadata cache limits repeated requests; no new datastore is introduced.
 - The original registered pilot `SEDIFEX_OAUTH_CLIENT_ID` and `SEDIFEX_OAUTH_REDIRECT_URI` remain valid for older plugin connections, without weakening the new CIMD callback checks. These environment variables are **optional for CIMD-only connections**, but leave them in place until any old connections have migrated.
-- Pilot allowlist `SEDIFEX_MCP_TEST_UIDS` remains mandatory for private tools. Merchant ownership, customer booking identity isolation, approval for write actions and 60-requests/minute user limit remain unchanged.
+- Authenticated Sedifex users can connect without a pilot UID allowlist. Store ownership, customer booking identity isolation, approval for write actions and the 60-requests/minute user limit remain enforced.
 
 ### Plugin package and connection
 
@@ -69,7 +69,7 @@ Use a current Agent Plugins package with root `plugin.json` and `mcp.json`, and 
 
 Product creation test: add `inventory:write` to the installed plugin's OAuth `baseScopes`, reconnect the ChatGPT account, rescan the tools, then create a low-cost unpublished draft with explicit approval. Verify it appears in Sedifex Products and `list_inventory` with the correct store, price and stock. No sale or payment should be recorded.
 
-End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
+End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with an authenticated Sedifex account, authorize the required scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Verify that non-owners remain blocked from another business's records.
 
 ## Account linking
 
