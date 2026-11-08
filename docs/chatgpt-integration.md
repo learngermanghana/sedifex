@@ -11,6 +11,7 @@ The MCP endpoint is `POST /api/chatgpt-mcp`, routed through the existing consoli
 | `list_stores` | `stores:read` | Discover the connected merchant's store IDs. |
 | `list_services` | `services:read` | Read the merchant's services, including unpublished services. |
 | `create_service` | `services:write` | Create an unpublished service in `products`. |
+| `create_product` | `inventory:write` | Create an unpublished physical product in `products` for an owned store, with an optional opening stock count, after user confirmation. |
 | `create_booking` | `bookings:write` | Reserve slot capacity and create a pending appointment for the connected customer. |
 | `list_my_bookings` | `bookings:read` | Read this customer’s ChatGPT bookings in the specified store, with cursor pagination. |
 | `request_booking_change` | `bookings:write` | Submit cancellation/rescheduling for merchant approval through the existing `customerPortalRequest` workflow. |
@@ -60,13 +61,13 @@ Use a current Agent Plugins package with root `plugin.json` and `mcp.json`, and 
   "authorizationUrl": "https://sedifex.com/api/chatgpt-oauth-authorize",
   "tokenUrl": "https://sedifex.com/api/chatgpt-oauth-token",
   "resource": "https://sedifex.com/api/chatgpt-mcp",
-  "baseScopes": ["stores:read", "services:read", "services:write", "bookings:read", "bookings:write", "blog:read", "blog:write"]
+  "baseScopes": ["stores:read", "services:read", "services:write", "bookings:read", "bookings:write", "blog:read", "blog:write", "inventory:read", "inventory:write", "sales:read", "sales:write", "merchant-bookings:read", "merchant-bookings:write", "reminders:write", "payments:read"]
 }
 ```
 
 **Do not** include a top-level `oauth` object in `.mcp.json`, a `clientId` alongside `mode:cimd`, a private key, client secret or Firebase UID in the ZIP. The portal may retain the previous registered-client settings for an existing plugin version; inspect the connection settings and, if the portal prevents changing registration mode, create a **new plugin submission**, reusing the same MCP endpoint and domain verification. Do not assert a previously installed plugin was migrated automatically.
 
-End-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
+Product creation test: add `inventory:write` to the installed plugin's OAuth `baseScopes`, reconnect the ChatGPT account, rescan the tools, then create a low-cost unpublished draft with explicit approval. Verify it appears in Sedifex Products and `list_inventory` with the correct store, price and stock. No sale or payment should be recorded.\n\nEnd-to-end smoke test: verify OAuth authorization and resource metadata, sign in with a Firebase UID explicitly listed in `SEDIFEX_MCP_TEST_UIDS`, authorize read scopes, exchange a PKCE code, call `list_stores` and `list_services`, then separately approve any test write. Keep non-enrolled accounts blocked.
 
 ## Account linking
 
