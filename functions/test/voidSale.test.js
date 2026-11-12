@@ -26,7 +26,15 @@ async function run() {
   currentDb = new MockFirestore({
     'teamMembers/owner-1': { uid: 'owner-1', storeId: 'store-1', role: 'owner' },
     'teamMembers/staff-1': { uid: 'staff-1', storeId: 'store-1', role: 'staff' },
+    'teamMembers/linked-owner': { uid: 'linked-owner', storeId: 'parent-store', role: 'owner' },
+    'stores/child-store': { storeId: 'child-store', parentStoreId: 'parent-store' },
     'products/product-1': { storeId: 'store-1', stockCount: 7 },
+    'products/child-product': { storeId: 'child-store', stockCount: 4 },
+    'sales/child-sale': {
+      storeId: 'child-store',
+      status: 'completed',
+      items: [{ productId: 'child-product', qty: 1, type: 'product' }],
+    },
     'sales/sale-1': {
       storeId: 'store-1',
       status: 'completed',
@@ -48,11 +56,19 @@ async function run() {
   assert.strictEqual(currentDb.getDoc('sales/sale-1').status, 'voided')
   assert.strictEqual(currentDb.getDoc('sales/sale-1').voidReason, 'Wrong quantity entered')
 
+  const linkedOwnerResult = await voidSale.run(
+    { storeId: 'child-store', saleId: 'child-sale', reason: 'Correct child store sale' },
+    { auth: { uid: 'linked-owner', token: { email: 'owner@example.com' } } },
+  )
+  assert.deepStrictEqual(linkedOwnerResult, { ok: true, saleId: 'child-sale', status: 'voided' })
+  assert.strictEqual(currentDb.getDoc('products/child-product').stockCount, 5)
+
   const reversals = currentDb.listCollection('ledger')
-  assert.strictEqual(reversals.length, 1)
-  assert.strictEqual(reversals[0].data.type, 'sale_void')
-  assert.strictEqual(reversals[0].data.qtyChange, 2)
-  assert.strictEqual(currentDb.listCollection('activity').length, 1)
+  assert.strictEqual(reversals.length, 2)
+  const originalSaleReversal = reversals.find(entry => entry.data.refId === 'sale-1')
+  assert.strictEqual(originalSaleReversal.data.type, 'sale_void')
+  assert.strictEqual(originalSaleReversal.data.qtyChange, 2)
+  assert.strictEqual(currentDb.listCollection('activity').length, 2)
 
   await assert.rejects(
     () => voidSale.run({ storeId: 'store-1', saleId: 'sale-1', reason: 'Try twice' }, ownerContext),

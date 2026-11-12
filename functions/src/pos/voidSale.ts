@@ -19,13 +19,25 @@ function positiveNumber(value: unknown) {
 }
 
 async function assertOwner(uid: string, storeId: string) {
-  const direct = await defaultDb.collection('teamMembers').doc(uid).get()
-  if (direct.exists && text(direct.get('storeId')) === storeId && text(direct.get('role')).toLowerCase() === 'owner') {
-    return
+  const [direct, matches] = await Promise.all([
+    defaultDb.collection('teamMembers').doc(uid).get(),
+    defaultDb.collection('teamMembers').where('uid', '==', uid).get(),
+  ])
+  const members = matches.docs.map(member => member.data())
+  if (direct.exists && (!text(direct.get('uid')) || text(direct.get('uid')) === uid)) {
+    members.push(direct.data() || {})
   }
 
-  const matches = await defaultDb.collection('teamMembers').where('uid', '==', uid).where('storeId', '==', storeId).limit(5).get()
-  if (matches.docs.some(member => text(member.get('role')).toLowerCase() === 'owner')) return
+  const ownsStore = (candidateStoreId: string) => members.some(member =>
+    text(member.storeId) === candidateStoreId && text(member.role).toLowerCase() === 'owner',
+  )
+  if (ownsStore(storeId)) return
+
+  // The UI exposes linked child workspaces to their parent owner as Owner.
+  // Apply that same rule here so the child workspace's sales can be corrected.
+  const store = await defaultDb.collection('stores').doc(storeId).get()
+  const parentStoreId = store.exists ? text(store.get('parentStoreId')) : ''
+  if (parentStoreId && ownsStore(parentStoreId)) return
 
   throw new functions.https.HttpsError('permission-denied', 'Only a workspace owner can void a sale')
 }
