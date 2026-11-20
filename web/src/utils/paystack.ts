@@ -1,33 +1,51 @@
-import { paystackPublicKey } from '../config/env'
-
+/**
+ * Paystack Inline V2 must only resume access codes initialized by Sedifex's
+ * server with its secret key. Never call setup/newTransaction with a public key.
+ * See https://paystack.com/docs/developer-tools/inlinejs/#resume-transaction
+ */
 declare global {
   interface Window {
-    PaystackPop?: PaystackPop
+    PaystackPop?: new () => { resumeTransaction(accessCode: string): void }
   }
 }
 
-interface PaystackPop {
-  setup(options: PaystackSetupOptions): PaystackHandler
+const SCRIPT_URL = 'https://js.paystack.co/v2/inline.js'
+let loading: Promise<NonNullable<Window['PaystackPop']> | null> | null = null
+
+export async function loadPaystackScript(): Promise<NonNullable<Window['PaystackPop']> | null> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null
+  if (window.PaystackPop) return window.PaystackPop
+  if (!loading) {
+    loading = new Promise(resolve => {
+      const existing = document.querySelector<HTMLScriptElement>(`script[src="${SCRIPT_URL}"]`)
+      const script = existing ?? document.createElement('script')
+      script.src = SCRIPT_URL
+      script.async = true
+      script.onload = () => resolve(window.PaystackPop ?? null)
+      script.onerror = () => {
+        loading = null
+        if (!existing) script.remove()
+        resolve(null)
+      }
+      if (!existing) document.body.appendChild(script)
+    })
+  }
+  return loading
 }
 
-interface PaystackHandler {
-  openIframe(): void
-}
-
-interface PaystackSetupOptions {
-  key: string
-  email: string
-  amount: number
-  currency?: string
-  ref?: string
-  metadata?: Record<string, unknown>
-  callback: (response: PaystackCallbackResponse) => void
-  onClose: () => void
-}
-
-interface PaystackCallbackResponse {
-  reference: string
-  status?: string
+/** Returns false when inline checkout cannot open; callers can use the
+ * server-returned Paystack authorizationUrl as a secure redirect fallback. */
+export async function resumePaystackTransaction(accessCode: string): Promise<boolean> {
+  if (!accessCode || !accessCode.trim()) return false
+  const Popup = await loadPaystackScript()
+  if (!Popup) return false
+  try {
+    const paystack = new Popup()
+    paystack.resumeTransaction(accessCode)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export interface PaystackBuyer {
@@ -35,7 +53,6 @@ export interface PaystackBuyer {
   phone?: string
   name?: string
 }
-
 export interface PaystackResult {
   ok: boolean
   reference: string | null
@@ -43,90 +60,14 @@ export interface PaystackResult {
   error?: string
 }
 
-const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v1/inline.js'
-
-let paystackLoader: Promise<PaystackPop | null> | null = null
-
-function toMinorUnits(ghs: number) {
-  return Math.round(ghs * 100)
-}
-
-function hasBrowserContext(): boolean {
-  return typeof window !== 'undefined' && typeof document !== 'undefined'
-}
-
-export async function loadPaystackScript(): Promise<PaystackPop | null> {
-  if (!hasBrowserContext()) {
-    return null
-  }
-
-  if (window.PaystackPop) {
-    return window.PaystackPop
-  }
-
-  if (!paystackLoader) {
-    paystackLoader = new Promise(resolve => {
-      const existingScript = document.querySelector(
-        `script[src="${PAYSTACK_SCRIPT_URL}"]`,
-      ) as HTMLScriptElement | null
-
-      const script = existingScript ?? document.createElement('script')
-      script.src = PAYSTACK_SCRIPT_URL
-      script.async = true
-      script.onload = () => resolve(window.PaystackPop ?? null)
-      script.onerror = () => {
-        paystackLoader = null
-        script.remove()
-        resolve(null)
-      }
-
-      if (!existingScript) {
-        document.body.appendChild(script)
-      }
-    })
-  }
-
-  return paystackLoader
-}
-
+/** Deprecated: fail closed rather than initializing a payment in the browser. */
 export async function payWithPaystack(
-  amountGhs: number,
-  buyer?: PaystackBuyer,
+  _amountGhs: number,
+  _buyer?: PaystackBuyer,
 ): Promise<PaystackResult> {
-  if (!paystackPublicKey) {
-    return {
-      ok: false,
-      reference: null,
-      error: 'Paystack is not configured. Please try again later.',
-    }
+  return {
+    ok: false,
+    reference: null,
+    error: 'Direct browser-initiated payments are disabled. Use a Sedifex server-created checkout.',
   }
-
-  const paystackPop = await loadPaystackScript()
-  if (!paystackPop) {
-    return {
-      ok: false,
-      reference: null,
-      error: 'Unable to load Paystack checkout. Please refresh and try again.',
-    }
-  }
-
-  const email = buyer?.email?.trim() || 'testbuyer@example.com'
-  const phone = buyer?.phone?.trim()
-  const name = buyer?.name?.trim()
-
-  return new Promise(resolve => {
-    const handler = paystackPop.setup({
-      key: paystackPublicKey,
-      email,
-      amount: toMinorUnits(amountGhs),
-      currency: 'GHS',
-      ref: `SFX_${Date.now()}`,
-      metadata: { phone, name },
-      callback: resp =>
-        resolve({ ok: true, reference: resp.reference, status: resp.status ?? 'success' }),
-      onClose: () => resolve({ ok: false, reference: null, status: 'cancelled' }),
-    })
-
-    handler.openIframe()
-  })
 }

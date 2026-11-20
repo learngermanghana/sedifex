@@ -157,22 +157,9 @@ export default function App() {
             <Link className="button button--primary" to="/account">
               Go to billing
             </Link>
-            <a
-              className="button button--ghost"
-              href="https://paystack.shop/pay/pa5tmww0ml"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Pay yearly
-            </a>
-            <a
-              className="button button--ghost"
-              href="https://paystack.shop/pay/opd2z7tow6"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Pay monthly
-            </a>
+            <p className="form__hint">
+              Choose a subscription in Billing. Payments are initialized securely by Sedifex.
+            </p>
           </div>
         </div>
       </main>
