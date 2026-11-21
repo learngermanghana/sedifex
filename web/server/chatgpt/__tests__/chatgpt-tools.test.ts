@@ -13,7 +13,7 @@ function setup(capacity = 2) {
   })
 }
 const args = { storeId: 'shop', listingId: 'listing', slotId: 'slot', quantity: 1, expectedUnitPrice: 100, expectedCurrency: 'GHS', expectedStartAt: start, expectedEndAt: end, expectedTimezone: 'Africa/Accra', customerName: 'Test Customer', customerEmail: 'customer@example.com', customerPhone: '+233241234567', requestId: 'booking_0001', confirmed: true }
-const blog = { storeId: 'shop', title: 'Helpful massage advice', content: 'A useful article.', requestId: 'blog_0001' }
+const blog = { storeId: 'shop', title: 'Helpful massage advice', content: 'A useful article.', requestId: 'blog_0001', confirmed: true }
 describe('ChatGPT tools', () => {
   it('uses current Sedifex business terminology in the exposed tool descriptions and consent scopes', () => {
     expect(tools.length).toBeGreaterThan(0)
@@ -103,6 +103,32 @@ describe('ChatGPT tools', () => {
     await expect(executeTool(m.db, 'publish_blog_post', publish, 'merchant')).rejects.toThrow('confirmation')
     expect((await executeTool(m.db, 'publish_blog_post', { ...publish, confirmed: true }, 'merchant')).status).toBe('published')
     expect(m.get('blogPosts/' + created.postId)?.publishedAt).toBeInstanceOf(Timestamp)
+  })
+  it('requires explicit approval for service creation and blog draft changes', async () => {
+    const m = setup()
+    const service = { storeId: 'shop', name: 'Review sample service', price: 25, currency: 'GHS', durationMinutes: 30, requestId: 'service_0001' }
+    for (const [name, data] of [
+      ['create_service', service],
+      ['create_blog_draft', { ...blog, confirmed: false }],
+    ] as const) {
+      await expect(executeTool(m.db, name, data, 'merchant')).rejects.toThrow('confirmation')
+    }
+    expect(m.entries().filter(([p]) => p.startsWith('blogPosts/'))).toHaveLength(0)
+    expect(m.entries().filter(([p]) => p.startsWith('products/'))).toHaveLength(1)
+
+    const created = await executeTool(m.db, 'create_blog_draft', blog, 'merchant')
+    const current = await executeTool(m.db, 'get_blog_post', { storeId: 'shop', postId: created.postId }, 'merchant')
+    const deniedEdit = { ...blog, postId: created.postId, expectedRevision: current.revision, content: 'Unapproved change', requestId: 'edit_0002', confirmed: false }
+    await expect(executeTool(m.db, 'update_blog_draft', deniedEdit, 'merchant')).rejects.toThrow('confirmation')
+    expect(m.get('blogPosts/' + created.postId)?.content).toBe(blog.content)
+    const createdService = await executeTool(m.db, 'create_service', { ...service, confirmed: true }, 'merchant')
+    expect(createdService.published).toBe(false)
+
+    for (const name of ['create_service', 'create_blog_draft', 'update_blog_draft', 'publish_blog_post']) {
+      const definition = tools.find(tool => tool.name === name)!
+      expect(definition.inputSchema.required).toContain('confirmed')
+      expect(definition.inputSchema.properties.confirmed).toMatchObject({ type: 'boolean', enum: [true] })
+    }
   })
   it('every write has narrow OAuth scopes and read-only annotations are accurate', () => {
     for (const tool of tools) {
