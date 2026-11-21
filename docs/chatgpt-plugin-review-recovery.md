@@ -14,6 +14,23 @@ Primary reference: https://developers.openai.com/plugins/deploy/submission and h
 
 This is a confirmed validation gap. We **cannot claim it was one of OpenAI's failed cases** without the submitted test cases or detailed reviewer feedback.
 
+## Reproduced connected-plugin schema drift (21 November 2026)
+
+The connected private **Sedifex Business Test** plugin currently exposes `create_blog_draft` **without** the `confirmed` field, even though the repository's MCP server requires it. Two approved blog-draft calls returned `INVALID_ARGUMENT`, because the installed tool definition did not allow sending `confirmed: true`. The plugin also omits `create_product` even though the repository advertises this tool with the `inventory:write` scope. The connected merchant's `list_stores` and `list_inventory` calls succeeded, proving that account/store discovery works but not that write scopes are fresh.
+
+**Do not remove the server-side confirmation requirement.** It protects against unapproved writes and is part of the negative review cases. This PR improves the missing-confirmation error, adds contract tests, and provides a read-only deployed MCP check; *the plugin tool scan and OAuth consent must still be refreshed in OpenAI Platform*.
+
+### Release / repair procedure
+
+1. Run `cd web && npm ci && npm run test:chatgpt && npm run typecheck:chatgpt && npm run build`. Only merge/deploy after CI is green; a PR alone cannot refresh a running plugin.
+2. Once the intended Sedifex API deployment is ready, run `cd web && npm run check:chatgpt-contract -- https://sedifex.com/api/chatgpt-mcp`. It reads `tools/list` **without writing store data** and fails if `create_product`, `create_blog_draft`, `create_service`, `update_blog_draft`, their approval arguments or their OAuth scopes are missing.
+3. In the **private Sedifex Business Test** plugin's OpenAI Platform MCP configuration, re-scan/refresh the tools from the deployed endpoint. Verify that `create_blog_draft` requires `confirmed: true` and `create_product` appears. Update MCP base scopes to include `inventory:write`, `services:write`, and `blog:write` alongside the existing read permissions. The GitHub code change by itself does **not** edit the App's MCP configuration.
+4. Reconnect the merchant's Sedifex account to consent to the newly requested scopes. A previously issued token cannot gain new scopes automatically. If a write is denied with 403, check actual granted scopes rather than changing ownership checks.
+5. With a dedicated demo store, repeat the confirmed **Review Test Soap** draft (GH₵25, opening stock 10) and **Review Test: Business Tips for [DEMO STORE]** blog-draft cases. Inspect the returned IDs/status and verify that both records remain unpublished. Run one unapproved write attempt and verify rejection. Use unique stable request IDs per distinct approval; reuse the same ID only for identical retries.
+6. Repeat the tool scan and scoped tests for the separately submitted public Sedifex plugin, rather than assuming its settings match the private test plugin.
+
+If step 2 passes but the ChatGPT tool schema is still stale, the remaining blocker is **OpenAI plugin configuration/cache**, not the server handler. Avoid claiming the production workflow works until the plugin itself can call the updated tools successfully.
+
 ## Reviewer-account prerequisites
 
 Create a **dedicated demo merchant and separate demo customer**, not real customer accounts. Save reviewer credentials only through OpenAI Platform's secure Review details form — never in this repository, plugin ZIP, email, or logs. Confirm the login does not require OTP, email magic link, MFA approval, or an inaccessible network. Grant the consent scopes used below and verify both identities can reconnect after a fresh authorization.
