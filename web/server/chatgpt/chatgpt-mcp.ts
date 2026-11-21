@@ -24,6 +24,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!security) return res.json(error(body.id, -32602, 'Unknown tool'))
   const args = body.params?.arguments ?? {}
   const definition = tools.find(t => t.name === name)!
+  // A stale ChatGPT tool scan may omit the confirmation field added to write tools.
+  // Give an actionable error without weakening the server's approval requirement.
+  if (definition.inputSchema.required.includes('confirmed') && args && typeof args === 'object' && !Array.isArray(args) && !('confirmed' in args)) {
+    return res.json(error(body.id, -32602, 'Missing confirmed: true. Review the details with the user, then refresh the Sedifex tool scan and reconnect the plugin before retrying.'))
+  }
   if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(k => !Object.prototype.hasOwnProperty.call(definition.inputSchema.properties, k)) || definition.inputSchema.required.some(k => !(k in args))) return res.json(error(body.id, -32602, 'Invalid tool arguments'))
   for (const [key, value] of Object.entries(args)) {
     const schema = definition.inputSchema.properties[key] as { type?: string; enum?: unknown[]; minimum?: number; maximum?: number }
