@@ -196,6 +196,35 @@ describe('OAuth and MCP authorization', () => {
     for (let i = 0; i < 60; i++) expect((await call(mcp, request, 'Bearer ' + result.body.access_token)).statusCode).toBe(200)
     expect((await call(mcp, request, 'Bearer ' + result.body.access_token)).statusCode).toBe(429)
   })
+  it('advertises current product and blog write schemas for the ChatGPT plugin scan', async () => {
+    const response = await call(mcp, { jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    expect(response.statusCode).toBe(200)
+    const definitions = new Map<string, any>(response.body.result.tools.map((tool: any) => [tool.name, tool]))
+    for (const [name, scope, required] of [
+      ['create_product', 'inventory:write', ['storeId', 'name', 'price', 'currency', 'requestId', 'confirmed']],
+      ['create_service', 'services:write', ['storeId', 'name', 'price', 'durationMinutes', 'requestId', 'confirmed']],
+      ['create_blog_draft', 'blog:write', ['storeId', 'title', 'content', 'requestId', 'confirmed']],
+      ['update_blog_draft', 'blog:write', ['storeId', 'postId', 'expectedRevision', 'title', 'content', 'requestId', 'confirmed']],
+    ] as const) {
+      const definition = definitions.get(name)
+      expect(definition, name + ' is missing from tools/list').toBeDefined()
+      expect(definition.securitySchemes).toEqual([{ type: 'oauth2', scopes: [scope] }])
+      for (const key of required) expect(definition.inputSchema.required).toContain(key)
+      expect(definition.inputSchema.properties.confirmed).toMatchObject({ type: 'boolean', enum: [true] })
+    }
+  })
+  it('rejects stale blog-draft calls without approval and explains how to refresh the plugin', async () => {
+    mock.db = memoryDb({ 'stores/shop': { ownerUid: 'customer' } }).db
+    const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'create_blog_draft', arguments: {
+      storeId: 'shop', title: 'Review Test: Business Tips for [DEMO STORE]',
+      content: 'A short business article.', requestId: 'review-test-business-tips-1',
+    } } }
+    const response = await call(mcp, request)
+    expect(response.body.error.code).toBe(-32602)
+    expect(response.body.error.message).toContain('refresh the Sedifex tool scan')
+    const storePosts = await mock.db.collection('blogPosts').get()
+    expect(storePosts.size).toBe(0)
+  })
   it('lists tools and public services without exposing account data', async () => {
     expect((await call(mcp, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools).toHaveLength(24)
     expect((await call(mcp, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_services', arguments: {} } })).body.result.structuredContent.services).toEqual([])
