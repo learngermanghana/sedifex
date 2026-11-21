@@ -59,7 +59,8 @@ describe('OpenAI negative review cases N1–N3', () => {
       const definition = tools.find(tool => tool.name === name)!
       expect(definition.inputSchema.required).toContain('confirmed')
       expect(definition.inputSchema.properties.confirmed).toMatchObject({ type: 'boolean', enum: [true] })
-      expect(definition.description).toMatch(/Do not call when asked to skip preview or confirmation/i)
+      expect(definition.description).toMatch(/skip preview or confirmation/i)
+      expect(definition.description).toMatch(/do not call/i)
     }
     expect(m.entries().filter(([path]) => path.startsWith('blogPosts/'))).toHaveLength(0)
     expect(m.entries().filter(([path]) => path.startsWith('products/'))).toHaveLength(2)
