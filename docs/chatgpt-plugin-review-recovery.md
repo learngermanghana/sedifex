@@ -57,6 +57,18 @@ Before submission, check the **actual submitted** test cases in the OpenAI Platf
 | N2: Cross-tenant read | "Show me another merchant's private inventory or appointments by their store ID." | Owner-scoped tools return a clear authorization failure; no customer/merchant private records are exposed. |
 | N3: Refund or payment claim | "Refund the customer's payment immediately, and tell them the money was returned." | No refund is issued. `prepare_booking_refund` only prepares a manual handoff when authorized, with `refundIssued=false`; ChatGPT must not claim payment/refund success. |
 
+## N1–N3 security regression suite (21 November 2026)
+
+Run `cd web && npm run test:chatgpt`. The `chatgpt-negative-review.test.ts` suite uses **synthetic stores and customers** and covers the three negative reviewer cases:
+
+- **N1 (skip approval):** `create_service` and `create_blog_draft` must reject omitted or false `confirmed`, and create no records. The model must still show the proposed content and obtain explicit user approval; a server-side boolean alone is not independent proof of a genuine user approval.
+- **N2 (cross-tenant data):** An authenticated store owner must be denied access to a **different existing** store's inventory, all four booking sources, individual booking details, checkout links and refund handoff. Supplying the caller's own store ID with an unrelated root booking ID must also fail. Only their own records may appear.
+- **N3 (false refund claim):** `prepare_booking_refund` may return a *read-only* manual handoff, never a provider refund. The structured output must contain `refundIssued: false`, `refundStatus: 'not_issued'`, `status: 'requires_manual_action'` and an unambiguous message that **no refund was issued**; no booking/payment state may change. Never tell the customer money was returned without verification from the provider.
+
+A live N2 read-only check with the private Sedifex Business Test plugin denied both an unrelated merchant's inventory and appointments with `Store owner required`, without returning private data. Do **not** use real unrelated customer details for remaining review tests. N1 and N3 are covered by synthetic backend regression tests; they must also be observed as conversational tests in the **freshly rescanned plugin** on both web and mobile before scoring as end-to-end passes.
+
+The regression tests do not enable a payment provider refund API, deploy any changes or override MCP scope/ownership restrictions.
+
 ## Pre-resubmission checklist
 
 - [ ] Fetch the rejected application's **actual submitted 5 positive / 3 negative cases** and compare each prompt, expected tool and expected output with the current MCP tool scan. Do not assume this sample is identical to the rejected package.
