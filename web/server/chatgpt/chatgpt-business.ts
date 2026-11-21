@@ -27,7 +27,7 @@ export const businessTools = [
   tool('send_booking_reminder', 'Queue a standard appointment reminder to the email saved on an existing confirmed booking. First display the exact recipient from get_store_booking and get user approval. No arbitrary recipient or message. Returns queued, not delivered; use get_reminder_status. Requires deployed notification worker and configured sender.', { ...booking, expectedRevision: string, expectedEmail: string, ...confirm }, ['storeId','source','bookingId','expectedRevision','expectedEmail','confirmed','requestId'], 'reminders:write', false),
   tool('get_reminder_status', 'Read the status of a reminder you queued. Delivery accepted means accepted by the notification service, not confirmed inbox delivery.', { ...store, reminderId: string }, ['storeId','reminderId'], 'reminders:write'),
   tool('get_booking_payment_options', 'Read payment status and an existing trusted hosted checkout link for an owned-store booking. If no link exists, open Sedifex to create checkout. Customer enters payment details and pays on the secure provider page. Never claim payment succeeded from a link.', booking, ['storeId','source','bookingId'], 'payments:read'),
-  tool('prepare_booking_refund', 'Prepare a refund handoff for an owned-store booking. Shows recorded payment reference and requested amount; returns requires_manual_action. This tool does NOT issue a refund. The store owner must review and complete it in their payment provider dashboard.', { ...booking, amount: number, reason: string }, ['storeId','source','bookingId','amount','reason'], 'payments:read'),
+  tool('prepare_booking_refund', 'Prepare a read-only manual refund handoff for a booking in a store you own. This does NOT issue or initiate any refund and cannot confirm money returned. Never tell a customer their payment was refunded based on this result; the store owner must verify and complete the refund in the payment provider dashboard.', { ...booking, amount: number, reason: string }, ['storeId','source','bookingId','amount','reason'], 'payments:read'),
 ]
 function collection(db: Firestore, storeId: string, source: unknown) {
   if (!sources.includes(str(source))) fail('Invalid booking source')
@@ -164,7 +164,7 @@ export async function executeBusinessTool(db: Firestore, name: string, args: Row
   }
   if(name==='prepare_booking_refund'){
     if(typeof args.amount!=='number'||!Number.isFinite(args.amount)||args.amount<=0||Math.abs(Math.round(args.amount*100)-args.amount*100)>1e-8||!str(args.reason)||str(args.reason).length>1000)fail('Valid amount and reason required')
-    return {bookingId:ref.id,requestedAmount:args.amount,currency:currency(data),paymentReference:data.paymentReference||data.payment?.reference||null,status:'requires_manual_action',refundIssued:false,reason:str(args.reason),message:'Review the original transaction and remaining refundable amount in your payment provider dashboard, then complete the refund there.'}
+    return {bookingId:ref.id,requestedAmount:args.amount,currency:currency(data),paymentReference:data.paymentReference||data.payment?.reference||null,status:'requires_manual_action',refundStatus:'not_issued',refundIssued:false,reason:str(args.reason),message:'No refund was issued or initiated. Review the original transaction and remaining refundable amount in your payment provider dashboard, then complete the refund there.'}
   }
   return mutate(db,uid,name,args,async tx=>{
     const current=await tx.get(ref),s=current.data()||{}
