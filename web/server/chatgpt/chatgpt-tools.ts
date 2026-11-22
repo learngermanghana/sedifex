@@ -129,7 +129,8 @@ export async function executeTool(db: Firestore, name: string, args: Args, uid?:
   const merchantTool = ['list_services', 'create_service', 'list_blog_posts', 'get_blog_post', 'create_blog_draft', 'update_blog_draft', 'publish_blog_post'].includes(name)
   if (merchantTool) await owner(db, storeId, uid)
   if (name === 'get_availability' || name === 'create_booking') {
-    if (!publicStore((await storeRef.get()).data() || {})) fail('Business is not accepting public bookings')
+    const storeData = (await storeRef.get()).data() || {}
+    if (!publicStore(storeData)) fail('Business is not accepting public bookings')
     const listingId = id(args.listingId), listingRef = db.collection('publicListings').doc(listingId)
     const listingSnap = await listingRef.get(), listing = listingSnap.data() || {}
     if (!publishedService(listing) || listing.storeId !== storeId) fail('Public service not found')
@@ -140,7 +141,13 @@ export async function executeTool(db: Firestore, name: string, args: Args, uid?:
       let query = storeRef.collection('integrationAvailabilitySlots').where('serviceId', '==', serviceId).orderBy(FieldPath.documentId()).limit(100)
       if (args.cursor) query = query.startAfter(id(args.cursor))
       const slots = await query.get()
-      return { serviceId, listingId, name: service.name, price: service.price, currency: service.currency || 'GHS', bookingStatus: 'pending_approval', nextCursor: slots.size === 100 ? slots.docs[slots.size - 1].id : null, slots: slots.docs.flatMap(d => { try { return [{ slotId: d.id, unitPrice: d.data().price ?? service.price, currency: d.data().currency || service.currency || 'GHS', ...availableSlot(d.data(), serviceId) }] } catch { return [] } }) }
+      const available = slots.docs.flatMap(d => { try { return [{ slotId: d.id, unitPrice: d.data().price ?? service.price, currency: d.data().currency || service.currency || 'GHS', ...availableSlot(d.data(), serviceId) }] } catch { return [] } })
+      // Always include a timezone even when no slots are currently bookable.
+      // Use an explicit slot or business timezone where available, then the
+      // same platform default already used by availableSlot().
+      const timezone = available[0]?.timezone || slots.docs.map(d => str(d.data().timezone)).find(Boolean)
+        || str(service.timezone) || str(listing.timezone) || str(storeData.timezone) || 'Africa/Accra'
+      return { serviceId, listingId, name: service.name, price: service.price, currency: service.currency || 'GHS', timezone, bookingStatus: 'pending_approval', nextCursor: slots.size === 100 ? slots.docs[slots.size - 1].id : null, slots: available }
     }
     if (args.confirmed !== true) fail('User confirmation required')
     const quantity = integer(args.quantity, 1, 20), slotId = id(args.slotId)
