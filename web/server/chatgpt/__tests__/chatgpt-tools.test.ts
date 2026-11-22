@@ -26,6 +26,34 @@ describe('ChatGPT tools', () => {
     expect((await executeTool(m.db, 'search_services', {})).services).toHaveLength(1)
     expect((await executeTool(m.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })).slots).toEqual([expect.objectContaining({ unitPrice: 100, startAt: start, timezone: 'Africa/Accra' })])
   })
+  it('does not offer or book a long event interval for a short service appointment', async () => {
+    const m = setup()
+    m.put('products/service', { ...m.get('products/service'), durationMinutes: 20 })
+    // The stored interval is a valid multi-day event range, but it is not a
+    // 20-minute appointment. ChatGPT must not advertise or book it as one.
+    const path = 'stores/shop/integrationAvailabilitySlots/slot'
+    m.put(path, { ...m.get(path), endAt: '2099-04-01T11:00:00.000Z' })
+    const result = await executeTool(m.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })
+    expect(result).toMatchObject({ timezone: 'Africa/Accra', slots: [] })
+    await expect(executeTool(m.db, 'create_booking', args, 'customer')).rejects.toThrow(/duration differs/i)
+    expect(m.get(path)?.seatsBooked).toBe(0)
+    expect(m.entries().filter(([key]) => key.startsWith('integrationBookings/'))).toHaveLength(0)
+  })
+  it('keeps correctly timed appointments bookable and does not invent event duration', async () => {
+    const m = setup()
+    const path = 'stores/shop/integrationAvailabilitySlots/slot'
+    const correctedEndAt = '2099-03-01T10:20:00.000Z'
+    m.put('products/service', { ...m.get('products/service'), durationMinutes: 20 })
+    m.put(path, { ...m.get(path), endAt: correctedEndAt })
+    const result = await executeTool(m.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })
+    expect(result.slots).toEqual([expect.objectContaining({ endAt: correctedEndAt })])
+    const booking = await executeTool(m.db, 'create_booking', { ...args, expectedEndAt: correctedEndAt, requestId: 'duration_match_0001' }, 'customer')
+    expect(booking.bookingStatus).toBe('pending_approval')
+    const event = setup()
+    event.put(path, { ...event.get(path), eventKind: 'intake', endAt: '2099-04-01T11:00:00.000Z' })
+    const eventResult = await executeTool(event.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })
+    expect(eventResult.slots).toHaveLength(1)
+  })
   it('returns a timezone when availability has no bookable slots, without inventing times', async () => {
     const m = setup()
     const path = 'stores/shop/integrationAvailabilitySlots/slot'
