@@ -28,12 +28,20 @@ function integer(value: unknown, min: number, max: number) {
 export function publishedService(data: Args) {
   return data.itemType === 'service' && data.isPublished === true && data.isMarketplaceVisible !== false && data.isVisible !== false && !['draft', 'archived', 'deleted'].includes(str(data.status).toLowerCase())
 }
-export function availableSlot(data: Args, serviceId: string, quantity = 1) {
+export function availableSlot(data: Args, serviceId: string, quantity = 1, serviceDurationMinutes?: unknown) {
   const start = iso(data.startAt), end = iso(data.endAt)
   const capacity = typeof data.capacity === 'number' ? data.capacity : NaN
   const booked = typeof data.seatsBooked === 'number' ? data.seatsBooked : 0
   const deadline = iso(data.registrationDeadline)
   if (str(data.serviceId).replace(/^draft-/i, '') !== serviceId.replace(/^draft-/i, '') || data.status !== 'open' || data.public === false || data.isPublic === false || data.visibleOnWebsite === false || !start || !end || start <= new Date().toISOString() || end <= start || !Number.isInteger(capacity) || capacity < 0 || !Number.isInteger(booked) || booked < 0 || (capacity > 0 && booked + quantity > capacity) || (deadline && deadline <= new Date().toISOString())) fail('Slot is unavailable; check availability again')
+  // Bookings/availability can also hold multi-day events or intakes. Do not
+  // silently reinterpret a multi-day event as a short service appointment.
+  // A service with a declared duration needs a matching appointment interval.
+  // Services without a declared duration retain the existing event behavior.
+  if (typeof serviceDurationMinutes === 'number' && Number.isInteger(serviceDurationMinutes) && serviceDurationMinutes > 0 &&
+      (new Date(end).getTime() - new Date(start).getTime()) !== serviceDurationMinutes * 60_000) {
+    fail('Slot duration differs from service duration; update availability in Sedifex')
+  }
   return { startAt: start, endAt: end, timezone: str(data.timezone) || 'Africa/Accra', seatsRemaining: capacity === 0 ? null : Math.max(0, capacity - booked) }
 }
 const storeOwner = (data: Args, storeId: string) => data.ownerUid || data.ownerId || data.userId || data.createdBy || storeId
@@ -141,7 +149,7 @@ export async function executeTool(db: Firestore, name: string, args: Args, uid?:
       let query = storeRef.collection('integrationAvailabilitySlots').where('serviceId', '==', serviceId).orderBy(FieldPath.documentId()).limit(100)
       if (args.cursor) query = query.startAfter(id(args.cursor))
       const slots = await query.get()
-      const available = slots.docs.flatMap(d => { try { return [{ slotId: d.id, unitPrice: d.data().price ?? service.price, currency: d.data().currency || service.currency || 'GHS', ...availableSlot(d.data(), serviceId) }] } catch { return [] } })
+      const available = slots.docs.flatMap(d => { try { return [{ slotId: d.id, unitPrice: d.data().price ?? service.price, currency: d.data().currency || service.currency || 'GHS', ...availableSlot(d.data(), serviceId, 1, service.durationMinutes) }] } catch { return [] } })
       // Always include a timezone even when no slots are currently bookable.
       // Use an explicit slot or business timezone where available, then the
       // same platform default already used by availableSlot().
@@ -162,7 +170,7 @@ export async function executeTool(db: Firestore, name: string, args: Args, uid?:
       if (!publicStore(liveStore.data() || {})) fail('Business is not accepting public bookings')
       const current = liveService.data() || {}, slot = slotSnap.data() || {}
       if (!publishedService(liveListing.data() || {}) || liveListing.data()?.storeId !== storeId || !publishedService(current) || current.storeId !== storeId) fail('Service no longer published')
-      const schedule = availableSlot(slot, serviceId, quantity)
+      const schedule = availableSlot(slot, serviceId, quantity, current.durationMinutes)
       const price = slot.price == null ? current.price : slot.price
       if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) fail('Service price unavailable')
       const currency = str(slot.currency) || str(current.currency) || 'GHS'
