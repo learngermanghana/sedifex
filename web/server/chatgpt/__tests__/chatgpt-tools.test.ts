@@ -26,6 +26,21 @@ describe('ChatGPT tools', () => {
     expect((await executeTool(m.db, 'search_services', {})).services).toHaveLength(1)
     expect((await executeTool(m.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })).slots).toEqual([expect.objectContaining({ unitPrice: 100, startAt: start, timezone: 'Africa/Accra' })])
   })
+  it('returns a timezone when availability has no bookable slots, without inventing times', async () => {
+    const m = setup()
+    const path = 'stores/shop/integrationAvailabilitySlots/slot'
+    m.put(path, { ...m.get(path), status: 'closed' })
+    const result = await executeTool(m.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })
+    expect(result).toMatchObject({ price: 100, currency: 'GHS', timezone: 'Africa/Accra', slots: [] })
+  })
+  it('uses the saved business timezone if there are no service slots', async () => {
+    const m = setup()
+    m.put('stores/shop', { ...m.get('stores/shop'), timezone: 'Europe/Berlin' })
+    const slotPath = 'stores/shop/integrationAvailabilitySlots/slot'
+    m.put(slotPath, { ...m.get(slotPath), serviceId: 'another-service' })
+    const result = await executeTool(m.db, 'get_availability', { storeId: 'shop', listingId: 'listing' })
+    expect(result).toMatchObject({ timezone: 'Europe/Berlin', slots: [], nextCursor: null })
+  })
   it('books atomically and exposes pending approval without claiming payment', async () => {
     const m = setup(), result = await executeTool(m.db, 'create_booking', args, 'customer')
     expect(result).toMatchObject({ bookingStatus: 'pending_approval', amount: 100, paymentStatus: 'pending', bookingDate: '2099-03-01', bookingTime: '10:00' })
