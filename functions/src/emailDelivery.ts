@@ -260,16 +260,23 @@ async function sendWebhook(
       },
       body: JSON.stringify(settings.secret ? { ...payload, secret: settings.secret } : payload),
     })
+    // Apps Script and custom endpoints can return HTTP 200 with an error body.
+    // HTTP transport success alone is not evidence of email acceptance.
+    const body = await response.json().catch(() => ({})) as RecordMap
+    const explicitlyRejected = body.ok === false || body.success === false || Boolean(body.error)
+      || ['failed', 'error', 'rejected', 'queued_no_live_sender'].includes(text(body.status, 80).toLowerCase())
+      || (Object.prototype.hasOwnProperty.call(body, 'sent') && numberValue(body.sent) === 0 && body.duplicate !== true)
+    const accepted = response.ok && !explicitlyRejected
     return {
       attempted: true,
-      ok: response.ok,
+      ok: accepted,
       status: response.status,
       channel,
-      deliveryStatus: response.ok ? 'sent' : 'failed',
+      deliveryStatus: accepted ? 'sent' : 'failed',
       senderName: settings.storeName,
       senderEmail: '',
       replyToEmail: settings.replyToEmail,
-      reason: response.ok ? undefined : `${channel}-http-${response.status}`,
+      reason: accepted ? undefined : text(body.error, 500) || (explicitlyRejected ? `${channel}-rejected` : `${channel}-http-${response.status}`),
     }
   } catch (error) {
     return {
