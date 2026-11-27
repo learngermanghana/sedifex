@@ -28,9 +28,9 @@ function validHttpsUrl(value: unknown) { const candidate = text(value, 2000); if
 function getFirstText(record: Record<string, unknown>, keys: string[], max = 500) { for (const key of keys) { const value = text(record[key], max); if (value) return value } return '' }
 function getDataItemName(data?: Record<string, unknown> | null) { const source = data ?? {}; return getFirstText(source, ['itemName', 'serviceName', 'productName', 'programName', 'course', 'supportType', 'preferredProject', 'project', 'campaign', 'title', 'name'], 220) || 'your request' }
 
-function eventCopy(eventType: string, storeName: string, itemName: string) {
+function eventCopy(eventType: string, storeName: string, itemName: string, paymentVerified = false) {
   switch (eventType) {
-    case 'booking.received': return { customerTitle: 'Booking received – payment pending', customerIntro: `We received your booking for ${itemName}. Payment has not been confirmed yet, so this booking is not confirmed until payment is received and verified.`, adminTitle: 'Booking received – payment pending', adminAction: 'Review the booking and payment status. Confirm the booking only after payment is received and verified.' }
+    case 'booking.received': if (paymentVerified) return { customerTitle: 'Booking received', customerIntro: `We received your booking for ${itemName}. Your payment has been verified. ${storeName} will review your appointment.`, adminTitle: 'New paid booking received', adminAction: 'Review the booking and confirm the appointment.' }; return { customerTitle: 'Booking received – payment pending', customerIntro: `We received your booking for ${itemName}. Payment has not been confirmed yet, so this booking is not confirmed until payment is received and verified.`, adminTitle: 'Booking received – payment pending', adminAction: 'Review the booking and payment status. Confirm the booking only after payment is received and verified.' }
     case 'booking.payment_submitted': return { customerTitle: 'Payment submitted', customerIntro: `We received the payment information for your ${itemName} booking. ${storeName} will review and confirm it.`, adminTitle: 'Booking payment needs review', adminAction: 'Verify the submitted payment and confirm it in Sedifex.' }
     case 'booking.payment_received': return { customerTitle: 'Payment received', customerIntro: `A payment has been recorded for your ${itemName} booking with ${storeName}. The amount received and remaining balance are shown below.`, adminTitle: 'Booking payment recorded', adminAction: 'Review the payment and remaining balance.' }
     case 'booking.payment_confirmed': return { customerTitle: 'Payment receipt', customerIntro: `Your payment for ${itemName} has been confirmed by ${storeName}. Keep this email as your Sedifex payment receipt.`, adminTitle: 'Booking payment confirmed', adminAction: 'Payment is confirmed. Continue with the booking workflow.' }
@@ -263,7 +263,7 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
   const brand = await fetchStoreBrand(storeId)
   const settings = await ensureNotificationSettings(storeId, brand)
   const itemName = getDataItemName(payload.data)
-  const copy = eventCopy(payload.eventType, brand.storeName, itemName)
+  const copy = eventCopy(payload.eventType, brand.storeName, itemName, payload.data?.paymentVerified === true)
   const rows = detailRows(payload, itemName)
   const customerName = text(payload.customer?.name, 160) || 'there'
   const reference = text(payload.reference ?? payload.payment?.reference, 220) || `${payload.eventType}-${Date.now()}`
