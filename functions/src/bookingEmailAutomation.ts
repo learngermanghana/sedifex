@@ -3,6 +3,7 @@ import { loadAutomationSettings, isEmailAutomationEnabled } from './automationSe
 import * as functions from 'firebase-functions/v1'
 import { defaultDb } from './firestore'
 import { queueBrandedNotification } from './notifications'
+import { queueUnpaidBookingEmails } from './bookingEmailNotifications'
 
 const TIME_ZONE = 'Africa/Accra'
 const REMINDER_DAYS = new Set([3, 2, 1])
@@ -271,6 +272,7 @@ function notificationData(bookingId: string, data: RecordMap) {
     booking_id: bookingId,
     bookingStatus: bookingStatus(data),
     booking_status: bookingStatus(data),
+    paymentVerified: verifiedPaid(data),
     itemName: serviceName(data),
     serviceName: serviceName(data),
     bookingDate: bookingDate(data) || null,
@@ -378,13 +380,21 @@ async function handleBookingEmailTransitions(
   const receivedAfter = amountReceived(after)
   const tasks: Promise<unknown>[] = []
 
+  // The create trigger handles pending bookings; recover when contact details
+  // arrive on a later write. Reuse the original reference for the store alert.
+  const contactAdded = !customerFromBooking(before).email && Boolean(customerFromBooking(after).email)
+  if (!isCreate && contactAdded && afterBookingStatus !== 'confirmed' && !isVerifiedPaid) {
+    const originalReference = firstText([before.reference, before.bookingReference, before.booking_reference], 220) || bookingId
+    tasks.push(queueUnpaidBookingEmails(storeId, bookingId, after, originalReference))
+  }
+
   if (isCreate && afterBookingStatus === 'confirmed') {
     tasks.push(queueBookingEmail(storeId, bookingId, 'booking.confirmed', after, { forceStoreAlert: true }))
   } else if (isCreate && isVerifiedPaid) {
     tasks.push(queueBookingEmail(storeId, bookingId, 'booking.received', after, { forceStoreAlert: true }))
   }
 
-  if (!isCreate && afterBookingStatus === 'confirmed' && beforeBookingStatus !== 'confirmed') {
+  if (!isCreate && afterBookingStatus === 'confirmed' && (beforeBookingStatus !== 'confirmed' || contactAdded)) {
     tasks.push(queueBookingEmail(storeId, bookingId, 'booking.confirmed', after, { forceStoreAlert: true }))
   }
 
