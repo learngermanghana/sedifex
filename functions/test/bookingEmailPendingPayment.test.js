@@ -60,6 +60,27 @@ function runAutomaticCheckoutChecks() {
   assert.ok(!bookings.includes('normalizedPaymentMode('), 'integrationBookings: legacy payment modes must not be used as checkout opt-in')
 }
 
+function runBookingEmailReliabilityChecks() {
+  const notifications = source('notifications.ts')
+  const automation = source('bookingEmailAutomation.ts')
+  const immediate = source('bookingEmailNotifications.ts')
+  const delivery = source('emailDelivery.ts')
+  includesAll(notifications, [
+    "prior?.status !== 'queued_no_live_sender'",
+    "Number(prior.deliveryAttempts || 1) >= 3",
+    "if (!claim) return { created: false, webhook: null }",
+    "payload.data?.paymentVerified === true",
+  ], 'safe duplicate and retry protection')
+  includesAll(automation, [
+    'const contactAdded =',
+    'queueUnpaidBookingEmails(storeId, bookingId, after, originalReference)',
+    "beforeBookingStatus !== 'confirmed' || contactAdded",
+  ], 'late contact recovery')
+  includesAll(immediate, ["'checkout_created'", "'partially_paid'", 'originalReference ||'], 'pending booking states')
+  includesAll(delivery, ["body.ok === false", "body.success === false", "const accepted = response.ok && !explicitlyRejected"], 'sender rejection')
+}
+
+runBookingEmailReliabilityChecks()
 runNotificationCopyChecks()
 runPendingPaymentChecks()
 runAutomaticCheckoutChecks()

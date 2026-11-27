@@ -130,6 +130,13 @@ function isUnpaidBooking(data: RecordMap) {
     'pending_payment',
     'unpaid',
     'not_paid',
+    'checkout_created',
+    'pending_cash',
+    'partial',
+    'partially_paid',
+    'payment_partial',
+    'deposit_paid',
+    'part_paid',
     'awaiting_verification',
     'payment_awaiting_verification',
     'manual_review',
@@ -294,7 +301,7 @@ async function markNotificationQueued(
   }
 }
 
-async function queueUnpaidBookingEmails(storeId: string, bookingId: string, data: RecordMap) {
+export async function queueUnpaidBookingEmails(storeId: string, bookingId: string, data: RecordMap, originalReference?: string) {
   if (!storeId || !bookingId || !isUnpaidBooking(data)) return false
 
   const embeddedStoreId = bookingStoreId(data)
@@ -310,7 +317,7 @@ async function queueUnpaidBookingEmails(storeId: string, bookingId: string, data
   const result = await queueBrandedNotification({
     eventType: UNPAID_BOOKING_EVENT,
     storeId,
-    reference: firstText([data.reference, data.bookingReference, data.booking_reference], 220) || bookingId,
+    reference: originalReference || firstText([data.reference, data.bookingReference, data.booking_reference], 220) || bookingId,
     customer: customerFromBooking(data),
     payment: paymentFromBooking(data),
     data: notificationData(bookingId, data),

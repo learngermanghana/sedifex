@@ -28,9 +28,9 @@ function validHttpsUrl(value: unknown) { const candidate = text(value, 2000); if
 function getFirstText(record: Record<string, unknown>, keys: string[], max = 500) { for (const key of keys) { const value = text(record[key], max); if (value) return value } return '' }
 function getDataItemName(data?: Record<string, unknown> | null) { const source = data ?? {}; return getFirstText(source, ['itemName', 'serviceName', 'productName', 'programName', 'course', 'supportType', 'preferredProject', 'project', 'campaign', 'title', 'name'], 220) || 'your request' }
 
-function eventCopy(eventType: string, storeName: string, itemName: string) {
+function eventCopy(eventType: string, storeName: string, itemName: string, paymentVerified = false) {
   switch (eventType) {
-    case 'booking.received': return { customerTitle: 'Booking received – payment pending', customerIntro: `We received your booking for ${itemName}. Payment has not been confirmed yet, so this booking is not confirmed until payment is received and verified.`, adminTitle: 'Booking received – payment pending', adminAction: 'Review the booking and payment status. Confirm the booking only after payment is received and verified.' }
+    case 'booking.received': if (paymentVerified) return { customerTitle: 'Booking received', customerIntro: `We received your booking for ${itemName}. Your payment has been verified. ${storeName} will review your appointment.`, adminTitle: 'New paid booking received', adminAction: 'Review the booking and confirm the appointment.' }; return { customerTitle: 'Booking received – payment pending', customerIntro: `We received your booking for ${itemName}. Payment has not been confirmed yet, so this booking is not confirmed until payment is received and verified.`, adminTitle: 'Booking received – payment pending', adminAction: 'Review the booking and payment status. Confirm the booking only after payment is received and verified.' }
     case 'booking.payment_submitted': return { customerTitle: 'Payment submitted', customerIntro: `We received the payment information for your ${itemName} booking. ${storeName} will review and confirm it.`, adminTitle: 'Booking payment needs review', adminAction: 'Verify the submitted payment and confirm it in Sedifex.' }
     case 'booking.payment_received': return { customerTitle: 'Payment received', customerIntro: `A payment has been recorded for your ${itemName} booking with ${storeName}. The amount received and remaining balance are shown below.`, adminTitle: 'Booking payment recorded', adminAction: 'Review the payment and remaining balance.' }
     case 'booking.payment_confirmed': return { customerTitle: 'Payment receipt', customerIntro: `Your payment for ${itemName} has been confirmed by ${storeName}. Keep this email as your Sedifex payment receipt.`, adminTitle: 'Booking payment confirmed', adminAction: 'Payment is confirmed. Continue with the booking workflow.' }
@@ -179,18 +179,30 @@ async function createDelivery(args: { payload: NotificationPayload; brand: Store
   const reference = text(args.payload.reference, 220) || `${args.payload.eventType}-${Date.now()}`
   const key = `${args.payload.storeId}|${args.payload.eventType}|${reference}|${args.recipientType}|${args.to}`.replace(/\//g, '_')
   const logRef = defaultDb.collection('notification_delivery_log').doc(key)
-  const outboxRef = defaultDb.collection('notification_outbox').doc()
+  const newOutboxRef = defaultDb.collection('notification_outbox').doc()
   const now = admin.firestore.FieldValue.serverTimestamp()
-  const created = await defaultDb.runTransaction(async transaction => {
+  const claim = await defaultDb.runTransaction(async transaction => {
     const existing = await transaction.get(logRef)
-    if (existing.exists) return false
-    transaction.set(logRef, { storeId: args.payload.storeId, eventType: args.payload.eventType, reference, recipientType: args.recipientType, to: args.to, outboxId: outboxRef.id, createdAt: now })
-    transaction.set(outboxRef, { storeId: args.payload.storeId, eventType: args.payload.eventType, reference, recipientType: args.recipientType, to: args.to, subject: args.subject, html: args.html, text: args.text, brand: args.brand, customer: args.payload.customer ?? null, payment: args.payload.payment ?? null, data: args.payload.data ?? null, status: 'queued', createdAt: now, updatedAt: now })
-    return true
+    if (existing.exists) {
+      const outboxId = text(existing.data()?.outboxId, 220)
+      if (!outboxId) return null
+      const existingRef = defaultDb.collection('notification_outbox').doc(outboxId)
+      const existingOutbox = await transaction.get(existingRef)
+      const prior = existingOutbox.data()
+      // A transport timeout or failed response may have sent the email already.
+      // Only retry automatically when we know no sender was attempted.
+      if (prior?.status !== 'queued_no_live_sender' || Number(prior.deliveryAttempts || 1) >= 3) return null
+      transaction.update(existingRef, { status: 'queued', deliveryAttempts: Number(prior.deliveryAttempts || 1) + 1, updatedAt: now })
+      return { outboxId, fresh: false }
+    }
+    transaction.set(logRef, { storeId: args.payload.storeId, eventType: args.payload.eventType, reference, recipientType: args.recipientType, to: args.to, outboxId: newOutboxRef.id, createdAt: now })
+    transaction.set(newOutboxRef, { storeId: args.payload.storeId, eventType: args.payload.eventType, reference, recipientType: args.recipientType, to: args.to, subject: args.subject, html: args.html, text: args.text, brand: args.brand, customer: args.payload.customer ?? null, payment: args.payload.payment ?? null, data: args.payload.data ?? null, status: 'queued', deliveryAttempts: 1, createdAt: now, updatedAt: now })
+    return { outboxId: newOutboxRef.id, fresh: true }
   })
-  if (!created) return { created: false, webhook: null }
+  if (!claim) return { created: false, webhook: null }
+  const outboxRef = defaultDb.collection('notification_outbox').doc(claim.outboxId)
   let sheetSyncStatus: 'synced_to_sheet' | 'sheet_sync_failed' | 'sheet_sync_skipped' = 'sheet_sync_skipped'
-  try {
+  if (claim.fresh) try {
     await appendNotificationOutboxRow([
       new Date().toISOString(),
       args.payload.storeId,
@@ -251,7 +263,7 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
   const brand = await fetchStoreBrand(storeId)
   const settings = await ensureNotificationSettings(storeId, brand)
   const itemName = getDataItemName(payload.data)
-  const copy = eventCopy(payload.eventType, brand.storeName, itemName)
+  const copy = eventCopy(payload.eventType, brand.storeName, itemName, payload.data?.paymentVerified === true)
   const rows = detailRows(payload, itemName)
   const customerName = text(payload.customer?.name, 160) || 'there'
   const reference = text(payload.reference ?? payload.payment?.reference, 220) || `${payload.eventType}-${Date.now()}`
@@ -274,8 +286,15 @@ export async function queueBrandedNotification(payload: NotificationPayload) {
       deliveries.push(createDelivery({ payload: { ...payload, reference }, brand, settings, recipientType: 'store', to, subject: amount ? `${title} - ${amount}` : `${title} - ${brand.storeName}`, html: buildHtmlEmail({ brand, title, intro, rows, actionText: copy.adminAction, footerNote: 'This store alert is enabled automatically for customer and money-related events.' }), text: buildTextEmail(title, intro, rows, copy.adminAction) }))
     }
   }
+  if (!customerEmail || !settings.customerEmailEnabled || !adminEmails.length) {
+    functions.logger.warn('Notification recipient unavailable or disabled', {
+      storeId, eventType: payload.eventType, reference,
+      customer: !customerEmail ? 'missing-email' : !settings.customerEmailEnabled ? 'disabled' : 'available',
+      store: adminEmails.length ? 'available' : 'missing-email',
+    })
+  }
   const results = await Promise.all(deliveries)
-  return { ok: true, deliveries: results.length, reference }
+  return { ok: results.length > 0, deliveries: results.length, reference }
 }
 
 export const initializeStoreNotificationDefaults = functions.firestore.document('stores/{storeId}').onWrite(async (_change, context) => { const storeId = text(context.params.storeId, 180); if (storeId) await ensureNotificationSettings(storeId) })
